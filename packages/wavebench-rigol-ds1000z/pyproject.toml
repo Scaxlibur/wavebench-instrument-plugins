@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wavebench-rigol-ds1000z"
+version = "0.1.0"
+description = "RIGOL DS1000Z oscilloscope driver plugin for WaveBench"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = ["wavebench>=0.7,<1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[project.entry-points."wavebench.instruments"]
+"rigol.ds1000z" = "wavebench_rigol_ds1000z:descriptor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wavebench_rigol_ds1000z"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
