@@ -36,7 +36,9 @@ Run the package tests, Ruff, WaveBench package inspection, and a managed-install
 
 ## Hardware acceptance boundary
 
-On 2026-07-21, a sanitized DS1104Z Plus regression passed identity, an empty error queue, high-impedance CH1 coupling, a 1,200-point NORM read, explicit autoscale, 2,400,000-point MAX and DMAX chunked reads, a PNG screenshot, and a one-acquisition CH1/CH2 capture. Each MAX/DMAX transfer used ten chunks of at most 250,000 points, and the error queue was empty before and after the run. The driver and offline tests cover CH1-CH4; that historical hardware run did not separately validate analog inputs on CH3 or CH4.
+On 2026-07-21, a sanitized DS1104Z Plus regression passed identity, an empty error queue, high-impedance CH1 coupling, a 1,200-point NORM read, explicit autoscale, 2,400,000-point MAX and DMAX chunked reads, a PNG screenshot, and a one-acquisition CH1/CH2 capture. Each MAX/DMAX transfer used ten chunks of at most 250,000 points, and the error queue was empty before and after the run.
+
+A four-channel hardware-path regression later that day queried coupling on CH1-CH4 and returned a finite 1,200-point waveform for every channel after one acquisition and one OPC wait. All four waveforms used a 2 µs sample interval, and the error queue was empty before and after the run. CH1 measured about 2.04 Vpp at the time. CH2-CH4 had no independent test signals connected, so this run validates their communication and acquisition paths, not independent analog-amplitude accuracy.
 
 The current VXI-11 path took about 135 seconds per 2,400,000-point transfer. This proves functional completeness, not optimized long-record performance. No real resource, capture, screenshot, or command log was written to this repository.
 

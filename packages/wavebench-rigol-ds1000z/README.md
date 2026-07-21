@@ -60,7 +60,9 @@ python -m wavebench plugin install packages/wavebench-rigol-ds1000z --dry-run
 
 ## 实机验收边界
 
-2026-07-21 在 DS1104Z Plus 上完成脱敏回归：IDN、空错误队列、CH1 高阻 coupling、NORM 1200 点、显式 autoscale、MAX/DMAX 2400000 点分块读取、PNG 截图和 CH1/CH2 单次 acquisition 均通过。MAX/DMAX 各分为 10 个不超过 250000 点的块，前后错误队列均为空。驱动和离线测试覆盖 CH1–CH4；本次历史实机记录没有单独验收 CH3/CH4 模拟输入。
+2026-07-21 在 DS1104Z Plus 上完成脱敏回归：IDN、空错误队列、CH1 高阻 coupling、NORM 1200 点、显式 autoscale、MAX/DMAX 2400000 点分块读取、PNG 截图和 CH1/CH2 单次 acquisition 均通过。MAX/DMAX 各分为 10 个不超过 250000 点的块，前后错误队列均为空。
+
+同日追加四通道实机路径回归：CH1–CH4 coupling 均可查询；一次 acquisition、一次 OPC 后，四个通道均返回 1200 点有限波形，采样间隔均为 2 µs，前后错误队列为空。CH1 当时测得约 2.04 Vpp；CH2–CH4 未接独立测试信号，因此本次只验收其通信和采集路径，不宣称已完成独立模拟幅度验收。
 
 当前 VXI-11 路径读取 2400000 点约需 135 秒，因此该结果证明功能完整性，不代表长记录性能已优化。实测没有写入仓库中的配置、波形、截图或命令日志。
 
