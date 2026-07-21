@@ -13,6 +13,7 @@ from wavebench.transport.base import InstrumentTransport
 _RAW_POINTS_ALIASES = {"MAX", "DMAX"}
 _HORIZONTAL_DIVISIONS = 12.0
 _MAX_BYTE_POINTS_PER_READ = 250_000
+_SUPPORTED_CHANNELS = (1, 2, 3, 4)
 
 
 @dataclass(frozen=True)
@@ -86,8 +87,8 @@ class DS1000ZScope:
 
     @staticmethod
     def _validate_channel(channel: int) -> None:
-        if channel not in {1, 2, 3, 4}:
-            raise DataError("DS1000Z channel must be between 1 and 4")
+        if channel not in _SUPPORTED_CHANNELS:
+            raise DataError("DS1000Z channel must be one of CH1, CH2, CH3, or CH4")
 
     def channel_coupling(self, channel: int) -> str:
         self._validate_channel(channel)

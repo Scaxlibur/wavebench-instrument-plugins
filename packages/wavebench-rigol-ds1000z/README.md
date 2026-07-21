@@ -2,7 +2,7 @@
 
 [English](README_EN.md)
 
-面向 RIGOL DS1104Z、DS1104Z Plus、DS1104Z-S Plus 和兼容 DS1000Z 系列的 WaveBench 可执行仪器插件。
+面向四通道 RIGOL DS1104Z、DS1104Z Plus、DS1104Z-S Plus 和兼容 DS1000Z 系列的 WaveBench 可执行仪器插件。
 
 ## 身份与兼容范围
 
@@ -17,10 +17,10 @@
 ## 能力
 
 - `*IDN?` 和错误队列；
-- 通道 coupling 查询和显式 autoscale；
+- CH1–CH4 coupling 查询和显式 autoscale；
 - NORM/RAW/DMAX BYTE 波形读取；
 - RAW 长记录按最多 250000 点分块；
-- 单通道和“一次 acquisition、一次 OPC、逐通道读取”的多通道采集；
+- CH1–CH4 单通道采集，以及“一次 acquisition、一次 OPC、逐通道读取”的四通道采集；
 - PNG 截图；
 - 分块、总传输和转换 telemetry。
 
@@ -60,7 +60,7 @@ python -m wavebench plugin install packages/wavebench-rigol-ds1000z --dry-run
 
 ## 实机验收边界
 
-2026-07-21 在 DS1104Z Plus 上完成脱敏回归：IDN、空错误队列、CH1 高阻 coupling、NORM 1200 点、显式 autoscale、MAX/DMAX 2400000 点分块读取、PNG 截图和 CH1/CH2 单次 acquisition 均通过。MAX/DMAX 各分为 10 个不超过 250000 点的块，前后错误队列均为空。
+2026-07-21 在 DS1104Z Plus 上完成脱敏回归：IDN、空错误队列、CH1 高阻 coupling、NORM 1200 点、显式 autoscale、MAX/DMAX 2400000 点分块读取、PNG 截图和 CH1/CH2 单次 acquisition 均通过。MAX/DMAX 各分为 10 个不超过 250000 点的块，前后错误队列均为空。驱动和离线测试覆盖 CH1–CH4；本次历史实机记录没有单独验收 CH3/CH4 模拟输入。
 
 当前 VXI-11 路径读取 2400000 点约需 135 秒，因此该结果证明功能完整性，不代表长记录性能已优化。实测没有写入仓库中的配置、波形、截图或命令日志。
 

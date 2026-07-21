@@ -24,7 +24,7 @@ packages/
 
 ## 当前插件
 
-- [`wavebench-rigol-ds1000z`](packages/wavebench-rigol-ds1000z/README.md)：RIGOL DS1104Z / DS1000Z 系列，canonical ID `rigol.ds1000z`。
+- [`wavebench-rigol-ds1000z`](packages/wavebench-rigol-ds1000z/README.md)：四通道 RIGOL DS1104Z / DS1000Z 系列，canonical ID `rigol.ds1000z`。
 
 ## 安全边界
 

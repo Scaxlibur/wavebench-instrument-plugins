@@ -24,7 +24,7 @@ Each Python plugin is an independent distribution registered through the `wavebe
 
 ## Current plugin
 
-- [`wavebench-rigol-ds1000z`](../packages/wavebench-rigol-ds1000z/README_EN.md): RIGOL DS1104Z / DS1000Z series, canonical ID `rigol.ds1000z`.
+- [`wavebench-rigol-ds1000z`](../packages/wavebench-rigol-ds1000z/README_EN.md): four-channel RIGOL DS1104Z / DS1000Z series, canonical ID `rigol.ds1000z`.
 
 ## Security boundary
 

@@ -183,7 +183,7 @@ def test_plugin_single_autoscale_screenshot_errors_and_close():
     assert transport.closed
 
 
-def test_plugin_multichannel_capture_uses_one_single_and_one_opc():
+def test_plugin_four_channel_capture_uses_one_single_and_one_opc():
     transport = FakeTransport(
         responses={
             ":WAVeform:PREamble?": "0,0,2,1,1e-3,0,0,0.1,0,127",
@@ -192,14 +192,23 @@ def test_plugin_multichannel_capture_uses_one_single_and_one_opc():
     )
 
     waveforms = DS1000ZScope(transport=transport).capture_waveforms(
-        channels=[1, 2],
+        channels=[1, 2, 3, 4],
         points="DEF",
         check_errors=False,
     )
 
-    assert list(waveforms) == [1, 2]
+    assert list(waveforms) == [1, 2, 3, 4]
     assert transport.writes.count(":SINGle") == 1
     assert transport.queries.count("*OPC?") == 1
+    for channel in (1, 2, 3, 4):
+        assert f":CHANnel{channel}:DISPlay ON" in transport.writes
+        assert f":WAVeform:SOURce CHANnel{channel}" in transport.writes
+
+
+@pytest.mark.parametrize("channel", [0, 5])
+def test_plugin_rejects_channels_outside_four_channel_front_end(channel):
+    with pytest.raises(DataError, match="CH1, CH2, CH3, or CH4"):
+        DS1000ZScope(FakeTransport()).channel_coupling(channel)
 
 
 def test_plugin_rejects_bad_preamble_short_blocks_screenshot_and_opc_timeout():
