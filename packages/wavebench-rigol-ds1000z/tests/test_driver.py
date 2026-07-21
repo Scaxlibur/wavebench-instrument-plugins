@@ -51,6 +51,11 @@ def test_plugin_descriptor_is_executable_v2_metadata_without_io():
     assert descriptor.aliases == ()
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.scope_coupling_policy == "fixed-high-impedance"
+    assert descriptor.config_fields == (
+        "connection.resource",
+        "scope.driver",
+        "waveform.*",
+    )
     assert descriptor.validate_options({}) == {"max_chunk_points": 250_000}
     with pytest.raises(ValueError, match=r"must be <= 250000"):
         descriptor.validate_options({"max_chunk_points": 250_001})

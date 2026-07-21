@@ -54,4 +54,5 @@ def descriptor() -> InstrumentDescriptor:
         version="0.1.0",
         source="entry_point:rigol.ds1000z",
         scope_coupling_policy="fixed-high-impedance",
+        config_fields=("connection.resource", "scope.driver", "waveform.*"),
     )
