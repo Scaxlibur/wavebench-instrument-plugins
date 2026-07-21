@@ -1,5 +1,5 @@
-# Private project cockpit and local operator notes
-tool-of-rei/
+# Private project cockpits and local operator notes
+/tool-*/
 
 # Python environments and caches
 .venv/
