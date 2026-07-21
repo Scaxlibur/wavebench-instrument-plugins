@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["packages"]
+
+[tool.ruff]
+line-length = 100

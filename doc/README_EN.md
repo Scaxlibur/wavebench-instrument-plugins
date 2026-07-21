@@ -6,13 +6,14 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The first source package, `wavebench-rigol-ds1000z`, has completed migration, offline lifecycle acceptance, and its first hardware regression. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The first source packages are now maintained independently: `wavebench-rigol-ds1000z` has completed offline lifecycle acceptance and its first hardware regression, while `wavebench-rigol-dg4000` has completed protocol migration and offline acceptance. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 ## Planned layout
 
 ```text
 packages/
 ├── wavebench-rigol-ds1000z/
+├── wavebench-rigol-dg4000/
 └── wavebench-<vendor>-<instrument>/
     ├── pyproject.toml
     ├── README.md
@@ -25,6 +26,7 @@ Each Python plugin is an independent distribution registered through the `wavebe
 ## Current plugin
 
 - [`wavebench-rigol-ds1000z`](../packages/wavebench-rigol-ds1000z/README_EN.md): four-channel RIGOL DS1104Z / DS1000Z series, canonical ID `rigol.ds1000z`.
+- [`wavebench-rigol-dg4000`](../packages/wavebench-rigol-dg4000/README_EN.md): dual-channel RIGOL DG4202 / DG4000 series, canonical ID `rigol.dg4202`.
 
 ## Security boundary
 
@@ -32,4 +34,4 @@ Python plugins run with the permissions of the WaveBench user; they are not sand
 
 ## Development note
 
-No remote repository or repository-wide open-source license has been selected yet. The DS1000Z package preserves the MIT package metadata of the WaveBench pilot from which it was migrated. Release and contribution policies still require an explicit decision.
+No remote repository or repository-wide open-source license has been selected yet. The DS1000Z package preserves the MIT package metadata of the WaveBench pilot from which it was migrated; the DG4000 package has no selected license. Release and contribution policies still require an explicit decision.

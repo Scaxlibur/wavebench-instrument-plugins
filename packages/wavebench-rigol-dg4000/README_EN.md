@@ -1,0 +1,31 @@
+# WaveBench RIGOL DG4000 Plugin
+
+[中文](README.md)
+
+An executable WaveBench instrument plugin for the dual-channel RIGOL DG4202 and compatible DG4000 function/arbitrary waveform generators.
+
+## Identity and compatibility
+
+- Distribution: `wavebench-rigol-dg4000`
+- Canonical driver ID: `rigol.dg4202`
+- WaveBench: `>=0.7,<1`
+- Python: `>=3.11`
+- Transport backend: `pyvisa`
+
+The plugin defines no aliases. After installation, the explicit canonical ID `rigol.dg4202` selects the external implementation, while the short `dg4202` alias always selects WaveBench's built-in fallback. Removing the plugin also restores the built-in canonical implementation.
+
+## Capabilities and boundaries
+
+The driver supports identity/error queries, CH1/CH2 state, fixed frequency, function, VPP amplitude, square duty cycle, explicit output control, query-only arbitrary-wave capability probes, and upload of validated DAC14 blocks through WaveBench's public `DG4000DacBlock` contract.
+
+WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
+
+The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs. No open-source license has yet been selected for this package.
+
+## Development checks
+
+Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an environment containing WaveBench 0.7.x.
+
+## Provenance
+
+Version 0.1.0 migrates the vendor-protocol portion of WaveBench's built-in DG4202 driver while leaving services and safety policy in core.

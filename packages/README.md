@@ -1,6 +1,6 @@
 # Plugin packages
 
-该目录用于放置独立的 WaveBench 仪器插件源码包。首个包为 `wavebench-rigol-ds1000z`；后续按仪器或紧密相关系列逐包迁移，不在这里冻结第二套 manifest、安装器或 catalog 协议。
+该目录用于放置独立的 WaveBench 仪器插件源码包。当前包含 `wavebench-rigol-ds1000z` 和 `wavebench-rigol-dg4000`；后续按仪器或紧密相关系列逐包迁移，不在这里冻结第二套 manifest、安装器或 catalog 协议。
 
 每个正式包至少应具备：
 
