@@ -22,6 +22,12 @@ WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amp
 
 The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs. No open-source license has yet been selected for this package.
 
+## Hardware acceptance boundary
+
+A controlled loop used external `wavebench-rigol-dg4000` to drive DG4202 CH1 with a 1 kHz, 1 Vpp sine wave and external `wavebench-rigol-ds1000z` to capture DS1104Z Plus CH1. Scope CH1 used AC coupling with fixed high-impedance input. A 1200-point DEF waveform measured 1000.000 Hz and 1.008 Vpp in WaveBench. Both instruments had clear error queues before and after the run, and the original generator CH1 state was restored in a `finally` path and verified by readback.
+
+This acceptance covers only the controlled CH1 sine loop and restoration semantics. CH2 currently has FakeTransport coverage only, and the external plugin's arbitrary-wave upload was not repeated in this hardware run.
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an environment containing WaveBench 0.7.x.
