@@ -6,13 +6,13 @@ A documentation-first incubation directory for an external WaveBench plugin targ
 
 ## Current status
 
-This directory currently establishes only the documentation and source-material boundaries. It does not yet contain an installable distribution, entry point, or instrument driver. The manual protocol audit is complete; instrument identity and transport details still require staged verification:
+This directory currently establishes only the documentation and source-material boundaries. It does not yet contain an installable distribution, entry point, or instrument driver. The manual protocol audit and core public contract are complete. RS-232 scalar read-only behavior has partial hardware acceptance, while trace queries and the exact submodel remain unconfirmed:
 
 - Planned distribution: `wavebench-shengpu-sp3000a`
 - Provisional canonical driver ID: `shengpu.sp30120a`
 - Planned instrument kind: `sweep_analyzer`
 
-`frequency_response` is a generic capability and data domain, not a second instrument kind. Public sweep-plan and frequency-response models must first be reviewed in the core repository. This plugin will not duplicate core safety policy, state restoration, reporting, or artifact handling. See the [remote protocol and capability audit](doc/PROTOCOL_AUDIT_EN.md).
+`frequency_response` is a generic capability and data domain, not a second instrument kind. This plugin will not duplicate core safety policy, state restoration, reporting, or artifact handling. See the [remote protocol and capability audit](doc/PROTOCOL_AUDIT_EN.md) and [RS-232 read-only protocol acceptance](doc/RS232_READONLY_ACCEPTANCE_EN.md).
 
 ## Manual drop location
 

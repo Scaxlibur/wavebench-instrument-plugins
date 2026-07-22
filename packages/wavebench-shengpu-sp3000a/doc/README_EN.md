@@ -6,6 +6,8 @@ This directory contains project-authored, publishable development documentation 
 
 - [Remote protocol and capability audit](PROTOCOL_AUDIT_EN.md)
 - [远控协议与能力审计](PROTOCOL_AUDIT.md)
+- [RS-232 read-only protocol acceptance](RS232_READONLY_ACCEPTANCE_EN.md)
+- [RS-232 只读协议验收](RS232_READONLY_ACCEPTANCE.md)
 
 Development material prioritizes:
 
