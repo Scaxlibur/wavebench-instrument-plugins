@@ -28,6 +28,10 @@ packages/
 - [`wavebench-rigol-ds1000z`](packages/wavebench-rigol-ds1000z/README.md)：四通道 RIGOL DS1104Z / DS1000Z 系列，canonical ID `rigol.ds1000z`。
 - [`wavebench-rigol-dg4000`](packages/wavebench-rigol-dg4000/README.md)：双通道 RIGOL DG4202 / DG4000 系列，canonical ID `rigol.dg4202`。
 
+## 孵化中的插件
+
+- [`wavebench-shengpu-sp3000a`](packages/wavebench-shengpu-sp3000a/README.md)：SP3000A 系列扫频仪的文档优先孵化目录；暂定首个型号为 SP30120A，驱动契约尚未冻结。
+
 ## 安全边界
 
 Python 插件会以运行 WaveBench 的用户权限执行，不是安全沙箱。安装或加载插件前必须信任其来源并审查代码。公开内容不得包含真实仪器地址、序列号、凭据、私钥、原始采集数据或实验室专用配置。

@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-This directory contains independently packaged WaveBench instrument plugins. It currently includes `wavebench-rigol-ds1000z` and `wavebench-rigol-dg4000`. Future migrations should add one package per instrument or closely related family without defining a second manifest, installer, or catalog protocol here.
+This directory contains independently packaged WaveBench instrument plugins. The current maintained packages are `wavebench-rigol-ds1000z` and `wavebench-rigol-dg4000`; `wavebench-shengpu-sp3000a` is in documentation-first incubation. Future migrations should add one package per instrument or closely related family without defining a second manifest, installer, or catalog protocol here.
 
 Each maintained package should include:
 

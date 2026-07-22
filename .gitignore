@@ -21,6 +21,10 @@ artifacts/
 *.egg-info/
 *.whl
 
+# Local vendor manuals retained beside each plugin, but not redistributed
+/packages/*/doc/vendor-local/*
+!/packages/*/doc/vendor-local/README.md
+
 # Coverage and test output
 .coverage
 .coverage.*
