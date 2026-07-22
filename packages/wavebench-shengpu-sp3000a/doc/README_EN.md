@@ -2,7 +2,12 @@
 
 [中文](README.md)
 
-This directory contains project-authored, publishable development documentation for the SP3000A plugin. After the manual arrives, the first pass will extract:
+This directory contains project-authored, publishable development documentation for the SP3000A plugin.
+
+- [Remote protocol and capability audit](PROTOCOL_AUDIT_EN.md)
+- [远控协议与能力审计](PROTOCOL_AUDIT.md)
+
+Development material prioritizes:
 
 1. model, firmware, interface, and impedance capability matrices;
 2. communication parameters for LAN, USB Device, RS-232, and optional GPIB;

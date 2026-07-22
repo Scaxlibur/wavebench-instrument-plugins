@@ -2,7 +2,12 @@
 
 [English](README_EN.md)
 
-本目录用于维护项目原创、可公开的 SP3000A 插件开发资料。收到手册后，优先整理：
+本目录用于维护项目原创、可公开的 SP3000A 插件开发资料。
+
+- [远控协议与能力审计](PROTOCOL_AUDIT.md)
+- [Remote protocol and capability audit](PROTOCOL_AUDIT_EN.md)
+
+开发资料优先整理：
 
 1. 型号、固件、接口和阻抗能力矩阵；
 2. LAN、USB Device、RS-232 与可选 GPIB 的通信参数；

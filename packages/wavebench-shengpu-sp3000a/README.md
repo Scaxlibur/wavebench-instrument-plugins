@@ -6,13 +6,13 @@
 
 ## 当前状态
 
-本目录目前只建立文档与资料边界，尚未创建可安装 distribution、entry point 或仪器驱动。以下标识均为开发暂定值，需在手册审计和实机身份查询后冻结：
+本目录目前只建立文档与资料边界，尚未创建可安装 distribution、entry point 或仪器驱动。手册协议审计已经完成；设备身份与传输细节仍需按分级计划验证：
 
 - 计划 distribution：`wavebench-shengpu-sp3000a`
 - 暂定 canonical driver ID：`shengpu.sp30120a`
-- 候选 instrument kind：`sweep_analyzer` 或 `frequency_response`
+- 计划 instrument kind：`sweep_analyzer`
 
-WaveBench 是否需要新增 instrument kind、扫描计划和复数频率响应数据模型，必须先在核心仓库评审；本插件不会自行复制核心安全策略、状态恢复、报告或 artifact 逻辑。
+`frequency_response` 是通用能力与数据域，不是第二种 instrument kind。WaveBench 的公共扫描计划和频率响应数据模型必须先在核心仓库评审；本插件不会自行复制核心安全策略、状态恢复、报告或 artifact 逻辑。详见[远控协议与能力审计](doc/PROTOCOL_AUDIT.md)。
 
 ## 手册投放位置
 
