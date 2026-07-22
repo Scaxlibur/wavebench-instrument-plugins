@@ -103,7 +103,7 @@ These are model capability limits, not WaveBench default safety limits. A task s
 - `PHASE`: `φ[0] ... φ[P-1]`;
 - `ALL`: P magnitude values followed by P phase values.
 
-`OUTPRFORM:POINT:DATA` accepts 20–730. `OUTPRFORM:POINT ON` uses the configured point count; `OFF` uses the device maximum. Query the current trace with `OUTPRFORM?` and a stored trace with `OUTPMEMOV n?`. The manual describes comma-separated floating-point values.
+`OUTPRFORM:POINT:DATA` accepts 20–730 and changes the current sweep point count. It is a sweep-plan write, not merely a return-format setting. `OUTPRFORM:POINT ON` uses the configured point count; `OFF` uses the device maximum. Query the current trace with `OUTPRFORM?` and a stored trace with `OUTPMEMOV n?`. The manual describes comma-separated floating-point values.
 
 ### Not established by documentation
 
@@ -181,28 +181,28 @@ Gate: fully offline; every unknown protocol point has an explicit failure test.
 
 ### L1: read-only queries
 
-Candidate order:
+Base candidate order:
 
 1. `*IDN?`;
 2. `OUTPRFORM:CONT?`;
 3. function, RF, level, impedance, frequency window, timing, axis mode, averaging, trigger, and sweep execution;
 4. magnitude/phase enablement, detector mode, and input impedance;
-5. point count and return mode;
+5. current point-count and return-mode queries;
 6. `OUTPRFORM?`;
-7. read-only marker queries;
-8. raw `OUTSTATEC?` evidence.
 
-Gate: every query succeeds repeatedly, response boundaries are known, key state is unchanged, and public records contain no resource or identity details.
+Markers, stored slots, and `OUTSTATEC?` are not part of base L1. They require separately approved read-only probes after scalar queries and bounded-trace framing are stable. Every query enters RMT, so the test must record that session side effect and use a verified controlled procedure to return local control.
+
+Gate: every query succeeds repeatedly, response boundaries are known, key configuration is unchanged, RMT/local cleanup is proven, and public records contain no resource or identity details.
 
 ### L2: configuration with RF unchanged, followed by restoration
 
-First prove RF is off. Change one item at a time—point count, return mode, display-independent setting, or sweep parameter—and run snapshot → set → query confirmation → restore → query confirmation. Reset, state save/recall, and continuous upload remain forbidden.
+First prove RF is off. Change one item at a time—`OUTPRFORM:CONT OFF`, return mode, or `OUTPRFORM:POINT ON/OFF`—and run snapshot → set → query confirmation → restore → query confirmation. `CONT ON`, `OUTPRFORM:POINT:DATA`, sweep parameters, reset, and state save/recall remain forbidden.
 
 Gate: every field restores, all implicit coupling is recorded, and RF remains off after any failure.
 
 ### L3: controlled output and measurement
 
-After wiring, load, impedance, frequency, and level limits are confirmed, perform through calibration and a controlled DUT measurement. RF enable requires explicit authorization. A finally path first makes the output safe and only then restores prior state if authorized.
+`OUTPRFORM:POINT:DATA`, the sweep plan, trigger, averaging, input/output impedance, source level, RF, and markers all belong to L3. After wiring, load, impedance, frequency, and level limits are confirmed, perform through calibration and a controlled DUT measurement. RF enable requires explicit authorization. A finally path first makes the output safe and only then restores prior state if authorized.
 
 Gate: magnitude/phase traces repeat, axis and units are verified, instrument analysis agrees with WaveBench or an independent instrument, and fault-injected restoration succeeds.
 
