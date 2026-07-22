@@ -41,3 +41,7 @@ Python 插件会以运行 WaveBench 的用户权限执行，不是安全沙箱�
 本仓库及其中维护的官方插件采用 [MIT License](LICENSE)。每个独立 distribution 也在包目录中携带许可证文件，并在包元数据中声明 SPDX `MIT`。
 
 当前源码已公开维护；PyPI 发布、版本标签和正式贡献流程仍待后续确认。
+
+## 开发环境
+
+仓库提供标准 PEP 660 editable 开发环境工具。首次同步核心与正式插件后，普通源码修改无需重复安装；发布门禁仍使用真实 wheel 和一次性虚拟环境。参见[插件开发环境](doc/DEVELOPMENT.md)。

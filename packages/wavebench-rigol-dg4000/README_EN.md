@@ -36,6 +36,8 @@ This acceptance covers only the controlled CH1 sine loop and restoration semanti
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an environment containing WaveBench 0.7.x.
 
+Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for daily source work. Formal acceptance still uses a real wheel and a disposable virtual environment.
+
 ## Provenance
 
 Version 0.1.0 migrates the vendor-protocol portion of WaveBench's built-in DG4202 driver while leaving services and safety policy in core.

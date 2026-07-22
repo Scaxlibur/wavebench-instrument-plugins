@@ -41,3 +41,7 @@ Python plugins run with the permissions of the WaveBench user; they are not sand
 This repository and its maintained official plugins are licensed under the [MIT License](../LICENSE). Each independent distribution also carries a license file in its package directory and declares the SPDX `MIT` identifier in package metadata.
 
 The source is now maintained publicly. PyPI publication, version tags, and the formal contribution process remain future decisions.
+
+## Development environment
+
+The repository provides a standard PEP 660 editable development-environment tool. After the initial core and plugin synchronization, ordinary source edits do not require repeated installation; release gates continue to use real wheels and disposable virtual environments. See [Plugin development environment](DEVELOPMENT_EN.md).

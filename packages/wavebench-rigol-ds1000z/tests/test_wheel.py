@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -18,6 +19,23 @@ def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         check=True,
+    )
+
+
+def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
+    bridge = workspace / "runtime-bridge"
+    bridge.mkdir()
+    for source in Path(sysconfig.get_paths()["purelib"]).iterdir():
+        name = source.name
+        if (
+            name.startswith("wavebench")
+            or name.endswith((".dist-info", ".egg-info", ".pth", ".egg"))
+        ):
+            continue
+        os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+    Path(purelib, "wavebench-test-runtime.pth").write_text(
+        str(Path(wavebench.__file__).resolve().parents[1]) + "\n" + str(bridge) + "\n",
+        encoding="utf-8",
     )
 
 
@@ -48,13 +66,7 @@ def test_wheel_install_discovery_and_uninstall_without_instrument_io(tmp_path):
         [str(python), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
         cwd=tmp_path,
     ).stdout.strip()
-    Path(purelib, "wavebench-test-runtime.pth").write_text(
-        str(Path(wavebench.__file__).resolve().parents[1])
-        + "\n"
-        + sysconfig.get_paths()["purelib"]
-        + "\n",
-        encoding="utf-8",
-    )
+    _write_isolated_runtime_bridge(purelib=Path(purelib), workspace=tmp_path)
     _run(
         [
             str(python),

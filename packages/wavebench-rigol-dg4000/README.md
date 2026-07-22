@@ -60,6 +60,8 @@ python -m wavebench plugin package check packages/wavebench-rigol-dg4000
 python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
 ```
 
+日常源码开发可使用仓库级 [editable 开发环境](../../doc/DEVELOPMENT.md)；正式验收仍使用真实 wheel 和一次性虚拟环境。
+
 真实仪器地址、序列号、波形、截图和命令日志不得提交。
 
 ## 来源

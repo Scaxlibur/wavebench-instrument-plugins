@@ -60,6 +60,8 @@ python -m wavebench plugin package check packages/wavebench-rigol-ds1000z
 python -m wavebench plugin install packages/wavebench-rigol-ds1000z --dry-run
 ```
 
+日常源码开发可使用仓库级 [editable 开发环境](../../doc/DEVELOPMENT.md)；正式验收仍使用真实 wheel 和一次性虚拟环境。
+
 默认测试使用 FakeTransport，不扫描资源、不连接仪器、不发送真实 SCPI。真实仪器资源、序列号、波形、截图和命令日志不得提交。
 
 ## 实机验收边界
