@@ -45,6 +45,10 @@ check_errors = true
 max_chunk_points = 250000
 ```
 
+## 许可证
+
+本插件采用 [MIT License](LICENSE)。
+
 ## 开发验证
 
 在已安装 WaveBench 0.7.x 的开发环境中：

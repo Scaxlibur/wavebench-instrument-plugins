@@ -32,6 +32,8 @@ Each Python plugin is an independent distribution registered through the `wavebe
 
 Python plugins run with the permissions of the WaveBench user; they are not sandboxed. Review and trust a plugin before installing or loading it. Public repository content must not contain real instrument addresses, serial numbers, credentials, private keys, raw captures, or laboratory-specific configuration.
 
-## Development note
+## License
 
-No remote repository or repository-wide open-source license has been selected yet. The DS1000Z package preserves the MIT package metadata of the WaveBench pilot from which it was migrated; the DG4000 package has no selected license. Release and contribution policies still require an explicit decision.
+This repository and its maintained official plugins are licensed under the [MIT License](../LICENSE). Each independent distribution also carries a license file in its package directory and declares the SPDX `MIT` identifier in package metadata.
+
+The source is now maintained publicly. PyPI publication, version tags, and the formal contribution process remain future decisions.

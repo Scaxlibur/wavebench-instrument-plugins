@@ -20,7 +20,11 @@ The driver supports identity/error queries, CH1/CH2 state, fixed frequency, func
 
 WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
 
-The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs. No open-source license has yet been selected for this package.
+The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs.
+
+## License
+
+This plugin is licensed under the [MIT License](LICENSE).
 
 ## Hardware acceptance boundary
 

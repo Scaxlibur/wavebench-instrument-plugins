@@ -30,6 +30,10 @@ The plugin opens only the configured transport through WaveBench's `DriverContex
 
 The configuration example in the Chinese README uses an RFC 5737 documentation address. Never commit real instrument resources, serial numbers, captures, screenshots, or command logs.
 
+## License
+
+This plugin is licensed under the [MIT License](LICENSE).
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an environment containing WaveBench 0.7.x. The default tests use a fake transport and never scan for or connect to hardware.

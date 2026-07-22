@@ -11,4 +11,5 @@ Each maintained package should include:
 - a canonical driver ID and an explicit WaveBench compatibility range;
 - unit tests that do not access real instruments;
 - bilingual user-facing documentation;
+- a package-local MIT license file and SPDX package metadata;
 - no real device resources, credentials, raw waveforms, or private experiment records.

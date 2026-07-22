@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "RIGOL DG4000 function and arbitrary waveform generator plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = ["wavebench>=0.7,<1"]
 
 [project.optional-dependencies]

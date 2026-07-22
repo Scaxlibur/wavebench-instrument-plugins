@@ -41,6 +41,10 @@ default_channel = 1
 check_errors = true
 ```
 
+## 许可证
+
+本插件采用 [MIT License](LICENSE)。
+
 ## 实机验收边界
 
 已使用外置 `wavebench-rigol-dg4000` 驱动 DG4202 CH1 输出 1 kHz、1 Vpp 正弦，并由外置 `wavebench-rigol-ds1000z` 驱动 DS1104Z Plus CH1 闭环采集。示波器 CH1 为 AC 耦合、固定高阻输入；DEF 波形返回 1200 点，WaveBench 测得 1000.000 Hz、1.008 Vpp。两台仪器前后错误队列均为空，发生器 CH1 原状态在 `finally` 路径恢复并回读确认。
@@ -56,7 +60,7 @@ python -m wavebench plugin package check packages/wavebench-rigol-dg4000
 python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
 ```
 
-真实仪器地址、序列号、波形、截图和命令日志不得提交。仓库尚未为该包选择开源许可证，不能据此推断发布许可。
+真实仪器地址、序列号、波形、截图和命令日志不得提交。
 
 ## 来源
 
