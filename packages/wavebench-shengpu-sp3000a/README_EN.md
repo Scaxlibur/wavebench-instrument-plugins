@@ -1,18 +1,32 @@
-# WaveBench SP3000A Plugin (Incubating)
+# WaveBench Shengpu SP30120 Plugin
 
 [中文](README.md)
 
-A documentation-first incubation directory for an external WaveBench plugin targeting the SP3000A sweep-analyzer family. SP30120A is the provisional first model.
+An external WaveBench driver plugin for the Shengpu SP30120 digital sweep analyzer. The distribution retains the early incubation name `wavebench-shengpu-sp3000a`; that name does not assert that the SP30120 is the SP30120A described by the local manual.
 
 ## Current status
 
-This directory currently establishes only the documentation and source-material boundaries. It does not yet contain an installable distribution, entry point, or instrument driver. The manual protocol audit and core public contract are complete. RS-232 scalar read-only behavior has partial hardware acceptance, while trace queries and the exact submodel remain unconfirmed:
+M3 now provides an installable query-only distribution, a V2 entry point, a driver, FakeTransport tests, and a wheel lifecycle test:
 
-- Planned distribution: `wavebench-shengpu-sp3000a`
-- Provisional canonical driver ID: `shengpu.sp30120a`
-- Planned instrument kind: `sweep_analyzer`
+- Distribution: `wavebench-shengpu-sp3000a` 0.1.0
+- Canonical driver ID: `shengpu.sp30120`
+- Instrument kind: `sweep_analyzer`
+- Backend: WaveBench core `serial` transport
+- Declared capability: `sweep_analyzer.idn`
 
-`frequency_response` is a generic capability and data domain, not a second instrument kind. This plugin will not duplicate core safety policy, state restoration, reporting, or artifact handling. See the [remote protocol and capability audit](doc/PROTOCOL_AUDIT_EN.md) and [RS-232 read-only protocol acceptance](doc/RS232_READONLY_ACCEPTANCE_EN.md).
+The driver also exposes the hardware-verified scalar state subset: RF state, input/output impedance, center/span and start/stop frequencies, CW frequency, offset, sweep time, linear/logarithmic mode, continuous/single execution, and external-trigger state. It sends only fixed allowlisted queries and does not retry device-private errors automatically.
+
+A generic `SweepAnalyzerSnapshot` requires a complete effective plan including function, power, averaging, and measurement state. Those fields are not reliably queryable on the target firmware, so version 0.1.0 does not declare `sweep_analyzer.status`. `frequency_response` remains a generic capability and data domain, not another instrument kind. M4 trace framing, point count, units, and frequency-axis semantics are unverified, so trace, marker, and analysis capabilities are also omitted. Configuration, triggering, and RF output methods are not exposed.
+
+See the [remote protocol and capability audit](doc/PROTOCOL_AUDIT_EN.md) and [RS-232 read-only protocol acceptance](doc/RS232_READONLY_ACCEPTANCE_EN.md).
+
+## Safety boundary
+
+- Descriptor import and registry discovery perform zero instrument I/O. The factory opens exactly one core transport through `DriverContext.open_transport()`.
+- Identity validation accepts only the hardware-observed `SHENGPU SP3000 Series Digital Sweeper` family string, with tolerance limited to case, whitespace, and a trailing period. The string does not prove a submodel or firmware version.
+- `ERRORNo00` through `ERRORNo08` and the target firmware's undocumented literal `Error` are deterministic failures and are never retried automatically.
+- Version 0.1.0 exposes no raw SCPI, writes, trace acquisition, state restoration, Local switching, or RF control.
+- Real serial resources, serial numbers, and raw logs must not enter the public repository.
 
 ## Manual drop location
 

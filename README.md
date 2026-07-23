@@ -6,7 +6,7 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或�
 
 ## 当前状态
 
-首批正式源码包已进入独立维护：`wavebench-rigol-ds1000z` 已完成离线生命周期和首轮实机验收，`wavebench-rigol-dg4000` 已完成协议迁移与离线验收。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+首批正式源码包已进入独立维护：`wavebench-rigol-ds1000z` 已完成离线生命周期和首轮实机验收，`wavebench-rigol-dg4000` 已完成协议迁移与离线验收，`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 ## 计划结构
 
@@ -27,10 +27,7 @@ packages/
 
 - [`wavebench-rigol-ds1000z`](packages/wavebench-rigol-ds1000z/README.md)：四通道 RIGOL DS1104Z / DS1000Z 系列，canonical ID `rigol.ds1000z`。
 - [`wavebench-rigol-dg4000`](packages/wavebench-rigol-dg4000/README.md)：双通道 RIGOL DG4202 / DG4000 系列，canonical ID `rigol.dg4202`。
-
-## 孵化中的插件
-
-- [`wavebench-shengpu-sp3000a`](packages/wavebench-shengpu-sp3000a/README.md)：SP3000A 系列扫频仪的文档优先孵化目录；暂定首个型号为 SP30120A，驱动契约尚未冻结。
+- [`wavebench-shengpu-sp3000a`](packages/wavebench-shengpu-sp3000a/README.md)：Shengpu SP30120 query-only 扫频仪驱动，canonical ID `shengpu.sp30120`；只声明已验证的身份能力，曲线和写操作保持关闭。
 
 ## 安全边界
 

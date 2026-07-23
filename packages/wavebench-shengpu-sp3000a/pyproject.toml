@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wavebench-shengpu-sp3000a"
+version = "0.1.0"
+description = "Shengpu SP30120 sweep analyzer driver plugin for WaveBench"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["wavebench>=0.7,<1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[project.entry-points."wavebench.instruments"]
+"shengpu.sp30120" = "wavebench_shengpu_sp3000a:descriptor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wavebench_shengpu_sp3000a"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
