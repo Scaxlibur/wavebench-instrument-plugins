@@ -73,9 +73,13 @@ in core/acceptance tooling rather than the vendor driver.
 
 Version 0.2.0 changes the preferred LAN transport to RsInstrument SocketIO while retaining the
 explicit compatibility backends above. Offline gates cover descriptor routing, per-call
-long-transfer timeouts, sanitized telemetry, and the wheel lifecycle. DEF/MAX/DMAX, screenshot,
-autoscale, repeat capture, and complete state restoration must be repeated on hardware through
-the same reversible acceptance script before SocketIO hardware acceptance is claimed.
+long-transfer timeouts, sanitized telemetry, and the wheel lifecycle. RTM2032 hardware acceptance
+passed for SocketIO DEF/MAX/DMAX, screenshot, autoscale, 20/20 repeated capture, and an empty error
+queue. Experiment-level `SYST:SET` restoration is not a plugin-driver responsibility: a SocketIO
+write once applied the setup only partially, so the acceptance tool uses the verified VXI-11
+512-byte protocol chunks and performs read-only comparison of the complete blob, configuration
+fingerprint, and active acquisition state after reconnecting. The final snapshot was deleted and
+no real address, serial number, waveform, or command log entered the commit.
 
 ## Development checks
 

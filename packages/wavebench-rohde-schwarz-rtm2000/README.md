@@ -64,8 +64,11 @@ setup blob、配置指纹和活动采集状态均恢复。验收未修改真实 
 不进入厂商驱动。
 
 0.2.0 将默认 LAN transport 改为 RsInstrument SocketIO，保留上述显式兼容后端。离线门禁
-覆盖 descriptor 路由、调用级长传输 timeout、脱敏 telemetry 和 wheel 生命周期；实机
-SocketIO 的 DEF/MAX/DMAX、截图、autoscale、重复采集和完整状态恢复需要按同一可逆脚本重验。
+覆盖 descriptor 路由、调用级长传输 timeout、脱敏 telemetry 和 wheel 生命周期。RTM2032
+实机已通过 SocketIO 的 DEF/MAX/DMAX、截图、autoscale、20/20 重复采集与空错误队列验收。
+实验级 `SYST:SET` setup 恢复不属于插件驱动：SocketIO 写入曾出现只部分生效，因此验收工具
+固定使用已验证的 VXI-11 512-byte 协议分片，并在重连后只读核对完整 blob、配置指纹和活动
+采集状态。验收结束时快照已删除，真实地址、序列号、波形和命令日志均未进入提交。
 
 ## 开发验证
 

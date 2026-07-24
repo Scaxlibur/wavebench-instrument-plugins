@@ -6,7 +6,7 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, `wavebench-rigol-dp800`, and `wavebench-rohde-schwarz-rtm2000` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, `wavebench-rigol-dp800`, and `wavebench-rohde-schwarz-rtm2000` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. The first five are optional external editions of drivers that remain bundled with WaveBench for first-use operation; they provide an independent upgrade, transport, and extension path rather than replacing or deprecating the bundled baseline. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 ## Planned layout
 
@@ -26,6 +26,10 @@ packages/
 ```
 
 Each Python plugin is an independent distribution registered through the `wavebench.instruments` entry-point group with a canonical driver ID. Trusted Python drivers may implement complex protocols. The executable boundary for declarative SCPI packages has not been finalized.
+
+## Bundled baseline and external editions
+
+WaveBench permanently bundles the RTM2000, DS1000Z, DG4000, DP800, and DM3000 families. An external package supplies an optional implementation only when the user explicitly installs it and selects its canonical ID; built-in short aliases remain pinned to the bundled implementation. DG4000, DM3000, DP800, and RTM2000 use core-controlled canonical-ID plus distribution allowlist slots, and removing the package restores the bundled canonical implementation. DS1000Z uses the separate external canonical ID `rigol.ds1000z`, while built-in `ds1104` and `ds1000z` aliases remain unaffected. Historical source may call the allowlist a migration slot; that term does not imply removal of bundled drivers.
 
 ## Current plugin
 

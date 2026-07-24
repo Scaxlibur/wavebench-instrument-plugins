@@ -6,7 +6,7 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或�
 
 ## 当前状态
 
-正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。前五个包是 WaveBench 预装驱动的可选外置发行版，用于独立升级、特定 transport 或后续扩展，并不替代或淘汰主包的开箱即用基线。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 ## 计划结构
 
@@ -26,6 +26,10 @@ packages/
 ```
 
 每个 Python 插件作为独立 distribution，通过 `wavebench.instruments` entry point 注册 canonical driver ID。复杂协议可使用可信 Python 驱动；声明式 SCPI 包的可执行边界尚未冻结。
+
+## 预装基线与外置发行
+
+WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五个仪器族。外置包只在用户显式安装并配置 canonical ID 时提供可选实现；内置短 alias 始终留在主包。DG4000、DM3000、DP800 与 RTM2000 通过核心按 canonical ID + distribution 双重白名单控制的覆盖槽位切换，卸载后 canonical ID 自动恢复到内置实现。DS1000Z 外置包使用独立 canonical `rigol.ds1000z`，内置 `ds1104` / `ds1000z` alias 不受影响。源码历史中仍可能使用“迁移槽位”一词，它只表示受限覆盖机制，不表示预装驱动计划移除。
 
 ## 当前插件
 
