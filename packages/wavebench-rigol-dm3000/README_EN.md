@@ -1,0 +1,52 @@
+# WaveBench RIGOL DM3000 Plugin
+
+Executable WaveBench driver plugin for RIGOL DM3000/DM3058 digital multimeters. This
+package supports LAN/VXI-11 connections through PyVISA only.
+
+## Identity and migration boundary
+
+- Distribution: `wavebench-rigol-dm3000`
+- Canonical driver ID: `rigol.dm3000`
+- WaveBench: `>=0.7,<1`
+- Python: `>=3.11`
+- Transport backend: `pyvisa` (LAN only)
+- VISA resource scheme: `TCPIP`; `ASRL`, `USB`, and `GPIB` are rejected
+
+The plugin declares no aliases. When installed, the canonical ID selects this external LAN
+implementation. The short aliases `dm3000` and `dm3058` keep resolving to WaveBench's built-in
+fallback with both serial and PyVISA support. Removing the plugin restores the built-in
+implementation for the canonical ID as well.
+
+An explicit serial backend is rejected for the external canonical driver. A non-TCPIP VISA
+resource such as `ASRL`, `USB`, or `GPIB` is also rejected for `lan`, `visa`, and `pyvisa`
+backends before any transport opens. Use a short alias when the built-in RS-232 path is required.
+
+## Capabilities
+
+- `dmm.idn`
+- `dmm.read`
+- `dmm.function_status`
+- `dmm.set_function`
+
+The package reuses WaveBench's public `DmmReading`, `DmmDriver`, and `DmmService` contracts. It
+contains only the vendor protocol implementation and its descriptor.
+
+## Example
+
+The address below is reserved for documentation:
+
+```toml
+[dmm]
+driver = "rigol.dm3000"
+backend = "lan"
+resource = "TCPIP::192.0.2.40::INSTR"
+timeout_ms = 3000
+settle_ms_before_read = 0
+settle_ms_after_function_change = 500
+```
+
+Descriptor import performs no instrument I/O. Offline tests do not discover resources or send
+SCPI. Do not commit real addresses, serial numbers, readings, screenshots, or command logs.
+
+Version 0.1.0 was migrated from WaveBench's built-in DM3000/DM3058 implementation and preserves
+its SCPI, parsing, and error semantics. This package is licensed under the [MIT License](LICENSE).

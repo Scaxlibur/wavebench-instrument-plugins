@@ -6,14 +6,16 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The first source packages are now maintained independently: `wavebench-rigol-ds1000z` has completed offline lifecycle acceptance and its first hardware regression, while `wavebench-rigol-dg4000` has completed protocol migration and offline acceptance. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently: `wavebench-rigol-ds1000z` and `wavebench-rigol-dg4000` have completed offline and controlled hardware acceptance, the LAN-only `wavebench-rigol-dm3000` has completed offline lifecycle acceptance and awaits its external-wheel hardware regression, and `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 ## Planned layout
 
 ```text
 packages/
-├── wavebench-rigol-ds1000z/
 ├── wavebench-rigol-dg4000/
+├── wavebench-rigol-dm3000/
+├── wavebench-rigol-ds1000z/
+├── wavebench-shengpu-sp3000a/
 └── wavebench-<vendor>-<instrument>/
     ├── pyproject.toml
     ├── README.md
@@ -27,10 +29,11 @@ Each Python plugin is an independent distribution registered through the `wavebe
 
 - [`wavebench-rigol-ds1000z`](../packages/wavebench-rigol-ds1000z/README_EN.md): four-channel RIGOL DS1104Z / DS1000Z series, canonical ID `rigol.ds1000z`.
 - [`wavebench-rigol-dg4000`](../packages/wavebench-rigol-dg4000/README_EN.md): dual-channel RIGOL DG4202 / DG4000 series, canonical ID `rigol.dg4202`.
+- [`wavebench-rigol-dm3000`](../packages/wavebench-rigol-dm3000/README_EN.md): LAN-only RIGOL DM3000 / DM3058 multimeter, canonical ID `rigol.dm3000`; short aliases retain the built-in dual-backend fallback.
 
 ## Incubating plugin
 
-- [`wavebench-shengpu-sp3000a`](../packages/wavebench-shengpu-sp3000a/README_EN.md): a documentation-first incubation directory for the SP3000A sweep-analyzer family. SP30120A is the provisional first model; the executable driver contract is not yet frozen.
+- [`wavebench-shengpu-sp3000a`](../packages/wavebench-shengpu-sp3000a/README_EN.md): query-only Shengpu SP30120 sweep-analyzer driver, canonical ID `shengpu.sp30120`; only the verified identity capability is declared while trace and write operations remain disabled.
 
 ## Security boundary
 
