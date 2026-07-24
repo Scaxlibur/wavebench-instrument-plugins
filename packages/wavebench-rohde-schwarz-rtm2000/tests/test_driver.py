@@ -5,6 +5,7 @@ import pytest
 
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.api import DriverContext
+from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.logging import CommandLogger
 from wavebench_rohde_schwarz_rtm2000 import descriptor as plugin_descriptor
 from wavebench_rohde_schwarz_rtm2000.driver import RTM2032Scope, parse_waveform_header
@@ -47,6 +48,13 @@ class FakeTransport:
 def test_descriptor_and_factory_preserve_core_transport_boundary():
     descriptor = plugin_descriptor()
     transport = FakeTransport()
+    transport_opens = 0
+
+    def open_transport():
+        nonlocal transport_opens
+        transport_opens += 1
+        return transport
+
     context = DriverContext(
         driver_id=descriptor.driver_id,
         kind="scope",
@@ -55,11 +63,12 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
         timeout_ms=1000,
         opc_timeout_ms=2000,
         logger=CommandLogger(),
-        _transport_factory=lambda: transport,
+        _transport_factory=open_transport,
         settings={"check_errors": False},
     )
 
     driver = descriptor.factory(context)
+    validate_declared_capabilities(descriptor, driver)
 
     assert descriptor.driver_id == "rohde-schwarz.rtm2032"
     assert descriptor.aliases == ()
@@ -68,6 +77,7 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
     assert descriptor.distribution == "wavebench-rohde-schwarz-rtm2000"
     assert driver.transport is transport
     assert driver.check_errors_after_ops is False
+    assert transport_opens == 1
 
 
 def test_header_parser_and_fetch_preserve_real_waveform_semantics():
@@ -93,6 +103,22 @@ def test_header_parser_and_fetch_preserve_real_waveform_semantics():
         "FORM:BORD LSBF",
         "CHAN:DATA:POIN DEF",
     ]
+
+
+def test_fetch_accepts_full_length_all_zero_waveform():
+    transport = FakeTransport(
+        responses={"CHAN1:DATA:HEAD?": "0,1,4,1"},
+        float_lists={"CHAN1:DATA?": [0.0, 0.0, 0.0, 0.0]},
+    )
+
+    waveform = RTM2032Scope(transport).fetch_waveform(
+        channel=1,
+        points="DEF",
+        check_errors=False,
+    )
+
+    assert waveform.sample_count == 4
+    np.testing.assert_array_equal(waveform.voltages_v, np.zeros(4))
 
 
 @pytest.mark.parametrize("header", ["bad", "0,1,0,1"])

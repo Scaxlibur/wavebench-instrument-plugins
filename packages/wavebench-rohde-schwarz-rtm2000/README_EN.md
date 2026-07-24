@@ -49,9 +49,17 @@ instruments, or send real SCPI.
 
 ## Acceptance status
 
-Version 0.1.0 has completed the offline protocol, descriptor, FakeTransport, real-wheel, and managed
-lifecycle implementation. Controlled dual-channel RTM2032 hardware acceptance is still pending, so
-hardware migration closure is not yet claimed.
+Version 0.1.0 completed controlled RTM2032 LAN acceptance with a real wheel on 2026-07-24. Managed
+install and healthy/load checks, canonical-versus-short-alias routing, dual-channel single
+acquisition, complete `DEF`, `MAX`, and `DMAX` waveforms, autoscale, the high-impedance coupling
+guard, PNG screenshots, 20/20 repeated dual-channel captures, and an empty error queue all passed.
+`MAX` returned 10,000,000 points per channel and `DMAX` returned 6,250,000 points per channel. Long
+records used a separate 300-second transfer bound rather than treating the shared 30-second timeout
+as a protocol failure. A complete setup snapshot was saved before mutation; the setup blob,
+configuration fingerprint, and active acquisition state were all confirmed restored afterward.
+The acceptance did not modify the real `wavebench.toml` or commit real addresses, serial numbers,
+waveforms, screenshots, snapshots, or command logs. Experiment-level snapshot and restoration stay
+in core/acceptance tooling rather than the vendor driver.
 
 ## Development checks
 

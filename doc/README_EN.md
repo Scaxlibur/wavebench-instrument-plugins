@@ -6,7 +6,7 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, and `wavebench-rigol-dp800` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-rohde-schwarz-rtm2000` has entered offline migration and is awaiting controlled dual-channel RTM2032 hardware acceptance; `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, `wavebench-rigol-dp800`, and `wavebench-rohde-schwarz-rtm2000` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 ## Planned layout
 
@@ -33,7 +33,7 @@ Each Python plugin is an independent distribution registered through the `wavebe
 - [`wavebench-rigol-dg4000`](../packages/wavebench-rigol-dg4000/README_EN.md): dual-channel RIGOL DG4202 / DG4000 series, canonical ID `rigol.dg4202`.
 - [`wavebench-rigol-dm3000`](../packages/wavebench-rigol-dm3000/README_EN.md): LAN-only RIGOL DM3000 / DM3058 multimeter, canonical ID `rigol.dm3000`; short aliases retain the built-in dual-backend fallback.
 - [`wavebench-rigol-dp800`](../packages/wavebench-rigol-dp800/README_EN.md): RIGOL DP800 / DP832 / DP832A programmable DC power supply, canonical ID `rigol.dp800`; it targets the current WaveBench HEAD and keeps the short alias on the built-in fallback.
-- [`wavebench-rohde-schwarz-rtm2000`](../packages/wavebench-rohde-schwarz-rtm2000/README_EN.md): R&S RTM2000 / RTM2032 oscilloscope, canonical ID `rohde-schwarz.rtm2032`; offline migration is complete and controlled dual-channel hardware acceptance remains pending.
+- [`wavebench-rohde-schwarz-rtm2000`](../packages/wavebench-rohde-schwarz-rtm2000/README_EN.md): R&S RTM2000 / RTM2032 oscilloscope, canonical ID `rohde-schwarz.rtm2032`; controlled dual-channel `DEF`, `MAX`, `DMAX`, autoscale, screenshot, and restoration acceptance is complete.
 
 ## Incubating plugin
 

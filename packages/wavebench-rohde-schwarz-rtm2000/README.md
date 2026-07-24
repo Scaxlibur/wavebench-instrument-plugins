@@ -45,8 +45,14 @@ check_errors = true
 
 ## 验收状态
 
-0.1.0 已完成离线协议、descriptor、FakeTransport、真实 wheel 和受管生命周期实现。RTM2032
-双通道实机验收尚未完成，因此当前不宣称硬件迁移收口。
+0.1.0 已于 2026-07-24 完成真实 wheel 的受控 RTM2032 LAN 验收：受管安装与 healthy/load、
+canonical 与短 alias 路由、双通道单次 acquisition、`DEF` / `MAX` / `DMAX` 完整波形、
+autoscale、高阻 coupling 守卫、PNG 截图、20/20 双通道重复采集和空错误队列均通过。
+`MAX` 每通道实测 10000000 点，`DMAX` 每通道实测 6250000 点；长记录使用独立 300 s
+传输上限，不把统一 30 s 超时误判为协议失败。验收前保存了完整 setup 快照，结束后确认
+setup blob、配置指纹和活动采集状态均恢复。验收未修改真实 `wavebench.toml`，未提交真实
+地址、序列号、波形、截图、快照或命令日志。实验级快照与恢复仍属于核心/验收工具边界，
+不进入厂商驱动。
 
 ## 开发验证
 
