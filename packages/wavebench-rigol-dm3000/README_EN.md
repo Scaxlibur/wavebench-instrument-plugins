@@ -48,5 +48,13 @@ settle_ms_after_function_change = 500
 Descriptor import performs no instrument I/O. Offline tests do not discover resources or send
 SCPI. Do not commit real addresses, serial numbers, readings, screenshots, or command logs.
 
+The external wheel completed controlled LAN acceptance on 2026-07-24: managed install and
+healthy/load checks, canonical-versus-alias routing, 20/20 finite DCV reads, function-status
+query, a reversible cross-voltage-function switch with state restoration, managed removal with
+built-in fallback, and a final canonical IDN/DCV smoke test after reinstall all passed. The
+acceptance did not modify the real `wavebench.toml` and did not retain real addresses, serial
+numbers, readings, or command logs. RS-232 remains outside this package and is available through
+the built-in short-alias path.
+
 Version 0.1.0 was migrated from WaveBench's built-in DM3000/DM3058 implementation and preserves
 its SCPI, parsing, and error semantics. This package is licensed under the [MIT License](LICENSE).

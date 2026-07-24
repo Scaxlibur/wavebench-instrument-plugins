@@ -52,9 +52,11 @@ settle_ms_after_function_change = 500
 descriptor 导入不连接仪器。factory 只通过 `DriverContext` 打开当前配置的一个 transport。
 默认测试不扫描资源、不连接仪器，也不会发送真实 SCPI。
 
-迁移前内建驱动已有 DM3058 LAN `*IDN?` 20/20 稳定查询和 DCV 实机读取证据。该证据只
-作为迁移基线；外置 wheel 的独立安装/卸载和迁移后的 LAN 实机回归需单独通过后，才可
-宣称第三批验收完成。
+2026-07-24 已完成外置 wheel 的第三批 LAN 验收：受管安装与 healthy/load、canonical
+与短 alias 路由、20/20 DCV 有限值读取、当前功能查询、跨电压功能切换与原状态恢复、
+受管卸载后的内建 fallback，以及重装后的 canonical IDN/DCV smoke 均通过。验收未修改
+真实 `wavebench.toml`，未提交真实地址、序列号、读数或命令日志。RS-232 不属于此外置
+包边界，继续由短 alias 对应的内建实现承载。
 
 ## 开发验证
 

@@ -6,7 +6,7 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The source packages are maintained independently: `wavebench-rigol-ds1000z` and `wavebench-rigol-dg4000` have completed offline and controlled hardware acceptance, the LAN-only `wavebench-rigol-dm3000` has completed offline lifecycle acceptance and awaits its external-wheel hardware regression, and `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, and the LAN-only `wavebench-rigol-dm3000` have completed offline, managed-lifecycle, and controlled hardware acceptance, while `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 ## Planned layout
 
