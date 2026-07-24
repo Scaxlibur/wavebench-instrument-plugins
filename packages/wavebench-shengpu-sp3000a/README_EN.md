@@ -13,6 +13,7 @@ M3 now provides an installable query-only distribution, a V2 entry point, a driv
 - Instrument kind: `sweep_analyzer`
 - Backend: WaveBench core `serial` transport
 - Declared capability: `sweep_analyzer.idn`
+- WaveBench: `>=0.8,<0.9`
 
 The driver also exposes the hardware-verified scalar state subset: RF state, input/output impedance, center/span and start/stop frequencies, CW frequency, offset, sweep time, linear/logarithmic mode, continuous/single execution, and external-trigger state. It sends only fixed allowlisted queries and does not retry device-private errors automatically.
 
@@ -28,6 +29,8 @@ See the [remote protocol and capability audit](doc/PROTOCOL_AUDIT_EN.md) and [RS
 - Version 0.1.0 exposes no raw SCPI, writes, trace acquisition, state restoration, Local switching, or RF control.
 - Real serial resources, serial numbers, and raw logs must not enter the public repository.
 
+This package targets the WaveBench `v0.8.0` release. It does not run with `v0.7.0` and does not automatically claim compatibility with a future `0.9` core.
+
 ## Manual drop location
 
 Copy the local Markdown manual to:
@@ -36,7 +39,7 @@ Copy the local Markdown manual to:
 doc/vendor-local/SP3000A_manual.md
 ```
 
-Git ignores all content under `doc/vendor-local/` except its explanatory README. Project-authored capability matrices, communication notes, SCPI summaries, trace-format documentation, and acceptance plans will live under `doc/` and will distinguish manual claims from hardware-verified behavior.
+Git ignores all content under `doc/vendor-local/` except its explanatory README, and the sdist build excludes the entire directory. Local manuals are therefore absent from both repository pushes and public distribution artifacts. Project-authored capability matrices, communication notes, SCPI summaries, trace-format documentation, and acceptance plans will live under `doc/` and will distinguish manual claims from hardware-verified behavior.
 
 ## License
 

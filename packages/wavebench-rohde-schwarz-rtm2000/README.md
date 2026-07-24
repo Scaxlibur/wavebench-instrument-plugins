@@ -4,15 +4,16 @@
 
 面向 Rohde & Schwarz RTM2000 系列、当前以 RTM2032 为实机基线的 WaveBench 可执行示波器插件。
 
-## 身份与 HEAD 基线
+## 身份与开发基线
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
 - 开发基线：WaveBench `60dffd0`
+- WaveBench：`>=0.8,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件只对齐 WaveBench 当前 HEAD，不维护旧核心兼容矩阵。安装后，显式 canonical ID
+本插件对齐 WaveBench `v0.8.0` release，不维护旧核心兼容矩阵，不能与 `v0.7.0` 配套运行，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 

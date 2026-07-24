@@ -37,8 +37,8 @@ def descriptor() -> InstrumentDescriptor:
             "Installable RIGOL DP800-series power driver for status, measurement, "
             "setpoint, output, and protection operations."
         ),
-        wavebench_min_version="0.7.0",
-        wavebench_max_version="1.0.0",
+        wavebench_min_version="0.8.0",
+        wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-dp800",
         version="0.1.0",
         source="entry_point:rigol.dp800",

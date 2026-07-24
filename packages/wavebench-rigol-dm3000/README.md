@@ -9,10 +9,12 @@ PyVISA 访问的 LAN/VXI-11 连接。
 
 - distribution：`wavebench-rigol-dm3000`
 - canonical driver ID：`rigol.dm3000`
-- WaveBench：`>=0.7,<1`
+- WaveBench：`>=0.8,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`（LAN-only）
 - VISA resource scheme：`TCPIP`；拒绝 `ASRL`、`USB` 和 `GPIB`
+
+当前包面向 WaveBench `v0.8.0` release，不能与 `v0.7.0` 配套运行，也不自动声明兼容未来 `0.9`。
 
 本插件不声明 alias。安装后，显式 canonical ID `rigol.dm3000` 选择外置 LAN 实现；
 短 alias `dm3000` 和 `dm3058` 始终选择 WaveBench 内建 fallback，继续保留 serial 与

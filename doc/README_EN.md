@@ -6,7 +6,10 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, `wavebench-rigol-dp800`, and `wavebench-rohde-schwarz-rtm2000` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. The first five are optional external editions of drivers that remain bundled with WaveBench for first-use operation; they provide an independent upgrade, transport, and extension path rather than replacing or deprecating the bundled baseline. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, `wavebench-rigol-dp800`, and `wavebench-rohde-schwarz-rtm2000` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. The first five are optional external editions of drivers that remain bundled with WaveBench for first-use operation; they provide an independent upgrade, transport, and extension path rather than replacing or deprecating the bundled baseline. WaveBench v0.8.0 provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+
+> [!IMPORTANT]
+> The WaveBench `v0.7.0` release does not contain Instrument API V2, the managed plugin lifecycle, or canonical override slots. These packages target the WaveBench `v0.8.0` release and uniformly require `wavebench>=0.8,<0.9`; they do not run with `v0.7.0` and do not assume compatibility with a future `0.9` core.
 
 ## Planned layout
 
@@ -36,7 +39,7 @@ WaveBench permanently bundles the RTM2000, DS1000Z, DG4000, DP800, and DM3000 fa
 - [`wavebench-rigol-ds1000z`](../packages/wavebench-rigol-ds1000z/README_EN.md): four-channel RIGOL DS1104Z / DS1000Z series, canonical ID `rigol.ds1000z`.
 - [`wavebench-rigol-dg4000`](../packages/wavebench-rigol-dg4000/README_EN.md): dual-channel RIGOL DG4202 / DG4000 series, canonical ID `rigol.dg4202`.
 - [`wavebench-rigol-dm3000`](../packages/wavebench-rigol-dm3000/README_EN.md): LAN-only RIGOL DM3000 / DM3058 multimeter, canonical ID `rigol.dm3000`; short aliases retain the built-in dual-backend fallback.
-- [`wavebench-rigol-dp800`](../packages/wavebench-rigol-dp800/README_EN.md): RIGOL DP800 / DP832 / DP832A programmable DC power supply, canonical ID `rigol.dp800`; it targets the current WaveBench HEAD and keeps the short alias on the built-in fallback.
+- [`wavebench-rigol-dp800`](../packages/wavebench-rigol-dp800/README_EN.md): RIGOL DP800 / DP832 / DP832A programmable DC power supply, canonical ID `rigol.dp800`; its short alias remains on the built-in fallback.
 - [`wavebench-rohde-schwarz-rtm2000`](../packages/wavebench-rohde-schwarz-rtm2000/README_EN.md): R&S RTM2000 / RTM2032 oscilloscope, canonical ID `rohde-schwarz.rtm2032`; controlled dual-channel `DEF`, `MAX`, `DMAX`, autoscale, screenshot, and restoration acceptance is complete.
 
 ## Incubating plugin

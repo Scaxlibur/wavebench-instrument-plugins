@@ -41,8 +41,8 @@ def descriptor() -> InstrumentDescriptor:
             "Installable RIGOL DG4000-series source driver for fixed waveforms, "
             "output control, and validated DAC14 arbitrary-wave uploads."
         ),
-        wavebench_min_version="0.7.0",
-        wavebench_max_version="1.0.0",
+        wavebench_min_version="0.8.0",
+        wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-dg4000",
         version="0.1.0",
         source="entry_point:rigol.dg4202",

@@ -27,8 +27,8 @@ def descriptor() -> InstrumentDescriptor:
             "Query-only SP30120 driver with verified RS-232 identity and scalar-status "
             "queries; generic snapshots, traces, markers, and control are not exposed."
         ),
-        wavebench_min_version="0.7.0",
-        wavebench_max_version="1.0.0",
+        wavebench_min_version="0.8.0",
+        wavebench_max_version="0.9.0",
         distribution="wavebench-shengpu-sp3000a",
         version="0.1.0",
         source="entry_point:shengpu.sp30120",

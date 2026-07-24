@@ -8,9 +8,11 @@ An executable WaveBench instrument plugin for the dual-channel RIGOL DG4202 and 
 
 - Distribution: `wavebench-rigol-dg4000`
 - Canonical driver ID: `rigol.dg4202`
-- WaveBench: `>=0.7,<1`
+- WaveBench: `>=0.8,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa`
+
+This package targets the WaveBench `v0.8.0` release. It does not run with `v0.7.0` and does not automatically claim compatibility with a future `0.9` core.
 
 The plugin defines no aliases. After installation, the explicit canonical ID `rigol.dg4202` selects the external implementation, while the short `dg4202` alias always selects WaveBench's built-in fallback. Removing the plugin also restores the built-in canonical implementation.
 
@@ -34,7 +36,7 @@ This acceptance covers only the controlled CH1 sine loop and restoration semanti
 
 ## Development checks
 
-Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an environment containing WaveBench 0.7.x.
+Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an environment containing the matching WaveBench `v0.8.0` release.
 
 Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for daily source work. Formal acceptance still uses a real wheel and a disposable virtual environment.
 

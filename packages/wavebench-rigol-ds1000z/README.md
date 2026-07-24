@@ -8,7 +8,7 @@
 
 - distribution：`wavebench-rigol-ds1000z`
 - canonical driver ID：`rigol.ds1000z`
-- WaveBench：`>=0.7,<1`
+- WaveBench：`>=0.8,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
 
@@ -51,7 +51,7 @@ max_chunk_points = 250000
 
 ## 开发验证
 
-在已安装 WaveBench 0.7.x 的开发环境中：
+在已安装匹配的 WaveBench `v0.8.0` release 环境中：
 
 ```bash
 python -m pytest -q packages/wavebench-rigol-ds1000z/tests

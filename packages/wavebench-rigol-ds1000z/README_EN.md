@@ -8,7 +8,7 @@ An executable WaveBench instrument plugin for the four-channel RIGOL DS1104Z, DS
 
 - Distribution: `wavebench-rigol-ds1000z`
 - Canonical driver ID: `rigol.ds1000z`
-- WaveBench: `>=0.7,<1`
+- WaveBench: `>=0.8,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa`
 
@@ -36,7 +36,7 @@ This plugin is licensed under the [MIT License](LICENSE).
 
 ## Development checks
 
-Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an environment containing WaveBench 0.7.x. The default tests use a fake transport and never scan for or connect to hardware.
+Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an environment containing the matching WaveBench `v0.8.0` release. Formal `v0.7.0` and a future `0.9` core are outside this package's compatibility range. The default tests use a fake transport and never scan for or connect to hardware.
 
 Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for daily source work. Formal acceptance still uses a real wheel and a disposable virtual environment.
 

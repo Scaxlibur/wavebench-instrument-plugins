@@ -4,15 +4,16 @@
 
 面向 RIGOL DP800、DP832 和 DP832A 可编程直流电源的 WaveBench 可执行仪器插件。
 
-## 身份与 HEAD 基线
+## 身份与开发基线
 
 - distribution：`wavebench-rigol-dp800`
 - canonical driver ID：`rigol.dp800`
 - 开发基线：WaveBench `a3e13fd`
+- WaveBench：`>=0.8,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
 
-本插件只对齐 WaveBench 主仓库当前 HEAD，不维护旧核心兼容矩阵。安装后，显式 canonical
+本插件对齐 WaveBench `v0.8.0` release，不维护旧核心兼容矩阵，不能与 `v0.7.0` 配套运行，也不自动声明兼容未来 `0.9`。安装后，显式 canonical
 ID `rigol.dp800` 选择外置实现；短 alias `dp800` 始终选择 WaveBench 内建 fallback。
 卸载插件后，canonical ID 也回退内建实现。
 

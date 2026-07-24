@@ -5,16 +5,17 @@
 An executable WaveBench instrument plugin for RIGOL DP800, DP832, and DP832A programmable DC
 power supplies.
 
-## Identity and HEAD baseline
+## Identity and development baseline
 
 - distribution: `wavebench-rigol-dp800`
 - canonical driver ID: `rigol.dp800`
 - development baseline: WaveBench `a3e13fd`
+- WaveBench: `>=0.8,<0.9`
 - Python: `>=3.11`
 - transport backend: `pyvisa`
 
-This plugin targets the current WaveBench repository HEAD only; it does not maintain a legacy-core
-compatibility matrix. When installed, the explicit canonical ID `rigol.dp800` selects the external
+This plugin targets the WaveBench `v0.8.0` release. It does not maintain a legacy-core
+compatibility matrix, run with `v0.7.0`, or automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rigol.dp800` selects the external
 implementation. The short alias `dp800` always selects WaveBench's built-in fallback. Removing the
 plugin restores the built-in implementation for the canonical ID as well.
 

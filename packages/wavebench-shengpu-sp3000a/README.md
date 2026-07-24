@@ -13,6 +13,7 @@ M3 已建立可安装的 query-only distribution、V2 entry point、驱动、Fak
 - instrument kind：`sweep_analyzer`
 - backend：WaveBench 核心 `serial` transport
 - 已声明 capability：`sweep_analyzer.idn`
+- WaveBench：`>=0.8,<0.9`
 
 驱动另提供经实机验证的标量状态读取：RF 状态、输入/输出阻抗、中心/跨度与起止频率、CW 频率、频偏、扫描时间、线性/对数模式、连续/单次方式和外部触发状态。该方法只发送固定 allowlist 中的 query，不发送设置命令，也不自动重试设备私有错误。
 
@@ -28,6 +29,8 @@ M3 已建立可安装的 query-only distribution、V2 entry point、驱动、Fak
 - 0.1.0 不提供裸 SCPI、写命令、曲线读取、状态恢复、Local 切换或 RF 控制。
 - 真实串口路径、序列号和原始日志不得写入公开仓库。
 
+本包当前面向 WaveBench `v0.8.0` release，不能与 `v0.7.0` 配套运行，也不自动声明兼容未来 `0.9`。
+
 ## 手册投放位置
 
 将本地 Markdown 手册复制到：
@@ -36,7 +39,7 @@ M3 已建立可安装的 query-only distribution、V2 entry point、驱动、Fak
 doc/vendor-local/SP3000A_manual.md
 ```
 
-`doc/vendor-local/` 中除说明文件外的内容会被 Git 忽略，不会随仓库推送。我们基于手册重新整理的能力矩阵、通信参数、SCPI 摘要、曲线格式和验收计划将放在 `doc/` 中，并清楚区分“手册声明”和“实机验证”。
+`doc/vendor-local/` 中除说明文件外的内容会被 Git 忽略，整个目录也被 sdist 构建规则排除，不会随仓库推送或公开发行包发布。我们基于手册重新整理的能力矩阵、通信参数、SCPI 摘要、曲线格式和验收计划将放在 `doc/` 中，并清楚区分“手册声明”和“实机验证”。
 
 ## 许可证
 

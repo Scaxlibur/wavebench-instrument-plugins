@@ -48,8 +48,8 @@ def descriptor() -> InstrumentDescriptor:
             "Installable four-channel RIGOL DS1000Z driver with BYTE conversion "
             "and RAW chunking."
         ),
-        wavebench_min_version="0.7.0",
-        wavebench_max_version="1.0.0",
+        wavebench_min_version="0.8.0",
+        wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-ds1000z",
         version="0.1.0",
         source="entry_point:rigol.ds1000z",

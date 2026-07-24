@@ -7,10 +7,12 @@ package supports LAN/VXI-11 connections through PyVISA only.
 
 - Distribution: `wavebench-rigol-dm3000`
 - Canonical driver ID: `rigol.dm3000`
-- WaveBench: `>=0.7,<1`
+- WaveBench: `>=0.8,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa` (LAN only)
 - VISA resource scheme: `TCPIP`; `ASRL`, `USB`, and `GPIB` are rejected
+
+This package targets the WaveBench `v0.8.0` release. It does not run with `v0.7.0` and does not automatically claim compatibility with a future `0.9` core.
 
 The plugin declares no aliases. When installed, the canonical ID selects this external LAN
 implementation. The short aliases `dm3000` and `dm3058` keep resolving to WaveBench's built-in

@@ -5,16 +5,17 @@
 An executable WaveBench oscilloscope plugin for the Rohde & Schwarz RTM2000 series, with the
 RTM2032 as the current hardware baseline.
 
-## Identity and HEAD baseline
+## Identity and development baseline
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
 - development baseline: WaveBench `60dffd0`
+- WaveBench: `>=0.8,<0.9`
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-This plugin targets the current WaveBench HEAD only and does not maintain a legacy-core
-compatibility matrix. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
+This plugin targets the WaveBench `v0.8.0` release and does not maintain a legacy-core
+compatibility matrix, run with `v0.7.0`, or automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
 

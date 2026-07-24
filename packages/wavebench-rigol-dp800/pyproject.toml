@@ -5,12 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "wavebench-rigol-dp800"
 version = "0.1.0"
-description = "RIGOL DP800 programmable power supply plugin for WaveBench HEAD"
+description = "RIGOL DP800 programmable power supply plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["wavebench>=0.7,<1"]
+dependencies = ["wavebench>=0.8,<0.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "ruff>=0.8.0"]

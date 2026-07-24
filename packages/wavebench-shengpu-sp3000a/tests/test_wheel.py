@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import sysconfig
+import tarfile
 
 import wavebench
 
@@ -31,6 +32,27 @@ def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
         str(Path(wavebench.__file__).resolve().parents[1]) + "\n" + str(bridge) + "\n",
         encoding="utf-8",
     )
+
+
+def test_sdist_excludes_local_vendor_manuals(tmp_path: Path) -> None:
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "hatchling",
+            "build",
+            "-t",
+            "sdist",
+            "-d",
+            str(tmp_path),
+        ],
+        cwd=PACKAGE_ROOT,
+    )
+    artifacts = list(tmp_path.glob("wavebench_shengpu_sp3000a-*.tar.gz"))
+    assert len(artifacts) == 1
+    with tarfile.open(artifacts[0]) as archive:
+        members = archive.getnames()
+    assert not any("/doc/vendor-local/" in member for member in members)
 
 
 def test_wheel_install_discovery_and_uninstall_without_instrument_io(tmp_path: Path) -> None:

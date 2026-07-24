@@ -8,9 +8,11 @@
 
 - distribution：`wavebench-rigol-dg4000`
 - canonical driver ID：`rigol.dg4202`
-- WaveBench：`>=0.7,<1`
+- WaveBench：`>=0.8,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
+
+当前包面向 WaveBench `v0.8.0` release，不能与 `v0.7.0` 配套运行，也不自动声明兼容未来 `0.9`。
 
 该插件不声明 alias。安装后，显式 canonical ID `rigol.dg4202` 选择外置实现；短 alias `dg4202` 始终选择 WaveBench 内建 fallback。卸载插件后，canonical ID 也回退到内建实现。
 
