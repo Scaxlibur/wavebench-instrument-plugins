@@ -6,7 +6,7 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或�
 
 ## 当前状态
 
-正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000` 与 LAN-only 的 `wavebench-rigol-dm3000` 已完成离线、受管生命周期和受控实机验收，`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000` 与 LAN-only 的 `wavebench-rigol-dm3000` 已完成离线、受管生命周期和受控实机验收；`wavebench-rigol-dp800` 已完成当前 HEAD 的离线迁移，等待 DP832A 受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 ## 计划结构
 
@@ -14,6 +14,7 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或�
 packages/
 ├── wavebench-rigol-dg4000/
 ├── wavebench-rigol-dm3000/
+├── wavebench-rigol-dp800/
 ├── wavebench-rigol-ds1000z/
 ├── wavebench-shengpu-sp3000a/
 └── wavebench-<vendor>-<instrument>/
@@ -30,6 +31,7 @@ packages/
 - [`wavebench-rigol-ds1000z`](packages/wavebench-rigol-ds1000z/README.md)：四通道 RIGOL DS1104Z / DS1000Z 系列，canonical ID `rigol.ds1000z`。
 - [`wavebench-rigol-dg4000`](packages/wavebench-rigol-dg4000/README.md)：双通道 RIGOL DG4202 / DG4000 系列，canonical ID `rigol.dg4202`。
 - [`wavebench-rigol-dm3000`](packages/wavebench-rigol-dm3000/README.md)：LAN-only RIGOL DM3000 / DM3058 数字万用表，canonical ID `rigol.dm3000`；短 alias 保留内建双 backend fallback。
+- [`wavebench-rigol-dp800`](packages/wavebench-rigol-dp800/README.md)：RIGOL DP800 / DP832 / DP832A 可编程直流电源，canonical ID `rigol.dp800`；当前对齐 WaveBench HEAD，短 alias 保留内建 fallback。
 - [`wavebench-shengpu-sp3000a`](packages/wavebench-shengpu-sp3000a/README.md)：Shengpu SP30120 query-only 扫频仪驱动，canonical ID `shengpu.sp30120`；只声明已验证的身份能力，曲线和写操作保持关闭。
 
 ## 安全边界

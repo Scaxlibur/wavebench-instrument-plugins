@@ -6,7 +6,7 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, and the LAN-only `wavebench-rigol-dm3000` have completed offline, managed-lifecycle, and controlled hardware acceptance, while `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, and the LAN-only `wavebench-rigol-dm3000` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-rigol-dp800` has completed its current-HEAD offline migration and is awaiting controlled DP832A hardware acceptance; `wavebench-shengpu-sp3000a` is at the SP30120 query-only M3 stage. WaveBench 0.7 already provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 ## Planned layout
 
@@ -14,6 +14,7 @@ The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wa
 packages/
 ├── wavebench-rigol-dg4000/
 ├── wavebench-rigol-dm3000/
+├── wavebench-rigol-dp800/
 ├── wavebench-rigol-ds1000z/
 ├── wavebench-shengpu-sp3000a/
 └── wavebench-<vendor>-<instrument>/
@@ -30,6 +31,7 @@ Each Python plugin is an independent distribution registered through the `wavebe
 - [`wavebench-rigol-ds1000z`](../packages/wavebench-rigol-ds1000z/README_EN.md): four-channel RIGOL DS1104Z / DS1000Z series, canonical ID `rigol.ds1000z`.
 - [`wavebench-rigol-dg4000`](../packages/wavebench-rigol-dg4000/README_EN.md): dual-channel RIGOL DG4202 / DG4000 series, canonical ID `rigol.dg4202`.
 - [`wavebench-rigol-dm3000`](../packages/wavebench-rigol-dm3000/README_EN.md): LAN-only RIGOL DM3000 / DM3058 multimeter, canonical ID `rigol.dm3000`; short aliases retain the built-in dual-backend fallback.
+- [`wavebench-rigol-dp800`](../packages/wavebench-rigol-dp800/README_EN.md): RIGOL DP800 / DP832 / DP832A programmable DC power supply, canonical ID `rigol.dp800`; it targets the current WaveBench HEAD and keeps the short alias on the built-in fallback.
 
 ## Incubating plugin
 

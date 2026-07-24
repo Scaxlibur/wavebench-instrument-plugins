@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-This directory contains independently packaged WaveBench instrument plugins. The current maintained packages are `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, and the M3 query-only `wavebench-shengpu-sp3000a`. Future migrations should add one package per instrument or closely related family without defining a second manifest, installer, or catalog protocol here.
+This directory contains independently packaged WaveBench instrument plugins. The current maintained packages are `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, the current-HEAD `wavebench-rigol-dp800`, and the M3 query-only `wavebench-shengpu-sp3000a`. Future migrations should add one package per instrument or closely related family without defining a second manifest, installer, or catalog protocol here.
 
 Each maintained package should include:
 

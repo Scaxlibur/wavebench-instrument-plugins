@@ -21,12 +21,14 @@ def test_discovers_only_installable_plugin_packages():
     assert [project.distribution for project in projects] == [
         "wavebench-rigol-dg4000",
         "wavebench-rigol-dm3000",
+        "wavebench-rigol-dp800",
         "wavebench-rigol-ds1000z",
         "wavebench-shengpu-sp3000a",
     ]
     assert [project.driver_ids for project in projects] == [
         ("rigol.dg4202",),
         ("rigol.dm3000",),
+        ("rigol.dp800",),
         ("rigol.ds1000z",),
         ("shengpu.sp30120",),
     ]
@@ -40,7 +42,7 @@ def test_expected_state_tracks_core_and_plugin_metadata():
     assert state["wavebench"]["distribution"] == "wavebench"
     assert state["wavebench"]["version"] == "0.7.0"
     assert len(state["wavebench"]["pyproject_sha256"]) == 64
-    assert len(state["plugins"]) == 4
+    assert len(state["plugins"]) == 5
     assert all(len(plugin["pyproject_sha256"]) == 64 for plugin in state["plugins"])
 
 
@@ -57,6 +59,7 @@ def test_sync_command_uses_standard_editable_installs():
     assert editable_targets[1:] == [
         f"{ROOT / 'packages/wavebench-rigol-dg4000'}[dev]",
         f"{ROOT / 'packages/wavebench-rigol-dm3000'}[dev]",
+        f"{ROOT / 'packages/wavebench-rigol-dp800'}[dev]",
         f"{ROOT / 'packages/wavebench-rigol-ds1000z'}[dev]",
         f"{ROOT / 'packages/wavebench-shengpu-sp3000a'}[dev]",
     ]
