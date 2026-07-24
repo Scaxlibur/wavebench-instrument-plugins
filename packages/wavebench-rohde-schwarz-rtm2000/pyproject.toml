@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wavebench-rohde-schwarz-rtm2000"
+version = "0.1.0"
+description = "Rohde & Schwarz RTM2000 oscilloscope plugin for WaveBench HEAD"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["wavebench>=0.7,<1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[project.entry-points."wavebench.instruments"]
+"rohde-schwarz.rtm2032" = "wavebench_rohde_schwarz_rtm2000:descriptor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wavebench_rohde_schwarz_rtm2000"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

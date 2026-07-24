@@ -1,0 +1,70 @@
+# WaveBench R&S RTM2000 plugin
+
+[中文](README.md)
+
+An executable WaveBench oscilloscope plugin for the Rohde & Schwarz RTM2000 series, with the
+RTM2032 as the current hardware baseline.
+
+## Identity and HEAD baseline
+
+- distribution: `wavebench-rohde-schwarz-rtm2000`
+- canonical driver ID: `rohde-schwarz.rtm2032`
+- development baseline: WaveBench `973fc88`
+- Python: `>=3.11`
+- transport backend: core-provided `rsinstrument`
+
+This plugin targets the current WaveBench HEAD only and does not maintain a legacy-core
+compatibility matrix. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
+the external implementation. The short alias `rtm2032` always selects the built-in fallback.
+Removing the plugin restores the built-in implementation for the canonical ID as well.
+
+## Capabilities and boundary
+
+- `*IDN?`, error queue, and explicit autoscale;
+- current-waveform fetch and single acquisition;
+- one acquisition followed by multi-channel waveform reads;
+- channel-coupling queries and PNG screenshots;
+- pass-through RTM2000 `DEF`, `MAX`, and `DMAX` point modes.
+
+The plugin owns RTM2000 SCPI, header/REAL waveform parsing, and device-error semantics. Core retains
+the RsInstrument session, timeouts, high-impedance guard, services, artifacts, run plans, and
+experiment-level restoration. Empty or short waveform lists, invalid headers, non-PNG screenshots,
+and OPC timeouts fail explicitly; the plugin does not pad, fabricate success, or retry blindly.
+
+## Configuration example
+
+```toml
+[connection]
+backend = "lan"
+resource = "TCPIP::192.0.2.60::INSTR"
+
+[scope]
+driver = "rohde-schwarz.rtm2032"
+default_channel = 1
+check_errors = true
+```
+
+The example uses an RFC 5737 documentation address. Offline tests do not scan resources, connect to
+instruments, or send real SCPI.
+
+## Acceptance status
+
+Version 0.1.0 has completed the offline protocol, descriptor, FakeTransport, real-wheel, and managed
+lifecycle implementation. Controlled dual-channel RTM2032 hardware acceptance is still pending, so
+hardware migration closure is not yet claimed.
+
+## Development checks
+
+```bash
+python -m pytest -q packages/wavebench-rohde-schwarz-rtm2000/tests
+python -m ruff check packages/wavebench-rohde-schwarz-rtm2000
+python -m wavebench plugin package check packages/wavebench-rohde-schwarz-rtm2000
+```
+
+Do not commit real addresses, serial numbers, waveforms, screenshots, or command logs. This package
+is licensed under the [MIT License](LICENSE).
+
+## Origin
+
+Version 0.1.0 was migrated from the built-in RTM2032 protocol implementation at WaveBench `973fc88`.
+Only the vendor driver, descriptor, entry point, and FakeTransport tests moved into this package.

@@ -6,7 +6,7 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或�
 
 ## 当前状态
 
-正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000` 与 `wavebench-rigol-dp800` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000` 与 `wavebench-rigol-dp800` 已完成离线、受管生命周期和受控实机验收；`wavebench-rohde-schwarz-rtm2000` 已进入离线迁移、等待 RTM2032 双通道实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 ## 计划结构
 
@@ -16,6 +16,7 @@ packages/
 ├── wavebench-rigol-dm3000/
 ├── wavebench-rigol-dp800/
 ├── wavebench-rigol-ds1000z/
+├── wavebench-rohde-schwarz-rtm2000/
 ├── wavebench-shengpu-sp3000a/
 └── wavebench-<vendor>-<instrument>/
     ├── pyproject.toml
@@ -32,6 +33,7 @@ packages/
 - [`wavebench-rigol-dg4000`](packages/wavebench-rigol-dg4000/README.md)：双通道 RIGOL DG4202 / DG4000 系列，canonical ID `rigol.dg4202`。
 - [`wavebench-rigol-dm3000`](packages/wavebench-rigol-dm3000/README.md)：LAN-only RIGOL DM3000 / DM3058 数字万用表，canonical ID `rigol.dm3000`；短 alias 保留内建双 backend fallback。
 - [`wavebench-rigol-dp800`](packages/wavebench-rigol-dp800/README.md)：RIGOL DP800 / DP832 / DP832A 可编程直流电源，canonical ID `rigol.dp800`；当前对齐 WaveBench HEAD，短 alias 保留内建 fallback。
+- [`wavebench-rohde-schwarz-rtm2000`](packages/wavebench-rohde-schwarz-rtm2000/README.md)：R&S RTM2000 / RTM2032 示波器，canonical ID `rohde-schwarz.rtm2032`；当前完成离线迁移，双通道实机验收待完成。
 - [`wavebench-shengpu-sp3000a`](packages/wavebench-shengpu-sp3000a/README.md)：Shengpu SP30120 query-only 扫频仪驱动，canonical ID `shengpu.sp30120`；只声明已验证的身份能力，曲线和写操作保持关闭。
 
 ## 安全边界
