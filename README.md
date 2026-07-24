@@ -6,7 +6,7 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或�
 
 ## 当前状态
 
-正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000` 与 LAN-only 的 `wavebench-rigol-dm3000` 已完成离线、受管生命周期和受控实机验收；`wavebench-rigol-dp800` 已完成当前 HEAD 的离线迁移，等待 DP832A 受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000` 与 `wavebench-rigol-dp800` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 query-only M3。WaveBench 0.7 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 ## 计划结构
 

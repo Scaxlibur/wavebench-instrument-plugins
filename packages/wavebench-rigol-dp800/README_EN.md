@@ -54,10 +54,13 @@ instruments, or send real SCPI.
 
 ## Acceptance status
 
-Version 0.1.0 has completed its offline implementation plus real-wheel managed installation,
-removal fallback, and reinstallation checks. A DP832A LAN session is currently unavailable, so the
-three-channel read-only snapshot and controlled write/restore hardware acceptance remain pending;
-hardware acceptance is not claimed.
+Version 0.1.0 completed controlled DP832A LAN acceptance with a real wheel on 2026-07-24. Managed
+installation, healthy/load checks, canonical-versus-short-alias routing, three-channel read-only
+status and protection snapshots, conservative CH1 voltage/current-limit writes, OVP/OCP write and
+readback, unloaded output ON/OFF, removal fallback, and reinstallation all passed. All three channels
+were snapshotted before mutation; a separate session then confirmed exact restoration, all outputs
+OFF, and an empty error queue. The acceptance did not modify the real `wavebench.toml` or commit real
+addresses, serial numbers, snapshots, measurements, or command logs.
 
 ## Development checks
 
