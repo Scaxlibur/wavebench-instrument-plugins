@@ -8,9 +8,9 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `973fc88`
+- 开发基线：WaveBench `60dffd0`
 - Python：`>=3.11`
-- transport backend：核心提供的 `rsinstrument`
+- 默认 transport backend：核心提供的 `rsinstrument-socket`
 
 本插件只对齐 WaveBench 当前 HEAD，不维护旧核心兼容矩阵。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
@@ -28,6 +28,12 @@
 高阻保护、Service、artifact、run plan 和实验级状态恢复留在核心。空列表、短列表、无效 header、
 非 PNG 截图和 OPC 超时都显式失败，不补零、不伪造成功、不盲目重试。
 
+`backend = "lan"` 按 descriptor 首选顺序使用 RsInstrument SocketIO，不依赖 VISA-C 或
+pyvisa-py。诊断兼容性时可显式选择 `rsinstrument`、`rsinstrument-rsvisa` 或
+`rsinstrument-pyvisa-py`；切换后端必须重新打开会话，读取失败后不会自动重放。插件仅对
+`MAX` / `DMAX` 波形数据读取使用独立的长传输 timeout，并记录不含地址、序列号和波形内容的
+分块进度、点数、字节数、耗时与吞吐 telemetry。
+
 ## 配置示例
 
 ```toml
@@ -39,13 +45,16 @@ resource = "TCPIP::192.0.2.60::INSTR"
 driver = "rohde-schwarz.rtm2032"
 default_channel = 1
 check_errors = true
+
+[scope.options]
+long_waveform_timeout_ms = 300000
 ```
 
 示例使用 RFC 5737 文档地址。默认测试不扫描资源、不连接仪器，也不发送真实 SCPI。
 
 ## 验收状态
 
-0.1.0 已于 2026-07-24 完成真实 wheel 的受控 RTM2032 LAN 验收：受管安装与 healthy/load、
+0.1.0 已于 2026-07-24 完成真实 wheel 的受控 RTM2032 LAN/VXI-11 验收：受管安装与 healthy/load、
 canonical 与短 alias 路由、双通道单次 acquisition、`DEF` / `MAX` / `DMAX` 完整波形、
 autoscale、高阻 coupling 守卫、PNG 截图、20/20 双通道重复采集和空错误队列均通过。
 `MAX` 每通道实测 10000000 点，`DMAX` 每通道实测 6250000 点；长记录使用独立 300 s
@@ -53,6 +62,10 @@ autoscale、高阻 coupling 守卫、PNG 截图、20/20 双通道重复采集和
 setup blob、配置指纹和活动采集状态均恢复。验收未修改真实 `wavebench.toml`，未提交真实
 地址、序列号、波形、截图、快照或命令日志。实验级快照与恢复仍属于核心/验收工具边界，
 不进入厂商驱动。
+
+0.2.0 将默认 LAN transport 改为 RsInstrument SocketIO，保留上述显式兼容后端。离线门禁
+覆盖 descriptor 路由、调用级长传输 timeout、脱敏 telemetry 和 wheel 生命周期；实机
+SocketIO 的 DEF/MAX/DMAX、截图、autoscale、重复采集和完整状态恢复需要按同一可逆脚本重验。
 
 ## 开发验证
 

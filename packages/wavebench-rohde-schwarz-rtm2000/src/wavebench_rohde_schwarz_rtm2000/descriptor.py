@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from wavebench.instruments.api import InstrumentDescriptor
+from wavebench.instruments.api import InstrumentDescriptor, OptionSpec
 
 
 def _open_driver(context):
@@ -9,6 +9,7 @@ def _open_driver(context):
     return RTM2032Scope(
         transport=context.open_transport(),
         check_errors_after_ops=bool(context.settings["check_errors"]),
+        long_waveform_timeout_ms=int(context.options["long_waveform_timeout_ms"]),
     )
 
 
@@ -31,16 +32,36 @@ def descriptor() -> InstrumentDescriptor:
             "scope.channel_coupling",
         ),
         idn_patterns=("Rohde&Schwarz,RTM", "Rohde & Schwarz,RTM"),
-        backends=("rsinstrument",),
-        option_specs=(),
+        backends=(
+            "rsinstrument-socket",
+            "rsinstrument",
+            "rsinstrument-rsvisa",
+            "rsinstrument-pyvisa-py",
+        ),
+        option_specs=(
+            OptionSpec(
+                "long_waveform_timeout_ms",
+                int,
+                default=300_000,
+                minimum=1_000,
+                maximum=3_600_000,
+            ),
+        ),
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary="Installable R&S RTM2000-series scope capture driver.",
         wavebench_min_version="0.7.0",
         wavebench_max_version="1.0.0",
         distribution="wavebench-rohde-schwarz-rtm2000",
-        version="0.1.0",
+        version="0.2.0",
         source="entry_point:rohde-schwarz.rtm2032",
         scope_coupling_policy="switchable-termination",
-        config_fields=("connection.resource", "scope.driver", "waveform.*"),
+        config_fields=(
+            "connection.backend",
+            "connection.resource",
+            "scope.driver",
+            "scope.options.long_waveform_timeout_ms",
+            "waveform.*",
+        ),
+        resource_schemes=("tcpip",),
     )

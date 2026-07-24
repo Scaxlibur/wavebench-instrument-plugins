@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import time
 
 import numpy as np
 
@@ -35,6 +36,7 @@ def parse_waveform_header(response: str) -> WaveformHeader:
 class RTM2032Scope:
     transport: InstrumentTransport
     check_errors_after_ops: bool = True
+    long_waveform_timeout_ms: int = 300_000
 
     def idn(self) -> str:
         return self.transport.query("*IDN?")
@@ -95,13 +97,35 @@ class RTM2032Scope:
         self.transport.write("FORM:BORD LSBF")
         self.transport.write(f"CHAN:DATA:POIN {points.upper()}")
 
-    def _read_waveform(self, channel: int) -> WaveformData:
+    def _read_waveform(self, channel: int, points: str) -> WaveformData:
         header = parse_waveform_header(
             self.transport.query(f"CHAN{channel}:DATA:HEAD?")
         )
+        point_mode = points.strip().upper()
+        transfer_timeout_ms = (
+            self.long_waveform_timeout_ms
+            if point_mode in {"MAX", "DMAX"}
+            else None
+        )
+        started = time.perf_counter()
         voltages = np.asarray(
-            self.transport.query_float_list(f"CHAN{channel}:DATA?"),
+            self.transport.query_float_list(
+                f"CHAN{channel}:DATA?",
+                timeout_ms=transfer_timeout_ms,
+            ),
             dtype=np.float64,
+        )
+        elapsed_s = max(time.perf_counter() - started, 0.0)
+        self.transport.record_event(
+            "telemetry",
+            " ".join(
+                (
+                    "operation=rtm2000_waveform",
+                    f"point_mode={point_mode}",
+                    f"points={voltages.size}",
+                    f"elapsed_ms={elapsed_s * 1000.0:.3f}",
+                )
+            ),
         )
         if voltages.size != header.points:
             raise DataError(
@@ -117,7 +141,7 @@ class RTM2032Scope:
         check_errors: bool = True,
     ) -> WaveformData:
         self._setup_real_waveform_transfer(channel=channel, points=points)
-        waveform = self._read_waveform(channel=channel)
+        waveform = self._read_waveform(channel=channel, points=points)
         if check_errors:
             self.assert_no_errors()
         return waveform
@@ -144,7 +168,7 @@ class RTM2032Scope:
                 "single acquisition timed out while waiting for *OPC?. "
                 "Check trigger source/level, or use `scope fetch` to read the current waveform."
             ) from exc
-        waveform = self._read_waveform(channel=channel)
+        waveform = self._read_waveform(channel=channel, points=points)
         if check_errors:
             self.assert_no_errors()
         return waveform
@@ -188,7 +212,7 @@ class RTM2032Scope:
             if on_channel_start is not None:
                 on_channel_start(channel)
             self._setup_real_waveform_transfer(channel=channel, points=points)
-            waveform = self._read_waveform(channel=channel)
+            waveform = self._read_waveform(channel=channel, points=points)
             waveforms[channel] = waveform
             if on_waveform is not None:
                 on_waveform(channel, waveform)

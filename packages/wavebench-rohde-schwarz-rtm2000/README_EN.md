@@ -9,9 +9,9 @@ RTM2032 as the current hardware baseline.
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
-- development baseline: WaveBench `973fc88`
+- development baseline: WaveBench `60dffd0`
 - Python: `>=3.11`
-- transport backend: core-provided `rsinstrument`
+- default transport backend: core-provided `rsinstrument-socket`
 
 This plugin targets the current WaveBench HEAD only and does not maintain a legacy-core
 compatibility matrix. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
@@ -31,6 +31,13 @@ the RsInstrument session, timeouts, high-impedance guard, services, artifacts, r
 experiment-level restoration. Empty or short waveform lists, invalid headers, non-PNG screenshots,
 and OPC timeouts fail explicitly; the plugin does not pad, fabricate success, or retry blindly.
 
+`backend = "lan"` selects RsInstrument SocketIO according to descriptor preference and does not
+depend on VISA-C or pyvisa-py. Explicit diagnostic compatibility paths are `rsinstrument`,
+`rsinstrument-rsvisa`, and `rsinstrument-pyvisa-py`; changing backend requires a fresh session,
+and a failed response is never replayed automatically. Only `MAX` and `DMAX` waveform data reads
+use the dedicated long-transfer timeout. Chunk progress, point/byte counts, elapsed time, and
+throughput telemetry exclude addresses, serial numbers, and waveform contents.
+
 ## Configuration example
 
 ```toml
@@ -42,6 +49,9 @@ resource = "TCPIP::192.0.2.60::INSTR"
 driver = "rohde-schwarz.rtm2032"
 default_channel = 1
 check_errors = true
+
+[scope.options]
+long_waveform_timeout_ms = 300000
 ```
 
 The example uses an RFC 5737 documentation address. Offline tests do not scan resources, connect to
@@ -49,7 +59,7 @@ instruments, or send real SCPI.
 
 ## Acceptance status
 
-Version 0.1.0 completed controlled RTM2032 LAN acceptance with a real wheel on 2026-07-24. Managed
+Version 0.1.0 completed controlled RTM2032 LAN/VXI-11 acceptance with a real wheel on 2026-07-24. Managed
 install and healthy/load checks, canonical-versus-short-alias routing, dual-channel single
 acquisition, complete `DEF`, `MAX`, and `DMAX` waveforms, autoscale, the high-impedance coupling
 guard, PNG screenshots, 20/20 repeated dual-channel captures, and an empty error queue all passed.
@@ -60,6 +70,12 @@ configuration fingerprint, and active acquisition state were all confirmed resto
 The acceptance did not modify the real `wavebench.toml` or commit real addresses, serial numbers,
 waveforms, screenshots, snapshots, or command logs. Experiment-level snapshot and restoration stay
 in core/acceptance tooling rather than the vendor driver.
+
+Version 0.2.0 changes the preferred LAN transport to RsInstrument SocketIO while retaining the
+explicit compatibility backends above. Offline gates cover descriptor routing, per-call
+long-transfer timeouts, sanitized telemetry, and the wheel lifecycle. DEF/MAX/DMAX, screenshot,
+autoscale, repeat capture, and complete state restoration must be repeated on hardware through
+the same reversible acceptance script before SocketIO hardware acceptance is claimed.
 
 ## Development checks
 

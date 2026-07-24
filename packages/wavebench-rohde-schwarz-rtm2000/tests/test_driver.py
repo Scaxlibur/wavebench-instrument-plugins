@@ -19,6 +19,8 @@ class FakeTransport:
         self.queries = []
         self.closed = False
         self.opc_error = None
+        self.float_list_calls = []
+        self.events = []
 
     def write(self, command):
         self.writes.append(command)
@@ -27,8 +29,9 @@ class FakeTransport:
         self.queries.append(command)
         return self.responses[command]
 
-    def query_float_list(self, command):
+    def query_float_list(self, command, *, timeout_ms=None):
         self.queries.append(command)
+        self.float_list_calls.append((command, timeout_ms))
         return self.float_lists[command]
 
     def query_bin_block(self, command):
@@ -43,6 +46,9 @@ class FakeTransport:
 
     def close(self):
         self.closed = True
+
+    def record_event(self, direction, text):
+        self.events.append((direction, text))
 
 
 def test_descriptor_and_factory_preserve_core_transport_boundary():
@@ -65,6 +71,7 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
         logger=CommandLogger(),
         _transport_factory=open_transport,
         settings={"check_errors": False},
+        options=descriptor.validate_options({}),
     )
 
     driver = descriptor.factory(context)
@@ -72,7 +79,14 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
 
     assert descriptor.driver_id == "rohde-schwarz.rtm2032"
     assert descriptor.aliases == ()
-    assert descriptor.backends == ("rsinstrument",)
+    assert descriptor.backends == (
+        "rsinstrument-socket",
+        "rsinstrument",
+        "rsinstrument-rsvisa",
+        "rsinstrument-pyvisa-py",
+    )
+    assert descriptor.resource_schemes == ("tcpip",)
+    assert descriptor.validate_options({}) == {"long_waveform_timeout_ms": 300_000}
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.distribution == "wavebench-rohde-schwarz-rtm2000"
     assert driver.transport is transport
@@ -103,6 +117,39 @@ def test_header_parser_and_fetch_preserve_real_waveform_semantics():
         "FORM:BORD LSBF",
         "CHAN:DATA:POIN DEF",
     ]
+    assert transport.float_list_calls == [("CHAN2:DATA?", None)]
+    assert any(
+        direction == "telemetry"
+        and "operation=rtm2000_waveform" in text
+        and "point_mode=DEF" in text
+        and "points=3" in text
+        for direction, text in transport.events
+    )
+
+
+@pytest.mark.parametrize("points", ["MAX", "dmax"])
+def test_long_record_modes_use_dedicated_transfer_timeout(points):
+    transport = FakeTransport(
+        responses={"CHAN1:DATA:HEAD?": "0,1,2,1"},
+        float_lists={"CHAN1:DATA?": [0.0, 1.0]},
+    )
+    scope = RTM2032Scope(transport, long_waveform_timeout_ms=456_000)
+
+    waveform = scope.fetch_waveform(
+        channel=1,
+        points=points,
+        check_errors=False,
+    )
+
+    assert waveform.sample_count == 2
+    assert transport.float_list_calls == [("CHAN1:DATA?", 456_000)]
+
+
+def test_descriptor_rejects_invalid_long_record_timeout():
+    descriptor = plugin_descriptor()
+
+    with pytest.raises(ValueError, match="must be >= 1000"):
+        descriptor.validate_options({"long_waveform_timeout_ms": 999})
 
 
 def test_fetch_accepts_full_length_all_zero_waveform():
