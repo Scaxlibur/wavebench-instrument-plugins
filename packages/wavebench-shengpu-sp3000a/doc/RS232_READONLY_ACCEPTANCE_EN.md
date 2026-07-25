@@ -50,7 +50,7 @@ The accepted core-state set was then read in three additional snapshots. Every f
 
 ## M3 driver-path acceptance
 
-The installable `wavebench-shengpu-sp3000a` 0.1.0 package passed one end-to-end read-only hardware acceptance run. After the target resource was opened through the WaveBench core serial transport, the plugin's `idn()` method confirmed the verified SP3000-family identity and `read_scalar_status()` successfully read and parsed every stable scalar field listed above.
+This is the historical read-only acceptance record for version 0.1.0, not a complete capability statement for the current 0.2.0 release. The installable `wavebench-shengpu-sp3000a` 0.1.0 package passed one end-to-end read-only hardware acceptance run. After the target resource was opened through the WaveBench core serial transport, the plugin's `idn()` method confirmed the verified SP3000-family identity and `read_scalar_status()` successfully read and parsed every stable scalar field listed above. The command-certification plan, matrix, and package README define the five vendor-specific RF-OFF controls added later in 0.2.0 and their safety boundary.
 
 This path sent only `*IDN?` and the fixed status-query allowlist. It did not call a transport write API or send trace, configuration, trigger, RF, save/recall, or Local commands. Descriptor import, entry-point discovery, and registry loading remain zero-I/O operations. This acceptance covers only the M3 query-only driver and scalar parser; it does not expand the M2 conclusions about trace transfer or local-state restoration.
 

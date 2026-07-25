@@ -24,13 +24,13 @@ def descriptor() -> InstrumentDescriptor:
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary=(
-            "Query-only SP30120 driver with verified RS-232 identity and scalar-status "
-            "queries; generic snapshots, traces, markers, and control are not exposed."
+            "SP30120 driver with verified RS-232 identity, scalar-status queries, and "
+            "vendor-specific RF-off controls; generic sweep capabilities are not exposed."
         ),
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-shengpu-sp3000a",
-        version="0.1.0",
+        version="0.2.0",
         source="entry_point:shengpu.sp30120",
         config_fields=("connection.resource",),
     )

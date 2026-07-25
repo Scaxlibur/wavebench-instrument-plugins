@@ -30,7 +30,7 @@
 |`FMT` / `SETSCALE` / `SETREFL`|W/Q|M2|Q `verified-read`；W `untested`|显示模式、幅度刻度和幅度参考值|
 |`SETREFPH`|W/Q|M2|Q `unsupported-firmware`；W `untested`|Q 返回确定性 `Error`|
 |`SETPHSCAL`|W/Q|M2|Q `unsupported-firmware`；W `untested`|Q 无响应，健康复核正常|
-|`SETREFP`|W/Q|M2|`verified-control`|`4→5→4` 连续 3/3，独立回读与完整指纹恢复通过|
+|`SETREFP`|W/Q|M2|`verified-control`|`4→5→4` 连续 3/3；0.2.0 类型化 RF-OFF API|
 |`MARKn:RMEAS`|W/Q|M5/选件|`manual-only`|S 参数/反射测量，需夹具和校准|
 |`MARKn:RVAL` / `MARKn:RTVAL?`|W/Q|M5/选件|`manual-only`|`RVAL AUTO` 会采集全反射基准|
 |`MARKn`|W/Q|M2/M5|Q `verified-read`；W `untested`|1–5 号频率稳定读回 20/40/60/80/100 MHz|
@@ -52,14 +52,14 @@
 |`*SAV` / `*RCL`|W|M6|`manual-only`|工作状态保存/调用，本轮禁止|
 |`CONFIGI` / `CONFIGO`|W|M6|`manual-only`|工作状态保存/调用，本轮禁止|
 |`TRACEI` / `TRACEOn`|W|M6|`manual-only`|曲线保存/显示，本轮禁止|
-|`TRIM`|W/Q|M2|`verified-control`|SING/CONT 静默写入及 `TRIM?` 回读已通过|
-|`EXTT`|W/Q|M2/M3|`verified-control`|`OFF→ONSWEE→OFF` 连续 3/3，独立回读与完整指纹恢复通过|
+|`TRIM`|W/Q|M2|`verified-control`|SING/CONT 连续 3/3；0.2.0 类型化 RF-OFF API|
+|`EXTT`|W/Q|M2/M3|`verified-control`|`OFF→ONSWEE→OFF` 连续 3/3；0.2.0 类型化 RF-OFF API|
 |`CONT` / `SING`|W|M2|`doc-ambiguous`|可能是 `TRIM` 的独立别名，无 query|
 |`RFSTAT`|W/Q|M4/互锁|Q `verified-read`；OFF W 仅有单向安全证据；ON `manual-only`|本轮从 ON 安全关闭并保持 OFF，但不作为通用可逆控制|
 |`SETCDATE`|W/Q|M2|Q `doc-ambiguous`；W `untested`|当前返回异常字符序列，禁止写入|
 |`SETCTIME`|W/Q|M2|Q `verified-read`；W `untested`|时间可读；未改变设备时钟|
-|`CLOCKSW`|W/Q|M2|`verified-control`|`ON→OFF→ON` 连续 3/3，恢复通过|
-|`LANGSEL`|W/Q|M2|`verified-control`|`CHINESE→ENGLISH→CHINESE` 连续 3/3，恢复通过|
+|`CLOCKSW`|W/Q|M2|`verified-control`|`ON→OFF→ON` 连续 3/3；0.2.0 类型化 RF-OFF API|
+|`LANGSEL`|W/Q|M2|`verified-control`|`CHINESE→ENGLISH→CHINESE` 连续 3/3；0.2.0 类型化 RF-OFF API|
 |`*RST` / `PRES`|W|M6|`manual-only`|高副作用复位，本轮禁止|
 |`OUTPRFORM?`|Q|M1/M3|`manual-only`|稳定 501+501 帧；模式/单位未关闭|
 |`OUTPRFORM:CONT`|W/Q|M3|`unsupported-firmware`|Q 无响应；W 无可见效果|

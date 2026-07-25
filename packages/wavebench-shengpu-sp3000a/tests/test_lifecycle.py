@@ -53,7 +53,7 @@ def test_managed_install_healthy_load_and_remove_round_trip(tmp_path: Path) -> N
         ],
         cwd=tmp_path,
     )
-    wheel = next(wheelhouse.glob("wavebench_shengpu_sp3000a-0.1.0-*.whl"))
+    wheel = next(wheelhouse.glob("wavebench_shengpu_sp3000a-0.2.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"
@@ -69,7 +69,7 @@ def test_managed_install_healthy_load_and_remove_round_trip(tmp_path: Path) -> N
 
     assert result.status == "installed"
     assert installed.distribution == "wavebench-shengpu-sp3000a"
-    assert installed.version == "0.1.0"
+    assert installed.version == "0.2.0"
     assert installed.status == "healthy"
     load_script = """
 from wavebench.instruments.registry import build_instrument_registry

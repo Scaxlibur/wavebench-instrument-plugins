@@ -74,7 +74,7 @@ def test_wheel_install_discovery_and_uninstall_without_instrument_io(tmp_path: P
         ],
         cwd=tmp_path,
     )
-    plugin_wheel = next(wheelhouse.glob("wavebench_shengpu_sp3000a-0.1.0-*.whl"))
+    plugin_wheel = next(wheelhouse.glob("wavebench_shengpu_sp3000a-0.2.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"

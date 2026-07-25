@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-shengpu-sp3000a"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shengpu SP30120 sweep analyzer driver plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -50,7 +50,7 @@
 
 ## M3 驱动路径验收
 
-可安装的 `wavebench-shengpu-sp3000a` 0.1.0 已通过一次端到端实机只读验收。通过 WaveBench 核心 serial transport 打开目标资源后，插件的 `idn()` 成功确认已验证的 SP3000 系列身份，`read_scalar_status()` 成功读取并解析上述全部稳定标量字段。
+这是 0.1.0 阶段的历史只读验收记录，不是当前 0.2.0 的完整能力说明。可安装的 `wavebench-shengpu-sp3000a` 0.1.0 已通过一次端到端实机只读验收。通过 WaveBench 核心 serial transport 打开目标资源后，插件的 `idn()` 成功确认已验证的 SP3000 系列身份，`read_scalar_status()` 成功读取并解析上述全部稳定标量字段。0.2.0 后续加入的五项厂商专用 RF-OFF 控制及其安全边界，以命令认证计划、矩阵和包 README 为准。
 
 该路径只发送 `*IDN?` 与固定 allowlist 中的状态 query；未调用 transport 写接口，未发送曲线、配置、触发、RF、保存/调出或 Local 命令。descriptor 导入、entry point 发现与 registry 加载仍为零仪器 I/O。验收只证明 query-only M3 驱动和标量解析，不扩张 M2 的曲线与本地状态结论。
 

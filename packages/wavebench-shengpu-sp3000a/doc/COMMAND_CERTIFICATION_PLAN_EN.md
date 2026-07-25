@@ -33,6 +33,8 @@ Every write must:
 
 Missing acknowledgement is not failure by itself because this firmware silently accepts verified `TRIM SING/CONT` writes. A write without verifiable readback or independent effect never passes. Loss of communication, a non-quiet boundary, failed restoration, or a frozen panel stops the run and requires an operator power cycle.
 
+The write/restore sequence above is the certification-runner experiment, not an everyday production-API call. Version 0.2.0 admits only five `verified-control` operations to the production driver as vendor-specific typed methods; each call retains its target and never restores the original value automatically. It requires RF OFF before and after, exact independent readback, core-fingerprint and identity postchecks; any post-write uncertainty permanently latches that instance's write path. The descriptor still declares only `sweep_analyzer.idn` and does not misrepresent these UI/control-plane operations as a generic configuration capability.
+
 ## M0–M3 scope
 
 - **M0:** deduplicate the manual inventory; record parameters, options, OCR ambiguity, and current evidence; build a private one-command runner with explicit resource input, journal-before-write, RF-OFF interlock, fingerprint checks, and quarantine tests.
@@ -58,8 +60,8 @@ The following reversible controls each passed three consecutive journal-before-w
 
 The final state was independently rechecked as RF OFF, TRIM CONT, reference position 4, clock display ON, Chinese UI, and external trigger OFF, with no active quarantine. RF OFF has one observed one-way ON-to-OFF safety transition only and does not certify generic RF control.
 
-These private certification operations remain disconnected from the production descriptor and driver. Frequency-window writes, display-scale writes, date/time writes, marker visibility, impedances, FUNC, amplitude/phase, and trace configuration remain uncertified or stricter because of coupled state, anomalous responses, missing readback, or firmware failure.
+Frequency-window writes, display-scale writes, date/time writes, marker visibility, impedances, FUNC, amplitude/phase, and trace configuration remain uncertified or stricter because of coupled state, anomalous responses, missing readback, or firmware failure.
 
 ## Code admission
 
-Hardware success first enters an exact protocol/error mapping, then a typed vendor method with FakeTransport and restoration tests, and only then a generic WaveBench capability when the semantics fit. There is no arbitrary SCPI passthrough. Public commits exclude real resources, serial numbers, raw responses, laboratory addresses, and recovery journals. Each feature family receives a separate signed local commit; no automatic push, tag, or release is allowed.
+Hardware success first enters an exact protocol/error mapping, then a typed vendor method with FakeTransport and failure-boundary tests, and only then a generic WaveBench capability when the semantics fit. There is no arbitrary SCPI passthrough. Every write method requires bounded parameters, an RF interlock, independent confirmation, explicit recovery responsibility, and non-retryable error semantics. Version 0.2.0 setters never attempt blind rollback; uncertain post-write state latches the instance and requires independent verification. Public commits exclude real resources, serial numbers, raw responses, laboratory addresses, and recovery journals. Each feature family receives a separate signed local commit; no automatic push, tag, or release is allowed.

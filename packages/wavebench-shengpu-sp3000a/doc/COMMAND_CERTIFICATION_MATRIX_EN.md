@@ -20,7 +20,7 @@ Statuses apply only to the observed non-A SP30120. `W/Q` means setter/query. Ite
 |External detector (`DETMODE`, `EXTDETPOL`, `EXTDETIN`, `EXTDETIN:SENS`)|W/Q|option|`option-absent`; DETMODE Q is also `unsupported-firmware`|Option not confirmed installed|
 |`FMT`, `SETSCALE`, `SETREFL`|W/Q|M2|Q `verified-read`; W `untested`|Display mode, amplitude scale, and reference level|
 |`SETREFPH`, `SETPHSCAL`|W/Q|M2|Q `unsupported-firmware`; W `untested`|Reference-phase query returns `Error`; phase-scale query is silent|
-|`SETREFP`|W/Q|M2|`verified-control`|`4→5→4` passed 3/3 with independent readback and full fingerprint restoration|
+|`SETREFP`|W/Q|M2|`verified-control`|`4→5→4` passed 3/3; typed RF-OFF API in 0.2.0|
 |`MARKn`|W/Q|M2/M5|Q `verified-read`; W `untested`|Markers 1–5 read 20/40/60/80/100 MHz consistently|
 |`MARD`|W/Q|M2|Q `manual-only`; W `untested`|One OFF observation, below the three-run gate|
 |`CLEMn`, `DISMn`|W/Q|M2|Q `unsupported-firmware`; W `untested`|Queries for markers 1–5 return deterministic `Error`|
@@ -28,14 +28,14 @@ Statuses apply only to the observed non-A SP30120. `W/Q` means setter/query. Ite
 |`MARKVn`, `MARKDISP:MEAS`|Q|M1/M5|`untested`|Marker measurement scope was excluded from this run|
 |Marker search, bandwidth, Q, reflection, VSWR, S-parameters, and limit line|W/Q|M5/option|`manual-only`|Analysis/calibration/fixture prerequisites|
 |Storage (`SAVTA`, `*SAV`, `*RCL`, `CONFIGI/O`, `TRACEI/O`)|W/Q|M6|Q `untested`; W `manual-only`|Writes and recalls prohibited in this run|
-|`TRIM`|W/Q|M2|`verified-control`|Silent SING/CONT writes with readback|
-|`EXTT`|W/Q|M2/M3|`verified-control`|`OFF→ONSWEE→OFF` passed 3/3 with readback and full restoration|
+|`TRIM`|W/Q|M2|`verified-control`|SING/CONT passed 3/3; typed RF-OFF API in 0.2.0|
+|`EXTT`|W/Q|M2/M3|`verified-control`|`OFF→ONSWEE→OFF` passed 3/3; typed RF-OFF API in 0.2.0|
 |`CONT`, `SING`|W|M2|`doc-ambiguous`|Possible standalone aliases, no query|
 |`RFSTAT`|W/Q|M4/interlock|Q `verified-read`; OFF has one-way safety evidence; ON `manual-only`|Safely forced from ON to OFF and kept OFF; not a generic reversible control|
 |`SETCDATE`|W/Q|M2|Q `doc-ambiguous`; W `untested`|Current response is not a valid date; writes prohibited|
 |`SETCTIME`|W/Q|M2|Q `verified-read`; W `untested`|Time is readable; device clock was not changed|
-|`CLOCKSW`|W/Q|M2|`verified-control`|`ON→OFF→ON` passed 3/3 and restored|
-|`LANGSEL`|W/Q|M2|`verified-control`|`CHINESE→ENGLISH→CHINESE` passed 3/3 and restored|
+|`CLOCKSW`|W/Q|M2|`verified-control`|`ON→OFF→ON` passed 3/3; typed RF-OFF API in 0.2.0|
+|`LANGSEL`|W/Q|M2|`verified-control`|`CHINESE→ENGLISH→CHINESE` passed 3/3; typed RF-OFF API in 0.2.0|
 |`*RST`, `PRES`|W|M6|`manual-only`|Reset prohibited in this run|
 |`OUTPRFORM?`|Q|M1/M3|`manual-only`|Stable 501+501 frame; mode/unit not closed|
 |`OUTPRFORM:CONT`, `MODE`, `POINT`, `POINT:DATA`|W/Q|M3|`unsupported-firmware`|Queries silent; writes have no observable effect|
