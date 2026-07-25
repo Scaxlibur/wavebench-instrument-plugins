@@ -19,6 +19,8 @@ The driver also exposes the hardware-verified scalar state subset: RF state, inp
 
 A generic `SweepAnalyzerSnapshot` requires a complete effective plan including function, power, averaging, and measurement state. Those fields are not reliably queryable on the target firmware, so version 0.1.0 does not declare `sweep_analyzer.status`. `frequency_response` remains a generic capability and data domain, not another instrument kind. M4 trace framing, point count, units, and frequency-axis semantics are unverified, so trace, marker, and analysis capabilities are also omitted. Configuration, triggering, and RF output methods are not exposed.
 
+M4 trace-protocol confirmation is now authorized for controlled hardware testing and is in progress, but it has not passed. Earlier exploratory sessions captured one short frame without a complete termination boundary and several 1002-token frames shaped as 501 candidate magnitude values followed by 501 zeros. Those observations do not prove that AMPT, PHASE, and ALL mode changes took effect, nor do they establish point count, units, or clean separation between control replies and asynchronous trace data. Version 0.1.0 therefore remains query-only and does not advertise trace capability from exploratory evidence.
+
 See the [remote protocol and capability audit](doc/PROTOCOL_AUDIT_EN.md) and [RS-232 read-only protocol acceptance](doc/RS232_READONLY_ACCEPTANCE_EN.md).
 
 ## Safety boundary

@@ -74,3 +74,14 @@ Full M2 closure still requires:
 5. keeping M4 trace-format writes and parser validation separate from this stage.
 
 Until those gates pass, the public status is “partially verified SP30120 RS-232 scalar read-only protocol,” not “accepted trace acquisition,” and the unit must not be relabeled SP30120A.
+
+## Timeline boundary for later trace exploration
+
+The statement that `OUTPRFORM?` was deliberately skipped accurately describes the initial M2 read-only session. Separate, later sessions were explicitly authorized to issue bounded trace queries and return-mode writes, but they did not produce an acceptable M4 conclusion:
+
+- One baseline read returned only 739 numeric values without a confirmed LF termination boundary and with a substantial zero-valued tail. It is evidence of an incomplete or desynchronized frame only.
+- Later reads repeatedly returned 1002 numeric values terminated by LF, shaped as 501 finite nonzero candidates followed by 501 zeros.
+- Experiments labelled AMPT, PHASE, and ALL all had the same 501+501 shape. They therefore did not prove that return-mode writes took effect, and they could not distinguish a disabled phase measurement from invalid data or stale stream residue.
+- Trace-shaped bytes were observed near writes intended to control continuous upload, return mode, or RF state instead of a recognizable acknowledgement, indicating possible mixing of control replies and asynchronous trace data in those sessions.
+
+These observations remain private protocol evidence for M4. They do not overwrite the historical M2 record and do not accept a trace parser, point count, units, restoration behavior, or the `sweep_analyzer.trace` capability. M4 must re-establish a quiet session boundary with `CONT OFF`, then validate AMPT, PHASE, ALL, and at least two point counts against both expected token counts and LF termination.

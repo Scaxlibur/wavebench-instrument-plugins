@@ -19,6 +19,8 @@ M3 已建立可安装的 query-only distribution、V2 entry point、驱动、Fak
 
 通用 `SweepAnalyzerSnapshot` 需要 `FUNC`、功率、平均和测量状态等完整有效计划，而目标固件尚不能稳定查询这些字段，因此 0.1.0 不声明 `sweep_analyzer.status`。`frequency_response` 是通用能力与数据域，不是第二种 instrument kind；M4 曲线 framing、点数、单位和频率轴未验收，所以也不声明 trace、marker 或 analysis 能力。配置、触发和 RF 输出方法完全不暴露。
 
+M4 曲线协议确认已获得受控实机测试授权并进入开发，但尚未通过。历史探索曾收到一组无完整终止边界的短帧，以及多组“501 个有效幅度候选值 + 501 个零值”的 1002-token 帧；这些结果不能证明 AMPT、PHASE、ALL 模式切换生效，也不能证明点数、单位或控制响应与异步曲线流已正确分离。0.1.0 因此继续保持 query-only，不把探索证据当作 trace capability。
+
 详见[远控协议与能力审计](doc/PROTOCOL_AUDIT.md)和 [RS-232 只读协议验收](doc/RS232_READONLY_ACCEPTANCE.md)。
 
 ## 安全边界
