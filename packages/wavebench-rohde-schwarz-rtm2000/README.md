@@ -21,6 +21,7 @@
 
 - `*IDN?`、错误队列和显式 autoscale；
 - 厂商专用只读 identity/options/health 快照，不消费 EVENT 寄存器或错误队列；
+- RTM2032 CH1/CH2 类型化模拟通道、时基和探头元数据快照；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
 - 通道 coupling 查询和 PNG 截图；
@@ -87,7 +88,11 @@ setup blob、配置指纹和活动采集状态均恢复。验收未修改真实 
 0.3.0 开发线新增严格类型化的只读 identity/options/health 快照。health 快照只读取
 `*STB?`、operation/questionable condition、acquisition available/count 和 sample rate；不读取会
 消费状态的 EVENT 寄存器，也不自动清空错误队列。该厂商专用 API 不扩张 WaveBench 核心
-capability 声明。
+capability 声明。0.3.0 还增加 RTM2032 CH1/CH2 的模拟通道、时基和探头元数据快照；
+`FULL` 带宽、`UNKN` 阻抗和仪器不可用数值映射为 `None`；封闭枚举中的未知值、格式非法的
+开放 token、非有限值、未加引号文本和 CH1/CH2 之外的索引均失败关闭。命令索引只证明命令面存在，返回类型来自 RTM2032
+受控只读实测；不会外推为所有 RTM2000 型号的通用契约。实机已验证两路通道、当前时基和
+无源探头状态，验收后 status byte 为 0；未读取 EVENT 或错误队列，也未发送设置命令。
 
 ## 开发验证
 

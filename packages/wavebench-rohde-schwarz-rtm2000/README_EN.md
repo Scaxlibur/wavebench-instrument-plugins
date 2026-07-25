@@ -23,6 +23,7 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 
 - `*IDN?`, error queue, and explicit autoscale;
 - vendor-specific read-only identity/options/health snapshots that do not consume event registers or the error queue;
+- typed RTM2032 CH1/CH2 analog-channel, timebase, and probe-metadata snapshots;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
 - channel-coupling queries and PNG screenshots;
@@ -98,7 +99,13 @@ no real address, serial number, waveform, or command log entered the commit.
 The 0.3.0 development line adds strict typed read-only identity/options/health snapshots. The health
 snapshot reads only `*STB?`, operation/questionable condition, acquisition available/count, and sample
 rate. It does not consume event registers or drain the error queue. This vendor-specific API does not
-expand the WaveBench core capability declaration.
+expand the WaveBench core capability declaration. Version 0.3.0 also adds RTM2032 CH1/CH2 analog-
+channel, timebase, and probe-metadata snapshots. `FULL` bandwidth, `UNKN` impedance, and instrument
+unavailable-value sentinels map to `None`; unknown values in closed enums, malformed open tokens,
+non-finite values, unquoted text, and indexes outside CH1/CH2 fail closed. The command index establishes command-surface existence only; return
+types come from controlled read-only RTM2032 measurements and are not generalized to every RTM2000
+model. Hardware acceptance covered both channels, the current timebase, and passive-probe state and
+left the status byte at zero. It read no event/error queue and sent no setting command.
 
 ## Development checks
 

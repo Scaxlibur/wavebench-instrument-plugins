@@ -71,6 +71,7 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
     ]
 
     assert distribution.metadata["License-Expression"] == "MIT"
+    assert distribution.version == "0.3.0"
     assert [(item.name, item.value) for item in entry_points] == [
         (
             "rohde-schwarz.rtm2032",

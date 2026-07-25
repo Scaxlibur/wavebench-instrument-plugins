@@ -86,6 +86,7 @@ assert canonical.backends == (
     "rsinstrument-pyvisa-py",
 )
 assert canonical.resource_schemes == ("tcpip",)
+assert canonical.version == "0.3.0"
 assert alias.origin == "builtin"
 assert alias.driver_id == "rohde-schwarz.rtm2032"
 """

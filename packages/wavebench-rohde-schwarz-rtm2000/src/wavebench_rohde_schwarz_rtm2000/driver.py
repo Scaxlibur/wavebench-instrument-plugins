@@ -14,6 +14,7 @@ from wavebench.transport.base import InstrumentTransport
 
 
 _DECIMAL_INTEGER = re.compile(r"[+-]?[0-9]+")
+_UNAVAILABLE_FLOAT_MINIMUM = 9.0e37
 
 
 def _parse_idn(response: str) -> tuple[str, str, str, str]:
@@ -65,6 +66,77 @@ def _parse_positive_float(response: str, *, command: str) -> float:
     return value
 
 
+def _parse_finite_float(response: str, *, command: str) -> float:
+    try:
+        value = float(response.strip())
+    except ValueError as exc:
+        raise DataError(f"invalid {command} response: {response!r}") from exc
+    if not math.isfinite(value):
+        raise DataError(f"non-finite {command} response: {response!r}")
+    return value
+
+
+def _parse_bounded_float(
+    response: str,
+    *,
+    command: str,
+    minimum: float,
+    maximum: float,
+) -> float:
+    value = _parse_finite_float(response, command=command)
+    if value < minimum or value > maximum:
+        raise DataError(f"out-of-range {command} response: {response!r}")
+    return value
+
+
+def _parse_optional_positive_float(response: str, *, command: str) -> float | None:
+    value = _parse_positive_float(response, command=command)
+    return None if value >= _UNAVAILABLE_FLOAT_MINIMUM else value
+
+
+def _parse_bool(response: str, *, command: str) -> bool:
+    value = response.strip().upper()
+    if value in {"1", "ON"}:
+        return True
+    if value in {"0", "OFF"}:
+        return False
+    raise DataError(f"invalid {command} response: {response!r}")
+
+
+def _parse_token(
+    response: str,
+    *,
+    command: str,
+    allowed: frozenset[str] | None = None,
+) -> str:
+    value = response.strip().upper()
+    valid_characters = value.replace("_", "")
+    if (
+        not value
+        or not value.isascii()
+        or not value[0].isalpha()
+        or not valid_characters.isalnum()
+        or (allowed is not None and value not in allowed)
+    ):
+        raise DataError(f"invalid {command} response: {response!r}")
+    return value
+
+
+def _parse_quoted_text(response: str, *, command: str) -> str:
+    value = response.strip()
+    if len(value) < 2 or not value.startswith('"') or not value.endswith('"'):
+        raise DataError(f"invalid {command} response: {response!r}")
+    text = value[1:-1]
+    if '"' in text or any(ord(character) < 0x20 for character in text):
+        raise DataError(f"invalid {command} response: {response!r}")
+    return text
+
+
+def _validate_rtm2032_channel(channel: int) -> None:
+    if isinstance(channel, bool) or channel not in {1, 2}:
+        raise DataError("RTM2032 channel must be 1 or 2")
+
+
 @dataclass(frozen=True)
 class RTM2000IdentitySnapshot:
     manufacturer: str
@@ -84,6 +156,46 @@ class RTM2000HealthSnapshot:
     sample_rate_hz: float
     error_queue_nonempty: bool
     waiting_for_trigger: bool
+
+
+@dataclass(frozen=True)
+class RTM2000AnalogChannelSnapshot:
+    channel: int
+    enabled: bool
+    coupling: str
+    range_v: float
+    scale_v_per_div: float
+    offset_v: float
+    position_div: float
+    bandwidth_hz: float | None
+    polarity: str
+    skew_s: float
+    label: str
+    label_enabled: bool
+    overloaded: bool
+    acquisition_type: str
+
+
+@dataclass(frozen=True)
+class RTM2000TimebaseSnapshot:
+    acquisition_time_s: float
+    divisions: int
+    position_s: float
+    range_s: float
+    reference_percent: float
+    scale_s_per_div: float
+    roll_enabled: bool
+
+
+@dataclass(frozen=True)
+class RTM2000ProbeSnapshot:
+    channel: int
+    attenuation_factor: float
+    bandwidth_hz: float | None
+    capacitance_f: float | None
+    impedance_ohm: float | None
+    name: str
+    probe_type: str
 
 
 def parse_waveform_header(response: str) -> WaveformHeader:
@@ -168,6 +280,163 @@ class RTM2032Scope:
             sample_rate_hz=sample_rate_hz,
             error_queue_nonempty=bool(status_byte & (1 << 2)),
             waiting_for_trigger=bool(operation_condition & (1 << 3)),
+        )
+
+    def analog_channel_snapshot(self, channel: int) -> RTM2000AnalogChannelSnapshot:
+        _validate_rtm2032_channel(channel)
+        prefix = f"CHANnel{channel}"
+        enabled = _parse_bool(
+            self.transport.query(f"{prefix}:STATE?"),
+            command=f"{prefix}:STATE?",
+        )
+        coupling = _parse_token(
+            self.transport.query(f"{prefix}:COUPling?"),
+            command=f"{prefix}:COUPling?",
+            allowed=frozenset({"AC", "ACL", "DC", "DCL", "GND"}),
+        )
+        range_v = _parse_positive_float(
+            self.transport.query(f"{prefix}:RANGE?"),
+            command=f"{prefix}:RANGE?",
+        )
+        scale_v_per_div = _parse_positive_float(
+            self.transport.query(f"{prefix}:SCALe?"),
+            command=f"{prefix}:SCALe?",
+        )
+        offset_v = _parse_finite_float(
+            self.transport.query(f"{prefix}:OFFSET?"),
+            command=f"{prefix}:OFFSET?",
+        )
+        position_div = _parse_finite_float(
+            self.transport.query(f"{prefix}:POSITION?"),
+            command=f"{prefix}:POSITION?",
+        )
+        bandwidth_response = self.transport.query(f"{prefix}:BANDwidth?")
+        bandwidth_hz = (
+            None
+            if bandwidth_response.strip().upper() == "FULL"
+            else _parse_positive_float(
+                bandwidth_response,
+                command=f"{prefix}:BANDwidth?",
+            )
+        )
+        polarity = _parse_token(
+            self.transport.query(f"{prefix}:POLarity?"),
+            command=f"{prefix}:POLarity?",
+            allowed=frozenset({"NORM", "INV"}),
+        )
+        skew_s = _parse_finite_float(
+            self.transport.query(f"{prefix}:SKEW?"),
+            command=f"{prefix}:SKEW?",
+        )
+        label = _parse_quoted_text(
+            self.transport.query(f"{prefix}:LABel?"),
+            command=f"{prefix}:LABel?",
+        )
+        label_enabled = _parse_bool(
+            self.transport.query(f"{prefix}:LABel:STATE?"),
+            command=f"{prefix}:LABel:STATE?",
+        )
+        overloaded = _parse_bool(
+            self.transport.query(f"{prefix}:OVERload?"),
+            command=f"{prefix}:OVERload?",
+        )
+        acquisition_type = _parse_token(
+            self.transport.query(f"{prefix}:TYPE?"),
+            command=f"{prefix}:TYPE?",
+        )
+        return RTM2000AnalogChannelSnapshot(
+            channel=channel,
+            enabled=enabled,
+            coupling=coupling,
+            range_v=range_v,
+            scale_v_per_div=scale_v_per_div,
+            offset_v=offset_v,
+            position_div=position_div,
+            bandwidth_hz=bandwidth_hz,
+            polarity=polarity,
+            skew_s=skew_s,
+            label=label,
+            label_enabled=label_enabled,
+            overloaded=overloaded,
+            acquisition_type=acquisition_type,
+        )
+
+    def timebase_snapshot(self) -> RTM2000TimebaseSnapshot:
+        return RTM2000TimebaseSnapshot(
+            acquisition_time_s=_parse_positive_float(
+                self.transport.query("TIMebase:ACQTime?"),
+                command="TIMebase:ACQTime?",
+            ),
+            divisions=_parse_decimal_integer(
+                self.transport.query("TIMebase:DIVisions?"),
+                command="TIMebase:DIVisions?",
+                minimum=1,
+                maximum=100,
+            ),
+            position_s=_parse_finite_float(
+                self.transport.query("TIMebase:POSition?"),
+                command="TIMebase:POSition?",
+            ),
+            range_s=_parse_positive_float(
+                self.transport.query("TIMebase:RANGE?"),
+                command="TIMebase:RANGE?",
+            ),
+            reference_percent=_parse_bounded_float(
+                self.transport.query("TIMebase:REFerence?"),
+                command="TIMebase:REFerence?",
+                minimum=0.0,
+                maximum=100.0,
+            ),
+            scale_s_per_div=_parse_positive_float(
+                self.transport.query("TIMebase:SCALe?"),
+                command="TIMebase:SCALe?",
+            ),
+            roll_enabled=_parse_bool(
+                self.transport.query("TIMebase:ROLL:ENABLE?"),
+                command="TIMebase:ROLL:ENABLE?",
+            ),
+        )
+
+    def probe_snapshot(self, channel: int) -> RTM2000ProbeSnapshot:
+        _validate_rtm2032_channel(channel)
+        prefix = f"PROBe{channel}:SETup"
+        attenuation_factor = _parse_positive_float(
+            self.transport.query(f"{prefix}:ATTenuation:AUTO?"),
+            command=f"{prefix}:ATTenuation:AUTO?",
+        )
+        bandwidth_hz = _parse_optional_positive_float(
+            self.transport.query(f"{prefix}:BANDwidth?"),
+            command=f"{prefix}:BANDwidth?",
+        )
+        capacitance_f = _parse_optional_positive_float(
+            self.transport.query(f"{prefix}:CAPacitance?"),
+            command=f"{prefix}:CAPacitance?",
+        )
+        impedance_response = self.transport.query(f"{prefix}:IMPedance?").strip()
+        impedance_ohm = (
+            None
+            if impedance_response.upper() == "UNKN"
+            else _parse_optional_positive_float(
+                impedance_response,
+                command=f"{prefix}:IMPedance?",
+            )
+        )
+        name = _parse_quoted_text(
+            self.transport.query(f"{prefix}:NAME?"),
+            command=f"{prefix}:NAME?",
+        )
+        probe_type = _parse_token(
+            self.transport.query(f"{prefix}:TYPE?"),
+            command=f"{prefix}:TYPE?",
+        )
+        return RTM2000ProbeSnapshot(
+            channel=channel,
+            attenuation_factor=attenuation_factor,
+            bandwidth_hz=bandwidth_hz,
+            capacitance_f=capacitance_f,
+            impedance_ohm=impedance_ohm,
+            name=name,
+            probe_type=probe_type,
         )
 
     def clear_status(self) -> None:

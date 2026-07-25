@@ -23,11 +23,11 @@
 
 | 功能域 | 手册命令面 | 当前覆盖 | 实机状态 | 主要缺口 | 建议 |
 |---|---|---|---|---|---|
-| 身份、同步与基本错误 | IEEE 488.2 公共命令，`SYSTem:ERRor:*` | `*IDN?`、`*CLS`、`*OPC?` 等待、错误队列 | **实机通过** | `*OPT?`、自检、完整状态/事件寄存器未暴露 | **P1**：增加只读 identity/options/health 快照 |
-| Acquisition 控制 | 16 个模板：模式、平均、采样率、记录长度、插值、分段和可用点数 | `SINGle` 单次采集；显式 `AUToscale` | **部分实机通过** | 连续运行/停止、平均、分段采集、采样率、写入率、插值和 acquisition 状态均缺失 | **P1/P2**：先做只读 acquisition state，再做有界 single/average/segmented plan |
-| 模拟通道配置 | 约 48 个模板：状态、耦合、量程、比例、偏置、位置、带宽、极性、skew、标签、过载、阈值 | 状态开、比例、位置归零、耦合查询 | **实机通过** | 无量程/偏置/带宽/极性/skew/标签/过载读回；setter 没有通用快照与回滚 | **P1**：增加类型化通道状态；写入继续受高阻和恢复策略约束 |
+| 身份、同步与基本错误 | IEEE 488.2 公共命令，`SYSTem:ERRor:*` | `*IDN?`、`*OPT?`、非消费型 health snapshot、`*CLS`、`*OPC?` 等待、显式错误队列 | **实机通过** | 自检和完整事件寄存器 API 未暴露 | identity/options/health P1 已完成；EVENT 保持显式边界 |
+| Acquisition 控制 | 16 个模板：模式、平均、采样率、记录长度、插值、分段和可用点数 | 只读 available/count/sample-rate 状态；`SINGle` 单次采集；显式 `AUToscale` | **部分实机通过** | 连续运行/停止、平均、分段采集、写入率和插值仍缺失 | 只读 P1 已完成；**P2**：有界 average/segmented plan |
+| 模拟通道配置 | 约 48 个模板：状态、耦合、量程、比例、偏置、位置、带宽、极性、skew、标签、过载、阈值 | RTM2032 CH1/CH2 类型化只读状态；既有状态开、比例、位置归零写路径 | **实机通过** | 无阈值读回；setter 没有通用快照与回滚 | 只读 P1 已完成；写入继续受高阻和恢复策略约束 |
 | 模拟波形传输 | `CHANnel<m>:DATA*`、envelope、独立 X/Y 元数据 | REAL/LSBF、header + data、`DEF/MAX/DMAX`、一次 acquisition 后逐通道读取 | **实机通过** | 无 envelope、显式 X/Y increment/origin/resolution、history/segment 选择、流式块 API；不承诺跨通道硬件同步 | **P1**：完善波形元数据；**P2**：分段/history/envelope |
-| 时基、缩放与时间戳 | 12 个 timebase 模板、zoom、timestamp 导航 | 仅 `TIMebase:RANGe` 写入 | **已实现** | 无 position/scale/reference/roll/zoom/acquisition time 读回；无 timestamp | **P1**：类型化 timebase state；**P2**：zoom/history timestamp |
+| 时基、缩放与时间戳 | 12 个 timebase 模板、zoom、timestamp 导航 | 类型化 acquisition time/divisions/position/range/reference/scale/roll 只读状态；既有 `TIMebase:RANGe` 写入 | **实机通过** | 无 zoom 或 timestamp | 基础 P1 已完成；**P2**：zoom/history timestamp |
 | 触发系统 | 约 159 个模板：A/B、edge、width、runt、rise time、pattern、TV、holdoff、外部和协议触发 | 不配置触发；单次采集沿用仪器当前触发设置 | 仅证明现有触发下可采集 | 无触发源、模式、类型、电平、斜率、holdoff、B trigger、trigger out | **P1**：edge trigger 最小闭环；其余按类型和选件分层 |
 | 自动测量与统计 | 20 个模板：测量槽、source/main、actual、峰值、均值、标准差、波形计数 | 未覆盖 | 无 | WaveBench 只能下载波形后自行分析，不能读取仪器测量结果 | **P1**：最有价值的只读扩展；先做 category/source/result/statistics |
 | 光标 | 约 27 个模板：X/Y 光标、delta、ratio、tracking、结果 | 未覆盖 | 无 | 无光标配置或结果读取 | **P2**：先只读结果，再考虑受控定位 |
@@ -39,12 +39,12 @@
 | 串行/并行总线解码 | 约 249 个模板：I²C、SPI/SSPI、UART、CAN、LIN、I²S、ARINC、MIL-STD、并行总线及帧结果 | 未覆盖 | 无 | 无总线配置、帧列表、字段解析或 history | **P3，按选件拆包**；不要放进基础 scope capability |
 | 协议触发与协议搜索 | 触发和 search 内另有大量 CAN/LIN/I²C/SPI/UART/I²S/ARINC/MIL-STD 模板 | 未覆盖 | 无 | 依赖总线源、阈值、协议格式和选件探测 | **P3**：在总线只读解码之后实现 |
 | DVM 与频率计数器 | 6 个 DVM、3 个 counter 模板 | 未覆盖 | 无 | 无 source/type/result/status API | **P2，选件门控**：适合小型只读 capability |
-| Probe 元数据与设置 | 约 18 个模板：探头身份、衰减、带宽、阻抗、偏置、模式 | 未覆盖 | 无 | 无探头识别或安全限值联动 | **P1 只读**：身份、衰减、阻抗可加强安全检查；写入延后 |
+| Probe 元数据与设置 | 约 18 个模板：探头身份、衰减、带宽、阻抗、偏置、模式 | RTM2032 CH1/CH2 衰减、带宽、电容、阻抗、名称、类型只读快照 | **实机通过** | 无探头 ID 字段、DC offset、mode 或安全限值联动 | 基础 P1 已完成；ID 与安全联动后续补充，写入延后 |
 | Reference curve | 约 19 个模板：source/save/load/state、缩放和数据 | 未覆盖 | 无 | 无 reference 波形读取或状态管理 | **P2**：先只读/下载，再做 save/load |
 | 显示与截图 | 24 个 display 模板和 8 个 hardcopy 模板 | PNG、颜色方案、菜单开关 | **实机通过** | 无 grid、palette、persistence、XY、virtual screen、页面/打印设置 | 截图已满足 MVP；其余 **P3** |
 | 仪器文件系统与导出 | 16 个 `MMEMory` 模板；波形、测量、搜索和 power 导出 | 未覆盖；WaveBench 仅保存主机侧 artifact | 无 | 仪器盘目录、复制/删除、仪器侧 CSV/报告导出均缺失 | **默认不做**；若实现需独立文件系统权限和路径沙箱 |
 | Setup 快照与恢复 | `SYSTem:SET`、`MMEMory:STORE/LOAD:STATE` | 生产驱动未暴露；验收工具使用 setup blob 恢复 | **验收路径通过** | SocketIO 对 setup blob 写入曾部分生效；可靠恢复依赖受控 VXI-11 分片 | 保持 **验收工具限定**，不要伪装成普通 setter |
-| 状态寄存器与健康监控 | operation/questionable/status byte、overload/mask/limit 状态 | 错误队列；采集后检查空队列 | **部分实机通过** | 无 operation/questionable tree、overload 聚合和事件寄存器 | **P1**：只读 health snapshot，适合 soak 与自动诊断 |
+| 状态寄存器与健康监控 | operation/questionable/status byte、overload/mask/limit 状态 | 不消费 EVENT/错误队列的 health snapshot；通道 overload 只读 | **实机通过** | 无 mask/limit 聚合或事件寄存器 API | 基础 P1 已完成；EVENT 保持显式、消费型边界 |
 | 电源分析 | 约 358 个模板：quality、harmonics、ripple、switching、SOA、efficiency、inrush、modulation 等 | 未覆盖 | 无 | 是独立应用域，涉及专用探头、deskew、报告和大量结果类型 | **P3，选件门控、独立 capability/package** |
 | Calibration、reset 与系统设置 | calibration、`*RST`、preset、日期/时间、语言、蜂鸣器、教育模式 | 未覆盖 | 无 | 这些操作会改变全局状态或需要人工恢复 | **默认禁止或仅验收工具显式授权** |
 
@@ -80,8 +80,8 @@ HCOPy:LANGuage  HCOPy:COLor:SCHeme  HCOPy:MENU  HCOPy:DATA?
 
 ### P1：把采集 MVP 补成可诊断的基础示波器驱动
 
-1. `identity/options/health` 只读快照：`*OPT?`、acquisition、status、overload 和错误队列。
-2. 类型化模拟通道与时基状态：读回 state/coupling/range/scale/offset/position/bandwidth、timebase range/position/reference。
+1. `identity/options/health` 只读快照：`*OPT?`、acquisition 和非消费型 status 条件。**已完成。**
+2. RTM2032 CH1/CH2 类型化模拟通道、时基和探头状态。**基础字段已完成并实机验证。**
 3. 基础 edge trigger 闭环：source、mode、slope、level、find level；必须支持快照、独立读回和恢复责任。
 4. 仪器自动测量只读结果与统计；与主机侧 DSP 结果明确区分来源。
 5. 波形元数据和 segment/history 标识，避免把不同 acquisition 或 segment 混为同一记录。

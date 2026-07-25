@@ -179,6 +179,219 @@ def test_identity_snapshot_rejects_malformed_responses(idn, options):
         RTM2032Scope(transport).identity_snapshot()
 
 
+def test_analog_channel_snapshot_is_typed_and_read_only():
+    transport = FakeTransport(
+        responses={
+            "CHANnel2:BANDwidth?": "FULL",
+            "CHANnel2:STATE?": "1",
+            "CHANnel2:COUPling?": "DCL",
+            "CHANnel2:RANGE?": "4.0",
+            "CHANnel2:SCALe?": "0.5",
+            "CHANnel2:OFFSET?": "0.0",
+            "CHANnel2:POSITION?": "-2.8",
+            "CHANnel2:POLarity?": "NORM",
+            "CHANnel2:SKEW?": "0.0",
+            "CHANnel2:LABel?": '"CAL"',
+            "CHANnel2:LABel:STATE?": "ON",
+            "CHANnel2:OVERload?": "0",
+            "CHANnel2:TYPE?": "SAMP",
+        }
+    )
+
+    snapshot = RTM2032Scope(transport).analog_channel_snapshot(2)
+
+    assert snapshot.channel == 2
+    assert snapshot.enabled is True
+    assert snapshot.coupling == "DCL"
+    assert snapshot.range_v == 4.0
+    assert snapshot.scale_v_per_div == 0.5
+    assert snapshot.offset_v == 0.0
+    assert snapshot.position_div == -2.8
+    assert snapshot.bandwidth_hz is None
+    assert snapshot.polarity == "NORM"
+    assert snapshot.skew_s == 0.0
+    assert snapshot.label == "CAL"
+    assert snapshot.label_enabled is True
+    assert snapshot.overloaded is False
+    assert snapshot.acquisition_type == "SAMP"
+    assert transport.writes == []
+    assert transport.queries == [
+        "CHANnel2:STATE?",
+        "CHANnel2:COUPling?",
+        "CHANnel2:RANGE?",
+        "CHANnel2:SCALe?",
+        "CHANnel2:OFFSET?",
+        "CHANnel2:POSITION?",
+        "CHANnel2:BANDwidth?",
+        "CHANnel2:POLarity?",
+        "CHANnel2:SKEW?",
+        "CHANnel2:LABel?",
+        "CHANnel2:LABel:STATE?",
+        "CHANnel2:OVERload?",
+        "CHANnel2:TYPE?",
+    ]
+
+
+def test_timebase_snapshot_is_typed_and_read_only():
+    transport = FakeTransport(
+        responses={
+            "TIMebase:ACQTime?": "2e-3",
+            "TIMebase:DIVisions?": "10",
+            "TIMebase:POSition?": "0",
+            "TIMebase:RANGE?": "2e-3",
+            "TIMebase:REFerence?": "50",
+            "TIMebase:SCALe?": "2e-4",
+            "TIMebase:ROLL:ENABLE?": "OFF",
+        }
+    )
+
+    snapshot = RTM2032Scope(transport).timebase_snapshot()
+
+    assert snapshot.acquisition_time_s == 2e-3
+    assert snapshot.divisions == 10
+    assert snapshot.position_s == 0.0
+    assert snapshot.range_s == 2e-3
+    assert snapshot.reference_percent == 50.0
+    assert snapshot.scale_s_per_div == 2e-4
+    assert snapshot.roll_enabled is False
+    assert transport.writes == []
+    assert transport.queries == [
+        "TIMebase:ACQTime?",
+        "TIMebase:DIVisions?",
+        "TIMebase:POSition?",
+        "TIMebase:RANGE?",
+        "TIMebase:REFerence?",
+        "TIMebase:SCALe?",
+        "TIMebase:ROLL:ENABLE?",
+    ]
+
+
+def test_probe_snapshot_maps_unavailable_values_to_none():
+    transport = FakeTransport(
+        responses={
+            "PROBe1:SETup:IMPedance?": "UNKN",
+            "PROBe1:SETup:ATTenuation:AUTO?": "1",
+            "PROBe1:SETup:BANDwidth?": "9.91E+37",
+            "PROBe1:SETup:CAPacitance?": "9.91E+37",
+            "PROBe1:SETup:NAME?": '""',
+            "PROBe1:SETup:TYPE?": "NONE",
+        }
+    )
+
+    snapshot = RTM2032Scope(transport).probe_snapshot(1)
+
+    assert snapshot.channel == 1
+    assert snapshot.attenuation_factor == 1.0
+    assert snapshot.bandwidth_hz is None
+    assert snapshot.capacitance_f is None
+    assert snapshot.impedance_ohm is None
+    assert snapshot.name == ""
+    assert snapshot.probe_type == "NONE"
+    assert transport.writes == []
+    assert transport.queries == [
+        "PROBe1:SETup:ATTenuation:AUTO?",
+        "PROBe1:SETup:BANDwidth?",
+        "PROBe1:SETup:CAPacitance?",
+        "PROBe1:SETup:IMPedance?",
+        "PROBe1:SETup:NAME?",
+        "PROBe1:SETup:TYPE?",
+    ]
+
+
+@pytest.mark.parametrize("channel", [0, 3, True])
+def test_channel_and_probe_snapshots_reject_invalid_channels_without_io(channel):
+    for method_name in ("analog_channel_snapshot", "probe_snapshot"):
+        transport = FakeTransport()
+        with pytest.raises(DataError, match="channel must be 1 or 2"):
+            getattr(RTM2032Scope(transport), method_name)(channel)
+        assert transport.queries == []
+        assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response"),
+    [
+        ("CHANnel1:STATE?", "MAYBE"),
+        ("CHANnel1:COUPling?", "UNKNOWN"),
+        ("CHANnel1:RANGE?", "nan"),
+        ("CHANnel1:LABel?", "unquoted"),
+        ("CHANnel1:TYPE?", "bad token"),
+    ],
+)
+def test_analog_channel_snapshot_rejects_malformed_responses(command, response):
+    responses = {
+        "CHANnel1:BANDwidth?": "FULL",
+        "CHANnel1:STATE?": "1",
+        "CHANnel1:COUPling?": "DCL",
+        "CHANnel1:RANGE?": "4.0",
+        "CHANnel1:SCALe?": "0.5",
+        "CHANnel1:OFFSET?": "0.0",
+        "CHANnel1:POSITION?": "0.0",
+        "CHANnel1:POLarity?": "NORM",
+        "CHANnel1:SKEW?": "0.0",
+        "CHANnel1:LABel?": '"CH1"',
+        "CHANnel1:LABel:STATE?": "0",
+        "CHANnel1:OVERload?": "0",
+        "CHANnel1:TYPE?": "SAMP",
+    }
+    responses[command] = response
+
+    with pytest.raises(DataError):
+        RTM2032Scope(FakeTransport(responses=responses)).analog_channel_snapshot(1)
+
+
+@pytest.mark.parametrize(
+    ("command", "response"),
+    [
+        ("TIMebase:ACQTime?", "0"),
+        ("TIMebase:DIVisions?", "10.5"),
+        ("TIMebase:POSition?", "nan"),
+        ("TIMebase:REFerence?", "101"),
+        ("TIMebase:ROLL:ENABLE?", "MAYBE"),
+    ],
+)
+def test_timebase_snapshot_rejects_malformed_responses(command, response):
+    responses = {
+        "TIMebase:ACQTime?": "2e-3",
+        "TIMebase:DIVisions?": "10",
+        "TIMebase:POSition?": "0",
+        "TIMebase:RANGE?": "2e-3",
+        "TIMebase:REFerence?": "50",
+        "TIMebase:SCALe?": "2e-4",
+        "TIMebase:ROLL:ENABLE?": "OFF",
+    }
+    responses[command] = response
+
+    with pytest.raises(DataError):
+        RTM2032Scope(FakeTransport(responses=responses)).timebase_snapshot()
+
+
+@pytest.mark.parametrize(
+    ("command", "response"),
+    [
+        ("PROBe1:SETup:ATTenuation:AUTO?", "0"),
+        ("PROBe1:SETup:BANDwidth?", "nan"),
+        ("PROBe1:SETup:CAPacitance?", "-1"),
+        ("PROBe1:SETup:IMPedance?", "BAD"),
+        ("PROBe1:SETup:NAME?", "unquoted"),
+        ("PROBe1:SETup:TYPE?", "bad token"),
+    ],
+)
+def test_probe_snapshot_rejects_malformed_responses(command, response):
+    responses = {
+        "PROBe1:SETup:ATTenuation:AUTO?": "1",
+        "PROBe1:SETup:BANDwidth?": "9.91E+37",
+        "PROBe1:SETup:CAPacitance?": "9.91E+37",
+        "PROBe1:SETup:IMPedance?": "UNKN",
+        "PROBe1:SETup:NAME?": '""',
+        "PROBe1:SETup:TYPE?": "NONE",
+    }
+    responses[command] = response
+
+    with pytest.raises(DataError):
+        RTM2032Scope(FakeTransport(responses=responses)).probe_snapshot(1)
+
+
 def test_header_parser_and_fetch_preserve_real_waveform_semantics():
     header = parse_waveform_header("-1e-3,1e-3,3,1")
     assert header.points == 3
