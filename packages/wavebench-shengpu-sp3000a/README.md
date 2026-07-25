@@ -19,7 +19,7 @@ M3 已建立可安装的 query-only distribution、V2 entry point、驱动、Fak
 
 通用 `SweepAnalyzerSnapshot` 需要 `FUNC`、功率、平均和测量状态等完整有效计划，而目标固件尚不能稳定查询这些字段，因此 0.1.0 不声明 `sweep_analyzer.status`。`frequency_response` 是通用能力与数据域，不是第二种 instrument kind；M4 曲线 framing、点数、单位和频率轴未验收，所以也不声明 trace、marker 或 analysis 能力。配置、触发和 RF 输出方法完全不暴露。
 
-M4 曲线协议确认已获得受控实机测试授权并进入开发，但尚未通过。历史探索曾收到一组无完整终止边界的短帧，以及多组“501 个有效幅度候选值 + 501 个零值”的 1002-token 帧；这些结果不能证明 AMPT、PHASE、ALL 模式切换生效，也不能证明点数、单位或控制响应与异步曲线流已正确分离。0.1.0 因此继续保持 query-only，不把探索证据当作 trace capability。
+M4 曲线协议确认已完成受控实机探索，但未通过。`OUTPRFORM?` 可重复返回完整 LF 终止的 1002-token 帧（501 个有限幅频候选值 + 501 个零值）；但标准与紧凑拼写的 MODE、POINT、CONT、幅相测量以及 20/200/730 点写入，均未改变独立 `OUTSTATEC?` 快照或曲线布局。该固件也不提供这些配置 query 的可验证读回。0.1.0 因此继续保持 query-only，不把探索证据当作 trace capability。
 
 M4 已加入一个尚未接入 descriptor/driver 的严格离线 parser：它按 LF 累积完整帧，要求单模式恰好 P 个有限值、ALL 恰好 2P 个有限值，并拒绝短帧、长帧、坏 token、非 ASCII、NaN/Inf、尾随数据和无终止符帧。该 parser 已用私有 501+501 完整帧和 739-token 截断帧回归，但这只证明帧校验逻辑，不代表写命令、模式切换、点数、单位、状态恢复或 trace capability 已通过实机验收。
 

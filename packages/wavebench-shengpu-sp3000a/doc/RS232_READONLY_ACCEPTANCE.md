@@ -90,4 +90,10 @@ M2 完整关闭前仍需：
 
 操作员随后执行了电源循环，远控链路恢复。重启后的被动监听为静默，`*IDN?`、`SWET:MODE?` 和 `RFSTAT?` 分别返回系列身份、`LIN` 和 `ON`，均完整 LF 终止且无残留。随后 4/4 次只读 `OUTPRFORM?` 均在约 10.46 秒内返回 10020-byte / 1002-token / 501+501 完整帧，每次曲线后 `*IDN?` 仍正常；这证明当前只读查询路径可重复恢复，不证明任何写命令生效。`BEEP?` 在该固件上无响应，但其后身份查询正常，因此无响应 query 与导致整机卡住的写路径应分别处理。后续写入仍暂停，直到以“一次写入、一次明确回读、失败即停止并准备人工重启”的新矩阵获得操作员确认。
 
+随后完成的完整 M4 矩阵从静默串口边界逐条发出写入，并在每条之后读取完整 `OUTSTATEC?` 和 `*IDN?`。`OUTSTATEC?` 实测是 327-byte、50-token、ASCII/LF 的逗号分隔文本；其末尾字段与手册顺序交叉核对后，可独立观察幅频测量、相频测量和点数。重启后的基线为幅频 `1`、相频 `0`、点数 `501`。
+
+`PHAMEAS ON`、`AMPMEAS OFF`、`OUTPRFORM:POINT:DATA 20` 和手册示例 `OUTPRFORM:POINT:DATA 200` 均在四秒有界等待内无 ACK，后续快照始终为 `1/0/501`。`MODE {AMPT|PHASE|ALL}`、`POINT {ON|OFF}`、`POINT:DATA 730`、`CONT {ON|OFF}` 及紧凑 OCR 式变体也始终留下同一 1002-token（501 个有限幅频候选值 + 501 个零值）按需帧。标准和紧凑 `CONT ON` 分别等待十二秒，均没有异步曲线。因此当前目标固件没有展示任何可接受的 trace 配置写入支持；严格 parser 不得接入生产 driver，也不得声明 trace capability。
+
+相反，`TRIM SING` 和 `TRIM CONT` 均是静默写入，但随后 `TRIM?` 可分别确认 `SING` 和恢复后的 `CONT`，且身份查询始终正常。这证明 trace 配置的静默并非泛化的 ACK 缺失。紧凑非法命令 `SWET:MODELOG` 会快速返回 `Error`；LF 是唯一已验证终止符，CRLF 对合法 query 也返回 `Error`。标准 `SWET:MODE LOG` 则会锁死远控和前面板，需要电源循环，重启后仍是 `LIN`。这是独立固件故障；driver 永不暴露或自动重试该命令，也不能用 `SYSTem:LOCal` 恢复。
+
 与此同时，插件包加入了未接入生产 driver/capability 的严格增量 parser。它只接受 LF/CRLF 终止的 ASCII 逗号数值帧，要求单模式恰好 P 个有限值、ALL 恰好 2P 个有限值，并拒绝短帧、长帧、空 token、坏 token、NaN/Inf、非 ASCII、终止符后残留和无终止符帧。私有 501+501 完整帧可按分片解析，历史 7649-byte 截断帧会 fail closed。该结果关闭了 M4 parser 的离线结构部分，但不关闭任何实机模式、点数、单位、恢复或 capability 门禁。
