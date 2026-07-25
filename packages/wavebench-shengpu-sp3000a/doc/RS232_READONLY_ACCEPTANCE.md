@@ -85,3 +85,7 @@ M2 完整关闭前仍需：
 - 写入连续上传、返回模式或 RF 状态命令附近曾读到曲线样式数据而非可识别 ACK，说明当时的会话可能存在控制响应与异步曲线流混流。
 
 这些结果是后续 M4 的私有协议证据，不覆盖首轮 M2 的历史记录，也不构成曲线 parser、点数、单位、状态恢复或 `sweep_analyzer.trace` capability 的验收。M4 必须从静默会话边界重新确认 `CONT OFF`，再按预期 token 数和 LF 双重条件验证 AMPT、PHASE、ALL 以及至少两种点数。
+
+2026-07-25 的后续 M4 会话在静默边界上再次取得完整的 10020-byte / 1002-token / LF 帧；标准带空格和紧凑拼写的 MODE/POINT/CONT 写入都没有改变 501+501 布局。一次已知 `SWET:MODE?` 控制查询先返回 `LIN`，但随后发送写命令后，同一会话及重新打开串口的 `*IDN?`、`SWET:MODE?`、`RFSTAT?` 均沉默，`SYSTem:LOCal` 也未恢复响应。因此 M4 实机写入暂停，需操作员通过前面板 `Shift/Local` 或电源循环恢复后再继续；在恢复前不继续猜测别名或发送写命令。
+
+与此同时，插件包加入了未接入生产 driver/capability 的严格增量 parser。它只接受 LF/CRLF 终止的 ASCII 逗号数值帧，要求单模式恰好 P 个有限值、ALL 恰好 2P 个有限值，并拒绝短帧、长帧、空 token、坏 token、NaN/Inf、非 ASCII、终止符后残留和无终止符帧。私有 501+501 完整帧可按分片解析，历史 7649-byte 截断帧会 fail closed。该结果关闭了 M4 parser 的离线结构部分，但不关闭任何实机模式、点数、单位、恢复或 capability 门禁。

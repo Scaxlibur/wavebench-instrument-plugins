@@ -21,6 +21,8 @@ M3 已建立可安装的 query-only distribution、V2 entry point、驱动、Fak
 
 M4 曲线协议确认已获得受控实机测试授权并进入开发，但尚未通过。历史探索曾收到一组无完整终止边界的短帧，以及多组“501 个有效幅度候选值 + 501 个零值”的 1002-token 帧；这些结果不能证明 AMPT、PHASE、ALL 模式切换生效，也不能证明点数、单位或控制响应与异步曲线流已正确分离。0.1.0 因此继续保持 query-only，不把探索证据当作 trace capability。
 
+M4 已加入一个尚未接入 descriptor/driver 的严格离线 parser：它按 LF 累积完整帧，要求单模式恰好 P 个有限值、ALL 恰好 2P 个有限值，并拒绝短帧、长帧、坏 token、非 ASCII、NaN/Inf、尾随数据和无终止符帧。该 parser 已用私有 501+501 完整帧和 739-token 截断帧回归，但这只证明帧校验逻辑，不代表写命令、模式切换、点数、单位、状态恢复或 trace capability 已通过实机验收。
+
 详见[远控协议与能力审计](doc/PROTOCOL_AUDIT.md)和 [RS-232 只读协议验收](doc/RS232_READONLY_ACCEPTANCE.md)。
 
 ## 安全边界
