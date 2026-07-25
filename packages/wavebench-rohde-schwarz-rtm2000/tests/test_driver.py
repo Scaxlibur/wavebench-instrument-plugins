@@ -179,6 +179,80 @@ def test_identity_snapshot_rejects_malformed_responses(idn, options):
         RTM2032Scope(transport).identity_snapshot()
 
 
+def test_edge_trigger_snapshot_is_strict_typed_and_read_only():
+    transport = FakeTransport(
+        responses={
+            "TRIGger:A:TYPE?": "EDGE",
+            "TRIGger:A:SOURce?": "CH2",
+            "TRIGger:A:MODE?": "AUTO",
+            "TRIGger:A:EDGE:SLOPe?": "POS",
+            "TRIGger:A:EDGE:COUpling?": "DC",
+            "TRIGger:A:LEVel2?": "5.3000E-01",
+            "TRIGger:A:HYSTEResis?": "AUTO",
+            "TRIGger:A:HOLDoff:MODE?": "OFF",
+            "TRIGger:A:HOLDoff:TIME?": "5.00000E-08",
+        }
+    )
+
+    snapshot = RTM2032Scope(transport).edge_trigger_snapshot()
+
+    assert snapshot.trigger_type == "EDGE"
+    assert snapshot.source_channel == 2
+    assert snapshot.mode == "AUTO"
+    assert snapshot.slope == "POS"
+    assert snapshot.coupling == "DC"
+    assert snapshot.level_v == 0.53
+    assert snapshot.hysteresis_mode == "AUTO"
+    assert snapshot.holdoff_mode == "OFF"
+    assert snapshot.holdoff_time_s == 50e-9
+    assert transport.writes == []
+    assert transport.queries == [
+        "TRIGger:A:TYPE?",
+        "TRIGger:A:SOURce?",
+        "TRIGger:A:MODE?",
+        "TRIGger:A:EDGE:SLOPe?",
+        "TRIGger:A:EDGE:COUpling?",
+        "TRIGger:A:LEVel2?",
+        "TRIGger:A:HYSTEResis?",
+        "TRIGger:A:HOLDoff:MODE?",
+        "TRIGger:A:HOLDoff:TIME?",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("command", "response"),
+    [
+        ("TRIGger:A:TYPE?", "PULSE"),
+        ("TRIGger:A:SOURce?", "EXT"),
+        ("TRIGger:A:MODE?", "NORM"),
+        ("TRIGger:A:EDGE:SLOPe?", "NEG"),
+        ("TRIGger:A:EDGE:COUpling?", "AC"),
+        ("TRIGger:A:LEVel2?", "nan"),
+        ("TRIGger:A:HYSTEResis?", "0.1"),
+        ("TRIGger:A:HOLDoff:MODE?", "TIME"),
+        ("TRIGger:A:HOLDoff:TIME?", "0"),
+    ],
+)
+def test_edge_trigger_snapshot_rejects_unverified_or_malformed_responses(
+    command, response
+):
+    responses = {
+        "TRIGger:A:TYPE?": "EDGE",
+        "TRIGger:A:SOURce?": "CH2",
+        "TRIGger:A:MODE?": "AUTO",
+        "TRIGger:A:EDGE:SLOPe?": "POS",
+        "TRIGger:A:EDGE:COUpling?": "DC",
+        "TRIGger:A:LEVel2?": "0.53",
+        "TRIGger:A:HYSTEResis?": "AUTO",
+        "TRIGger:A:HOLDoff:MODE?": "OFF",
+        "TRIGger:A:HOLDoff:TIME?": "5e-8",
+    }
+    responses[command] = response
+
+    with pytest.raises(DataError):
+        RTM2032Scope(FakeTransport(responses=responses)).edge_trigger_snapshot()
+
+
 def test_analog_channel_snapshot_is_typed_and_read_only():
     transport = FakeTransport(
         responses={

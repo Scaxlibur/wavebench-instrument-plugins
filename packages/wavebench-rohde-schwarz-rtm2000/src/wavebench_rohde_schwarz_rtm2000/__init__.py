@@ -1,6 +1,7 @@
 from .descriptor import descriptor
 from .driver import (
     RTM2000AnalogChannelSnapshot,
+    RTM2000EdgeTriggerSnapshot,
     RTM2000HealthSnapshot,
     RTM2000IdentitySnapshot,
     RTM2000ProbeSnapshot,
@@ -11,6 +12,7 @@ from .driver import (
 
 __all__ = [
     "RTM2000AnalogChannelSnapshot",
+    "RTM2000EdgeTriggerSnapshot",
     "RTM2000HealthSnapshot",
     "RTM2000IdentitySnapshot",
     "RTM2000ProbeSnapshot",

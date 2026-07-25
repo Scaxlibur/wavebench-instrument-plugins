@@ -23,6 +23,7 @@
 - 厂商专用只读 identity/options/health 快照，不消费 EVENT 寄存器或错误队列；
 - RTM2032 CH1/CH2 类型化模拟通道、时基和探头元数据快照；
 - 当前波形的类型化 X/Y 缩放、点数、量化位数和每采样值数量快照；
+- RTM2032 CH1/CH2 基础 edge-trigger 类型化只读快照；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
 - 通道 coupling 查询和 PNG 截图；
@@ -102,6 +103,12 @@ RTM2032 CH2 实机只读验收返回 10000 点、200 ns X 步长、20 mV/bit 和
 写命令、未产生 status/questionable 错误，也未改变 acquisition count。连续运行时 operation condition
 会随正常触发周期在 waiting/non-waiting 间变化，因此不把它误作恒定前后条件。
 `DATA:HEADER?` 第四字段不是 segment ID；history/segment identity 仍未实现，也不纳入本版本声明。
+
+0.5.0 首个小步新增厂商专用只读 `edge_trigger_snapshot()`。当前类型域只覆盖 RTM2032 实机
+证实的 `EDGE / CH1|CH2 / AUTO / POS / DC / hysteresis AUTO / holdoff OFF` 基线；未知 trigger
+类型、source、模式、斜率、coupling 或 holdoff 均失败关闭，不推断手册索引未给出的返回域。CH2
+校准方波只读验收得到 0.53 V trigger level 和 50 ns holdoff time；9 条查询前后 status byte、
+questionable condition 和 acquisition count 保持健康，未读取 EVENT/error queue，也未发送写命令。
 
 ## 开发验证
 

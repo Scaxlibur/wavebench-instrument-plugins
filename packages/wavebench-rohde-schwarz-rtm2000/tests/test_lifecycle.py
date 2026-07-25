@@ -53,7 +53,7 @@ def test_managed_install_routes_canonical_and_remove_restores_builtin(tmp_path: 
         ],
         cwd=tmp_path,
     )
-    wheel = next(wheelhouse.glob("wavebench_rohde_schwarz_rtm2000-0.4.0-*.whl"))
+    wheel = next(wheelhouse.glob("wavebench_rohde_schwarz_rtm2000-0.5.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"
@@ -86,7 +86,7 @@ assert canonical.backends == (
     "rsinstrument-pyvisa-py",
 )
 assert canonical.resource_schemes == ("tcpip",)
-assert canonical.version == "0.4.0"
+assert canonical.version == "0.5.0"
 assert alias.origin == "builtin"
 assert alias.driver_id == "rohde-schwarz.rtm2032"
 """

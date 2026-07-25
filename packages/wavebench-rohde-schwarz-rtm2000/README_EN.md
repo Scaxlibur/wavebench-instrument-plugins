@@ -25,6 +25,7 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 - vendor-specific read-only identity/options/health snapshots that do not consume event registers or the error queue;
 - typed RTM2032 CH1/CH2 analog-channel, timebase, and probe-metadata snapshots;
 - typed current-waveform X/Y scaling, point-count, quantization, and values-per-sample metadata;
+- a typed read-only basic edge-trigger snapshot for RTM2032 CH1/CH2;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
 - channel-coupling queries and PNG screenshots;
@@ -117,6 +118,14 @@ acquisition count showed no error or count change, and no write was sent. On a r
 the operation condition may naturally move between waiting and non-waiting states during the trigger
 cycle, so it is not treated as a constant before/after invariant. The fourth `DATA:HEADER?` field is
 not a segment identity; history/segment identity remains outside this release claim.
+
+The first version 0.5.0 increment adds the vendor-specific read-only `edge_trigger_snapshot()` API.
+Its closed domains intentionally cover only the RTM2032 hardware-verified
+`EDGE / CH1|CH2 / AUTO / POS / DC / hysteresis AUTO / holdoff OFF` baseline. Unknown trigger types,
+sources, modes, slopes, coupling, or holdoff modes fail closed rather than inferring response domains
+from the command index. Read-only CH2 calibration-square-wave acceptance returned a 0.53 V trigger
+level and 50 ns holdoff time. Nine queries left status byte, questionable condition, and acquisition
+count healthy, consumed no event/error queue, and sent no write.
 
 ## Development checks
 

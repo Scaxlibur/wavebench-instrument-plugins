@@ -212,6 +212,19 @@ class RTM2000WaveformMetadataSnapshot:
     y_resolution_bits: int
 
 
+@dataclass(frozen=True)
+class RTM2000EdgeTriggerSnapshot:
+    trigger_type: str
+    source_channel: int
+    mode: str
+    slope: str
+    coupling: str
+    level_v: float
+    hysteresis_mode: str
+    holdoff_mode: str
+    holdoff_time_s: float
+
+
 def _parse_waveform_header_response(
     response: str,
 ) -> tuple[WaveformHeader, int | None]:
@@ -548,6 +561,64 @@ class RTM2032Scope:
                 minimum=1,
                 maximum=64,
             ),
+        )
+
+    def edge_trigger_snapshot(self) -> RTM2000EdgeTriggerSnapshot:
+        trigger_type = _parse_token(
+            self.transport.query("TRIGger:A:TYPE?"),
+            command="TRIGger:A:TYPE?",
+            allowed=frozenset({"EDGE"}),
+        )
+        source = _parse_token(
+            self.transport.query("TRIGger:A:SOURce?"),
+            command="TRIGger:A:SOURce?",
+            allowed=frozenset({"CH1", "CH2"}),
+        )
+        source_channel = int(source.removeprefix("CH"))
+        mode = _parse_token(
+            self.transport.query("TRIGger:A:MODE?"),
+            command="TRIGger:A:MODE?",
+            allowed=frozenset({"AUTO"}),
+        )
+        slope = _parse_token(
+            self.transport.query("TRIGger:A:EDGE:SLOPe?"),
+            command="TRIGger:A:EDGE:SLOPe?",
+            allowed=frozenset({"POS"}),
+        )
+        coupling = _parse_token(
+            self.transport.query("TRIGger:A:EDGE:COUpling?"),
+            command="TRIGger:A:EDGE:COUpling?",
+            allowed=frozenset({"DC"}),
+        )
+        level_command = f"TRIGger:A:LEVel{source_channel}?"
+        level_v = _parse_finite_float(
+            self.transport.query(level_command),
+            command=level_command,
+        )
+        hysteresis_mode = _parse_token(
+            self.transport.query("TRIGger:A:HYSTEResis?"),
+            command="TRIGger:A:HYSTEResis?",
+            allowed=frozenset({"AUTO"}),
+        )
+        holdoff_mode = _parse_token(
+            self.transport.query("TRIGger:A:HOLDoff:MODE?"),
+            command="TRIGger:A:HOLDoff:MODE?",
+            allowed=frozenset({"OFF"}),
+        )
+        holdoff_time_s = _parse_positive_float(
+            self.transport.query("TRIGger:A:HOLDoff:TIME?"),
+            command="TRIGger:A:HOLDoff:TIME?",
+        )
+        return RTM2000EdgeTriggerSnapshot(
+            trigger_type=trigger_type,
+            source_channel=source_channel,
+            mode=mode,
+            slope=slope,
+            coupling=coupling,
+            level_v=level_v,
+            hysteresis_mode=hysteresis_mode,
+            holdoff_mode=holdoff_mode,
+            holdoff_time_s=holdoff_time_s,
         )
 
     def clear_status(self) -> None:
