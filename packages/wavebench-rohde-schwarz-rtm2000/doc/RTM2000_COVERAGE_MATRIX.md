@@ -28,7 +28,7 @@
 | 模拟通道配置 | 约 48 个模板：状态、耦合、量程、比例、偏置、位置、带宽、极性、skew、标签、过载、阈值 | RTM2032 CH1/CH2 类型化只读状态；既有状态开、比例、位置归零写路径 | **实机通过** | 无阈值读回；setter 没有通用快照与回滚 | 只读 P1 已完成；写入继续受高阻和恢复策略约束 |
 | 模拟波形传输 | `CHANnel<m>:DATA*`、envelope、独立 X/Y 元数据 | REAL/LSBF、header + data、`DEF/MAX/DMAX`、一次 acquisition 后逐通道读取；类型化 X/Y 缩放、点数、量化位数和 values-per-sample 快照 | **实机通过** | 无 envelope、history/segment 选择或流式块 API；不承诺跨通道硬件同步 | 波形元数据已完成；**P2**：分段/history/envelope |
 | 时基、缩放与时间戳 | 12 个 timebase 模板、zoom、timestamp 导航 | 类型化 acquisition time/divisions/position/range/reference/scale/roll 只读状态；既有 `TIMebase:RANGe` 写入 | **实机通过** | 无 zoom 或 timestamp | 基础 P1 已完成；**P2**：zoom/history timestamp |
-| 触发系统 | 约 159 个模板：A/B、edge、width、runt、rise time、pattern、TV、holdoff、外部和协议触发 | CH1/CH2 基础 edge-trigger 类型化只读快照；单次采集沿用仪器当前触发设置 | **只读实机通过** | 尚无受控 setter/恢复闭环；无其他 trigger 类型、B trigger 或 trigger out | P1 只读已完成；下一小步：CH2 edge trigger 最小受控闭环 |
+| 触发系统 | 约 159 个模板：A/B、edge、width、runt、rise time、pattern、TV、holdoff、外部和协议触发 | CH1/CH2 基础 edge-trigger 类型化只读快照；RTM2032 CH2 `EDGE/AUTO/POS/DC/level` 厂商专用受控 setter；单次采集沿用仪器当前触发设置 | **只读与 CH2 写入/恢复实机通过** | setter 仅接受健康、高阻、未过载 CH2 和当前量程内电平；无自动恢复 journal、其他 trigger 类型、B trigger 或 trigger out | P1 已完成；恢复责任保持显式，扩展写能力前另行设计事务模型 |
 | 自动测量与统计 | 20 个模板：测量槽、source/main、actual、峰值、均值、标准差、波形计数 | 未暴露生产 API | **只读探测部分通过**：槽位 category 可读；未配置槽的 actual 超时 | 当前 RsInstrument 超时诊断会读取错误队列并报告 `-200/-410`，因此不能把未知配置槽当作无副作用快照 | **P1 暂停**：先取得已配置槽位和响应语法证据，或提供不自动消费错误队列的有界 query 路径；不得隐式配置/启用/复位槽位 |
 | 光标 | 约 27 个模板：X/Y 光标、delta、ratio、tracking、结果 | 未覆盖 | 无 | 无光标配置或结果读取 | **P2**：先只读结果，再考虑受控定位 |
 | 数学与 FFT | 约 51 个模板：表达式、math 波形、envelope、FFT window/span/RBW | 未覆盖 | 无 | 无仪器 math/FFT 配置和波形读取 | **P2**：优先只读 math/FFT waveform；保留主机 DSP 作为独立能力 |
@@ -82,7 +82,7 @@ HCOPy:LANGuage  HCOPy:COLor:SCHeme  HCOPy:MENU  HCOPy:DATA?
 
 1. `identity/options/health` 只读快照：`*OPT?`、acquisition 和非消费型 status 条件。**已完成。**
 2. RTM2032 CH1/CH2 类型化模拟通道、时基和探头状态。**基础字段已完成并实机验证。**
-3. 基础 edge trigger：严格只读快照已完成；下一小步完成 CH2 source/type/mode/slope/coupling/level 的独立读回和恢复责任，不隐式调用 find level。
+3. 基础 edge trigger：严格只读快照与 CH2 source/type/mode/slope/coupling/level 最小受控闭环已完成；不隐式调用 find level，生产 setter 不伪装拥有持久恢复 journal。
 4. 仪器自动测量只读结果与统计；与主机侧 DSP 结果明确区分来源。当前未配置槽的结果查询会超时，且 transport 诊断会消费错误队列，故在获得已配置槽位证据或非消费型 query 路径前暂停。
 5. 波形缩放与形状元数据。**已完成并实机验证。** `DATA:HEADER?` 第四字段是每个 sample interval 的值数量，不是 segment ID；segment/history identity 必须走独立 history/timestamp 路径。
 

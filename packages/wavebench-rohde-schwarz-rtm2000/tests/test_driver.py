@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from threading import Event, Thread
+
 import numpy as np
 import pytest
 
@@ -8,7 +10,11 @@ from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.logging import CommandLogger
 from wavebench_rohde_schwarz_rtm2000 import descriptor as plugin_descriptor
-from wavebench_rohde_schwarz_rtm2000.driver import RTM2032Scope, parse_waveform_header
+from wavebench_rohde_schwarz_rtm2000.driver import (
+    RTM2000TriggerControlError,
+    RTM2032Scope,
+    parse_waveform_header,
+)
 
 
 class FakeTransport:
@@ -49,6 +55,89 @@ class FakeTransport:
 
     def record_event(self, direction, text):
         self.events.append((direction, text))
+
+
+class TriggerControlTransport(FakeTransport):
+    def __init__(
+        self,
+        *,
+        level_v=0.53,
+        source="CH2",
+        questionable_before=0,
+        fail_write_at=None,
+        ignore_level_write=False,
+        questionable_after=0,
+        change_identity_after=False,
+        channel_state="1",
+        channel_coupling="DCL",
+        channel_overload="0",
+        change_holdoff_after=False,
+    ):
+        super().__init__()
+        self.level_v = level_v
+        self.source = source
+        self.questionable_before = questionable_before
+        self.fail_write_at = fail_write_at
+        self.ignore_level_write = ignore_level_write
+        self.questionable_after = questionable_after
+        self.change_identity_after = change_identity_after
+        self.channel_state = channel_state
+        self.channel_coupling = channel_coupling
+        self.channel_overload = channel_overload
+        self.change_holdoff_after = change_holdoff_after
+
+    def write(self, command):
+        self.writes.append(command)
+        if self.fail_write_at == len(self.writes):
+            raise TimeoutError("simulated write timeout")
+        if command.startswith("TRIGger:A:LEVel2 ") and not self.ignore_level_write:
+            self.level_v = float(command.rsplit(" ", 1)[1])
+
+    def query(self, command):
+        self.queries.append(command)
+        wrote = bool(self.writes)
+        responses = {
+            "*IDN?": (
+                "Rohde&Schwarz,RTM2032,123456,changed"
+                if wrote and self.change_identity_after
+                else "Rohde&Schwarz,RTM2032,123456,3.500"
+            ),
+            "*OPT?": "B1,K1",
+            "*STB?": "0",
+            "STATUS:OPERation:CONDITION?": "8",
+            "STATUS:QUESTIONable:CONDITION?": str(
+                self.questionable_after if wrote else self.questionable_before
+            ),
+            "ACQuire:AVAilable?": "53",
+            "ACQuire:COUNT?": "53",
+            "ACQuire:SRATe?": "5e6",
+            "TRIGger:A:TYPE?": "EDGE",
+            "TRIGger:A:SOURce?": self.source,
+            "TRIGger:A:MODE?": "AUTO",
+            "TRIGger:A:EDGE:SLOPe?": "POS",
+            "TRIGger:A:EDGE:COUpling?": "DC",
+            "TRIGger:A:LEVel1?": f"{self.level_v:.12g}",
+            "TRIGger:A:LEVel2?": f"{self.level_v:.12g}",
+            "TRIGger:A:HYSTEResis?": "AUTO",
+            "TRIGger:A:HOLDoff:MODE?": "OFF",
+            "TRIGger:A:HOLDoff:TIME?": (
+                "6e-8" if wrote and self.change_holdoff_after else "5e-8"
+            ),
+            "CHANnel2:STATE?": self.channel_state,
+            "CHANnel2:COUPling?": self.channel_coupling,
+            "CHANnel2:RANGE?": "4.0",
+            "CHANnel2:SCALe?": "0.5",
+            "CHANnel2:OFFSET?": "0.0",
+            "CHANnel2:POSITION?": "-2.8",
+            "CHANnel2:BANDwidth?": "FULL",
+            "CHANnel2:POLarity?": "NORM",
+            "CHANnel2:SKEW?": "0.0",
+            "CHANnel2:LABel?": '"CAL"',
+            "CHANnel2:LABel:STATE?": "ON",
+            "CHANnel2:OVERload?": self.channel_overload,
+            "CHANnel2:TYPE?": "SAMP",
+        }
+        return responses[command]
 
 
 def test_descriptor_and_factory_preserve_core_transport_boundary():
@@ -251,6 +340,139 @@ def test_edge_trigger_snapshot_rejects_unverified_or_malformed_responses(
 
     with pytest.raises(DataError):
         RTM2032Scope(FakeTransport(responses=responses)).edge_trigger_snapshot()
+
+
+def test_configure_ch2_edge_trigger_uses_canonical_writes_and_exact_readback():
+    transport = TriggerControlTransport()
+    scope = RTM2032Scope(transport)
+
+    snapshot = scope.configure_ch2_edge_trigger(level_v=0.65)
+
+    assert snapshot.source_channel == 2
+    assert snapshot.level_v == 0.65
+    assert scope.trigger_writes_blocked is False
+    assert transport.writes == [
+        "TRIGger:A:TYPE EDGE",
+        "TRIGger:A:SOURce CH2",
+        "TRIGger:A:MODE AUTO",
+        "TRIGger:A:EDGE:SLOPe POS",
+        "TRIGger:A:EDGE:COUpling DC",
+        "TRIGger:A:LEVel2 0.65",
+    ]
+    assert transport.queries.count("TRIGger:A:LEVel2?") == 2
+    assert transport.queries.count("*IDN?") == 2
+    assert transport.queries.count("*OPT?") == 2
+
+
+@pytest.mark.parametrize("level_v", [True, None, "0.65", float("nan"), float("inf")])
+def test_configure_ch2_edge_trigger_rejects_invalid_level_without_io(level_v):
+    transport = TriggerControlTransport()
+
+    with pytest.raises(DataError):
+        RTM2032Scope(transport).configure_ch2_edge_trigger(level_v=level_v)
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    "transport",
+    [
+        TriggerControlTransport(questionable_before=1),
+        TriggerControlTransport(source="CH1"),
+        TriggerControlTransport(channel_state="0"),
+        TriggerControlTransport(channel_coupling="DC"),
+        TriggerControlTransport(channel_overload="1"),
+    ],
+)
+def test_configure_ch2_edge_trigger_preflight_failure_does_not_latch(transport):
+    scope = RTM2032Scope(transport)
+
+    with pytest.raises(RTM2000TriggerControlError) as exc_info:
+        scope.configure_ch2_edge_trigger(level_v=0.65)
+
+    assert exc_info.value.phase == "preflight"
+    assert scope.trigger_writes_blocked is False
+    assert transport.writes == []
+
+
+def test_configure_ch2_edge_trigger_rejects_level_outside_current_range():
+    transport = TriggerControlTransport()
+    scope = RTM2032Scope(transport)
+
+    with pytest.raises(RTM2000TriggerControlError) as exc_info:
+        scope.configure_ch2_edge_trigger(level_v=2.1)
+
+    assert exc_info.value.phase == "preflight"
+    assert scope.trigger_writes_blocked is False
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("transport", "expected_phase"),
+    [
+        (TriggerControlTransport(fail_write_at=1), "write"),
+        (TriggerControlTransport(ignore_level_write=True), "readback"),
+        (TriggerControlTransport(change_holdoff_after=True), "readback"),
+        (TriggerControlTransport(questionable_after=1), "health-postcheck"),
+        (TriggerControlTransport(change_identity_after=True), "identity-postcheck"),
+    ],
+)
+def test_trigger_write_uncertainty_latches_and_next_write_has_zero_io(
+    transport, expected_phase
+):
+    scope = RTM2032Scope(transport)
+
+    with pytest.raises(RTM2000TriggerControlError) as exc_info:
+        scope.configure_ch2_edge_trigger(level_v=0.65)
+
+    assert exc_info.value.phase == expected_phase
+    assert scope.trigger_writes_blocked is True
+    query_count = len(transport.queries)
+    write_count = len(transport.writes)
+    with pytest.raises(RTM2000TriggerControlError) as blocked:
+        scope.configure_ch2_edge_trigger(level_v=0.7)
+    assert blocked.value.phase == "blocked"
+    assert len(transport.queries) == query_count
+    assert len(transport.writes) == write_count
+
+
+def test_close_cannot_interleave_with_trigger_control_transaction():
+    entered_write = Event()
+    release_write = Event()
+
+    class BlockingTriggerTransport(TriggerControlTransport):
+        def write(self, command):
+            if not self.writes:
+                entered_write.set()
+                assert release_write.wait(timeout=2)
+            super().write(command)
+
+    transport = BlockingTriggerTransport()
+    scope = RTM2032Scope(transport)
+    setter_errors = []
+
+    def run_setter():
+        try:
+            scope.configure_ch2_edge_trigger(level_v=0.65)
+        except Exception as exc:  # pragma: no cover - asserted below
+            setter_errors.append(exc)
+
+    setter = Thread(target=run_setter)
+    closer = Thread(target=scope.close)
+
+    setter.start()
+    assert entered_write.wait(timeout=2)
+    closer.start()
+    assert transport.closed is False
+    release_write.set()
+    setter.join(timeout=2)
+    closer.join(timeout=2)
+
+    assert not setter.is_alive()
+    assert not closer.is_alive()
+    assert setter_errors == []
+    assert transport.closed is True
 
 
 def test_analog_channel_snapshot_is_typed_and_read_only():

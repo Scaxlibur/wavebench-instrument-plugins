@@ -26,6 +26,7 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 - typed RTM2032 CH1/CH2 analog-channel, timebase, and probe-metadata snapshots;
 - typed current-waveform X/Y scaling, point-count, quantization, and values-per-sample metadata;
 - a typed read-only basic edge-trigger snapshot for RTM2032 CH1/CH2;
+- a vendor-specific minimal controlled RTM2032 CH2 edge-trigger configuration loop;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
 - channel-coupling queries and PNG screenshots;
@@ -126,6 +127,18 @@ sources, modes, slopes, coupling, or holdoff modes fail closed rather than infer
 from the command index. Read-only CH2 calibration-square-wave acceptance returned a 0.53 V trigger
 level and 50 ns holdoff time. Nine queries left status byte, questionable condition, and acquisition
 count healthy, consumed no event/error queue, and sent no write.
+
+The second 0.5.0 increment adds `configure_ch2_edge_trigger(level_v=...)` without declaring a generic
+trigger capability. It accepts only an enabled, non-overloaded, high-impedance `DCL/ACL` RTM2032 CH2
+baseline and a finite level inside the current displayed range. Under the instance-wide reentrant I/O
+lock it writes the fixed `EDGE / CH2 / AUTO / POS / DC / level` state, reads every field back,
+requires the untouched hysteresis/holdoff settings to remain unchanged, and rechecks non-consuming
+health and identity. Any timeout, readback mismatch, health fault, or identity drift after writing
+begins permanently latches that instance's trigger-write path; subsequent calls fail with zero I/O.
+There is no blind retry, automatic rollback, find-level, autoscale, single acquisition, error-queue
+clear, or EVENT read. Persistent restoration remains the caller's responsibility. Controlled hardware
+acceptance used a private fsync journal to change CH2 from 0.53 V to 0.65 V and restore 0.53 V; status
+byte/questionable condition remained zero and acquisition count remained 53 before and after.
 
 ## Development checks
 

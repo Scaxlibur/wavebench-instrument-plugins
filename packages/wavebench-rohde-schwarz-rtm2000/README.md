@@ -24,6 +24,7 @@
 - RTM2032 CH1/CH2 类型化模拟通道、时基和探头元数据快照；
 - 当前波形的类型化 X/Y 缩放、点数、量化位数和每采样值数量快照；
 - RTM2032 CH1/CH2 基础 edge-trigger 类型化只读快照；
+- RTM2032 CH2 edge trigger 的厂商专用最小受控配置闭环；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
 - 通道 coupling 查询和 PNG 截图；
@@ -109,6 +110,15 @@ RTM2032 CH2 实机只读验收返回 10000 点、200 ns X 步长、20 mV/bit 和
 类型、source、模式、斜率、coupling 或 holdoff 均失败关闭，不推断手册索引未给出的返回域。CH2
 校准方波只读验收得到 0.53 V trigger level 和 50 ns holdoff time；9 条查询前后 status byte、
 questionable condition 和 acquisition count 保持健康，未读取 EVENT/error queue，也未发送写命令。
+
+0.5.0 第二个小步新增 `configure_ch2_edge_trigger(level_v=...)`，但不声明通用 trigger capability。
+它只接受已启用、未过载、高阻 `DCL/ACL` 的 RTM2032 CH2 基线和当前显示量程内的有限电平；
+在实例级可重入 I/O 锁内固定写入 `EDGE / CH2 / AUTO / POS / DC / level`，随后逐字段回读，
+确认未写入的 hysteresis/holdoff 保持原值，并复核非消费型 health 与 identity。写入开始后的任意
+timeout、回读不符、健康异常或身份变化都会永久锁存该实例的 trigger 写路径，后续调用零 I/O
+拒绝；不自动重试、回滚、find-level、autoscale、single、清错误队列或读取 EVENT。生产 setter
+明确由调用方负责持久恢复；受控实机验收用私有 fsync journal 将 CH2 level 从 0.53 V 改为
+0.65 V 后恢复至 0.53 V，前后 status byte/questionable condition 均为 0，acquisition count 均为 53。
 
 ## 开发验证
 

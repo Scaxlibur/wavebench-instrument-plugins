@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import wraps
 import math
+from numbers import Real
 import re
+from threading import RLock
 import time
 
 import numpy as np
@@ -225,6 +228,12 @@ class RTM2000EdgeTriggerSnapshot:
     holdoff_time_s: float
 
 
+class RTM2000TriggerControlError(InstrumentError):
+    def __init__(self, message: str, *, phase: str):
+        super().__init__(message)
+        self.phase = phase
+
+
 def _parse_waveform_header_response(
     response: str,
 ) -> tuple[WaveformHeader, int | None]:
@@ -275,69 +284,86 @@ def parse_waveform_header(response: str) -> WaveformHeader:
     return _parse_waveform_header_response(response)[0]
 
 
+def _serialized_io(method):
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self._io_lock:
+            return method(self, *args, **kwargs)
+
+    return wrapped
+
+
 @dataclass
 class RTM2032Scope:
     transport: InstrumentTransport
     check_errors_after_ops: bool = True
     long_waveform_timeout_ms: int = 300_000
+    _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
+    _trigger_writes_blocked: bool = field(default=False, init=False, repr=False)
 
+    @_serialized_io
     def idn(self) -> str:
         return self.transport.query("*IDN?")
 
+    @_serialized_io
     def identity_snapshot(self) -> RTM2000IdentitySnapshot:
-        manufacturer, model, serial_number, firmware = _parse_idn(self.idn())
-        return RTM2000IdentitySnapshot(
-            manufacturer=manufacturer,
-            model=model,
-            serial_number=serial_number,
-            firmware=firmware,
-            options=_parse_options(self.transport.query("*OPT?")),
-        )
+        with self._io_lock:
+            manufacturer, model, serial_number, firmware = _parse_idn(self.idn())
+            return RTM2000IdentitySnapshot(
+                manufacturer=manufacturer,
+                model=model,
+                serial_number=serial_number,
+                firmware=firmware,
+                options=_parse_options(self.transport.query("*OPT?")),
+            )
 
+    @_serialized_io
     def health_snapshot(self) -> RTM2000HealthSnapshot:
-        status_byte = _parse_decimal_integer(
-            self.transport.query("*STB?"),
-            command="*STB?",
-            minimum=0,
-            maximum=0xFF,
-        )
-        operation_condition = _parse_decimal_integer(
-            self.transport.query("STATUS:OPERation:CONDITION?"),
-            command="STATUS:OPERation:CONDITION?",
-            minimum=0,
-            maximum=0xFFFF,
-        )
-        questionable_condition = _parse_decimal_integer(
-            self.transport.query("STATUS:QUESTIONable:CONDITION?"),
-            command="STATUS:QUESTIONable:CONDITION?",
-            minimum=0,
-            maximum=0xFFFF,
-        )
-        acquisition_available = _parse_decimal_integer(
-            self.transport.query("ACQuire:AVAilable?"),
-            command="ACQuire:AVAilable?",
-            minimum=0,
-        )
-        acquisition_count = _parse_decimal_integer(
-            self.transport.query("ACQuire:COUNT?"),
-            command="ACQuire:COUNT?",
-            minimum=0,
-        )
-        sample_rate_hz = _parse_positive_float(
-            self.transport.query("ACQuire:SRATe?"),
-            command="ACQuire:SRATe?",
-        )
-        return RTM2000HealthSnapshot(
-            status_byte=status_byte,
-            operation_condition=operation_condition,
-            questionable_condition=questionable_condition,
-            acquisition_available=acquisition_available,
-            acquisition_count=acquisition_count,
-            sample_rate_hz=sample_rate_hz,
-            error_queue_nonempty=bool(status_byte & (1 << 2)),
-            waiting_for_trigger=bool(operation_condition & (1 << 3)),
-        )
+        with self._io_lock:
+            status_byte = _parse_decimal_integer(
+                self.transport.query("*STB?"),
+                command="*STB?",
+                minimum=0,
+                maximum=0xFF,
+            )
+            operation_condition = _parse_decimal_integer(
+                self.transport.query("STATUS:OPERation:CONDITION?"),
+                command="STATUS:OPERation:CONDITION?",
+                minimum=0,
+                maximum=0xFFFF,
+            )
+            questionable_condition = _parse_decimal_integer(
+                self.transport.query("STATUS:QUESTIONable:CONDITION?"),
+                command="STATUS:QUESTIONable:CONDITION?",
+                minimum=0,
+                maximum=0xFFFF,
+            )
+            acquisition_available = _parse_decimal_integer(
+                self.transport.query("ACQuire:AVAilable?"),
+                command="ACQuire:AVAilable?",
+                minimum=0,
+            )
+            acquisition_count = _parse_decimal_integer(
+                self.transport.query("ACQuire:COUNT?"),
+                command="ACQuire:COUNT?",
+                minimum=0,
+            )
+            sample_rate_hz = _parse_positive_float(
+                self.transport.query("ACQuire:SRATe?"),
+                command="ACQuire:SRATe?",
+            )
+            return RTM2000HealthSnapshot(
+                status_byte=status_byte,
+                operation_condition=operation_condition,
+                questionable_condition=questionable_condition,
+                acquisition_available=acquisition_available,
+                acquisition_count=acquisition_count,
+                sample_rate_hz=sample_rate_hz,
+                error_queue_nonempty=bool(status_byte & (1 << 2)),
+                waiting_for_trigger=bool(operation_condition & (1 << 3)),
+            )
 
+    @_serialized_io
     def analog_channel_snapshot(self, channel: int) -> RTM2000AnalogChannelSnapshot:
         _validate_rtm2032_channel(channel)
         prefix = f"CHANnel{channel}"
@@ -417,6 +443,7 @@ class RTM2032Scope:
             acquisition_type=acquisition_type,
         )
 
+    @_serialized_io
     def timebase_snapshot(self) -> RTM2000TimebaseSnapshot:
         return RTM2000TimebaseSnapshot(
             acquisition_time_s=_parse_positive_float(
@@ -453,6 +480,7 @@ class RTM2032Scope:
             ),
         )
 
+    @_serialized_io
     def probe_snapshot(self, channel: int) -> RTM2000ProbeSnapshot:
         _validate_rtm2032_channel(channel)
         prefix = f"PROBe{channel}:SETup"
@@ -495,6 +523,7 @@ class RTM2032Scope:
             probe_type=probe_type,
         )
 
+    @_serialized_io
     def waveform_metadata_snapshot(
         self,
         channel: int,
@@ -563,7 +592,12 @@ class RTM2032Scope:
             ),
         )
 
+    @_serialized_io
     def edge_trigger_snapshot(self) -> RTM2000EdgeTriggerSnapshot:
+        with self._io_lock:
+            return self._edge_trigger_snapshot_unlocked()
+
+    def _edge_trigger_snapshot_unlocked(self) -> RTM2000EdgeTriggerSnapshot:
         trigger_type = _parse_token(
             self.transport.query("TRIGger:A:TYPE?"),
             command="TRIGger:A:TYPE?",
@@ -621,14 +655,122 @@ class RTM2032Scope:
             holdoff_time_s=holdoff_time_s,
         )
 
+    @property
+    def trigger_writes_blocked(self) -> bool:
+        with self._io_lock:
+            return self._trigger_writes_blocked
+
+    def configure_ch2_edge_trigger(
+        self,
+        *,
+        level_v: float,
+    ) -> RTM2000EdgeTriggerSnapshot:
+        if (
+            isinstance(level_v, bool)
+            or not isinstance(level_v, Real)
+            or not math.isfinite(float(level_v))
+        ):
+            raise DataError("CH2 edge-trigger level must be finite")
+        level_v = float(level_v)
+        with self._io_lock:
+            if self._trigger_writes_blocked:
+                raise RTM2000TriggerControlError(
+                    "trigger writes are blocked after an earlier ambiguous write",
+                    phase="blocked",
+                )
+            identity_before = self.identity_snapshot()
+            health_before = self.health_snapshot()
+            trigger_before = self._edge_trigger_snapshot_unlocked()
+            channel_before = self.analog_channel_snapshot(2)
+            if identity_before.model.upper() != "RTM2032":
+                raise RTM2000TriggerControlError(
+                    "controlled trigger writes require an RTM2032 identity",
+                    phase="preflight",
+                )
+            if health_before.error_queue_nonempty or health_before.questionable_condition:
+                raise RTM2000TriggerControlError(
+                    "instrument health is not clean before trigger write",
+                    phase="preflight",
+                )
+            if trigger_before.source_channel != 2:
+                raise RTM2000TriggerControlError(
+                    "controlled trigger writes require the existing CH2 baseline",
+                    phase="preflight",
+                )
+            if (
+                not channel_before.enabled
+                or channel_before.coupling not in {"DCL", "ACL"}
+                or channel_before.overloaded
+            ):
+                raise RTM2000TriggerControlError(
+                    "controlled trigger writes require enabled, high-impedance, non-overloaded CH2",
+                    phase="preflight",
+                )
+            visible_min_v = channel_before.offset_v - channel_before.range_v / 2.0
+            visible_max_v = channel_before.offset_v + channel_before.range_v / 2.0
+            if level_v < visible_min_v or level_v > visible_max_v:
+                raise RTM2000TriggerControlError(
+                    "requested trigger level is outside the current CH2 range",
+                    phase="preflight",
+                )
+
+            commands = (
+                "TRIGger:A:TYPE EDGE",
+                "TRIGger:A:SOURce CH2",
+                "TRIGger:A:MODE AUTO",
+                "TRIGger:A:EDGE:SLOPe POS",
+                "TRIGger:A:EDGE:COUpling DC",
+                f"TRIGger:A:LEVel2 {level_v:.12g}",
+            )
+            phase = "write"
+            try:
+                for command in commands:
+                    self.transport.write(command)
+                phase = "readback"
+                trigger_after = self._edge_trigger_snapshot_unlocked()
+                if (
+                    trigger_after.trigger_type != "EDGE"
+                    or trigger_after.source_channel != 2
+                    or trigger_after.mode != "AUTO"
+                    or trigger_after.slope != "POS"
+                    or trigger_after.coupling != "DC"
+                    or not math.isclose(
+                        trigger_after.level_v,
+                        level_v,
+                        rel_tol=1e-9,
+                        abs_tol=1e-12,
+                    )
+                    or trigger_after.hysteresis_mode != trigger_before.hysteresis_mode
+                    or trigger_after.holdoff_mode != trigger_before.holdoff_mode
+                    or trigger_after.holdoff_time_s != trigger_before.holdoff_time_s
+                ):
+                    raise DataError("trigger readback does not match requested CH2 edge state")
+                phase = "health-postcheck"
+                health_after = self.health_snapshot()
+                if health_after.error_queue_nonempty or health_after.questionable_condition:
+                    raise DataError("instrument health changed after trigger write")
+                phase = "identity-postcheck"
+                if self.identity_snapshot() != identity_before:
+                    raise DataError("instrument identity changed after trigger write")
+                return trigger_after
+            except Exception as exc:
+                self._trigger_writes_blocked = True
+                raise RTM2000TriggerControlError(
+                    f"ambiguous RTM2032 trigger write during {phase}",
+                    phase=phase,
+                ) from exc
+
+    @_serialized_io
     def clear_status(self) -> None:
         self.transport.write("*CLS")
 
+    @_serialized_io
     def channel_coupling(self, channel: int) -> str:
         if channel < 1:
             raise DataError("channel must be >= 1")
         return self.transport.query(f"CHAN{channel}:COUP?").strip().upper()
 
+    @_serialized_io
     def errors(self, limit: int = 16) -> list[str]:
         errors: list[str] = []
         for _ in range(limit):
@@ -638,6 +780,7 @@ class RTM2032Scope:
                 break
         return errors
 
+    @_serialized_io
     def assert_no_errors(self) -> None:
         errors = self.errors()
         active = [
@@ -648,6 +791,7 @@ class RTM2032Scope:
         if active:
             raise InstrumentError("instrument error queue is not empty: " + "; ".join(active))
 
+    @_serialized_io
     def autoscale(self, wait_opc: bool = True, check_errors: bool = True) -> None:
         self.transport.write("AUToscale")
         if wait_opc:
@@ -655,11 +799,13 @@ class RTM2032Scope:
         if check_errors:
             self.assert_no_errors()
 
+    @_serialized_io
     def set_time_range(self, time_range_s: float) -> None:
         if time_range_s <= 0:
             raise DataError("time range must be > 0")
         self.transport.write(f"TIMebase:RANGe {time_range_s:.12g}")
 
+    @_serialized_io
     def set_vertical_scale(self, channel: int, scale_v_per_div: float) -> None:
         if channel < 1:
             raise DataError("channel must be >= 1")
@@ -714,6 +860,7 @@ class RTM2032Scope:
             )
         return WaveformData(channel=channel, header=header, voltages_v=voltages)
 
+    @_serialized_io
     def fetch_waveform(
         self,
         channel: int,
@@ -726,6 +873,7 @@ class RTM2032Scope:
             self.assert_no_errors()
         return waveform
 
+    @_serialized_io
     def capture_waveform(
         self,
         channel: int,
@@ -753,6 +901,7 @@ class RTM2032Scope:
             self.assert_no_errors()
         return waveform
 
+    @_serialized_io
     def capture_waveforms(
         self,
         channels: list[int],
@@ -802,6 +951,7 @@ class RTM2032Scope:
             self.assert_no_errors()
         return waveforms
 
+    @_serialized_io
     def screenshot_png(
         self,
         *,
@@ -816,5 +966,7 @@ class RTM2032Scope:
             raise DataError("screenshot response is not a PNG image")
         return data
 
+    @_serialized_io
     def close(self) -> None:
-        self.transport.close()
+        with self._io_lock:
+            self.transport.close()
