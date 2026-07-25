@@ -17,13 +17,15 @@ M3 now provides an installable query-only distribution, a V2 entry point, a driv
 
 The driver also exposes the hardware-verified scalar state subset: RF state, input/output impedance, center/span and start/stop frequencies, CW frequency, offset, sweep time, linear/logarithmic mode, continuous/single execution, and external-trigger state. It sends only fixed allowlisted queries and does not retry device-private errors automatically.
 
+A separate M0–M3 command-certification run, with RF held OFF, also passed three consecutive reversible cycles for TRIM, reference position, clock display, UI language, and external trigger. That evidence remains in the private certification runner and public matrix; it is not wired into the 0.1.0 descriptor or driver and does not expand production capabilities.
+
 A generic `SweepAnalyzerSnapshot` requires a complete effective plan including function, power, averaging, and measurement state. Those fields are not reliably queryable on the target firmware, so version 0.1.0 does not declare `sweep_analyzer.status`. `frequency_response` remains a generic capability and data domain, not another instrument kind. M4 trace framing, point count, units, and frequency-axis semantics are unverified, so trace, marker, and analysis capabilities are also omitted. Configuration, triggering, and RF output methods are not exposed.
 
 M4 trace-protocol confirmation completed controlled hardware exploration but did not pass. `OUTPRFORM?` repeatably returns complete LF-terminated 1002-token frames (501 finite amplitude candidates followed by 501 zeroes); however, canonical and compact MODE, POINT, CONT, amplitude/phase-measurement, and 20/200/730-point writes did not change either an independent `OUTSTATEC?` snapshot or the curve shape. The firmware also supplies no verifiable readback for these configuration queries. Version 0.1.0 therefore remains query-only and does not advertise trace capability from exploratory evidence.
 
 M4 now includes a strict offline parser that is not wired into the descriptor or driver. It accumulates through LF, requires exactly P finite values for a single mode or 2P finite values for ALL, and rejects short or long frames, malformed tokens, non-ASCII data, NaN/Inf, trailing bytes, and unterminated frames. Private 501+501 complete evidence and a 739-token truncation exercise that parser, but this validates framing logic only; it does not accept write commands, mode changes, point counts, units, restoration, or a trace capability.
 
-See the [remote protocol and capability audit](doc/PROTOCOL_AUDIT_EN.md) and [RS-232 read-only protocol acceptance](doc/RS232_READONLY_ACCEPTANCE_EN.md).
+See the [remote protocol and capability audit](doc/PROTOCOL_AUDIT_EN.md), [RS-232 read-only protocol acceptance](doc/RS232_READONLY_ACCEPTANCE_EN.md), [command certification plan](doc/COMMAND_CERTIFICATION_PLAN_EN.md), and [per-command matrix](doc/COMMAND_CERTIFICATION_MATRIX_EN.md). Manual-only commands do not enter the driver before satisfying those gates.
 
 ## Safety boundary
 

@@ -17,13 +17,15 @@ M3 已建立可安装的 query-only distribution、V2 entry point、驱动、Fak
 
 驱动另提供经实机验证的标量状态读取：RF 状态、输入/输出阻抗、中心/跨度与起止频率、CW 频率、频偏、扫描时间、线性/对数模式、连续/单次方式和外部触发状态。该方法只发送固定 allowlist 中的 query，不发送设置命令，也不自动重试设备私有错误。
 
+独立的 M0–M3 命令认证还在 RF OFF 下确认了 TRIM、参考位置、时钟显示、界面语言和外部触发五类可逆控制各连续 3/3 通过。该证据目前只保留在私有认证 runner 和公开矩阵中，没有接入 0.1.0 descriptor/driver，也不扩大生产 capability。
+
 通用 `SweepAnalyzerSnapshot` 需要 `FUNC`、功率、平均和测量状态等完整有效计划，而目标固件尚不能稳定查询这些字段，因此 0.1.0 不声明 `sweep_analyzer.status`。`frequency_response` 是通用能力与数据域，不是第二种 instrument kind；M4 曲线 framing、点数、单位和频率轴未验收，所以也不声明 trace、marker 或 analysis 能力。配置、触发和 RF 输出方法完全不暴露。
 
 M4 曲线协议确认已完成受控实机探索，但未通过。`OUTPRFORM?` 可重复返回完整 LF 终止的 1002-token 帧（501 个有限幅频候选值 + 501 个零值）；但标准与紧凑拼写的 MODE、POINT、CONT、幅相测量以及 20/200/730 点写入，均未改变独立 `OUTSTATEC?` 快照或曲线布局。该固件也不提供这些配置 query 的可验证读回。0.1.0 因此继续保持 query-only，不把探索证据当作 trace capability。
 
 M4 已加入一个尚未接入 descriptor/driver 的严格离线 parser：它按 LF 累积完整帧，要求单模式恰好 P 个有限值、ALL 恰好 2P 个有限值，并拒绝短帧、长帧、坏 token、非 ASCII、NaN/Inf、尾随数据和无终止符帧。该 parser 已用私有 501+501 完整帧和 739-token 截断帧回归，但这只证明帧校验逻辑，不代表写命令、模式切换、点数、单位、状态恢复或 trace capability 已通过实机验收。
 
-详见[远控协议与能力审计](doc/PROTOCOL_AUDIT.md)和 [RS-232 只读协议验收](doc/RS232_READONLY_ACCEPTANCE.md)。
+详见[远控协议与能力审计](doc/PROTOCOL_AUDIT.md)、[RS-232 只读协议验收](doc/RS232_READONLY_ACCEPTANCE.md)、[命令认证计划](doc/COMMAND_CERTIFICATION_PLAN.md)和[逐命令矩阵](doc/COMMAND_CERTIFICATION_MATRIX.md)。未达到矩阵门禁的手册命令不会进入驱动。
 
 ## 安全边界
 
