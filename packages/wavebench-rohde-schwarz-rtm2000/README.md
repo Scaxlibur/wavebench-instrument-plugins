@@ -20,6 +20,7 @@
 ## 能力与边界
 
 - `*IDN?`、错误队列和显式 autoscale；
+- 厂商专用只读 identity/options/health 快照，不消费 EVENT 寄存器或错误队列；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
 - 通道 coupling 查询和 PNG 截图；
@@ -82,6 +83,11 @@ setup blob、配置指纹和活动采集状态均恢复。验收未修改真实 
 实验级 `SYST:SET` setup 恢复不属于插件驱动：SocketIO 写入曾出现只部分生效，因此验收工具
 固定使用已验证的 VXI-11 512-byte 协议分片，并在重连后只读核对完整 blob、配置指纹和活动
 采集状态。验收结束时快照已删除，真实地址、序列号、波形和命令日志均未进入提交。
+
+0.3.0 开发线新增严格类型化的只读 identity/options/health 快照。health 快照只读取
+`*STB?`、operation/questionable condition、acquisition available/count 和 sample rate；不读取会
+消费状态的 EVENT 寄存器，也不自动清空错误队列。该厂商专用 API 不扩张 WaveBench 核心
+capability 声明。
 
 ## 开发验证
 

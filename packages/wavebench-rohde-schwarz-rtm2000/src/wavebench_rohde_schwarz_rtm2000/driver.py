@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import math
+import re
 import time
 
 import numpy as np
@@ -9,6 +11,79 @@ import numpy as np
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import WaveformData, WaveformHeader
 from wavebench.transport.base import InstrumentTransport
+
+
+_DECIMAL_INTEGER = re.compile(r"[+-]?[0-9]+")
+
+
+def _parse_idn(response: str) -> tuple[str, str, str, str]:
+    parts = tuple(item.strip() for item in response.split(","))
+    if len(parts) != 4 or any(not item for item in parts):
+        raise DataError(f"invalid *IDN? response: {response!r}")
+    manufacturer, model, serial_number, firmware = parts
+    if not model.upper().startswith("RTM"):
+        raise DataError(f"unexpected RTM2000 model in *IDN? response: {model!r}")
+    return manufacturer, model, serial_number, firmware
+
+
+def _parse_options(response: str) -> tuple[str, ...]:
+    value = response.strip().strip('"')
+    if value in {"", "0"}:
+        return ()
+    options = tuple(item.strip() for item in value.split(","))
+    if any(
+        not item or any(ord(character) < 0x20 for character in item)
+        for item in options
+    ):
+        raise DataError(f"invalid *OPT? response: {response!r}")
+    return options
+
+
+def _parse_decimal_integer(
+    response: str,
+    *,
+    command: str,
+    minimum: int,
+    maximum: int | None = None,
+) -> int:
+    value = response.strip()
+    if _DECIMAL_INTEGER.fullmatch(value) is None:
+        raise DataError(f"invalid {command} response: {response!r}")
+    parsed = int(value, 10)
+    if parsed < minimum or (maximum is not None and parsed > maximum):
+        raise DataError(f"out-of-range {command} response: {response!r}")
+    return parsed
+
+
+def _parse_positive_float(response: str, *, command: str) -> float:
+    try:
+        value = float(response.strip())
+    except ValueError as exc:
+        raise DataError(f"invalid {command} response: {response!r}") from exc
+    if not math.isfinite(value) or value <= 0:
+        raise DataError(f"out-of-range {command} response: {response!r}")
+    return value
+
+
+@dataclass(frozen=True)
+class RTM2000IdentitySnapshot:
+    manufacturer: str
+    model: str
+    serial_number: str
+    firmware: str
+    options: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RTM2000HealthSnapshot:
+    status_byte: int
+    operation_condition: int
+    questionable_condition: int
+    acquisition_available: int
+    acquisition_count: int
+    sample_rate_hz: float
+    error_queue_nonempty: bool
+    waiting_for_trigger: bool
 
 
 def parse_waveform_header(response: str) -> WaveformHeader:
@@ -40,6 +115,60 @@ class RTM2032Scope:
 
     def idn(self) -> str:
         return self.transport.query("*IDN?")
+
+    def identity_snapshot(self) -> RTM2000IdentitySnapshot:
+        manufacturer, model, serial_number, firmware = _parse_idn(self.idn())
+        return RTM2000IdentitySnapshot(
+            manufacturer=manufacturer,
+            model=model,
+            serial_number=serial_number,
+            firmware=firmware,
+            options=_parse_options(self.transport.query("*OPT?")),
+        )
+
+    def health_snapshot(self) -> RTM2000HealthSnapshot:
+        status_byte = _parse_decimal_integer(
+            self.transport.query("*STB?"),
+            command="*STB?",
+            minimum=0,
+            maximum=0xFF,
+        )
+        operation_condition = _parse_decimal_integer(
+            self.transport.query("STATUS:OPERation:CONDITION?"),
+            command="STATUS:OPERation:CONDITION?",
+            minimum=0,
+            maximum=0xFFFF,
+        )
+        questionable_condition = _parse_decimal_integer(
+            self.transport.query("STATUS:QUESTIONable:CONDITION?"),
+            command="STATUS:QUESTIONable:CONDITION?",
+            minimum=0,
+            maximum=0xFFFF,
+        )
+        acquisition_available = _parse_decimal_integer(
+            self.transport.query("ACQuire:AVAilable?"),
+            command="ACQuire:AVAilable?",
+            minimum=0,
+        )
+        acquisition_count = _parse_decimal_integer(
+            self.transport.query("ACQuire:COUNT?"),
+            command="ACQuire:COUNT?",
+            minimum=0,
+        )
+        sample_rate_hz = _parse_positive_float(
+            self.transport.query("ACQuire:SRATe?"),
+            command="ACQuire:SRATe?",
+        )
+        return RTM2000HealthSnapshot(
+            status_byte=status_byte,
+            operation_condition=operation_condition,
+            questionable_condition=questionable_condition,
+            acquisition_available=acquisition_available,
+            acquisition_count=acquisition_count,
+            sample_rate_hz=sample_rate_hz,
+            error_queue_nonempty=bool(status_byte & (1 << 2)),
+            waiting_for_trigger=bool(operation_condition & (1 << 3)),
+        )
 
     def clear_status(self) -> None:
         self.transport.write("*CLS")

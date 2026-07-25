@@ -94,6 +94,91 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
     assert transport_opens == 1
 
 
+def test_identity_and_health_snapshots_are_read_only_and_typed():
+    transport = FakeTransport(
+        responses={
+            "*IDN?": "Rohde&Schwarz,RTM2032,123456,3.500",
+            "*OPT?": "B1, K1, K2",
+            "*STB?": "4",
+            "STATUS:OPERation:CONDITION?": "8",
+            "STATUS:QUESTIONable:CONDITION?": "0",
+            "ACQuire:AVAilable?": "53",
+            "ACQuire:COUNT?": "53",
+            "ACQuire:SRATe?": "5.000000000E+06",
+        }
+    )
+    scope = RTM2032Scope(transport)
+
+    identity = scope.identity_snapshot()
+    health = scope.health_snapshot()
+
+    assert identity.manufacturer == "Rohde&Schwarz"
+    assert identity.model == "RTM2032"
+    assert identity.serial_number == "123456"
+    assert identity.firmware == "3.500"
+    assert identity.options == ("B1", "K1", "K2")
+    assert health.status_byte == 4
+    assert health.operation_condition == 8
+    assert health.questionable_condition == 0
+    assert health.acquisition_available == 53
+    assert health.acquisition_count == 53
+    assert health.sample_rate_hz == 5_000_000.0
+    assert health.error_queue_nonempty is True
+    assert health.waiting_for_trigger is True
+    assert transport.writes == []
+    assert transport.queries == [
+        "*IDN?",
+        "*OPT?",
+        "*STB?",
+        "STATUS:OPERation:CONDITION?",
+        "STATUS:QUESTIONable:CONDITION?",
+        "ACQuire:AVAilable?",
+        "ACQuire:COUNT?",
+        "ACQuire:SRATe?",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("command", "response"),
+    [
+        ("*STB?", "256"),
+        ("STATUS:OPERation:CONDITION?", "-1"),
+        ("STATUS:QUESTIONable:CONDITION?", "bad"),
+        ("ACQuire:AVAilable?", "1.5"),
+        ("ACQuire:COUNT?", "-1"),
+        ("ACQuire:SRATe?", "nan"),
+    ],
+)
+def test_health_snapshot_rejects_invalid_numeric_responses(command, response):
+    responses = {
+        "*STB?": "0",
+        "STATUS:OPERation:CONDITION?": "8",
+        "STATUS:QUESTIONable:CONDITION?": "0",
+        "ACQuire:AVAilable?": "1",
+        "ACQuire:COUNT?": "1",
+        "ACQuire:SRATe?": "1e6",
+    }
+    responses[command] = response
+
+    with pytest.raises(DataError, match="response"):
+        RTM2032Scope(FakeTransport(responses=responses)).health_snapshot()
+
+
+@pytest.mark.parametrize(
+    ("idn", "options"),
+    [
+        ("Rohde&Schwarz,RTM2032,serial", "B1"),
+        ("Rohde&Schwarz,Other,serial,firmware", "B1"),
+        ("Rohde&Schwarz,RTM2032,serial,firmware", "B1,,K1"),
+    ],
+)
+def test_identity_snapshot_rejects_malformed_responses(idn, options):
+    transport = FakeTransport(responses={"*IDN?": idn, "*OPT?": options})
+
+    with pytest.raises(DataError):
+        RTM2032Scope(transport).identity_snapshot()
+
+
 def test_header_parser_and_fetch_preserve_real_waveform_semantics():
     header = parse_waveform_header("-1e-3,1e-3,3,1")
     assert header.points == 3

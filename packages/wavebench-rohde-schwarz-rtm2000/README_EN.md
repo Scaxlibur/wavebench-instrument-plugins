@@ -22,6 +22,7 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 ## Capabilities and boundary
 
 - `*IDN?`, error queue, and explicit autoscale;
+- vendor-specific read-only identity/options/health snapshots that do not consume event registers or the error queue;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
 - channel-coupling queries and PNG screenshots;
@@ -93,6 +94,11 @@ write once applied the setup only partially, so the acceptance tool uses the ver
 512-byte protocol chunks and performs read-only comparison of the complete blob, configuration
 fingerprint, and active acquisition state after reconnecting. The final snapshot was deleted and
 no real address, serial number, waveform, or command log entered the commit.
+
+The 0.3.0 development line adds strict typed read-only identity/options/health snapshots. The health
+snapshot reads only `*STB?`, operation/questionable condition, acquisition available/count, and sample
+rate. It does not consume event registers or drain the error queue. This vendor-specific API does not
+expand the WaveBench core capability declaration.
 
 ## Development checks
 
