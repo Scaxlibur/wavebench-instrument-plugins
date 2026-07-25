@@ -29,7 +29,7 @@
 | 模拟波形传输 | `CHANnel<m>:DATA*`、envelope、独立 X/Y 元数据 | REAL/LSBF、header + data、`DEF/MAX/DMAX`、一次 acquisition 后逐通道读取 | **实机通过** | 无 envelope、显式 X/Y increment/origin/resolution、history/segment 选择、流式块 API；不承诺跨通道硬件同步 | **P1**：完善波形元数据；**P2**：分段/history/envelope |
 | 时基、缩放与时间戳 | 12 个 timebase 模板、zoom、timestamp 导航 | 类型化 acquisition time/divisions/position/range/reference/scale/roll 只读状态；既有 `TIMebase:RANGe` 写入 | **实机通过** | 无 zoom 或 timestamp | 基础 P1 已完成；**P2**：zoom/history timestamp |
 | 触发系统 | 约 159 个模板：A/B、edge、width、runt、rise time、pattern、TV、holdoff、外部和协议触发 | 不配置触发；单次采集沿用仪器当前触发设置 | 仅证明现有触发下可采集 | 无触发源、模式、类型、电平、斜率、holdoff、B trigger、trigger out | **P1**：edge trigger 最小闭环；其余按类型和选件分层 |
-| 自动测量与统计 | 20 个模板：测量槽、source/main、actual、峰值、均值、标准差、波形计数 | 未覆盖 | 无 | WaveBench 只能下载波形后自行分析，不能读取仪器测量结果 | **P1**：最有价值的只读扩展；先做 category/source/result/statistics |
+| 自动测量与统计 | 20 个模板：测量槽、source/main、actual、峰值、均值、标准差、波形计数 | 未暴露生产 API | **只读探测部分通过**：槽位 category 可读；未配置槽的 actual 超时 | 当前 RsInstrument 超时诊断会读取错误队列并报告 `-200/-410`，因此不能把未知配置槽当作无副作用快照 | **P1 暂停**：先取得已配置槽位和响应语法证据，或提供不自动消费错误队列的有界 query 路径；不得隐式配置/启用/复位槽位 |
 | 光标 | 约 27 个模板：X/Y 光标、delta、ratio、tracking、结果 | 未覆盖 | 无 | 无光标配置或结果读取 | **P2**：先只读结果，再考虑受控定位 |
 | 数学与 FFT | 约 51 个模板：表达式、math 波形、envelope、FFT window/span/RBW | 未覆盖 | 无 | 无仪器 math/FFT 配置和波形读取 | **P2**：优先只读 math/FFT waveform；保留主机 DSP 作为独立能力 |
 | Spectrum / spectrogram | 107 个模板：频谱波形、频率轴、RBW、marker、history、spectrogram | 未覆盖 | 无 | 完整频谱分析应用缺失 | **P3，选件门控**：先探测选件和 `SPECtrum[:STATe]`，再设计独立 capability |
@@ -83,7 +83,7 @@ HCOPy:LANGuage  HCOPy:COLor:SCHeme  HCOPy:MENU  HCOPy:DATA?
 1. `identity/options/health` 只读快照：`*OPT?`、acquisition 和非消费型 status 条件。**已完成。**
 2. RTM2032 CH1/CH2 类型化模拟通道、时基和探头状态。**基础字段已完成并实机验证。**
 3. 基础 edge trigger 闭环：source、mode、slope、level、find level；必须支持快照、独立读回和恢复责任。
-4. 仪器自动测量只读结果与统计；与主机侧 DSP 结果明确区分来源。
+4. 仪器自动测量只读结果与统计；与主机侧 DSP 结果明确区分来源。当前未配置槽的结果查询会超时，且 transport 诊断会消费错误队列，故在获得已配置槽位证据或非消费型 query 路径前暂停。
 5. 波形元数据和 segment/history 标识，避免把不同 acquisition 或 segment 混为同一记录。
 
 ### P2：扩展分析与特殊采集
