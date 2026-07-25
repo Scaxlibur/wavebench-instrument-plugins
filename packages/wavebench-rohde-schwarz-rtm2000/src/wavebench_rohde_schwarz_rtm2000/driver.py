@@ -198,25 +198,68 @@ class RTM2000ProbeSnapshot:
     probe_type: str
 
 
-def parse_waveform_header(response: str) -> WaveformHeader:
+@dataclass(frozen=True)
+class RTM2000WaveformMetadataSnapshot:
+    channel: int
+    x_start_s: float
+    x_stop_s: float
+    points: int
+    values_per_sample: int | None
+    x_increment_s: float
+    x_origin_s: float
+    y_increment_v: float
+    y_origin_v: float
+    y_resolution_bits: int
+
+
+def _parse_waveform_header_response(
+    response: str,
+) -> tuple[WaveformHeader, int | None]:
     parts = [item.strip() for item in response.split(",")]
-    if len(parts) < 3:
+    if len(parts) not in {3, 4}:
         raise DataError(f"invalid CHAN:DATA:HEAD? response: {response!r}")
     try:
         x_start = float(parts[0])
         x_stop = float(parts[1])
-        points = int(float(parts[2]))
-        segment = int(float(parts[3])) if len(parts) >= 4 else None
+        points = _parse_decimal_integer(
+            parts[2],
+            command="CHAN:DATA:HEAD? point count",
+            minimum=1,
+        )
+        values_per_sample = (
+            _parse_decimal_integer(
+                parts[3],
+                command="CHAN:DATA:HEAD? values per sample interval",
+                minimum=1,
+            )
+            if len(parts) == 4
+            else None
+        )
     except ValueError as exc:
         raise DataError(f"invalid CHAN:DATA:HEAD? response: {response!r}") from exc
-    if points <= 0:
-        raise DataError(f"invalid waveform point count: {points}")
-    return WaveformHeader(
-        x_start=x_start,
-        x_stop=x_stop,
-        points=points,
-        segment=segment,
+    if (
+        not math.isfinite(x_start)
+        or not math.isfinite(x_stop)
+        or x_stop < x_start
+        or (points > 1 and x_stop == x_start)
+    ):
+        raise DataError(f"invalid waveform time range: {response!r}")
+    return (
+        WaveformHeader(
+            x_start=x_start,
+            x_stop=x_stop,
+            points=points,
+            # RTM2000 DATA:HEADER field 4 is values per sample interval,
+            # not a history-segment identity. Do not leak it into core
+            # capture metadata under the misleading ``segment`` field.
+            segment=None,
+        ),
+        values_per_sample,
     )
+
+
+def parse_waveform_header(response: str) -> WaveformHeader:
+    return _parse_waveform_header_response(response)[0]
 
 
 @dataclass
@@ -437,6 +480,74 @@ class RTM2032Scope:
             impedance_ohm=impedance_ohm,
             name=name,
             probe_type=probe_type,
+        )
+
+    def waveform_metadata_snapshot(
+        self,
+        channel: int,
+    ) -> RTM2000WaveformMetadataSnapshot:
+        _validate_rtm2032_channel(channel)
+        prefix = f"CHANnel{channel}:DATA"
+        header, values_per_sample = _parse_waveform_header_response(
+            self.transport.query(f"{prefix}:HEADer?")
+        )
+        points = _parse_decimal_integer(
+            self.transport.query(f"{prefix}:POINTs?"),
+            command=f"{prefix}:POINTs?",
+            minimum=1,
+        )
+        if points != header.points:
+            raise DataError(
+                "waveform metadata point count mismatch: "
+                f"header says {header.points}, POINTs? returned {points}"
+            )
+        x_increment_s = _parse_positive_float(
+            self.transport.query(f"{prefix}:XINCrement?"),
+            command=f"{prefix}:XINCrement?",
+        )
+        x_origin_s = _parse_finite_float(
+            self.transport.query(f"{prefix}:XORigin?"),
+            command=f"{prefix}:XORigin?",
+        )
+        x_tolerance_s = max(x_increment_s * 1e-6, 1e-15)
+        expected_x_stop_s = x_origin_s + (points - 1) * x_increment_s
+        if not math.isclose(
+            x_origin_s,
+            header.x_start,
+            rel_tol=0.0,
+            abs_tol=x_tolerance_s,
+        ) or not math.isclose(
+            expected_x_stop_s,
+            header.x_stop,
+            rel_tol=0.0,
+            abs_tol=x_tolerance_s,
+        ):
+            raise DataError(
+                "waveform metadata x-axis mismatch between DATA:HEADER, "
+                "XINCrement, and XORigin"
+            )
+        return RTM2000WaveformMetadataSnapshot(
+            channel=channel,
+            x_start_s=header.x_start,
+            x_stop_s=header.x_stop,
+            points=header.points,
+            values_per_sample=values_per_sample,
+            x_increment_s=x_increment_s,
+            x_origin_s=x_origin_s,
+            y_increment_v=_parse_positive_float(
+                self.transport.query(f"{prefix}:YINCrement?"),
+                command=f"{prefix}:YINCrement?",
+            ),
+            y_origin_v=_parse_finite_float(
+                self.transport.query(f"{prefix}:YORigin?"),
+                command=f"{prefix}:YORigin?",
+            ),
+            y_resolution_bits=_parse_decimal_integer(
+                self.transport.query(f"{prefix}:YRESolution?"),
+                command=f"{prefix}:YRESolution?",
+                minimum=1,
+                maximum=64,
+            ),
         )
 
     def clear_status(self) -> None:

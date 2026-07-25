@@ -392,10 +392,91 @@ def test_probe_snapshot_rejects_malformed_responses(command, response):
         RTM2032Scope(FakeTransport(responses=responses)).probe_snapshot(1)
 
 
+def test_waveform_metadata_snapshot_is_typed_read_only_and_consistent():
+    transport = FakeTransport(
+        responses={
+            "CHANnel2:DATA:HEADer?": "-1e-3,1e-3,1001,1",
+            "CHANnel2:DATA:POINTs?": "1001",
+            "CHANnel2:DATA:XINCrement?": "2e-6",
+            "CHANnel2:DATA:XORigin?": "-1e-3",
+            "CHANnel2:DATA:YINCrement?": "1e-3",
+            "CHANnel2:DATA:YORigin?": "-0.128",
+            "CHANnel2:DATA:YRESolution?": "8",
+        }
+    )
+
+    snapshot = RTM2032Scope(transport).waveform_metadata_snapshot(2)
+
+    assert snapshot.channel == 2
+    assert snapshot.x_start_s == -1e-3
+    assert snapshot.x_stop_s == 1e-3
+    assert snapshot.points == 1001
+    assert snapshot.values_per_sample == 1
+    assert snapshot.x_increment_s == 2e-6
+    assert snapshot.x_origin_s == -1e-3
+    assert snapshot.y_increment_v == 1e-3
+    assert snapshot.y_origin_v == -0.128
+    assert snapshot.y_resolution_bits == 8
+    assert transport.writes == []
+    assert transport.queries == [
+        "CHANnel2:DATA:HEADer?",
+        "CHANnel2:DATA:POINTs?",
+        "CHANnel2:DATA:XINCrement?",
+        "CHANnel2:DATA:XORigin?",
+        "CHANnel2:DATA:YINCrement?",
+        "CHANnel2:DATA:YORigin?",
+        "CHANnel2:DATA:YRESolution?",
+    ]
+
+
+def test_waveform_metadata_snapshot_rejects_invalid_channel_without_io():
+    transport = FakeTransport()
+
+    with pytest.raises(DataError, match="must be 1 or 2"):
+        RTM2032Scope(transport).waveform_metadata_snapshot(3)
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response"),
+    [
+        ("CHANnel1:DATA:HEADer?", "nan,1,1001,1"),
+        ("CHANnel1:DATA:HEADer?", "1,-1,1001,1"),
+        ("CHANnel1:DATA:POINTs?", "1000"),
+        ("CHANnel1:DATA:XINCrement?", "0"),
+        ("CHANnel1:DATA:XINCrement?", "3e-6"),
+        ("CHANnel1:DATA:XORigin?", "nan"),
+        ("CHANnel1:DATA:XORigin?", "-2e-3"),
+        ("CHANnel1:DATA:YINCrement?", "-1"),
+        ("CHANnel1:DATA:YORigin?", "inf"),
+        ("CHANnel1:DATA:YRESolution?", "8.5"),
+    ],
+)
+def test_waveform_metadata_snapshot_rejects_malformed_or_inconsistent_responses(
+    command,
+    response,
+):
+    responses = {
+        "CHANnel1:DATA:HEADer?": "-1e-3,1e-3,1001,1",
+        "CHANnel1:DATA:POINTs?": "1001",
+        "CHANnel1:DATA:XINCrement?": "2e-6",
+        "CHANnel1:DATA:XORigin?": "-1e-3",
+        "CHANnel1:DATA:YINCrement?": "1e-3",
+        "CHANnel1:DATA:YORigin?": "0",
+        "CHANnel1:DATA:YRESolution?": "8",
+    }
+    responses[command] = response
+
+    with pytest.raises(DataError):
+        RTM2032Scope(FakeTransport(responses=responses)).waveform_metadata_snapshot(1)
+
+
 def test_header_parser_and_fetch_preserve_real_waveform_semantics():
     header = parse_waveform_header("-1e-3,1e-3,3,1")
     assert header.points == 3
-    assert header.segment == 1
+    assert header.segment is None
     transport = FakeTransport(
         responses={"CHAN2:DATA:HEAD?": "-1e-3,1e-3,3,1"},
         float_lists={"CHAN2:DATA?": [-0.25, 0.0, 0.25]},
@@ -408,6 +489,7 @@ def test_header_parser_and_fetch_preserve_real_waveform_semantics():
     )
 
     assert waveform.channel == 2
+    assert waveform.header.segment is None
     np.testing.assert_allclose(waveform.voltages_v, [-0.25, 0.0, 0.25])
     assert transport.writes == [
         "CHAN2:STAT ON",
@@ -466,10 +548,28 @@ def test_fetch_accepts_full_length_all_zero_waveform():
     np.testing.assert_array_equal(waveform.voltages_v, np.zeros(4))
 
 
-@pytest.mark.parametrize("header", ["bad", "0,1,0,1"])
+@pytest.mark.parametrize(
+    "header",
+    [
+        "bad",
+        "0,1,0,1",
+        "0,1,2.5,1",
+        "0,1,2,1.5",
+        "0,1,2,0",
+        "0,1,2,1,extra",
+        "nan,1,2,1",
+        "0,inf,2,1",
+        "1,0,2,1",
+        "0,0,2,1",
+    ],
+)
 def test_header_parser_rejects_invalid_or_zero_point_headers(header):
     with pytest.raises(DataError):
         parse_waveform_header(header)
+
+
+def test_public_header_parser_does_not_mislabel_values_per_sample_as_segment():
+    assert parse_waveform_header("0,1,2,2").segment is None
 
 
 @pytest.mark.parametrize("values", [[], [0.0]])

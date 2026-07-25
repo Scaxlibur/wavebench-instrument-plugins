@@ -53,7 +53,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rohde-schwarz-rtm2000",
-        version="0.3.0",
+        version="0.4.0",
         source="entry_point:rohde-schwarz.rtm2032",
         scope_coupling_policy="switchable-termination",
         config_fields=(

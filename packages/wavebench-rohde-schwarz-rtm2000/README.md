@@ -22,6 +22,7 @@
 - `*IDN?`、错误队列和显式 autoscale；
 - 厂商专用只读 identity/options/health 快照，不消费 EVENT 寄存器或错误队列；
 - RTM2032 CH1/CH2 类型化模拟通道、时基和探头元数据快照；
+- 当前波形的类型化 X/Y 缩放、点数、量化位数和每采样值数量快照；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
 - 通道 coupling 查询和 PNG 截图；
@@ -93,6 +94,14 @@ capability 声明。0.3.0 还增加 RTM2032 CH1/CH2 的模拟通道、时基和�
 开放 token、非有限值、未加引号文本和 CH1/CH2 之外的索引均失败关闭。命令索引只证明命令面存在，返回类型来自 RTM2032
 受控只读实测；不会外推为所有 RTM2000 型号的通用契约。实机已验证两路通道、当前时基和
 无源探头状态，验收后 status byte 为 0；未读取 EVENT 或错误队列，也未发送设置命令。
+
+0.4.0 增加厂商专用只读 `waveform_metadata_snapshot(channel)`。它交叉验证
+`DATA:HEADER?`、`POINTs?`、X increment/origin，并返回 Y increment/origin、垂直量化位数和
+每个 sample interval 的值数量；未知/非整数/非有限响应以及混合记录造成的 X 轴不一致均失败关闭。
+RTM2032 CH2 实机只读验收返回 10000 点、200 ns X 步长、20 mV/bit 和 8-bit 分辨率；调用未发送
+写命令、未产生 status/questionable 错误，也未改变 acquisition count。连续运行时 operation condition
+会随正常触发周期在 waiting/non-waiting 间变化，因此不把它误作恒定前后条件。
+`DATA:HEADER?` 第四字段不是 segment ID；history/segment identity 仍未实现，也不纳入本版本声明。
 
 ## 开发验证
 

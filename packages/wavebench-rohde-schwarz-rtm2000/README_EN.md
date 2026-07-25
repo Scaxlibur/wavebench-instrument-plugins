@@ -24,6 +24,7 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 - `*IDN?`, error queue, and explicit autoscale;
 - vendor-specific read-only identity/options/health snapshots that do not consume event registers or the error queue;
 - typed RTM2032 CH1/CH2 analog-channel, timebase, and probe-metadata snapshots;
+- typed current-waveform X/Y scaling, point-count, quantization, and values-per-sample metadata;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
 - channel-coupling queries and PNG screenshots;
@@ -106,6 +107,16 @@ non-finite values, unquoted text, and indexes outside CH1/CH2 fail closed. The c
 types come from controlled read-only RTM2032 measurements and are not generalized to every RTM2000
 model. Hardware acceptance covered both channels, the current timebase, and passive-probe state and
 left the status byte at zero. It read no event/error queue and sent no setting command.
+
+Version 0.4.0 adds the vendor-specific read-only `waveform_metadata_snapshot(channel)` API. It
+cross-checks `DATA:HEADER?`, `POINTs?`, X increment/origin, and returns Y increment/origin, vertical
+quantization bits, and values per sample interval. Unknown, non-integral, non-finite, or mixed-record
+X-axis responses fail closed. Controlled RTM2032 CH2 acceptance returned 10,000 points, a 200 ns X
+increment, 20 mV/bit, and 8-bit resolution. Status byte, operation/questionable condition, and
+acquisition count showed no error or count change, and no write was sent. On a running acquisition,
+the operation condition may naturally move between waiting and non-waiting states during the trigger
+cycle, so it is not treated as a constant before/after invariant. The fourth `DATA:HEADER?` field is
+not a segment identity; history/segment identity remains outside this release claim.
 
 ## Development checks
 
