@@ -58,6 +58,18 @@ long_waveform_timeout_ms = 300000
 The example uses an RFC 5737 documentation address. Offline tests do not scan resources, connect to
 instruments, or send real SCPI.
 
+## Programming-manual location
+
+Place the RTM2000-series oscilloscope programming manual at:
+
+```text
+doc/vendor-local/RTM2000_programming_manual.pdf
+```
+
+The vendor's original filename may also be retained. All content under `doc/vendor-local/` except its explanatory README is ignored by Git, and the entire directory is excluded from the sdist, so vendor manuals are not pushed with the repository or published in public distribution artifacts. Project-authored SCPI indexes, capability matrices, and acceptance material should live separately under public `doc/` and distinguish manual claims from hardware-verified behavior.
+
+See the [RTM2000 manual feature coverage matrix](doc/RTM2000_COVERAGE_MATRIX_EN.md) for the current comparison across the manual surface, external plugin, bundled fallback, and hardware evidence.
+
 ## Acceptance status
 
 Version 0.1.0 completed controlled RTM2032 LAN/VXI-11 acceptance with a real wheel on 2026-07-24. Managed

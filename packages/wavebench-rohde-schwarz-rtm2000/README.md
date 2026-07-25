@@ -53,6 +53,18 @@ long_waveform_timeout_ms = 300000
 
 示例使用 RFC 5737 文档地址。默认测试不扫描资源、不连接仪器，也不发送真实 SCPI。
 
+## 编程手册投放位置
+
+将 RTM2000 系列示波器编程手册放到：
+
+```text
+doc/vendor-local/RTM2000_programming_manual.pdf
+```
+
+也可以保留厂商原始文件名。`doc/vendor-local/` 中除说明文件外的内容会被 Git 忽略，整个目录也会从 sdist 排除，不会随仓库推送或公开发行包发布。项目根据手册整理的 SCPI 索引、能力矩阵和验收资料应另放在公开 `doc/` 中，并明确区分手册声明与实机验证结果。
+
+当前手册命令面与插件、内建 fallback、实机证据的对照见 [RTM2000 手册功能覆盖矩阵](doc/RTM2000_COVERAGE_MATRIX.md)。
+
 ## 验收状态
 
 0.1.0 已于 2026-07-24 完成真实 wheel 的受控 RTM2032 LAN/VXI-11 验收：受管安装与 healthy/load、
