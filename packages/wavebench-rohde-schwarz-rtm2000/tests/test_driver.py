@@ -254,7 +254,7 @@ def test_identity_and_health_snapshots_are_read_only_and_typed():
 def test_acquisition_status_reads_average_and_k15_segment_state_without_writes():
     transport = FakeTransport(
         responses={
-            "*OPT?": "B1,K15",
+            "*OPT?": "B1 - MSO 16 Logic Channels,K15 - History/Segmented Memory",
             "ACQuire:AVERage:COUNt?": "16",
             "ACQuire:AVERage:COMPlete?": "1",
             "ACQuire:SEGMented:STATe?": "OFF",
@@ -349,7 +349,7 @@ def test_history_timestamps_strictly_zips_oldest_to_newest_tables():
 )
 def test_history_timestamps_rejects_malformed_tables(command, response, message):
     responses = {
-        "*OPT?": "K15",
+        "*OPT?": "K15 - History/Segmented Memory",
         "CHANnel1:HISTORY:TSRelative:ALL?": "-0.1,0",
         "CHANnel1:HISTORY:TSABsolute:ALL?": "10,0,0,10,0,1",
         "CHANnel1:HISTORY:TSDate:ALL?": "2026,7,26,2026,7,26",
@@ -594,6 +594,11 @@ def test_cursor_readout_requires_configured_confirmation_before_io():
         ("RMS", {"CURSor1:RESult?": "1.25"}, ScopeCursorReadout(1, "CH1", "RMS", result=1.25)),
         (
             "VERTical",
+            {"CURSor1:XDELta:VALue?": "0.001", "CURSor1:XDELta:INVerse?": "1000"},
+            ScopeCursorReadout(1, "CH1", "VERTICAL", x_delta_s=0.001, inverse_x_delta_hz=1000.0),
+        ),
+        (
+            "VERT",
             {"CURSor1:XDELta:VALue?": "0.001", "CURSor1:XDELta:INVerse?": "1000"},
             ScopeCursorReadout(1, "CH1", "VERTICAL", x_delta_s=0.001, inverse_x_delta_hz=1000.0),
         ),

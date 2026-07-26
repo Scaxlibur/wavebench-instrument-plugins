@@ -65,6 +65,15 @@ def _parse_options(response: str) -> tuple[str, ...]:
     return options
 
 
+def _has_option(options: tuple[str, ...], option_code: str) -> bool:
+    expected = option_code.strip().upper()
+    return any(
+        option.upper() == expected
+        or option.upper().startswith(f"{expected} ")
+        for option in options
+    )
+
+
 def _parse_decimal_integer(
     response: str,
     *,
@@ -227,6 +236,25 @@ _CURSOR_RESULT_FUNCTIONS = frozenset(
         "BWIDTH",
     }
 )
+
+_CURSOR_FUNCTION_ALIASES = {
+    "VERT": "VERTICAL",
+    "VERTICAL": "VERTICAL",
+    "HOR": "HORIZONTAL",
+    "HORIZ": "HORIZONTAL",
+    "HORIZONTAL": "HORIZONTAL",
+    "PAIR": "PAIRED",
+    "PAIRED": "PAIRED",
+    "VRAT": "VRATIO",
+    "VRATIO": "VRATIO",
+    "HRAT": "HRATIO",
+    "HRATIO": "HRATIO",
+}
+
+
+def _normalize_cursor_function(response: str, *, command: str) -> str:
+    function = _parse_token(response, command=command)
+    return _CURSOR_FUNCTION_ALIASES.get(function, function)
 
 
 def _metadata_from_prefix(
@@ -428,7 +456,7 @@ class RTM2032Scope:
     def get_acquisition_status(self) -> ScopeAcquisitionStatus:
         with self._io_lock:
             options = _parse_options(self.transport.query("*OPT?"))
-            has_k15 = "K15" in {option.upper() for option in options}
+            has_k15 = _has_option(options, "K15")
             average_count = _parse_decimal_integer(
                 self.transport.query("ACQuire:AVERage:COUNt?"),
                 command="ACQuire:AVERage:COUNt?",
@@ -478,7 +506,7 @@ class RTM2032Scope:
         _validate_rtm2032_channel(channel)
         with self._io_lock:
             options = _parse_options(self.transport.query("*OPT?"))
-            if "K15" not in {option.upper() for option in options}:
+            if not _has_option(options, "K15"):
                 raise InstrumentError(
                     "RTM2000 history timestamps require installed option K15; "
                     "*OPT? did not report K15"
@@ -685,7 +713,7 @@ class RTM2032Scope:
                 self.transport.query(f"{prefix}:SOURce?"),
                 command=f"{prefix}:SOURce?",
             )
-            function = _parse_token(
+            function = _normalize_cursor_function(
                 self.transport.query(f"{prefix}:FUNCTION?"),
                 command=f"{prefix}:FUNCTION?",
             )
