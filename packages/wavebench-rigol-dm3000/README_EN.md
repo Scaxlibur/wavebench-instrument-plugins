@@ -7,12 +7,12 @@ package supports LAN/VXI-11 connections through PyVISA only.
 
 - Distribution: `wavebench-rigol-dm3000`
 - Canonical driver ID: `rigol.dm3000`
-- WaveBench: `>=0.8.8,<0.9`
+- WaveBench: `>=0.8.9,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa` (LAN only)
 - VISA resource scheme: `TCPIP`; `ASRL`, `USB`, and `GPIB` are rejected
 
-This package targets WaveBench `v0.8.8` and does not automatically claim compatibility with a future `0.9` core.
+This package targets WaveBench `v0.8.9` and does not automatically claim compatibility with a future `0.9` core.
 
 The plugin declares no aliases. When installed, the canonical ID selects this external LAN
 implementation. The short aliases `dm3000` and `dm3058` keep resolving to WaveBench's built-in
@@ -30,16 +30,26 @@ backends before any transport opens. Use a short alias when the built-in RS-232 
 - `dmm.function_status`
 - `dmm.set_function`
 - `dmm.measurement_profile`
+- `dmm.set_voltage_range`
+- `dmm.set_dcv_impedance`
 
-`wavebench dmm profile` does not switch function, write range, or consume the error queue. On the
-DM3058, range code `0` means autorange. Continuity and diode report `n/a` for range fields because
-no accepted range query is available for those modes.
+`wavebench dmm profile` does not switch function, write range, or consume the error queue. In the
+DM3000 command set, range code `0` is the smallest range, not autorange. The instrument exposes no
+matching query for automatic-versus-manual measurement mode, so `auto_range=n/a`. Continuity and
+diode report `n/a` for range fields because no accepted range query is available for those modes.
+
+The setters do not switch function implicitly. Voltage range accepts codes `0..4` only for the
+already-active DCV or ACV function. DCV impedance accepts `10M` or `10G`, with `10G` limited to
+range codes `0..2`. Both setters read before write and verify readback. A failed range transaction
+latches configuration writes even when its range is restored, because any range write forces
+manual measurement mode and the prior automatic/manual mode cannot be queried. An ambiguous first
+write or failed restoration also latches the instance.
 
 The package reuses WaveBench's public `DmmReading`, `DmmDriver`, and `DmmService` contracts. It
 contains only the vendor protocol implementation and its descriptor.
 
 See the [DM3000 coverage matrix](doc/DM3000_COVERAGE_MATRIX_EN.md) for the vendor-manual command
-domains, the five current capabilities, per-measurement offline/hardware evidence, and commands
+domains, the seven current capabilities, per-measurement offline/hardware evidence, and commands
 denied by default. The local vendor manual is under ignored `doc/vendor-local/` and is excluded
 from release packages.
 
@@ -77,3 +87,6 @@ Version 0.1.0 was migrated from WaveBench's built-in DM3000/DM3058 implementatio
 its SCPI, parsing, and error semantics. This package is licensed under the [MIT License](LICENSE).
 
 Version 0.2.0 adds the query-only current measurement profile without changing instrument state.
+
+Version 0.3.0 adds function-gated, readback-verified DCV/ACV range and DCV impedance setters and
+corrects the earlier mislabeling of range code `0` as autorange.

@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-rigol-dm3000"
-version = "0.2.0"
+version = "0.3.0"
 description = "LAN-only RIGOL DM3000 and DM3058 multimeter plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["wavebench>=0.8.8,<0.9"]
+dependencies = ["wavebench>=0.8.9,<0.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "ruff>=0.8.0"]

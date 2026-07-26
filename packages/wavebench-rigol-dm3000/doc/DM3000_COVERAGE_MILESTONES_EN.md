@@ -41,7 +41,7 @@ ranges, 10 MOhm input, AUTO trigger, and calculation disabled.
 
 ### Accepted queries
 
-Only the plugin's five existing capabilities are formal APIs. Other commands below were controlled
+Only the plugin's seven existing capabilities are formal APIs. Other commands below were controlled
 diagnostic probes used to decide which milestones are feasible.
 
 | Domain | Accepted command surface | Note |
@@ -119,20 +119,29 @@ The original capabilities are `dmm.idn`, `dmm.read`, `dmm.function_status`, and 
 `dmm.measurement_profile` queries only accepted fields applicable to the current function:
 
 - Common: `:FUNCtion?`;
-- DCV: discrete range code, autorange state, and input impedance;
-- ACV/DCI/ACI/RES/FRES/FREQ/PERIOD/CAP: discrete range code and autorange state;
+- DCV: discrete range code and input impedance;
+- ACV/DCI/ACI/RES/FRES/FREQ/PERIOD/CAP: discrete range code;
 - CONT/DIODE: no unaccepted range query; unavailable fields remain explicit.
 
 The path does not switch function, read a measurement, query `:MEASure?`, or consume the error
 queue. It does not mislabel the discrete range code as an SI range limit. Nonresponding
 digits/resolution/filter fields are absent from the model.
 
-### M3: controlled voltage-input configuration — implementable
+### M3: controlled voltage-input configuration — complete
 
-Expose function selection, DCV/ACV range, and DCV impedance separately rather than through one
-generic integer setter. Read before write, use per-function range tables, read back after write,
-restore on failure, and latch configuration writes if restoration fails. Never modify trigger,
-calculation, display, format, or interface state implicitly.
+DCV/ACV range and DCV impedance are separate public capabilities. They read before writing, gate on
+the active function, validate per-function limits, verify readback, restore on failure, and latch
+ambiguous transactions. Range code `0` is the smallest range, not autorange; because measurement
+mode has no query, profile reports autorange as unavailable. Range writes force manual mode, so a
+failed range transaction latches writes even if its code is restored. DCV `10G` is limited to range
+codes `0..2`. Trigger, calculation, display, format, and interface state are never changed.
+
+Controlled 0.3.0 hardware acceptance on the tested DM3058 completed on 2026-07-26. DCV and ACV
+each completed a `0 -> 1 -> 0` range-code write, readback, and restoration cycle. DCV impedance
+completed a `10M -> 10G -> 10M` write, readback, and restoration cycle. A request for DCV range
+code `3` while at `10G` was rejected before the first configuration write and left state unchanged.
+Final state was verified as DCV, range code `0`, and `10M`. This proves protocol, constraint, and
+restoration behavior only, not range or input-impedance accuracy.
 
 ### M4: query-only trigger and existing statistics — implementable
 

@@ -30,11 +30,11 @@ and apparent copy errors, including an RS-232 parity section that repeats the ba
 matrix therefore reports auditable functional domains and public capabilities rather than a
 misleading completion percentage based on heading counts.
 
-The current external plugin is version `0.2.0` and declares five capabilities: `dmm.idn`,
-`dmm.read`, `dmm.function_status`, `dmm.set_function`, and query-only
-`dmm.measurement_profile`. It is a narrow TCPIP/PyVISA LAN driver
+The current external plugin is version `0.3.0` and declares seven capabilities: `dmm.idn`,
+`dmm.read`, `dmm.function_status`, `dmm.set_function`, query-only
+`dmm.measurement_profile`, `dmm.set_voltage_range`, and `dmm.set_dcv_impedance`. It is a narrow TCPIP/PyVISA LAN driver
 for a configured resource, not a general DM3000 SCPI shell. It exposes no error-queue, reset,
-range, trigger, datalog, scan, or interface-configuration path. The short aliases `dm3000` and
+trigger, datalog, scan, or interface-configuration path. The short aliases `dm3000` and
 `dm3058` remain bound to the bundled fallback; its serial support is not transport coverage of
 this external package.
 
@@ -59,8 +59,8 @@ Coverage labels:
 | DC voltage ratio | `:FUNCtion:VOLTage:DC:RATIO`, `:MEASure:VOLTage:DC:RATIO?` | Not public; `RATIO` status is not accepted either | **Not covered** | Requires two inputs and has no ordinary physical unit; it needs explicit input and result semantics | Design a separate ratio capability first |
 | Eleven scalar readings | `:MEASure:VOLTage:DC/AC?`, `CURRent:DC/AC?`, `RESistance?`, `FRESistance?`, `FREQuency?`, `PERiod?`, `CONTinuity?`, `DIODe?`, `CAPacitance?` | `dmm.read` returns shared `DmmReading(function, value, unit, raw)` | **Offline and DM3058 open-probe accepted:** all eleven queries returned finite values; DCV also has 20/20 repeated-read evidence | `read(function=...)` sends the query only and does not select a function. A finite response is not accuracy evidence; the parser rejects `NaN`/`inf` | Keep the preselected-function requirement; validate accuracy separately |
 | Automatic/manual measurement | `:MEASure AUTO|MANU`, `:MEASure?` | Not public | **Not covered** | Changes continuous-measurement behavior; in this manual `MEASure?` reports completion rather than a reading | Implement only after an explicit acquisition-state model exists |
-| Range and autorange | Per-function `:MEASure:<function> <range>` and `:RANGe?` | `dmm.measurement_profile` reads the accepted discrete `range_code` for the current function and maps `0` to autorange | **Implemented, offline and DM3058 hardware accepted:** DCV, ACV, DCI, ACI, RES, FRES, FREQ, PERIOD, and CAP returned parseable codes; CONT/DIODE are explicitly unavailable | Range writes remain non-public; codes and limits differ by function, and the profile does not mislabel a discrete code as an SI limit | **M3:** setters need per-function tables, readback, restoration, and failure latching |
-| Input impedance, AC filter, secondary frequency | DCV `:IMPedance`, ACV `:FILTer`, ACV/ACI `:FREQ:*` | `dmm.measurement_profile` returns query-only DCV impedance; other fields remain non-public | **DCV profile implemented, offline and hardware accepted;** controlled 10 MOhm/10 GOhm restoration has separate probe evidence; ACV filter/frequency queries did not respond | Impedance setters and filters affect results; display/hide mutates front-panel state; ACI naming is inconsistent | Consider an independent restorative setter in M3; do not add nonresponding fields |
+| Range and measurement mode | Per-function `:MEASure:<function> <range>`, `:RANGe?`, and `:MEASure AUTO|MANU` without a matching mode query | Profile returns the discrete code with autorange unavailable; setter covers active DCV/ACV and codes `0..4` only | **M3 external hardware accepted:** the tested DM3058 completed DCV and ACV `0 -> 1 -> 0` write, readback, and restoration cycles. The manual defines code `0` as the smallest range, not autorange | A range write also forces manual mode, but that state cannot be queried; failed transactions therefore latch writes even after range restoration | Protocol and restoration are accepted; validate measurement accuracy separately |
+| Input impedance, AC filter, secondary frequency | DCV `:IMPedance`, ACV `:FILTer`, ACV/ACI `:FREQ:*` | Profile reads DCV impedance; setter controls `10M/10G`, with `10G` limited to range codes `0..2` | **M3 external hardware accepted:** the tested DM3058 completed a `10M -> 10G -> 10M` cycle; range code `3` at `10G` was rejected before writing. AC filter/frequency queries did not respond | The setter does not switch function or range; ambiguous writes and failed readback/restoration latch the instance | Protocol, constraint, and final safe state are accepted; omit nonresponding fields |
 | Display digits | Per-function `:DIGit?` and `:DIGit INC|DEC|5|6|7` | Not public | **Not covered; no response on tested DM3058** for DCV/ACV/FREQ/PERIOD queries | Display digits are not acquisition resolution and must not share one capability | Leave unimplemented without different-firmware evidence and a concrete need |
 | Measurement resolution | Eight `:RESolution:*` families | Not public | **Not covered; no response on tested DM3058** for DCV/ACV queries | Discrete values are model-dependent despite the manual's 0/1/2 table | Do not project the manual onto DM3058; wait for stronger model/firmware evidence |
 | System diagnostic queries | `:SYSTem:SCANSerial?`, `MACAddr?`, `LANSerial?`, `OPENtimes?` | Not public | **API not covered; queries partly accepted:** option/interface identifiers parsed and MAC was format-checked; `OPENtimes?` semantics were implausible and not accepted | MAC is sensitive identity and must not enter default artifacts | Add a redacted query-only identity extension only for a concrete gating need |
@@ -108,6 +108,9 @@ hardware acceptance for every command.
 :MEASure:PERiod:RANGe?
 :MEASure:CAPacitance:RANGe?
 :MEASure:VOLTage:DC:IMPedance?
+:MEASure:VOLTage:DC <0..4>
+:MEASure:VOLTage:AC <0..4>
+:MEASure:VOLTage:DC:IMPedance <10M|10G>
 
 :FUNCtion:VOLTage:DC
 :FUNCtion:VOLTage:AC
@@ -122,8 +125,8 @@ hardware acceptance for every command.
 :FUNCtion:CAPacitance
 ```
 
-The implementation sends no `*RST`, `CMDSET`, range setter, resolution, trigger, calculate, datalog,
-scan, interface, or error-queue command and has no generic raw-SCPI path. A complete
+The implementation sends no `*RST`, `CMDSET`, resolution, trigger, calculate, datalog, scan,
+interface, or error-queue command and has no generic raw-SCPI path. A complete
 `dmm.set_function` transaction is one function-selection write followed by one `:FUNCtion?`
 readback. A `dmm.read` operation is one measurement query only.
 
@@ -165,11 +168,10 @@ release gates. The overall order is:
    parameterized tests, nonfinite readings are rejected, and `dmm.read` does not select a function.
    Optional target/current-mode preflight remains outside this milestone.
 2. **M2: query-only measurement profile — complete.** Covers the current function, accepted
-   discrete range code, autorange, and DCV impedance. CONT/DIODE keep inapplicable fields explicitly
+   discrete range code, and DCV impedance. Measurement mode and CONT/DIODE inapplicable fields stay
    unavailable.
-3. **P2: controlled range and resolution.** Each setter needs function gating, a mode-specific
-   parameter table, write readback, clear failure semantics, and restoration. A generic integer
-   range API must not hide function differences.
+3. **M3: controlled voltage-input configuration — complete.** DCV/ACV
+   range and DCV impedance have function gates, parameter limits, readback, restoration, and latching.
 4. **P2: read existing statistics and trigger state.** Do not implicitly enable, clear, trigger, or
    reset instrument state.
 5. **P3: datalog.** First resolve binary format, byte order, valid counts, size limits, timeout,

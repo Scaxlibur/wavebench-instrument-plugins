@@ -25,10 +25,11 @@ sdist。手册封面列出 DM3061/2/3/4 与 DM3051/2/3/4，没有单独点名实
 命令名断裂和明显复制错误，例如 RS-232 parity 小节重复了 baud 命令。因此，本矩阵按
 可审计的功能域和公开 capability 报告状态，不用标题数量计算伪精确的完成百分比。
 
-当前外置插件版本为 `0.2.0`，声明五项 capability：`dmm.idn`、`dmm.read`、
-`dmm.function_status`、`dmm.set_function` 和只读 `dmm.measurement_profile`。它是经配置的
+当前外置插件版本为 `0.3.0`，声明七项 capability：`dmm.idn`、`dmm.read`、
+`dmm.function_status`、`dmm.set_function`、只读 `dmm.measurement_profile`、
+`dmm.set_voltage_range` 和 `dmm.set_dcv_impedance`。它是经配置的
 TCPIP/PyVISA LAN 窄驱动，
-不是通用 DM3000 SCPI shell，也不公开 error-queue、reset、range、trigger、datalog、
+不是通用 DM3000 SCPI shell，也不公开 error-queue、reset、trigger、datalog、
 scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench 内建 fallback；
 其 serial 支持不能计作此外置包的 transport 覆盖。
 
@@ -53,8 +54,8 @@ scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench �
 | 直流电压比率功能 | `:FUNCtion:VOLTage:DC:RATIO`、`:MEASure:VOLTage:DC:RATIO?` | 未公开，`RATIO` 状态也未被 parser 接受 | **未覆盖** | 需要两路输入，结果无普通单位；不能塞入现有单值功能映射而不定义输入和返回语义 | 单独设计 ratio capability 后再考虑 |
 | 11 类标量读数 | `:MEASure:VOLTage:DC/AC?`、`CURRent:DC/AC?`、`RESistance?`、`FRESistance?`、`FREQuency?`、`PERiod?`、`CONTinuity?`、`DIODe?`、`CAPacitance?` | `dmm.read` 返回公共 `DmmReading(function, value, unit, raw)` | **离线与 DM3058 开放探针通过**：11 条 query 均返回有限值；DCV 另有 20/20 重复读取证据 | `read(function=...)` 只发送查询，不先切换功能；有限回包不等于测量准确度，且 parser 已拒绝 `NaN`/`inf` | 保持“先确认/设置功能”的前置条件；准确度另行验收 |
 | 自动/手动测量方式 | `:MEASure AUTO|MANU`、`:MEASure?` | 未公开 | **未覆盖** | 会改变连续测量行为；`MEASure?` 在本手册中表示完成状态，不是读数 | 仅在明确 acquisition state model 后实现 |
-| 量程与自动量程 | 各功能的 `:MEASure:<function> <range>`、`:RANGe?` | `dmm.measurement_profile` 只读当前功能已验收的离散 `range_code`，并将 `0` 映射为自动量程 | **已实现、离线与 DM3058 实机通过**：DCV、ACV、DCI、ACI、RES、FRES、FREQ、PERIOD、CAP 返回可解析档位码；CONT/DIODE 明确 unavailable | 写量程仍未公开；不同功能档位编号和上限不同，profile 不把离散码伪装成 SI 上限 | **M3** setter 使用逐功能档位表、回读、恢复和失败锁存 |
-| 输入阻抗、交流滤波和副屏频率 | DCV `:IMPedance`、ACV `:FILTer`、ACV/ACI `:FREQ:*` | `dmm.measurement_profile` 在 DCV 返回只读输入阻抗；其他字段未公开 | **DCV profile 已实现、离线与实机通过**；DM3058 的 10 MΩ/10 GΩ 受控切换和恢复另有诊断证据；ACV filter/frequency 查询无响应 | 输入阻抗 setter 和滤波仍会改变测量结果；display/hide 改前面板状态，且 ACI 小节命名存在 `hide/state` 不一致 | M3 再考虑独立、可恢复 setter；不加入无响应字段 |
+| 量程与测量方式 | 各功能的 `:MEASure:<function> <range>`、`:RANGe?`，以及无对应状态 query 的 `:MEASure AUTO|MANU` | profile 只读离散 `range_code`，`auto_range` 明确 unavailable；setter 只覆盖当前已激活的 DCV/ACV 和档位码 `0..4` | **M3 外置实机通过**：当前 DM3058 的 DCV/ACV 均完成 `0 -> 1 -> 0` 写入、回读和恢复。手册明确 code `0` 是最小量程，不是自动量程 | 写量程会同时切换为手动测量，设备却没有测量方式 query；失败路径恢复档位后仍无法证明该状态恢复，因此锁停实例 | 协议与恢复已验收；测量准确度另行验证 |
+| 输入阻抗、交流滤波和副屏频率 | DCV `:IMPedance`、ACV `:FILTer`、ACV/ACI `:FREQ:*` | profile 只读 DCV 阻抗；setter 设置 `10M/10G`，且 `10G` 只允许 range code `0..2` | **M3 外置实机通过**：当前 DM3058 完成 `10M -> 10G -> 10M` 写入、回读和恢复；`10G` 下的档位 3 请求在写前拒绝。ACV filter/frequency 查询无响应 | setter 不切功能或档位；首写不明、读回或恢复失败锁停实例 | 协议、约束与最终安全状态已验收；不加入无响应字段 |
 | 显示位数 | 各功能 `:DIGit?` / `:DIGit INC|DEC|5|6|7` | 未公开 | **未覆盖；当前 DM3058 无响应**：DCV/ACV/FREQ/PERIOD 的 query 均未得到完整响应 | 改显示位数不等于改变采样精度，不能与 resolution 混为同一 capability | 除非有不同固件证据和明确价值，否则保持未实现 |
 | 测量精度 | `:RESolution:*` 八个功能族 | 未公开 | **未覆盖；当前 DM3058 无响应**：本轮 DCV/ACV query 未得到完整响应 | 手册用离散 0/1/2 表示 4½/5½/6½ 位；型号能力可能不同 | 不从手册外推 DM3058；等待不同固件或型号证据 |
 | 系统诊断查询 | `:SYSTem:SCANSerial?`、`MACAddr?`、`LANSerial?`、`OPENtimes?` | 未公开 | **未覆盖 API；查询探针部分通过**：选件/接口标识可解析；MAC 只做格式校验；`OPENtimes?` 数值语义异常，未通过 | 可能用于 option/接口门控，但 MAC 属于敏感设备标识，不应进入默认 artifact | 如有明确门控需求，设计脱敏、query-only 的 identity extension |
@@ -101,6 +102,9 @@ scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench �
 :MEASure:PERiod:RANGe?
 :MEASure:CAPacitance:RANGe?
 :MEASure:VOLTage:DC:IMPedance?
+:MEASure:VOLTage:DC <0..4>
+:MEASure:VOLTage:AC <0..4>
+:MEASure:VOLTage:DC:IMPedance <10M|10G>
 
 :FUNCtion:VOLTage:DC
 :FUNCtion:VOLTage:AC
@@ -115,8 +119,8 @@ scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench �
 :FUNCtion:CAPacitance
 ```
 
-实现不会发送 `*RST`、`CMDSET`、range setter、resolution、trigger、calculate、datalog、scan、
-interface 或 error-queue 命令，也没有通用 raw-SCPI 入口。`dmm.set_function` 的完整事务
+实现不会发送 `*RST`、`CMDSET`、resolution、trigger、calculate、datalog、scan、interface
+或 error-queue 命令，也没有通用 raw-SCPI 入口。`dmm.set_function` 的完整事务
 是“一条功能选择写入 + 一条 `:FUNCtion?` 回读”；`dmm.read` 则只有一条测量 query。
 
 ## 逐测量类型证据
@@ -153,10 +157,10 @@ interface 或 error-queue 命令，也没有通用 raw-SCPI 入口。`dmm.set_fu
 
 1. **M1：收紧原四项能力 — 完成。** 11 类 selector 有参数化命令测试；非有限读数被拒绝；
    `dmm.read` 明确不隐式切换功能。可选模式一致性预检未纳入本轮范围。
-2. **M2：只读测量 profile — 完成。** 覆盖当前 function、已验收的离散 range code、
-   autorange 和 DCV impedance；CONT/DIODE 的不适用字段显式为 unavailable。
-3. **P2：受控量程/精度设置。** 每个 setter 都需要功能门控、参数表、写后回读、失败语义和
-   可恢复的事务，不用通用整数 range API 掩盖各功能差异。
+2. **M2：只读测量 profile — 完成。** 覆盖当前 function、已验收的离散 range code 和
+   DCV impedance；自动/手动方式及 CONT/DIODE 的不适用字段显式为 unavailable。
+3. **M3：受控电压端配置 — 完成。** DCV/ACV 档位和 DCV 阻抗具有
+   功能门控、逐功能参数限制、写后回读、失败恢复与实例锁存；不扩展到其他端子。
 4. **P2：已有统计与触发状态只读。** 只读取已配置的 calculate/trigger 状态，不隐式启用、
    清空、触发或重置仪器。
 5. **P3：Datalog。** 先解决二进制格式、端序、有效点数、大小上限、超时、stop/finally 和

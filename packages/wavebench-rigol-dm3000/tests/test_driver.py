@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from wavebench.errors import DataError
+from wavebench.errors import DataError, InstrumentError
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.logging import CommandLogger
@@ -31,6 +31,12 @@ class FakeTransport:
         reverse = {value: key for key, value in DMM_FUNCTION_SET_COMMANDS.items()}
         if command in reverse:
             self.function = reverse[command].upper()
+        if command.startswith(":MEASure:VOLTage:DC "):
+            self.readings[":MEASure:VOLTage:DC:RANGe?"] = command.rsplit(" ", 1)[1]
+        if command.startswith(":MEASure:VOLTage:AC "):
+            self.readings[":MEASure:VOLTage:AC:RANGe?"] = command.rsplit(" ", 1)[1]
+        if command.startswith(":MEASure:VOLTage:DC:IMPedance "):
+            self.readings[":MEASure:VOLTage:DC:IMPedance?"] = command.rsplit(" ", 1)[1]
 
     def query(self, command: str) -> str:
         self.queries.append(command)
@@ -59,9 +65,11 @@ def test_descriptor_is_canonical_lan_only_and_alias_free() -> None:
         "dmm.function_status",
         "dmm.set_function",
         "dmm.measurement_profile",
+        "dmm.set_voltage_range",
+        "dmm.set_dcv_impedance",
     )
-    assert item.wavebench_min_version == "0.8.8"
-    assert item.version == "0.2.0"
+    assert item.wavebench_min_version == "0.8.9"
+    assert item.version == "0.3.0"
     assert not any("baud" in field or "termination" in field for field in item.config_fields)
 
 
@@ -142,7 +150,7 @@ def test_measurement_profile_is_query_only_and_typed() -> None:
 
     assert profile.function == "dcv"
     assert profile.range_code == 0
-    assert profile.auto_range is True
+    assert profile.auto_range is None
     assert profile.impedance == "10M"
     assert transport.writes == []
     assert transport.queries == [
@@ -164,6 +172,226 @@ def test_measurement_profile_omits_unaccepted_range_query() -> None:
     assert profile.impedance is None
     assert transport.writes == []
     assert transport.queries == [":FUNCtion?"]
+
+
+def test_set_voltage_range_is_function_gated_and_read_back() -> None:
+    transport = FakeTransport()
+    transport.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+
+    result = DM3000Dmm(transport).set_voltage_range("dcv", 1)
+
+    assert result.function == "dcv"
+    assert result.previous_range_code == 2
+    assert result.range_code == 1
+    assert result.changed is True
+    assert transport.writes == [":MEASure:VOLTage:DC 1"]
+    assert transport.queries == [
+        ":FUNCtion?",
+        ":MEASure:VOLTage:DC:RANGe?",
+        ":MEASure:VOLTage:DC:RANGe?",
+    ]
+
+
+def test_set_voltage_range_noop_does_not_write() -> None:
+    transport = FakeTransport()
+    transport.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+
+    result = DM3000Dmm(transport).set_voltage_range("dcv", 2)
+
+    assert result.changed is False
+    assert transport.writes == []
+
+
+def test_set_voltage_range_rejects_wrong_active_function_before_write() -> None:
+    transport = FakeTransport()
+    transport.function = "ACV"
+
+    with pytest.raises(InstrumentError, match="requires active function dcv"):
+        DM3000Dmm(transport).set_voltage_range("dcv", 1)
+
+    assert transport.writes == []
+    assert transport.queries == [":FUNCtion?"]
+
+
+def test_set_voltage_range_rejects_high_dcv_range_with_10g_before_write() -> None:
+    transport = FakeTransport()
+    transport.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+    transport.readings[":MEASure:VOLTage:DC:IMPedance?"] = "10G"
+
+    with pytest.raises(InstrumentError, match="require 10M impedance"):
+        DM3000Dmm(transport).set_voltage_range("dcv", 3)
+
+    assert transport.writes == []
+    assert transport.queries == [
+        ":FUNCtion?",
+        ":MEASure:VOLTage:DC:RANGe?",
+        ":MEASure:VOLTage:DC:IMPedance?",
+    ]
+
+
+def test_set_voltage_range_restores_and_latches_on_readback_failure() -> None:
+    class IgnoredFirstRangeWrite(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+            self._range_writes = 0
+
+        def write(self, command: str) -> None:
+            if command.startswith(":MEASure:VOLTage:DC "):
+                self.writes.append(command)
+                self._range_writes += 1
+                if self._range_writes == 1:
+                    return
+                self.readings[":MEASure:VOLTage:DC:RANGe?"] = command.rsplit(" ", 1)[1]
+                return
+            super().write(command)
+
+    transport = IgnoredFirstRangeWrite()
+    driver = DM3000Dmm(transport)
+
+    with pytest.raises(InstrumentError, match="original range was restored"):
+        driver.set_voltage_range("dcv", 1)
+
+    assert driver.configuration_writes_blocked is True
+    writes_before = list(transport.writes)
+    queries_before = list(transport.queries)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.set_voltage_range("dcv", 1)
+    assert transport.writes == writes_before
+    assert transport.queries == queries_before
+
+
+def test_ambiguous_range_write_restores_then_latches_all_configuration_writes() -> None:
+    class AmbiguousFirstRangeWrite(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+            self._range_writes = 0
+
+        def write(self, command: str) -> None:
+            if command.startswith(":MEASure:VOLTage:DC "):
+                self.writes.append(command)
+                self._range_writes += 1
+                if self._range_writes == 1:
+                    raise OSError("simulated timeout")
+                self.readings[":MEASure:VOLTage:DC:RANGe?"] = command.rsplit(" ", 1)[1]
+                return
+            super().write(command)
+
+    transport = AmbiguousFirstRangeWrite()
+    driver = DM3000Dmm(transport)
+
+    with pytest.raises(InstrumentError, match="write outcome is ambiguous"):
+        driver.set_voltage_range("dcv", 1)
+
+    assert driver.configuration_writes_blocked is True
+    writes_before = list(transport.writes)
+    queries_before = list(transport.queries)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.set_function("acv")
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.set_dcv_impedance("10G")
+    assert transport.writes == writes_before
+    assert transport.queries == queries_before
+
+
+def test_range_restore_failure_latches_writes() -> None:
+    class FailedRangeRestore(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+            self._range_writes = 0
+
+        def write(self, command: str) -> None:
+            if command.startswith(":MEASure:VOLTage:DC "):
+                self.writes.append(command)
+                self._range_writes += 1
+                if self._range_writes == 1:
+                    return
+                raise OSError("simulated restore timeout")
+            super().write(command)
+
+    driver = DM3000Dmm(FailedRangeRestore())
+
+    with pytest.raises(InstrumentError, match="restoration is ambiguous"):
+        driver.set_voltage_range("dcv", 1)
+
+    assert driver.configuration_writes_blocked is True
+
+
+def test_set_dcv_impedance_is_gated_by_function_and_range() -> None:
+    transport = FakeTransport()
+    transport.readings[":MEASure:VOLTage:DC:RANGe?"] = "3"
+
+    with pytest.raises(InstrumentError, match="requires range code 0, 1, or 2"):
+        DM3000Dmm(transport).set_dcv_impedance("10G")
+
+    assert transport.writes == []
+    assert transport.queries == [":FUNCtion?", ":MEASure:VOLTage:DC:RANGe?"]
+
+
+def test_set_dcv_impedance_writes_and_reads_back() -> None:
+    transport = FakeTransport()
+    transport.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+
+    result = DM3000Dmm(transport).set_dcv_impedance("10g")
+
+    assert result.previous_impedance == "10M"
+    assert result.impedance == "10G"
+    assert result.range_code == 2
+    assert result.changed is True
+    assert transport.writes == [":MEASure:VOLTage:DC:IMPedance 10G"]
+
+
+def test_ambiguous_impedance_write_restores_then_latches() -> None:
+    class AmbiguousFirstImpedanceWrite(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+            self._impedance_writes = 0
+
+        def write(self, command: str) -> None:
+            if command.startswith(":MEASure:VOLTage:DC:IMPedance "):
+                self.writes.append(command)
+                self._impedance_writes += 1
+                if self._impedance_writes == 1:
+                    raise OSError("simulated timeout")
+                self.readings[":MEASure:VOLTage:DC:IMPedance?"] = command.rsplit(" ", 1)[1]
+                return
+            super().write(command)
+
+    transport = AmbiguousFirstImpedanceWrite()
+    driver = DM3000Dmm(transport)
+
+    with pytest.raises(InstrumentError, match="write outcome is ambiguous"):
+        driver.set_dcv_impedance("10G")
+
+    assert transport.readings[":MEASure:VOLTage:DC:IMPedance?"] == "10M"
+    assert driver.configuration_writes_blocked is True
+
+
+def test_impedance_restore_failure_latches_writes() -> None:
+    class FailedImpedanceRestore(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.readings[":MEASure:VOLTage:DC:RANGe?"] = "2"
+            self._impedance_writes = 0
+
+        def write(self, command: str) -> None:
+            if command.startswith(":MEASure:VOLTage:DC:IMPedance "):
+                self.writes.append(command)
+                self._impedance_writes += 1
+                if self._impedance_writes == 1:
+                    return
+                raise OSError("simulated restore timeout")
+            super().write(command)
+
+    driver = DM3000Dmm(FailedImpedanceRestore())
+
+    with pytest.raises(InstrumentError, match="restoration is ambiguous"):
+        driver.set_dcv_impedance("10G")
+
+    assert driver.configuration_writes_blocked is True
 
 
 @pytest.mark.parametrize("raw", ["bad", "-1"])
