@@ -150,27 +150,32 @@ channel, timebase, probe, waveform metadata, and edge-trigger snapshots under th
 lock. Only this canonical external descriptor declares the capability, so `wavebench scope status
 --channel N` becomes available without requiring other scope drivers to implement it. Existing
 `RTM2000*Snapshot` import names remain compatibility aliases of the public core models. The aggregate
-path still reads no EVENT/error queue and sends no setting command. This increment is implemented and
-tested offline; its combined RTM2032 hardware path remains pending acceptance.
+path still reads no EVENT/error queue and sends no setting command. Controlled RTM2032 acceptance now
+covers identity, CH1/CH2 snapshots, and acquisition status.
 
 Version 0.7.0 adds the optional `scope.acquisition_status` and `scope.history_timestamps`
 contracts from WaveBench 0.8.2. Both paths are query-only. K15-only queries require an exact K15
 token from `*OPT?`; timestamp rows are built by strict positional matching of the relative-time,
 absolute-time, and date `:ALL?` tables in oldest-to-newest order. No history segment is selected,
-no acquisition is started, and the error queue is not consumed. Hardware acceptance remains pending.
+no acquisition is started, and the error queue is not consumed. RTM2032 acceptance confirmed K15 and
+the read-only average/segmented status. The history timestamp-table query timed out, was not retried,
+and remains blocked.
 
 Version 0.8.0 adds `scope.measurement_statistics`. The caller must explicitly confirm that slot 1-4
 was configured before the command. Buffer reads additionally require explicit confirmation that
 acquisition is stopped. The implementation never configures, enables, or resets a slot and never
 queries or clears the error queue. `NAN` actual/statistical values are represented as unavailable;
-timeouts leave the operation outcome unknown and are not retried. Configured-slot hardware acceptance
-remains pending.
+timeouts leave the operation outcome unknown and are not retried. A caller-confirmed CH2 frequency
+slot passed controlled actual/average/min/max/stddev/count acceptance; stopped-acquisition buffer
+reading remains pending.
 
 Version 0.9.0 adds query-only analysis surfaces. Math and reference commands return metadata only;
 they do not read waveform payloads or alter the global transfer format. FFT and cursor status require
 explicit confirmation that the corresponding front-panel object is already configured. The plugin
 does not define an FFT expression, move cursors, update/save/load references, start acquisition, or
-consume the error queue. Hardware acceptance remains pending.
+consume the error queue. Math metadata, FFT status, and vertical cursor delta readout passed controlled
+RTM2032 acceptance with front-panel restoration. Reference metadata remains blocked because reference
+storage was empty; `UPDATE` was not used to manufacture test data.
 
 ## Development checks
 

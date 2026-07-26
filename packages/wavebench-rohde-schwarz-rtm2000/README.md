@@ -129,21 +129,25 @@ timeout、回读不符、健康异常或身份变化都会永久锁存该实例�
 探头、波形元数据和 edge-trigger 快照；descriptor 仅为本 canonical 外置驱动声明该能力，
 因此 `wavebench scope status --channel N` 可用，而不要求其他 scope 驱动实现。原有
 `RTM2000*Snapshot` 导入名保留为公共模型的兼容别名。该聚合调用仍不读取 EVENT/错误队列，
-也不发送设置命令；本增量仅完成离线实现，真实 RTM2032 组合路径仍待硬件验收。
+也不发送设置命令；真实 RTM2032 的 identity、CH1/CH2 snapshot 与 acquisition status 组合路径已完成受控实机验收。
 
 0.7.0 接入 WaveBench 0.8.2 的选择性 `scope.acquisition_status` 与
 `scope.history_timestamps` 公共契约。两条路径均只查询；K15 专属查询必须由 `*OPT?`
 精确返回 K15 token。时间戳按 oldest-to-newest 顺序严格合并 relative、absolute、date 三张
-`:ALL?` 表，不选择 history segment、不启动采集，也不消费错误队列。实机验收仍待进行。
+`:ALL?` 表，不选择 history segment、不启动采集，也不消费错误队列。RTM2032 已确认 K15 与
+average/segmented 只读状态；history timestamp table 查询发生 timeout，未重试且仍属阻塞项。
 
 0.8.0 新增 `scope.measurement_statistics`。调用方必须显式确认 1–4 号槽位已经配置；读取统计
 buffer 时还必须显式确认 acquisition 已停止。实现不配置、启用或复位测量槽，也不读取或清空
-错误队列。`NAN` 结果表示 unavailable；timeout 后结果状态为未知且不重试。已配置槽位的实机
-验收仍待进行。
+错误队列。`NAN` 结果表示 unavailable；timeout 后结果状态为未知且不重试。RTM2032 上调用方
+确认已配置的 CH2 frequency 槽已完成 actual/average/min/max/stddev/count 受控验收；STOP 状态
+buffer 仍待验收。
 
 0.9.0 新增只读分析状态面。math/reference 只读 metadata，不下载波形本体，也不修改全局传输
 格式；FFT/cursor 必须由调用方显式确认已经在前面板配置。实现不定义 FFT expression、不移动
-cursor、不 update/save/load reference、不启动采集，也不消费错误队列。实机验收仍待进行。
+cursor、不 update/save/load reference、不启动采集，也不消费错误队列。RTM2032 的 math
+metadata、FFT status 与 vertical cursor delta readout 已完成受控验收并恢复前面板状态；reference
+存储为空，故 metadata 实机验收保持阻塞，未调用 `UPDATE` 制造测试数据。
 
 ## 开发验证
 
