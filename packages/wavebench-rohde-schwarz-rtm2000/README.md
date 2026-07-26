@@ -8,12 +8,12 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `60dffd0`
-- WaveBench：`>=0.8,<0.9`
+- 开发基线：WaveBench `0.8.1`
+- WaveBench：`>=0.8.1,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件对齐 WaveBench `v0.8.0` release，不维护旧核心兼容矩阵，不能与 `v0.7.0` 配套运行，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.6.0 开发线对齐 WaveBench `v0.8.1`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -119,6 +119,13 @@ timeout、回读不符、健康异常或身份变化都会永久锁存该实例�
 拒绝；不自动重试、回滚、find-level、autoscale、single、清错误队列或读取 EVENT。生产 setter
 明确由调用方负责持久恢复；受控实机验收用私有 fsync journal 将 CH2 level 从 0.53 V 改为
 0.65 V 后恢复至 0.53 V，前后 status byte/questionable condition 均为 0，acquisition count 均为 53。
+
+0.6.0 将上述七类只读快照接入 WaveBench 0.8.1 的选择性 `scope.snapshot` 公共契约。
+`get_snapshot(channel)` 在同一实例 I/O 锁内组合 identity、health、指定模拟通道、时基、
+探头、波形元数据和 edge-trigger 快照；descriptor 仅为本 canonical 外置驱动声明该能力，
+因此 `wavebench scope status --channel N` 可用，而不要求其他 scope 驱动实现。原有
+`RTM2000*Snapshot` 导入名保留为公共模型的兼容别名。该聚合调用仍不读取 EVENT/错误队列，
+也不发送设置命令；本增量仅完成离线实现，真实 RTM2032 组合路径仍待硬件验收。
 
 ## 开发验证
 

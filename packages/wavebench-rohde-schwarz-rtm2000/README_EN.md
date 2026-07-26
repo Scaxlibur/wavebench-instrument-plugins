@@ -9,13 +9,13 @@ RTM2032 as the current hardware baseline.
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
-- development baseline: WaveBench `60dffd0`
-- WaveBench: `>=0.8,<0.9`
+- development baseline: WaveBench `0.8.1`
+- WaveBench: `>=0.8.1,<0.9`
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-This plugin targets the WaveBench `v0.8.0` release and does not maintain a legacy-core
-compatibility matrix, run with `v0.7.0`, or automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
+The plugin's 0.6.0 development line targets WaveBench `v0.8.1`, does not maintain a legacy-core
+compatibility matrix, and does not automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
 
@@ -139,6 +139,15 @@ There is no blind retry, automatic rollback, find-level, autoscale, single acqui
 clear, or EVENT read. Persistent restoration remains the caller's responsibility. Controlled hardware
 acceptance used a private fsync journal to change CH2 from 0.53 V to 0.65 V and restore 0.53 V; status
 byte/questionable condition remained zero and acquisition count remained 53 before and after.
+
+Version 0.6.0 connects those seven read-only sections to WaveBench 0.8.1's optional
+`scope.snapshot` contract. `get_snapshot(channel)` aggregates identity, health, the selected analog
+channel, timebase, probe, waveform metadata, and edge-trigger snapshots under the same instance I/O
+lock. Only this canonical external descriptor declares the capability, so `wavebench scope status
+--channel N` becomes available without requiring other scope drivers to implement it. Existing
+`RTM2000*Snapshot` import names remain compatibility aliases of the public core models. The aggregate
+path still reads no EVENT/error queue and sends no setting command. This increment is implemented and
+tested offline; its combined RTM2032 hardware path remains pending acceptance.
 
 ## Development checks
 

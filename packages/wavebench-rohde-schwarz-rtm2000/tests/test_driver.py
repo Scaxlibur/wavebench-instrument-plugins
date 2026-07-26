@@ -8,10 +8,27 @@ import pytest
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
+from wavebench.instruments.models import (
+    ScopeAnalogChannelSnapshot,
+    ScopeEdgeTriggerSnapshot,
+    ScopeHealthSnapshot,
+    ScopeIdentitySnapshot,
+    ScopeProbeSnapshot,
+    ScopeSnapshot,
+    ScopeTimebaseSnapshot,
+    ScopeWaveformMetadataSnapshot,
+)
 from wavebench.logging import CommandLogger
 from wavebench_rohde_schwarz_rtm2000 import descriptor as plugin_descriptor
 from wavebench_rohde_schwarz_rtm2000.driver import (
+    RTM2000AnalogChannelSnapshot,
+    RTM2000EdgeTriggerSnapshot,
+    RTM2000HealthSnapshot,
+    RTM2000IdentitySnapshot,
+    RTM2000ProbeSnapshot,
+    RTM2000TimebaseSnapshot,
     RTM2000TriggerControlError,
+    RTM2000WaveformMetadataSnapshot,
     RTM2032Scope,
     parse_waveform_header,
 )
@@ -225,6 +242,44 @@ def test_identity_and_health_snapshots_are_read_only_and_typed():
         "ACQuire:COUNT?",
         "ACQuire:SRATe?",
     ]
+
+
+def test_vendor_snapshot_names_are_core_compatible_aliases():
+    assert RTM2000IdentitySnapshot is ScopeIdentitySnapshot
+    assert RTM2000HealthSnapshot is ScopeHealthSnapshot
+    assert RTM2000AnalogChannelSnapshot is ScopeAnalogChannelSnapshot
+    assert RTM2000TimebaseSnapshot is ScopeTimebaseSnapshot
+    assert RTM2000ProbeSnapshot is ScopeProbeSnapshot
+    assert RTM2000WaveformMetadataSnapshot is ScopeWaveformMetadataSnapshot
+    assert RTM2000EdgeTriggerSnapshot is ScopeEdgeTriggerSnapshot
+
+
+def test_get_snapshot_returns_all_read_only_sections_from_one_channel():
+    scope = RTM2032Scope(FakeTransport())
+    expected = ScopeSnapshot(
+        identity=ScopeIdentitySnapshot("Rohde&Schwarz", "RTM2032", "123", "3.5", ()),
+        health=ScopeHealthSnapshot(0, 0, 0, 1, 1, 1_000_000.0, False, False),
+        channel=ScopeAnalogChannelSnapshot(
+            2, True, "DCL", 8.0, 1.0, 0.0, 0.0, None, "NORM", 0.0,
+            "input", True, False, "SAMPLE",
+        ),
+        timebase=ScopeTimebaseSnapshot(0.001, 10, 0.0, 0.001, 50.0, 0.0001, False),
+        probe=ScopeProbeSnapshot(2, 10.0, None, None, 10_000_000.0, "P10", "PASSIVE"),
+        waveform=ScopeWaveformMetadataSnapshot(
+            2, -0.0005, 0.0005, 1000, 1, 1e-6, -0.0005, 0.001, 0.0, 8,
+        ),
+        trigger=ScopeEdgeTriggerSnapshot("EDGE", 2, "AUTO", "POS", "DC", 0.1, "AUTO", "OFF", 1e-6),
+    )
+
+    scope.identity_snapshot = lambda: expected.identity
+    scope.health_snapshot = lambda: expected.health
+    scope.analog_channel_snapshot = lambda channel: expected.channel
+    scope.timebase_snapshot = lambda: expected.timebase
+    scope.probe_snapshot = lambda channel: expected.probe
+    scope.waveform_metadata_snapshot = lambda channel: expected.waveform
+    scope.edge_trigger_snapshot = lambda: expected.trigger
+
+    assert scope.get_snapshot(2) == expected
 
 
 @pytest.mark.parametrize(

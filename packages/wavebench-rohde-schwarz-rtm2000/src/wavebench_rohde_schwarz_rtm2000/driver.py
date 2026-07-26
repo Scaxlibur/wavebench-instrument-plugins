@@ -12,7 +12,18 @@ import time
 import numpy as np
 
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
-from wavebench.instruments.models import WaveformData, WaveformHeader
+from wavebench.instruments.models import (
+    ScopeAnalogChannelSnapshot,
+    ScopeEdgeTriggerSnapshot,
+    ScopeHealthSnapshot,
+    ScopeIdentitySnapshot,
+    ScopeProbeSnapshot,
+    ScopeSnapshot,
+    ScopeTimebaseSnapshot,
+    ScopeWaveformMetadataSnapshot,
+    WaveformData,
+    WaveformHeader,
+)
 from wavebench.transport.base import InstrumentTransport
 
 
@@ -140,92 +151,13 @@ def _validate_rtm2032_channel(channel: int) -> None:
         raise DataError("RTM2032 channel must be 1 or 2")
 
 
-@dataclass(frozen=True)
-class RTM2000IdentitySnapshot:
-    manufacturer: str
-    model: str
-    serial_number: str
-    firmware: str
-    options: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class RTM2000HealthSnapshot:
-    status_byte: int
-    operation_condition: int
-    questionable_condition: int
-    acquisition_available: int
-    acquisition_count: int
-    sample_rate_hz: float
-    error_queue_nonempty: bool
-    waiting_for_trigger: bool
-
-
-@dataclass(frozen=True)
-class RTM2000AnalogChannelSnapshot:
-    channel: int
-    enabled: bool
-    coupling: str
-    range_v: float
-    scale_v_per_div: float
-    offset_v: float
-    position_div: float
-    bandwidth_hz: float | None
-    polarity: str
-    skew_s: float
-    label: str
-    label_enabled: bool
-    overloaded: bool
-    acquisition_type: str
-
-
-@dataclass(frozen=True)
-class RTM2000TimebaseSnapshot:
-    acquisition_time_s: float
-    divisions: int
-    position_s: float
-    range_s: float
-    reference_percent: float
-    scale_s_per_div: float
-    roll_enabled: bool
-
-
-@dataclass(frozen=True)
-class RTM2000ProbeSnapshot:
-    channel: int
-    attenuation_factor: float
-    bandwidth_hz: float | None
-    capacitance_f: float | None
-    impedance_ohm: float | None
-    name: str
-    probe_type: str
-
-
-@dataclass(frozen=True)
-class RTM2000WaveformMetadataSnapshot:
-    channel: int
-    x_start_s: float
-    x_stop_s: float
-    points: int
-    values_per_sample: int | None
-    x_increment_s: float
-    x_origin_s: float
-    y_increment_v: float
-    y_origin_v: float
-    y_resolution_bits: int
-
-
-@dataclass(frozen=True)
-class RTM2000EdgeTriggerSnapshot:
-    trigger_type: str
-    source_channel: int
-    mode: str
-    slope: str
-    coupling: str
-    level_v: float
-    hysteresis_mode: str
-    holdoff_mode: str
-    holdoff_time_s: float
+RTM2000IdentitySnapshot = ScopeIdentitySnapshot
+RTM2000HealthSnapshot = ScopeHealthSnapshot
+RTM2000AnalogChannelSnapshot = ScopeAnalogChannelSnapshot
+RTM2000TimebaseSnapshot = ScopeTimebaseSnapshot
+RTM2000ProbeSnapshot = ScopeProbeSnapshot
+RTM2000WaveformMetadataSnapshot = ScopeWaveformMetadataSnapshot
+RTM2000EdgeTriggerSnapshot = ScopeEdgeTriggerSnapshot
 
 
 class RTM2000TriggerControlError(InstrumentError):
@@ -315,6 +247,20 @@ class RTM2032Scope:
                 serial_number=serial_number,
                 firmware=firmware,
                 options=_parse_options(self.transport.query("*OPT?")),
+            )
+
+    @_serialized_io
+    def get_snapshot(self, channel: int) -> ScopeSnapshot:
+        _validate_rtm2032_channel(channel)
+        with self._io_lock:
+            return ScopeSnapshot(
+                identity=self.identity_snapshot(),
+                health=self.health_snapshot(),
+                channel=self.analog_channel_snapshot(channel),
+                timebase=self.timebase_snapshot(),
+                probe=self.probe_snapshot(channel),
+                waveform=self.waveform_metadata_snapshot(channel),
+                trigger=self.edge_trigger_snapshot(),
             )
 
     @_serialized_io
