@@ -130,6 +130,35 @@ def test_set_function_preserves_write_then_readback_semantics() -> None:
 
 
 @pytest.mark.parametrize(
+    ("requested", "command", "reported"),
+    [
+        ("dcv", ":FUNCtion:VOLTage:DC", "DCV"),
+        ("acv", ":FUNCtion:VOLTage:AC", "ACV"),
+        ("dci", ":FUNCtion:CURRent:DC", "DCI"),
+        ("aci", ":FUNCtion:CURRent:AC", "ACI"),
+        ("res", ":FUNCtion:RESistance", "RES"),
+        ("fres", ":FUNCtion:FRESistance", "FRES"),
+        ("freq", ":FUNCtion:FREQuency", "FREQ"),
+        ("period", ":FUNCtion:PERiod", "PERI"),
+        ("continuity", ":FUNCtion:CONTinuity", "CONT"),
+        ("diode", ":FUNCtion:DIODe", "DIODE"),
+        ("cap", ":FUNCtion:CAPacitance", "CAP"),
+    ],
+)
+def test_all_function_selectors_send_exact_scpi_and_read_back(
+    requested: str,
+    command: str,
+    reported: str,
+) -> None:
+    transport = FakeTransport()
+    transport.function = reported
+
+    assert DM3000Dmm(transport).set_function(requested) == requested
+    assert transport.writes == [command]
+    assert transport.queries == [":FUNCtion?"]
+
+
+@pytest.mark.parametrize(
     ("requested", "command", "function", "unit"),
     [
         ("vdc", ":MEASure:VOLTage:DC?", "dcv", "V"),
@@ -183,3 +212,12 @@ def test_unsupported_function_and_invalid_reading_preserve_data_errors() -> None
         driver.read("dcv")
 
     assert transport.writes == []
+
+
+@pytest.mark.parametrize("raw", ["nan", "+inf", "-inf", "1e9999"])
+def test_read_rejects_nonfinite_values(raw: str) -> None:
+    transport = FakeTransport()
+    transport.readings[":MEASure:VOLTage:DC?"] = raw
+
+    with pytest.raises(DataError, match="non-finite DM3000 reading"):
+        DM3000Dmm(transport).read("dcv")
