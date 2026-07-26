@@ -41,6 +41,17 @@ class FakeTransport:
                 ":CALCulate:STATistic:AVERage?": "1.25000000E+00",
                 ":CALCulate:STATistic:MIN?": "1.00000000E+00",
                 ":CALCulate:STATistic:MAX?": "1.50000000E+00",
+                ":SYSTem:BEEPer:STATe?": "1",
+                ":SYSTem:LANGuage?": "english",
+                ":SYSTem:FORMat:DECimal?": "dot",
+                ":SYSTem:FORMat:SEParate?": "none",
+                ":SYSTem:DISPlay:BRIGht?": "128",
+                ":SYSTem:SCANserial?": "None",
+                ":SYSTem:LANserial?": "Installed",
+                ":UTILity:INTerface:LAN:DHCP?": "ON",
+                ":UTILity:INTerface:GPIB:ADDRess?": "22",
+                ":UTILity:INTerface:RS232:BAUD?": "9600",
+                ":UTILity:INTerface:RS232:PARity?": "none8bits",
             }
         )
         self.closed = False
@@ -87,11 +98,12 @@ def test_descriptor_is_canonical_lan_only_and_alias_free() -> None:
         "dmm.trigger_status",
         "dmm.calculation_status",
         "dmm.calculation_statistics",
+        "dmm.system_interface_status",
         "dmm.set_voltage_range",
         "dmm.set_dcv_impedance",
     )
-    assert item.wavebench_min_version == "0.8.10"
-    assert item.version == "0.4.0"
+    assert item.wavebench_min_version == "0.8.11"
+    assert item.version == "0.5.0"
     assert not any("baud" in field or "termination" in field for field in item.config_fields)
 
 
@@ -296,6 +308,70 @@ def test_calculation_statistics_reads_existing_mode_without_writes() -> None:
         ":CALCulate:STATistic:AVERage?",
         ":CALCulate:STATistic:COUNt?",
     ]
+
+
+def test_system_interface_status_is_query_only_typed_and_redacted() -> None:
+    transport = FakeTransport()
+
+    status = DM3000Dmm(transport).system_interface_status()
+
+    assert status.beeper_enabled is True
+    assert status.language == "ENGLISH"
+    assert status.decimal_format == "DOT"
+    assert status.separator_format == "NONE"
+    assert status.display_brightness == 128
+    assert status.scan_board_installed is False
+    assert status.lan_interface_installed is True
+    assert status.dhcp_enabled is True
+    assert status.gpib_address == 22
+    assert status.rs232_baud == 9600
+    assert status.rs232_parity == "NONE8BITS"
+    assert transport.writes == []
+    assert transport.queries == [
+        ":SYSTem:BEEPer:STATe?",
+        ":SYSTem:LANGuage?",
+        ":SYSTem:FORMat:DECimal?",
+        ":SYSTem:FORMat:SEParate?",
+        ":SYSTem:DISPlay:BRIGht?",
+        ":SYSTem:SCANserial?",
+        ":SYSTem:LANserial?",
+        ":UTILity:INTerface:LAN:DHCP?",
+        ":UTILity:INTerface:GPIB:ADDRess?",
+        ":UTILity:INTerface:RS232:BAUD?",
+        ":UTILity:INTerface:RS232:PARity?",
+    ]
+    forbidden = ("IDN", "MAC", ":IP?", "MASK", "GATE", "DNS", "HOST", "DOMAIN", "OPEN")
+    assert not any(token in query.upper() for query in transport.queries for token in forbidden)
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        (":SYSTem:BEEPer:STATe?", "ON", "beeper state"),
+        (":SYSTem:LANGuage?", "GERMAN", "language"),
+        (":SYSTem:FORMat:DECimal?", "AUTO", "decimal format"),
+        (":SYSTem:FORMat:SEParate?", "COMMA", "separator format"),
+        (":SYSTem:DISPlay:BRIGht?", "256", "display brightness"),
+        (":SYSTem:SCANserial?", "UNKNOWN", "scan board status"),
+        (":SYSTem:LANserial?", "SERIAL123", "LAN interface status"),
+        (":UTILity:INTerface:LAN:DHCP?", "1", "LAN DHCP state"),
+        (":UTILity:INTerface:GPIB:ADDRess?", "31", "GPIB address"),
+        (":UTILity:INTerface:RS232:BAUD?", "14400", "baud rate"),
+        (":UTILity:INTerface:RS232:PARity?", "MARK", "parity"),
+    ],
+)
+def test_system_interface_status_rejects_out_of_contract_responses(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = FakeTransport()
+    transport.readings[command] = response
+
+    with pytest.raises(DataError, match=message):
+        DM3000Dmm(transport).system_interface_status()
+
+    assert transport.writes == []
 
 
 def test_set_voltage_range_is_function_gated_and_read_back() -> None:

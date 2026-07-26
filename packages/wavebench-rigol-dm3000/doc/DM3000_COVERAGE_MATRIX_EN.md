@@ -30,10 +30,11 @@ and apparent copy errors, including an RS-232 parity section that repeats the ba
 matrix therefore reports auditable functional domains and public capabilities rather than a
 misleading completion percentage based on heading counts.
 
-The current external plugin is version `0.4.0` and declares ten capabilities: `dmm.idn`,
+The current external plugin is version `0.5.0` and declares eleven capabilities: `dmm.idn`,
 `dmm.read`, `dmm.function_status`, `dmm.set_function`, query-only
 `dmm.measurement_profile`, `dmm.trigger_status`, `dmm.calculation_status`,
-`dmm.calculation_statistics`, `dmm.set_voltage_range`, and `dmm.set_dcv_impedance`. It is a narrow TCPIP/PyVISA LAN driver
+`dmm.calculation_statistics`, redacted query-only `dmm.system_interface_status`,
+`dmm.set_voltage_range`, and `dmm.set_dcv_impedance`. It is a narrow TCPIP/PyVISA LAN driver
 for a configured resource, not a general DM3000 SCPI shell. It exposes no error-queue, reset,
 trigger/calculation-control write, datalog, scan, or interface-configuration path. The short aliases `dm3000` and
 `dm3058` remain bound to the bundled fallback; its serial support is not transport coverage of
@@ -64,16 +65,16 @@ Coverage labels:
 | Input impedance, AC filter, secondary frequency | DCV `:IMPedance`, ACV `:FILTer`, ACV/ACI `:FREQ:*` | Profile reads DCV impedance; setter controls `10M/10G`, with `10G` limited to range codes `0..2` | **M3 external hardware accepted:** the tested DM3058 completed a `10M -> 10G -> 10M` cycle; range code `3` at `10G` was rejected before writing. AC filter/frequency queries did not respond | The setter does not switch function or range; ambiguous writes and failed readback/restoration latch the instance | Protocol, constraint, and final safe state are accepted; omit nonresponding fields |
 | Display digits | Per-function `:DIGit?` and `:DIGit INC|DEC|5|6|7` | Not public | **Not covered; no response on tested DM3058** for DCV/ACV/FREQ/PERIOD queries | Display digits are not acquisition resolution and must not share one capability | Leave unimplemented without different-firmware evidence and a concrete need |
 | Measurement resolution | Eight `:RESolution:*` families | Not public | **Not covered; no response on tested DM3058** for DCV/ACV queries | Discrete values are model-dependent despite the manual's 0/1/2 table | Do not project the manual onto DM3058; wait for stronger model/firmware evidence |
-| System diagnostic queries | `:SYSTem:SCANSerial?`, `MACAddr?`, `LANSerial?`, `OPENtimes?` | Not public | **API not covered; queries partly accepted:** option/interface identifiers parsed and MAC was format-checked; `OPENtimes?` semantics were implausible and not accepted | MAC is sensitive identity and must not enter default artifacts | Add a redacted query-only identity extension only for a concrete gating need |
-| Beeper, language, clock, display, formatting | `:SYSTem:BEEPer*`, `LANGuage`, `CLOCk:*`, `DISPlay:*`, `FORMat:*` | Not public | **API not covered:** beeper/language/format/brightness queries passed; beeper and brightness restorative writes passed; clock and contrast queries did not respond | Decimal/separator changes may break parsing; global front-panel writes do not belong in normal measurement APIs | M5 may expose query-only status; keep format/language/clock writes denied |
+| System diagnostic queries | `:SYSTem:SCANSerial?`, `MACAddr?`, `LANSerial?`, `OPENtimes?` | `dmm.system_interface_status` parses only `SCANserial?`/`LANserial?` as strict installed/none booleans | **M5 external hardware accepted:** the complete 0.5.0 snapshot returned 11/11 parseable queries with zero writes; both options were absent | Never query or retain MAC, `OPENtimes?`, raw IDN, or raw responses; fields are option-presence booleans, not serial numbers | Keep strict enums and all-or-nothing snapshot semantics; exclude sensitive identity |
+| Beeper, language, clock, display, formatting | `:SYSTem:BEEPer*`, `LANGuage`, `CLOCk:*`, `DISPlay:*`, `FORMat:*` | `dmm.system_interface_status` reads only beeper state, language, decimal/separator format, and brightness | **M5 external hardware accepted:** the complete 0.5.0 snapshot returned parseable status with zero writes; clock and contrast remain unqueried/unsupported | Decimal/separator changes may break parsing; the public API sends no writes and rejects unknown/out-of-range responses atomically | Keep query-only; deny language, format, clock, and display writes |
 | Power-on and system defaults | `:SYSTem:CONFigure:POWeron`, `:SYSTem:CONFigure:DEFault` | Not public | **Denied by default** | Changes persistent or instrument-wide state | Maintenance workflows only |
-| LAN/GPIB/RS-232 configuration | `:UTILity:INTerface:LAN:*`, `GPIB:ADDRess`, `RS232:BAUD/PARity` | Not public | **Writes denied; query probes partly accepted:** LAN DHCP/IP/mask/gateway/DNS, GPIB address, and RS-232 baud/parity were readable; hostname/domain did not respond | Interface writes can sever the active session; the manual parity section repeats baud commands. This package accepts TCPIP/PyVISA only | M5 may expose redacted query-only status; never write connection settings in normal measurement flows |
+| LAN/GPIB/RS-232 configuration | `:UTILity:INTerface:LAN:*`, `GPIB:ADDRess`, `RS232:BAUD/PARity` | `dmm.system_interface_status` reads only DHCP, GPIB address, RS-232 baud/parity | **M5 external hardware accepted:** all four interface queries in the complete 0.5.0 snapshot parsed with zero writes | It does not query IP/mask/gateway/DNS/hostname/domain. Interface writes can sever the session. The manual parity section incorrectly repeats baud; code accepts only the three observed parity enums | Never write interface settings from ordinary measurement flows; retain the source copy-error note |
 | Trigger system | `:TRIGger:SOURce`, auto interval/hold, single count/triggered, external, VMC polarity/pulse width | Query-only `dmm.trigger_status`: source, auto interval/hold/sensitivity, single count, external slope, and VMC polarity/pulse width | **Implemented / external hardware status-query accepted:** eight fields parse; 0.4.0 sent queries only and returned AUTO, 400 ms, OFF, 1, 1, RISE, POS, and 7 ms | Changes timing or drives VMC; public API performs no trigger action or source change | Review setters individually; AUTO interval setter remains disabled |
 | Math and statistics | `:CALCulate:FUNCtion`, min/max/average/count | Query-only `dmm.calculation_status` (mode, count, dB/dBm references) and `dmm.calculation_statistics` (existing min/max/average) | **Implemented / exact offline coverage plus external hardware status-query accepted:** 0.4.0 accepts NONE, NULL, DB, DBM, AVERAGE, MIN, MAX, TOTAL, LIMIT offline; the current device status query reported NONE/count 0. Statistics have exact offline coverage | Statistics depend on active mode and series; API requires explicit caller confirmation and independently rechecks instrument mode | Never enable, clear, or trigger; do not read statistics without a matching active calculation |
 | NULL, dB, dBm, limit | `:CALCulate:NULL:OFFSet`, `DB[:REFerence]`, `DBM[:REFerence]`, `LIMit:*` | Not public | **Not covered** | Setters change the meaning of later readings; references and units depend on the active function | Expose only as an independent, snapshot-and-restore calculation profile |
-| Datalog status and configuration | `:DATAlog?`, `CONFigure:*`, `RUN`, `STOP` | Not public | **Writes denied; current DM3058 queries did not respond** | Status/configuration queries attempted in this run returned no complete response; start/stop/configuration also have significant state | **M7 blocked:** wait for a supported device and reliable status before designing bounded controlled capture |
+| Datalog status and configuration | `:DATAlog?`, `CONFigure:*`, `RUN`, `STOP` | Not public | **M7 audited and blocked; writes denied; current DM3058 queries did not respond** | Status/configuration queries attempted in this run returned no complete response; start/stop/configuration also have significant state | Wait for a supported device and reliable status before designing bounded controlled capture |
 | Datalog binary retrieval | `:DATAlog:FETCHdata <packet>` | Not public | **Not covered / source uncertain** | Each packet contains 512 32-bit values; the manual calls for a vendor driver/DLL and configuration-dependent valid-count extraction; it is not an ordinary ASCII query | Do not implement until byte order, value format, and DLL-free decoding are established |
-| Scan board and projects | `:SCAN:*` task/project/run/fetch/save/load/delete/cardID | Not public | **Denied; tested device explicitly lacks the scan board and queries did not respond** | Project writes are persistent and run/stop controls multi-channel acquisition | **M7 blocked:** wait for equipped hardware, then gate a separate capability through option identity |
+| Scan board and projects | `:SCAN:*` task/project/run/fetch/save/load/delete/cardID | Not public | **M7 audited and blocked; denied; tested device explicitly lacks the scan board and queries did not respond** | Project writes are persistent and run/stop controls multi-channel acquisition | Wait for equipped hardware, then gate a separate capability through option identity |
 | Agilent compatibility set | Compatible `CALCulate`, `CONFigure`, `SENSe`, `TRIGger`, `DATA`, `MEMory`, and related SCPI | Not public | **Denied by default** | Requires instrument-wide `CMDSET AGILENT`; its grammar cannot be mixed into the RIGOL driver | Do not count as free aliases; a future implementation should be a separate driver/profile |
 | Fluke compatibility set | `VDC`, `VAC`, `ADC`, `AAC`, `OHMS`, `MEAS?`, and related short commands | Not public | **Denied by default** | Also requires command-set switching, with different short-command semantics and responses | Do not mix into the current capabilities |
 
@@ -141,6 +142,18 @@ hardware acceptance for every command.
 :CALCulate:STATistic:AVERage?
 :CALCulate:DB:REFerence?
 :CALCulate:DBM:REFerence?
+
+:SYSTem:BEEPer:STATe?
+:SYSTem:LANGuage?
+:SYSTem:FORMat:DECimal?
+:SYSTem:FORMat:SEParate?
+:SYSTem:DISPlay:BRIGht?
+:SYSTem:SCANserial?
+:SYSTem:LANserial?
+:UTILity:INTerface:LAN:DHCP?
+:UTILity:INTerface:GPIB:ADDRess?
+:UTILity:INTerface:RS232:BAUD?
+:UTILity:INTerface:RS232:PARity?
 ```
 
 The implementation sends no `*RST`, `CMDSET`, resolution, trigger/calculation write, datalog,

@@ -158,16 +158,30 @@ returned AUTO, 400 ms, OFF, 1, 1, RISE, POS, and 7 ms; `calculation_status` retu
 recheck gates are covered by exact FakeTransport tests; it never enables, clears, or triggers a
 calculation.
 
-### M5: system and interface query-only status — conditionally implementable
+### M5: system and interface query-only status — implemented; external hardware accepted
 
-A redacted query-only snapshot is feasible, but default artifacts must not retain MAC, IP,
-hostname, or domain. Writes to networking, GPIB, RS-232, formatting, language, clock, defaults, or
-power-on configuration remain prohibited.
+Version 0.5.0 implements `dmm.system_interface_status` as an all-or-nothing redacted snapshot with
+eleven fields, using only queries that already have individual zero-write DM3058 response evidence.
+Default artifacts retain no IDN, MAC, IP, hostname, domain, clock, raw response, or resource address.
+Writes to networking, GPIB, RS-232, formatting, language, clock, defaults, or power-on configuration
+remain prohibited. The manual transcription's parity section mistakenly repeats the baud command;
+the implementation accepts only `none8bits/odd7bits/even7bits` based on DM3058 experience. The
+complete 0.5.0 snapshot was accepted on the current DM3058: all 11 queries returned parseable
+values, with 11 query log entries and zero writes. Acceptance sent no IDN, MAC, IP, mask, gateway,
+DNS, hostname, domain, clock, `*CLS`, or error-queue command. Only protocol response and redacted
+state are claimed; no real address, serial number, or raw response is retained.
 
-### M6: other electrical modes — waiting for a safe fixture
+### M6: other electrical modes — open-probe protocol complete; accuracy/fixture acceptance pending
 
-DCI, ACI, 2/4-wire resistance, continuity, diode, capacitance, and ratio require explicit terminal,
-source-disconnect, fuse, range, and load checks. A mere response cannot bypass physical safety.
+M1 already used the existing `dmm.set_function` + `dmm.read` path to complete open-probe protocol
+acceptance for DCI, ACI, 2/4-wire resistance, continuity, diode, and capacitance: target-function
+readback succeeded, each response was complete, parseable, and finite, and every run restored DCV.
+Under this milestone's open-probe standard, M6 needs no duplicate capability or protocol path.
+
+This does not establish measurement accuracy, terminal wiring, fuse condition, range correctness,
+stimulus current/voltage, or dedicated-load behavior. `RATIO` remains unimplemented because it
+requires two inputs and separate result semantics. Formal accuracy acceptance still requires a
+safe per-mode fixture and cannot be inferred from one finite response.
 
 ### M7: datalog and scan — blocked
 
@@ -175,6 +189,11 @@ source-disconnect, fuse, range, and load checks. A mere response cannot bypass p
 - The scan board is absent and SCAN queries also do not respond.
 - No capability is published without a supported device, format/endianness evidence, size bounds,
   and stop/restoration contracts.
+
+M7 is therefore considered audited and intentionally blocked, not a device or driver failure. The
+current hardware provides insufficient evidence for even a query-only status model, and no RUN,
+STOP, project save/load/delete, or binary-fetch implementation is authorized. A milestone number
+must not justify high-side-effect probes or wrapping no-response commands as optional fields.
 
 ## Release gate
 

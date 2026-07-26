@@ -25,10 +25,11 @@ sdist。手册封面列出 DM3061/2/3/4 与 DM3051/2/3/4，没有单独点名实
 命令名断裂和明显复制错误，例如 RS-232 parity 小节重复了 baud 命令。因此，本矩阵按
 可审计的功能域和公开 capability 报告状态，不用标题数量计算伪精确的完成百分比。
 
-当前外置插件版本为 `0.4.0`，声明十项 capability：`dmm.idn`、`dmm.read`、
+当前外置插件版本为 `0.5.0`，声明十一项 capability：`dmm.idn`、`dmm.read`、
 `dmm.function_status`、`dmm.set_function`、只读 `dmm.measurement_profile`、
 `dmm.trigger_status`、`dmm.calculation_status`、`dmm.calculation_statistics`、
-`dmm.set_voltage_range` 和 `dmm.set_dcv_impedance`。它是经配置的
+只读脱敏 `dmm.system_interface_status`、`dmm.set_voltage_range` 和
+`dmm.set_dcv_impedance`。它是经配置的
 TCPIP/PyVISA LAN 窄驱动，
 不是通用 DM3000 SCPI shell，也不公开 error-queue、reset、trigger/calculation 控制写入、
 datalog、scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench 内建 fallback；
@@ -59,16 +60,16 @@ datalog、scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 W
 | 输入阻抗、交流滤波和副屏频率 | DCV `:IMPedance`、ACV `:FILTer`、ACV/ACI `:FREQ:*` | profile 只读 DCV 阻抗；setter 设置 `10M/10G`，且 `10G` 只允许 range code `0..2` | **M3 外置实机通过**：当前 DM3058 完成 `10M -> 10G -> 10M` 写入、回读和恢复；`10G` 下的档位 3 请求在写前拒绝。ACV filter/frequency 查询无响应 | setter 不切功能或档位；首写不明、读回或恢复失败锁停实例 | 协议、约束与最终安全状态已验收；不加入无响应字段 |
 | 显示位数 | 各功能 `:DIGit?` / `:DIGit INC|DEC|5|6|7` | 未公开 | **未覆盖；当前 DM3058 无响应**：DCV/ACV/FREQ/PERIOD 的 query 均未得到完整响应 | 改显示位数不等于改变采样精度，不能与 resolution 混为同一 capability | 除非有不同固件证据和明确价值，否则保持未实现 |
 | 测量精度 | `:RESolution:*` 八个功能族 | 未公开 | **未覆盖；当前 DM3058 无响应**：本轮 DCV/ACV query 未得到完整响应 | 手册用离散 0/1/2 表示 4½/5½/6½ 位；型号能力可能不同 | 不从手册外推 DM3058；等待不同固件或型号证据 |
-| 系统诊断查询 | `:SYSTem:SCANSerial?`、`MACAddr?`、`LANSerial?`、`OPENtimes?` | 未公开 | **未覆盖 API；查询探针部分通过**：选件/接口标识可解析；MAC 只做格式校验；`OPENtimes?` 数值语义异常，未通过 | 可能用于 option/接口门控，但 MAC 属于敏感设备标识，不应进入默认 artifact | 如有明确门控需求，设计脱敏、query-only 的 identity extension |
-| 蜂鸣器、语言、时钟和显示 | `:SYSTem:BEEPer*`、`LANGuage`、`CLOCk:*`、`DISPlay:*`、`FORMat:*` | 未公开 | **未覆盖 API**；DM3058 蜂鸣器状态/语言/格式/亮度查询通过，蜂鸣器状态和亮度受控恢复通过；时钟和对比度查询无响应 | 改小数点/分隔符可能破坏解析；全局前面板写入仍不属于普通测量 API | M5 仅考虑只读、脱敏状态；格式/语言/时钟写入继续拒绝 |
+| 系统诊断查询 | `:SYSTem:SCANSerial?`、`MACAddr?`、`LANSerial?`、`OPENtimes?` | `dmm.system_interface_status` 只将 `SCANserial?`/`LANserial?` 严格解析为 installed/none 布尔状态 | **M5 外置实机通过**：0.5.0 完整快照 11/11 query 可解析、零写入；选件状态均为未安装 | 永不发送或保存 MAC、`OPENtimes?`、raw IDN/响应；字段名明确为选件安装状态而非序列号 | 保持严格枚举和全有或全无快照；敏感标识继续排除 |
+| 蜂鸣器、语言、时钟和显示 | `:SYSTem:BEEPer*`、`LANGuage`、`CLOCk:*`、`DISPlay:*`、`FORMat:*` | `dmm.system_interface_status` 只读蜂鸣器状态、语言、小数点/分隔符与亮度 | **M5 外置实机通过**：0.5.0 完整快照零写入返回可解析的状态；时钟和对比度仍未查询/无支持证据 | 改小数点/分隔符可能破坏解析；公开 API 不发送任何写入，未知枚举或越界值整次失败 | 保持 query-only；语言、格式、时钟和显示写入继续拒绝 |
 | 上电与系统默认 | `:SYSTem:CONFigure:POWeron`、`:SYSTem:CONFigure:DEFault` | 未公开 | **默认拒绝** | 会改变持久或整机状态 | 仅限人工维护流程 |
-| LAN/GPIB/RS-232 设置 | `:UTILity:INTerface:LAN:*`、`GPIB:ADDRess`、`RS232:BAUD/PARity` | 未公开 | **写入默认拒绝；查询探针部分通过**：LAN DHCP/IP/mask/gateway/DNS、GPIB address、RS-232 baud/parity 可读；hostname/domain 无响应 | 修改接口会断开会话；parity 小节在转录中错误重复 baud 命令。外置包本身仅允许 TCPIP/PyVISA | M5 可做脱敏 query-only 状态；网络和串口参数永不经普通测量工作流写入 |
+| LAN/GPIB/RS-232 设置 | `:UTILity:INTerface:LAN:*`、`GPIB:ADDRess`、`RS232:BAUD/PARity` | `dmm.system_interface_status` 仅只读 DHCP、GPIB 地址、RS-232 baud/parity | **M5 外置实机通过**：0.5.0 完整快照的四项接口 query 可解析，零写入 | 不查询 IP/mask/gateway/DNS/hostname/domain；修改接口会断开会话。手册 parity 小节复制错写为 baud，代码按实机证据严格接受三种枚举 | 永不经普通测量工作流写接口配置；保留资料复制错误说明 |
 | 触发系统 | `:TRIGger:SOURce`、auto interval/hold、single count/triggered、external、VMC polarity/pulsewidth | 只读 `dmm.trigger_status`，覆盖 source、auto interval/hold/sensitivity、single count、external slope、VMC polarity/pulsewidth | **已实现 / 外置实机查询通过**：八项状态可解析；0.4.0 实机只发送 query，返回 AUTO、400 ms、OFF、1、1、RISE、POS、7 ms | 会改变采样时序或产生 VMC 输出；公开 API 不执行 trigger action 或改变 source | setter 逐项独立评审；`AUTO:INTerval` setter 继续禁用 |
 | 数学函数与统计 | `:CALCulate:FUNCtion`、min/max/average/count | 只读 `dmm.calculation_status`（模式、count、dB/dBm reference）与 `dmm.calculation_statistics`（已有 min/max/average） | **已实现 / 精确离线覆盖加外置实机状态查询通过**：0.4.0 离线识别 NONE、NULL、DB、DBM、AVERAGE、MIN、MAX、TOTAL、LIMIT；当前实机状态查询为 NONE/count 0。统计路径有精确离线测试 | 统计 query 依赖已激活的运算和当前测量序列；统计 API 要求显式 caller confirmation 且再次核对仪器当前模式 | 不得隐式启用、清空或触发；当前无匹配 active calculation 时不读取统计 |
 | NULL、dB、dBm 与 limit | `:CALCulate:NULL:OFFSet`、`DB[:REFerence]`、`DBM[:REFerence]`、`LIMit:*` | 未公开 | **未覆盖** | setter 改变后续读数语义；参考值和单位依赖当前测量功能 | 只作为独立、可快照与恢复的 calculation profile |
-| Datalog 配置与状态 | `:DATAlog?`、`CONFigure:*`、`RUN`、`STOP` | 未公开 | **默认拒绝写入；当前 DM3058 查询无响应** | 本轮状态和配置查询均未得到完整响应；启动/停止和配置还有明显状态副作用 | **M7 阻塞**：等待支持设备和可靠只读状态，再讨论有上限、超时、停止和恢复的采集 |
+| Datalog 配置与状态 | `:DATAlog?`、`CONFigure:*`、`RUN`、`STOP` | 未公开 | **M7 已审计并阻塞；默认拒绝写入；当前 DM3058 查询无响应** | 本轮状态和配置查询均未得到完整响应；启动/停止和配置还有明显状态副作用 | 等待支持设备和可靠只读状态，再讨论有上限、超时、停止和恢复的采集 |
 | Datalog 二进制读取 | `:DATAlog:FETCHdata <packet>` | 未公开 | **未覆盖 / 资料不确定** | 每包 512 个 32-bit 数据，手册要求厂商驱动/DLL 转换且需结合配置判断有效点数；不是普通 ASCII query | 在确认端序、数据格式和无 DLL 解码方法前不实现 |
-| 巡检板与工程 | `:SCAN:*`，包括 task/project/run/fetch/save/load/delete/cardID | 未公开 | **默认拒绝；当前设备明确无巡检板且查询无响应** | 创建、保存、加载、删除工程有持久副作用，run/stop 控制多通道采集 | **M7 阻塞**：等待带选件设备，再以 `SCANSerial?`/`cardID?` 门控独立 capability |
+| 巡检板与工程 | `:SCAN:*`，包括 task/project/run/fetch/save/load/delete/cardID | 未公开 | **M7 已审计并阻塞；默认拒绝；当前设备明确无巡检板且查询无响应** | 创建、保存、加载、删除工程有持久副作用，run/stop 控制多通道采集 | 等待带选件设备，再以 `SCANSerial?`/`cardID?` 门控独立 capability |
 | Agilent 兼容命令集 | `CALCulate`、`CONFigure`、`SENSe`、`TRIGger`、`DATA`、`MEMory` 等兼容 SCPI | 未公开 | **默认拒绝** | 需先全局切换 `CMDSET AGILENT`；不同语法不能与当前 RIGOL driver 混用 | 不作为“免费别名”计入覆盖；若支持应是独立 driver/profile |
 | Fluke 兼容命令集 | `VDC`、`VAC`、`ADC`、`AAC`、`OHMS`、`MEAS?` 等 | 未公开 | **默认拒绝** | 同样需要切换整机命令集；短命令语义和返回格式不同 | 不混入当前 capability |
 
@@ -135,6 +136,18 @@ datalog、scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 W
 :CALCulate:STATistic:AVERage?
 :CALCulate:DB:REFerence?
 :CALCulate:DBM:REFerence?
+
+:SYSTem:BEEPer:STATe?
+:SYSTem:LANGuage?
+:SYSTem:FORMat:DECimal?
+:SYSTem:FORMat:SEParate?
+:SYSTem:DISPlay:BRIGht?
+:SYSTem:SCANserial?
+:SYSTem:LANserial?
+:UTILity:INTerface:LAN:DHCP?
+:UTILity:INTerface:GPIB:ADDRess?
+:UTILity:INTerface:RS232:BAUD?
+:UTILity:INTerface:RS232:PARity?
 ```
 
 实现不会发送 `*RST`、`CMDSET`、resolution、trigger/calculation 写入、datalog、scan、
