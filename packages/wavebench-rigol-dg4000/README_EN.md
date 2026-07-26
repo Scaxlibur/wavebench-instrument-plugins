@@ -22,6 +22,10 @@ The driver supports identity/error queries, CH1/CH2 state, fixed frequency, func
 
 WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
 
+The [DG4000 coverage matrix](doc/DG4000_COVERAGE_MATRIX_EN.md) maps vendor command domains to
+current public APIs, offline/hardware evidence, and high-risk commands denied by default. The
+local vendor manual remains under ignored `doc/vendor-local/` and is excluded from releases.
+
 The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs.
 
 ## License

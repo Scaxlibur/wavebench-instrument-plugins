@@ -25,6 +25,10 @@
 
 WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅度安全限制、Service、run plan、状态恢复和 artifact。插件不复制这些策略。
 
+完整的厂商手册命令域、当前公开 API、离线/实机证据和默认拒绝的高风险命令见
+[DG4000 功能覆盖矩阵](doc/DG4000_COVERAGE_MATRIX.md)。本地厂商手册保存在被忽略的
+`doc/vendor-local/`，不进入发行包。
+
 ## 安全边界
 
 descriptor 导入不连接仪器。factory 只通过 `DriverContext` 打开当前配置的 transport。默认离线测试不扫描资源、不连接仪器，也不发送真实 SCPI。输出控制、任意波形上传和其他写操作不会盲目重试。
