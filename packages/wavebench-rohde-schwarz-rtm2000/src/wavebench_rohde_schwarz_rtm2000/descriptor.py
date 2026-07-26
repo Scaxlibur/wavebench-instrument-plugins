@@ -31,6 +31,8 @@ def descriptor() -> InstrumentDescriptor:
             "scope.screenshot",
             "scope.channel_coupling",
             "scope.snapshot",
+            "scope.acquisition_status",
+            "scope.history_timestamps",
         ),
         idn_patterns=("Rohde&Schwarz,RTM", "Rohde & Schwarz,RTM"),
         backends=(
@@ -51,10 +53,10 @@ def descriptor() -> InstrumentDescriptor:
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary="Installable R&S RTM2000-series scope capture driver.",
-        wavebench_min_version="0.8.1",
+        wavebench_min_version="0.8.2",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rohde-schwarz-rtm2000",
-        version="0.6.0",
+        version="0.7.0",
         source="entry_point:rohde-schwarz.rtm2032",
         scope_coupling_policy="switchable-termination",
         config_fields=(

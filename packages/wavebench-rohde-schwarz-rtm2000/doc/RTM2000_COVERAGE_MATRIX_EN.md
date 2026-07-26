@@ -8,7 +8,7 @@ This matrix compares the locally stored RTM2000 programming-manual command index
 
 The selected manual transcription has 1,490 lines containing 1,434 command-index entries and 1,417 exact unique command templates: 608 query-marked forms and 809 non-query forms. Further case-insensitive, whitespace-normalized parsing yields 1,416 templates (607 query-marked and 809 non-query); the final difference is one repeated/layout variant. These figures still include parameterized templates and a small number of OCR defects. They describe command-surface scale and are not a feature-completion denominator.
 
-The external plugin currently declares eight WaveBench capabilities and directly uses roughly twenty SCPI templates. It is a hardware-accepted analog-waveform acquisition MVP, not a general RTM2000 remote-control layer.
+The external plugin currently declares ten WaveBench capabilities. It is a hardware-accepted analog-waveform acquisition MVP with additional offline-tested, read-only status surfaces, not a general RTM2000 remote-control layer.
 
 Coverage labels:
 
@@ -88,7 +88,7 @@ These improve experiment safety and traceability but do not count as RTM2000 man
 
 ### P2: analysis and specialized acquisition
 
-- average/segmented acquisition and history/timestamps;
+- average/segmented acquisition and history/timestamps; **read-only average/segmented status and K15 history timestamp tables complete offline, pending hardware acceptance; configuration and segment waveform selection remain deferred**;
 - math/FFT/reference waveforms;
 - cursor, DVM, and counter results;
 - read-only probe identity and attenuation/impedance safety integration.

@@ -9,12 +9,12 @@ RTM2032 as the current hardware baseline.
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
-- development baseline: WaveBench `0.8.1`
-- WaveBench: `>=0.8.1,<0.9`
+- development baseline: WaveBench `0.8.2`
+- WaveBench: `>=0.8.2,<0.9`
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-The plugin's 0.6.0 development line targets WaveBench `v0.8.1`, does not maintain a legacy-core
+The plugin's 0.7.0 development line targets WaveBench `v0.8.2`, does not maintain a legacy-core
 compatibility matrix, and does not automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
@@ -26,6 +26,8 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 - typed RTM2032 CH1/CH2 analog-channel, timebase, and probe-metadata snapshots;
 - typed current-waveform X/Y scaling, point-count, quantization, and values-per-sample metadata;
 - a typed read-only basic edge-trigger snapshot for RTM2032 CH1/CH2;
+- read-only average/segmented acquisition state, with K15-only queries option-gated;
+- read-only K15 history timestamp tables for RTM2032 CH1/CH2;
 - a vendor-specific minimal controlled RTM2032 CH2 edge-trigger configuration loop;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
@@ -148,6 +150,12 @@ lock. Only this canonical external descriptor declares the capability, so `waveb
 `RTM2000*Snapshot` import names remain compatibility aliases of the public core models. The aggregate
 path still reads no EVENT/error queue and sends no setting command. This increment is implemented and
 tested offline; its combined RTM2032 hardware path remains pending acceptance.
+
+Version 0.7.0 adds the optional `scope.acquisition_status` and `scope.history_timestamps`
+contracts from WaveBench 0.8.2. Both paths are query-only. K15-only queries require an exact K15
+token from `*OPT?`; timestamp rows are built by strict positional matching of the relative-time,
+absolute-time, and date `:ALL?` tables in oldest-to-newest order. No history segment is selected,
+no acquisition is started, and the error queue is not consumed. Hardware acceptance remains pending.
 
 ## Development checks
 

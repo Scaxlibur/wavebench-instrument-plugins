@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 from functools import wraps
 import math
 from numbers import Real
@@ -13,9 +14,12 @@ import numpy as np
 
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import (
+    ScopeAcquisitionStatus,
     ScopeAnalogChannelSnapshot,
     ScopeEdgeTriggerSnapshot,
     ScopeHealthSnapshot,
+    ScopeHistoryTimestamp,
+    ScopeHistoryTimestamps,
     ScopeIdentitySnapshot,
     ScopeProbeSnapshot,
     ScopeSnapshot,
@@ -29,6 +33,9 @@ from wavebench.transport.base import InstrumentTransport
 
 _DECIMAL_INTEGER = re.compile(r"[+-]?[0-9]+")
 _UNAVAILABLE_FLOAT_MINIMUM = 9.0e37
+_MAX_HISTORY_RESPONSE_CHARS = 8_000_000
+_MAX_HISTORY_SEGMENTS = 100_000
+_NEWEST_RELATIVE_TIME_TOLERANCE_S = 1.0e-6
 
 
 def _parse_idn(response: str) -> tuple[str, str, str, str]:
@@ -115,6 +122,82 @@ def _parse_bool(response: str, *, command: str) -> bool:
     if value in {"0", "OFF"}:
         return False
     raise DataError(f"invalid {command} response: {response!r}")
+
+
+def _parse_csv_fields(response: str, *, command: str) -> tuple[str, ...]:
+    if len(response) > _MAX_HISTORY_RESPONSE_CHARS:
+        raise DataError(f"oversized {command} response")
+    value = response.strip()
+    if not value:
+        return ()
+    fields = tuple(item.strip() for item in value.split(","))
+    if any(not item for item in fields):
+        raise DataError(f"invalid {command} response: {response!r}")
+    return fields
+
+
+def _parse_history_relative_times(response: str) -> tuple[float, ...]:
+    command = "CHANnel:HISTORY:TSRelative:ALL?"
+    fields = _parse_csv_fields(response, command=command)
+    if len(fields) > _MAX_HISTORY_SEGMENTS:
+        raise DataError(f"too many segments in {command} response")
+    values = tuple(_parse_finite_float(item, command=command) for item in fields)
+    if any(value > _NEWEST_RELATIVE_TIME_TOLERANCE_S for value in values):
+        raise DataError(f"out-of-range {command} response: {response!r}")
+    if any(current > following for current, following in zip(values, values[1:])):
+        raise DataError(f"out-of-order {command} response: {response!r}")
+    newest_is_not_zero = (
+        bool(values)
+        and abs(values[-1]) > _NEWEST_RELATIVE_TIME_TOLERANCE_S
+    )
+    if newest_is_not_zero:
+        raise DataError(f"newest segment is not near zero in {command} response")
+    return values
+
+
+def _parse_history_dates(response: str) -> tuple[tuple[int, int, int], ...]:
+    command = "CHANnel:HISTORY:TSDate:ALL?"
+    fields = _parse_csv_fields(response, command=command)
+    if len(fields) % 3:
+        raise DataError(f"invalid {command} response: {response!r}")
+    if len(fields) // 3 > _MAX_HISTORY_SEGMENTS:
+        raise DataError(f"too many segments in {command} response")
+    result = []
+    for offset in range(0, len(fields), 3):
+        year, month, day = (
+            _parse_decimal_integer(field, command=command, minimum=1)
+            for field in fields[offset : offset + 3]
+        )
+        try:
+            date(year, month, day)
+        except ValueError as exc:
+            raise DataError(f"out-of-range {command} response: {response!r}") from exc
+        result.append((year, month, day))
+    return tuple(result)
+
+
+def _parse_history_times(response: str) -> tuple[tuple[int, int, float], ...]:
+    command = "CHANnel:HISTORY:TSABsolute:ALL?"
+    fields = _parse_csv_fields(response, command=command)
+    if len(fields) % 3:
+        raise DataError(f"invalid {command} response: {response!r}")
+    if len(fields) // 3 > _MAX_HISTORY_SEGMENTS:
+        raise DataError(f"too many segments in {command} response")
+    result = []
+    for offset in range(0, len(fields), 3):
+        hour = _parse_decimal_integer(
+            fields[offset], command=command, minimum=0, maximum=23
+        )
+        minute = _parse_decimal_integer(
+            fields[offset + 1], command=command, minimum=0, maximum=59
+        )
+        second = _parse_bounded_float(
+            fields[offset + 2], command=command, minimum=0.0, maximum=60.0
+        )
+        if second >= 60.0:
+            raise DataError(f"out-of-range {command} response: {response!r}")
+        result.append((hour, minute, second))
+    return tuple(result)
 
 
 def _parse_token(
@@ -247,6 +330,108 @@ class RTM2032Scope:
                 serial_number=serial_number,
                 firmware=firmware,
                 options=_parse_options(self.transport.query("*OPT?")),
+            )
+
+    @_serialized_io
+    def get_acquisition_status(self) -> ScopeAcquisitionStatus:
+        with self._io_lock:
+            options = _parse_options(self.transport.query("*OPT?"))
+            has_k15 = "K15" in {option.upper() for option in options}
+            average_count = _parse_decimal_integer(
+                self.transport.query("ACQuire:AVERage:COUNt?"),
+                command="ACQuire:AVERage:COUNt?",
+                minimum=2,
+                maximum=1024,
+            )
+            average_complete = _parse_bool(
+                self.transport.query("ACQuire:AVERage:COMPlete?"),
+                command="ACQuire:AVERage:COMPlete?",
+            )
+            if not has_k15:
+                return ScopeAcquisitionStatus(
+                    average_count=average_count,
+                    average_complete=average_complete,
+                    segmented_option_installed=False,
+                    segmented_enabled=None,
+                    segmented_maximum_enabled=None,
+                    segment_capacity=None,
+                    segments_available=None,
+                )
+            return ScopeAcquisitionStatus(
+                average_count=average_count,
+                average_complete=average_complete,
+                segmented_option_installed=True,
+                segmented_enabled=_parse_bool(
+                    self.transport.query("ACQuire:SEGMented:STATe?"),
+                    command="ACQuire:SEGMented:STATe?",
+                ),
+                segmented_maximum_enabled=_parse_bool(
+                    self.transport.query("ACQuire:SEGMented:MAXimum?"),
+                    command="ACQuire:SEGMented:MAXimum?",
+                ),
+                segment_capacity=_parse_decimal_integer(
+                    self.transport.query("ACQuire:COUNt?"),
+                    command="ACQuire:COUNt?",
+                    minimum=0,
+                ),
+                segments_available=_parse_decimal_integer(
+                    self.transport.query("ACQuire:AVAilable?"),
+                    command="ACQuire:AVAilable?",
+                    minimum=0,
+                ),
+            )
+
+    @_serialized_io
+    def get_history_timestamps(self, channel: int) -> ScopeHistoryTimestamps:
+        _validate_rtm2032_channel(channel)
+        with self._io_lock:
+            options = _parse_options(self.transport.query("*OPT?"))
+            if "K15" not in {option.upper() for option in options}:
+                raise InstrumentError(
+                    "RTM2000 history timestamps require installed option K15; "
+                    "*OPT? did not report K15"
+                )
+            prefix = f"CHANnel{channel}:HISTORY"
+            relatives = _parse_history_relative_times(
+                self.transport.query(f"{prefix}:TSRelative:ALL?")
+            )
+            times = _parse_history_times(
+                self.transport.query(f"{prefix}:TSABsolute:ALL?")
+            )
+            dates = _parse_history_dates(
+                self.transport.query(f"{prefix}:TSDate:ALL?")
+            )
+            if not (len(relatives) == len(times) == len(dates)):
+                raise DataError(
+                    "RTM2000 history timestamp tables have inconsistent segment counts"
+                )
+            calendar_values = tuple(
+                (*date_value, *time_value)
+                for date_value, time_value in zip(dates, times)
+            )
+            if any(
+                current > following
+                for current, following in zip(calendar_values, calendar_values[1:])
+            ):
+                raise DataError("RTM2000 history timestamp tables are not oldest-to-newest")
+            return ScopeHistoryTimestamps(
+                channel=channel,
+                entries=tuple(
+                    ScopeHistoryTimestamp(
+                        position=position,
+                        relative_s=relative_s,
+                        year=date_value[0],
+                        month=date_value[1],
+                        day=date_value[2],
+                        hour=time_value[0],
+                        minute=time_value[1],
+                        second=time_value[2],
+                    )
+                    for position, (relative_s, date_value, time_value) in enumerate(
+                        zip(relatives, dates, times),
+                        start=1,
+                    )
+                ),
             )
 
     @_serialized_io

@@ -8,12 +8,12 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `0.8.1`
-- WaveBench：`>=0.8.1,<0.9`
+- 开发基线：WaveBench `0.8.2`
+- WaveBench：`>=0.8.2,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件的 0.6.0 开发线对齐 WaveBench `v0.8.1`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.7.0 开发线对齐 WaveBench `v0.8.2`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -24,6 +24,8 @@
 - RTM2032 CH1/CH2 类型化模拟通道、时基和探头元数据快照；
 - 当前波形的类型化 X/Y 缩放、点数、量化位数和每采样值数量快照；
 - RTM2032 CH1/CH2 基础 edge-trigger 类型化只读快照；
+- 只读 average/segmented acquisition 状态，K15 专属查询受选件门控；
+- RTM2032 CH1/CH2 的只读 K15 history 时间戳表；
 - RTM2032 CH2 edge trigger 的厂商专用最小受控配置闭环；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
@@ -126,6 +128,11 @@ timeout、回读不符、健康异常或身份变化都会永久锁存该实例�
 因此 `wavebench scope status --channel N` 可用，而不要求其他 scope 驱动实现。原有
 `RTM2000*Snapshot` 导入名保留为公共模型的兼容别名。该聚合调用仍不读取 EVENT/错误队列，
 也不发送设置命令；本增量仅完成离线实现，真实 RTM2032 组合路径仍待硬件验收。
+
+0.7.0 接入 WaveBench 0.8.2 的选择性 `scope.acquisition_status` 与
+`scope.history_timestamps` 公共契约。两条路径均只查询；K15 专属查询必须由 `*OPT?`
+精确返回 K15 token。时间戳按 oldest-to-newest 顺序严格合并 relative、absolute、date 三张
+`:ALL?` 表，不选择 history segment、不启动采集，也不消费错误队列。实机验收仍待进行。
 
 ## 开发验证
 

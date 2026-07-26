@@ -9,9 +9,12 @@ from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import (
+    ScopeAcquisitionStatus,
     ScopeAnalogChannelSnapshot,
     ScopeEdgeTriggerSnapshot,
     ScopeHealthSnapshot,
+    ScopeHistoryTimestamp,
+    ScopeHistoryTimestamps,
     ScopeIdentitySnapshot,
     ScopeProbeSnapshot,
     ScopeSnapshot,
@@ -242,6 +245,143 @@ def test_identity_and_health_snapshots_are_read_only_and_typed():
         "ACQuire:COUNT?",
         "ACQuire:SRATe?",
     ]
+
+
+def test_acquisition_status_reads_average_and_k15_segment_state_without_writes():
+    transport = FakeTransport(
+        responses={
+            "*OPT?": "B1,K15",
+            "ACQuire:AVERage:COUNt?": "16",
+            "ACQuire:AVERage:COMPlete?": "1",
+            "ACQuire:SEGMented:STATe?": "OFF",
+            "ACQuire:SEGMented:MAXimum?": "ON",
+            "ACQuire:COUNt?": "1000",
+            "ACQuire:AVAilable?": "24",
+        }
+    )
+
+    status = RTM2032Scope(transport).get_acquisition_status()
+
+    assert status == ScopeAcquisitionStatus(16, True, True, False, True, 1000, 24)
+    assert transport.writes == []
+    assert transport.queries == [
+        "*OPT?",
+        "ACQuire:AVERage:COUNt?",
+        "ACQuire:AVERage:COMPlete?",
+        "ACQuire:SEGMented:STATe?",
+        "ACQuire:SEGMented:MAXimum?",
+        "ACQuire:COUNt?",
+        "ACQuire:AVAilable?",
+    ]
+
+
+def test_acquisition_status_skips_k15_queries_when_option_is_absent():
+    transport = FakeTransport(
+        responses={
+            "*OPT?": "B1",
+            "ACQuire:AVERage:COUNt?": "8",
+            "ACQuire:AVERage:COMPlete?": "0",
+        }
+    )
+
+    status = RTM2032Scope(transport).get_acquisition_status()
+
+    assert status == ScopeAcquisitionStatus(8, False, False, None, None, None, None)
+    assert transport.writes == []
+    assert transport.queries == [
+        "*OPT?",
+        "ACQuire:AVERage:COUNt?",
+        "ACQuire:AVERage:COMPlete?",
+    ]
+
+
+def test_history_timestamps_requires_k15_before_querying_tables():
+    transport = FakeTransport(responses={"*OPT?": "B1"})
+
+    with pytest.raises(InstrumentError, match="option K15"):
+        RTM2032Scope(transport).get_history_timestamps(1)
+
+    assert transport.writes == []
+    assert transport.queries == ["*OPT?"]
+
+
+def test_history_timestamps_strictly_zips_oldest_to_newest_tables():
+    transport = FakeTransport(
+        responses={
+            "*OPT?": "B1,k15",
+            "CHANnel2:HISTORY:TSRelative:ALL?": "-0.25,-0.0",
+            "CHANnel2:HISTORY:TSABsolute:ALL?": "10,30,1.25,10,30,1.5",
+            "CHANnel2:HISTORY:TSDate:ALL?": "2026,7,26,2026,7,26",
+        }
+    )
+
+    table = RTM2032Scope(transport).get_history_timestamps(2)
+
+    assert table == ScopeHistoryTimestamps(
+        channel=2,
+        entries=(
+            ScopeHistoryTimestamp(1, -0.25, 2026, 7, 26, 10, 30, 1.25),
+            ScopeHistoryTimestamp(2, -0.0, 2026, 7, 26, 10, 30, 1.5),
+        ),
+    )
+    assert transport.writes == []
+    assert transport.queries == [
+        "*OPT?",
+        "CHANnel2:HISTORY:TSRelative:ALL?",
+        "CHANnel2:HISTORY:TSABsolute:ALL?",
+        "CHANnel2:HISTORY:TSDate:ALL?",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        ("CHANnel1:HISTORY:TSRelative:ALL?", "-0.1,-0.2,0", "out-of-order"),
+        ("CHANnel1:HISTORY:TSRelative:ALL?", "-0.1,-0.01", "near zero"),
+        ("CHANnel1:HISTORY:TSRelative:ALL?", "-0.1,nan", "non-finite"),
+        ("CHANnel1:HISTORY:TSABsolute:ALL?", "24,0,0,10,0,0", "out-of-range"),
+        ("CHANnel1:HISTORY:TSDate:ALL?", "2026,2,30,2026,3,1", "out-of-range"),
+    ],
+)
+def test_history_timestamps_rejects_malformed_tables(command, response, message):
+    responses = {
+        "*OPT?": "K15",
+        "CHANnel1:HISTORY:TSRelative:ALL?": "-0.1,0",
+        "CHANnel1:HISTORY:TSABsolute:ALL?": "10,0,0,10,0,1",
+        "CHANnel1:HISTORY:TSDate:ALL?": "2026,7,26,2026,7,26",
+    }
+    responses[command] = response
+
+    with pytest.raises(DataError, match=message):
+        RTM2032Scope(FakeTransport(responses=responses)).get_history_timestamps(1)
+
+
+def test_history_timestamps_rejects_table_length_mismatch():
+    transport = FakeTransport(
+        responses={
+            "*OPT?": "K15",
+            "CHANnel1:HISTORY:TSRelative:ALL?": "-0.1,0",
+            "CHANnel1:HISTORY:TSABsolute:ALL?": "10,0,1",
+            "CHANnel1:HISTORY:TSDate:ALL?": "2026,7,26,2026,7,26",
+        }
+    )
+
+    with pytest.raises(DataError, match="inconsistent segment counts"):
+        RTM2032Scope(transport).get_history_timestamps(1)
+
+
+def test_history_timestamps_rejects_calendar_order_mismatch():
+    transport = FakeTransport(
+        responses={
+            "*OPT?": "K15",
+            "CHANnel1:HISTORY:TSRelative:ALL?": "-0.1,0",
+            "CHANnel1:HISTORY:TSABsolute:ALL?": "10,0,1,10,0,0",
+            "CHANnel1:HISTORY:TSDate:ALL?": "2026,7,26,2026,7,26",
+        }
+    )
+
+    with pytest.raises(DataError, match="not oldest-to-newest"):
+        RTM2032Scope(transport).get_history_timestamps(1)
 
 
 def test_vendor_snapshot_names_are_core_compatible_aliases():
