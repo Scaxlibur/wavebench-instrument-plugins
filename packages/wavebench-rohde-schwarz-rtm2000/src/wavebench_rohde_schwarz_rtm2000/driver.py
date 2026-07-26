@@ -16,7 +16,10 @@ from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import (
     ScopeAcquisitionStatus,
     ScopeAnalogChannelSnapshot,
+    ScopeCursorReadout,
+    ScopeDerivedWaveformMetadata,
     ScopeEdgeTriggerSnapshot,
+    ScopeFftStatus,
     ScopeHealthSnapshot,
     ScopeHistoryTimestamp,
     ScopeHistoryTimestamps,
@@ -206,6 +209,87 @@ def _parse_optional_measurement_float(response: str, *, command: str) -> float |
     if value == "NAN":
         return None
     return _parse_finite_float(response, command=command)
+
+
+_CURSOR_RESULT_FUNCTIONS = frozenset(
+    {
+        "PPCOUNT",
+        "NPCOUNT",
+        "RECOUNT",
+        "FECOUNT",
+        "MEAN",
+        "RMS",
+        "RTIME",
+        "FTIME",
+        "PEAK",
+        "UPEAKVALUE",
+        "LPEAKVALUE",
+        "BWIDTH",
+    }
+)
+
+
+def _metadata_from_prefix(
+    transport: InstrumentTransport,
+    *,
+    prefix: str,
+    source_kind: str,
+    index: int,
+    source_catalog: str | None,
+) -> ScopeDerivedWaveformMetadata:
+    header, values_per_sample = _parse_waveform_header_response(
+        transport.query(f"{prefix}:HEADer?")
+    )
+    points = _parse_decimal_integer(
+        transport.query(f"{prefix}:POINts?"),
+        command=f"{prefix}:POINts?",
+        minimum=1,
+    )
+    if points != header.points:
+        raise DataError(
+            f"{source_kind} waveform metadata point count mismatch: "
+            f"header says {header.points}, POINTs? returned {points}"
+        )
+    x_increment = _parse_positive_float(
+        transport.query(f"{prefix}:XINCrement?"),
+        command=f"{prefix}:XINCrement?",
+    )
+    x_origin = _parse_finite_float(
+        transport.query(f"{prefix}:XORigin?"),
+        command=f"{prefix}:XORigin?",
+    )
+    tolerance = max(x_increment * 1e-6, 1e-15)
+    if not math.isclose(x_origin, header.x_start, abs_tol=tolerance) or not math.isclose(
+        x_origin + (points - 1) * x_increment,
+        header.x_stop,
+        abs_tol=tolerance,
+    ):
+        raise DataError(f"{source_kind} waveform metadata x-axis mismatch")
+    return ScopeDerivedWaveformMetadata(
+        source_kind=source_kind,
+        index=index,
+        source_catalog=source_catalog,
+        x_start=header.x_start,
+        x_stop=header.x_stop,
+        points=points,
+        values_per_sample=values_per_sample,
+        x_increment=x_increment,
+        x_origin=x_origin,
+        y_increment=_parse_positive_float(
+            transport.query(f"{prefix}:YINCrement?"),
+            command=f"{prefix}:YINCrement?",
+        ),
+        y_origin=_parse_finite_float(
+            transport.query(f"{prefix}:YORigin?"),
+            command=f"{prefix}:YORigin?",
+        ),
+        y_resolution_bits=_parse_decimal_integer(
+            transport.query(f"{prefix}:YRESolution?"),
+            command=f"{prefix}:YRESolution?",
+            minimum=1,
+            maximum=64,
+        ),
+    )
 
 
 def _parse_token(
@@ -513,6 +597,156 @@ class RTM2032Scope:
                 maximum=values["maximum"],
                 waveform_count=waveform_count,
                 buffered_values=buffered_values,
+            )
+
+    @_serialized_io
+    def get_math_waveform_metadata(self, math_index: int) -> ScopeDerivedWaveformMetadata:
+        if math_index not in {1, 2, 3, 4}:
+            raise ValueError("RTM2000 math waveform index must be 1, 2, 3, or 4")
+        with self._io_lock:
+            return _metadata_from_prefix(
+                self.transport,
+                prefix=f"CALCulate:MATH{math_index}:DATA",
+                source_kind="math",
+                index=math_index,
+                source_catalog=None,
+            )
+
+    @_serialized_io
+    def get_fft_status(
+        self,
+        math_index: int,
+        *,
+        configured_fft: bool,
+    ) -> ScopeFftStatus:
+        if math_index not in {1, 2, 3, 4}:
+            raise ValueError("RTM2000 FFT math waveform index must be 1, 2, 3, or 4")
+        if not configured_fft:
+            raise ValueError(
+                "reading RTM2000 FFT status requires explicit confirmation that the math "
+                "waveform is already configured as FFT"
+            )
+        prefix = f"CALCulate:MATH{math_index}:FFT"
+        with self._io_lock:
+            return ScopeFftStatus(
+                math_index=math_index,
+                average_complete=_parse_bool(
+                    self.transport.query(f"{prefix}:AVERAGE:COMPLETE?"),
+                    command=f"{prefix}:AVERAGE:COMPLETE?",
+                ),
+                resolution_bandwidth_hz=_parse_positive_float(
+                    self.transport.query(f"{prefix}:BANDwidth:RESolution:ADJusted?"),
+                    command=f"{prefix}:BANDwidth:RESolution:ADJusted?",
+                ),
+                sample_rate_hz=_parse_positive_float(
+                    self.transport.query(f"{prefix}:SRATe?"),
+                    command=f"{prefix}:SRATe?",
+                ),
+            )
+
+    @_serialized_io
+    def get_reference_waveform_metadata(
+        self,
+        reference_index: int,
+    ) -> ScopeDerivedWaveformMetadata:
+        if reference_index not in {1, 2, 3, 4}:
+            raise ValueError("RTM2000 reference waveform index must be 1, 2, 3, or 4")
+        prefix = f"REFCurve{reference_index}"
+        with self._io_lock:
+            source_catalog = _parse_token(
+                self.transport.query(f"{prefix}:SOURce:CATalog?"),
+                command=f"{prefix}:SOURce:CATalog?",
+            )
+            return _metadata_from_prefix(
+                self.transport,
+                prefix=f"{prefix}:DATA",
+                source_kind="reference",
+                index=reference_index,
+                source_catalog=source_catalog,
+            )
+
+    @_serialized_io
+    def get_cursor_readout(
+        self,
+        cursor_index: int,
+        *,
+        configured_cursor: bool,
+    ) -> ScopeCursorReadout:
+        if cursor_index != 1:
+            raise ValueError("RTM2000 cursor index must be 1")
+        if not configured_cursor:
+            raise ValueError(
+                "reading an RTM2000 cursor requires explicit confirmation that it is "
+                "already configured"
+            )
+        prefix = f"CURSor{cursor_index}"
+        with self._io_lock:
+            source = _parse_token(
+                self.transport.query(f"{prefix}:SOURce?"),
+                command=f"{prefix}:SOURce?",
+            )
+            function = _parse_token(
+                self.transport.query(f"{prefix}:FUNCTION?"),
+                command=f"{prefix}:FUNCTION?",
+            )
+            fields: dict[str, float | None] = {
+                "result": None,
+                "x_delta_s": None,
+                "inverse_x_delta_hz": None,
+                "y_delta": None,
+                "inverse_y_delta": None,
+                "x_ratio": None,
+                "y_ratio": None,
+            }
+            if function in _CURSOR_RESULT_FUNCTIONS:
+                command = f"{prefix}:RESult?"
+                fields["result"] = _parse_optional_measurement_float(
+                    self.transport.query(command), command=command
+                )
+            elif function == "VERTICAL":
+                x_command = f"{prefix}:XDELta:VALue?"
+                inverse_command = f"{prefix}:XDELta:INVerse?"
+                fields["x_delta_s"] = _parse_finite_float(
+                    self.transport.query(x_command), command=x_command
+                )
+                fields["inverse_x_delta_hz"] = _parse_finite_float(
+                    self.transport.query(inverse_command), command=inverse_command
+                )
+            elif function == "HORIZONTAL":
+                y_command = f"{prefix}:YDELta:VALue?"
+                inverse_command = f"{prefix}:YDELta:SLOPe?"
+                fields["y_delta"] = _parse_finite_float(
+                    self.transport.query(y_command), command=y_command
+                )
+                fields["inverse_y_delta"] = _parse_finite_float(
+                    self.transport.query(inverse_command), command=inverse_command
+                )
+            elif function == "PAIRED":
+                x_command = f"{prefix}:XDELta:VALue?"
+                y_command = f"{prefix}:YDELta:VALue?"
+                fields["x_delta_s"] = _parse_finite_float(
+                    self.transport.query(x_command), command=x_command
+                )
+                fields["y_delta"] = _parse_finite_float(
+                    self.transport.query(y_command), command=y_command
+                )
+            elif function == "VRATIO":
+                command = f"{prefix}:XRATio:VALue?"
+                fields["x_ratio"] = _parse_finite_float(
+                    self.transport.query(command), command=command
+                )
+            elif function == "HRATIO":
+                command = f"{prefix}:YRATio:VALue?"
+                fields["y_ratio"] = _parse_finite_float(
+                    self.transport.query(command), command=command
+                )
+            else:
+                raise DataError(f"unsupported RTM2000 cursor function {function!r}")
+            return ScopeCursorReadout(
+                cursor_index=cursor_index,
+                source=source,
+                function=function,
+                **fields,
             )
 
     @_serialized_io

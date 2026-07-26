@@ -8,12 +8,12 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `0.8.3`
-- WaveBench：`>=0.8.3,<0.9`
+- 开发基线：WaveBench `0.8.4`
+- WaveBench：`>=0.8.4,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件的 0.8.0 开发线对齐 WaveBench `v0.8.3`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.9.0 开发线对齐 WaveBench `v0.8.4`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -27,6 +27,7 @@
 - 只读 average/segmented acquisition 状态，K15 专属查询受选件门控；
 - RTM2032 CH1/CH2 的只读 K15 history 时间戳表；
 - 显式确认已配置槽位后的自动测量只读统计；
+- 现有 math、FFT、reference、cursor 状态的只读 metadata/readout；
 - RTM2032 CH2 edge trigger 的厂商专用最小受控配置闭环；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
@@ -139,6 +140,10 @@ timeout、回读不符、健康异常或身份变化都会永久锁存该实例�
 buffer 时还必须显式确认 acquisition 已停止。实现不配置、启用或复位测量槽，也不读取或清空
 错误队列。`NAN` 结果表示 unavailable；timeout 后结果状态为未知且不重试。已配置槽位的实机
 验收仍待进行。
+
+0.9.0 新增只读分析状态面。math/reference 只读 metadata，不下载波形本体，也不修改全局传输
+格式；FFT/cursor 必须由调用方显式确认已经在前面板配置。实现不定义 FFT expression、不移动
+cursor、不 update/save/load reference、不启动采集，也不消费错误队列。实机验收仍待进行。
 
 ## 开发验证
 

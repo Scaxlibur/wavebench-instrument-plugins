@@ -9,12 +9,12 @@ RTM2032 as the current hardware baseline.
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
-- development baseline: WaveBench `0.8.3`
-- WaveBench: `>=0.8.3,<0.9`
+- development baseline: WaveBench `0.8.4`
+- WaveBench: `>=0.8.4,<0.9`
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-The plugin's 0.8.0 development line targets WaveBench `v0.8.3`, does not maintain a legacy-core
+The plugin's 0.9.0 development line targets WaveBench `v0.8.4`, does not maintain a legacy-core
 compatibility matrix, and does not automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
@@ -29,6 +29,7 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 - read-only average/segmented acquisition state, with K15-only queries option-gated;
 - read-only K15 history timestamp tables for RTM2032 CH1/CH2;
 - read-only statistics for an explicitly preconfigured automatic-measurement slot;
+- read-only metadata/status for existing math, FFT, reference, and cursor state;
 - a vendor-specific minimal controlled RTM2032 CH2 edge-trigger configuration loop;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
@@ -164,6 +165,12 @@ acquisition is stopped. The implementation never configures, enables, or resets 
 queries or clears the error queue. `NAN` actual/statistical values are represented as unavailable;
 timeouts leave the operation outcome unknown and are not retried. Configured-slot hardware acceptance
 remains pending.
+
+Version 0.9.0 adds query-only analysis surfaces. Math and reference commands return metadata only;
+they do not read waveform payloads or alter the global transfer format. FFT and cursor status require
+explicit confirmation that the corresponding front-panel object is already configured. The plugin
+does not define an FFT expression, move cursors, update/save/load references, start acquisition, or
+consume the error queue. Hardware acceptance remains pending.
 
 ## Development checks
 

@@ -16,6 +16,9 @@ from wavebench.instruments.models import (
     ScopeHistoryTimestamp,
     ScopeHistoryTimestamps,
     ScopeMeasurementStatistics,
+    ScopeCursorReadout,
+    ScopeDerivedWaveformMetadata,
+    ScopeFftStatus,
     ScopeIdentitySnapshot,
     ScopeProbeSnapshot,
     ScopeSnapshot,
@@ -510,6 +513,116 @@ def test_measurement_statistics_rejects_invalid_values(command, response, messag
             include_buffer=command.endswith("ALL?"),
             acquisition_stopped=command.endswith("ALL?"),
         )
+
+
+def _derived_metadata_responses(prefix):
+    return {
+        f"{prefix}:HEADer?": "-1,1,3,1",
+        f"{prefix}:POINts?": "3",
+        f"{prefix}:XINCrement?": "1",
+        f"{prefix}:XORigin?": "-1",
+        f"{prefix}:YINCrement?": "0.5",
+        f"{prefix}:YORigin?": "0",
+        f"{prefix}:YRESolution?": "32",
+    }
+
+
+def test_math_waveform_metadata_is_query_only_and_does_not_read_data():
+    prefix = "CALCulate:MATH2:DATA"
+    transport = FakeTransport(responses=_derived_metadata_responses(prefix))
+
+    metadata = RTM2032Scope(transport).get_math_waveform_metadata(2)
+
+    assert metadata == ScopeDerivedWaveformMetadata(
+        "math", 2, None, -1.0, 1.0, 3, 1, 1.0, -1.0, 0.5, 0.0, 32
+    )
+    assert transport.writes == []
+    assert f"{prefix}?" not in transport.queries
+
+
+def test_reference_waveform_metadata_queries_catalog_and_is_query_only():
+    prefix = "REFCurve3:DATA"
+    responses = _derived_metadata_responses(prefix)
+    responses["REFCurve3:SOURce:CATalog?"] = "CH1"
+    transport = FakeTransport(responses=responses)
+
+    metadata = RTM2032Scope(transport).get_reference_waveform_metadata(3)
+
+    assert metadata == ScopeDerivedWaveformMetadata(
+        "reference", 3, "CH1", -1.0, 1.0, 3, 1, 1.0, -1.0, 0.5, 0.0, 32
+    )
+    assert transport.writes == []
+    assert not any("UPDATE" in query or "SAVE" in query or "LOAD" in query for query in transport.queries)
+
+
+def test_fft_status_requires_configured_confirmation_before_io():
+    transport = FakeTransport()
+
+    with pytest.raises(ValueError, match="configured as FFT"):
+        RTM2032Scope(transport).get_fft_status(1, configured_fft=False)
+
+    assert transport.queries == []
+
+
+def test_fft_status_is_narrow_and_query_only():
+    transport = FakeTransport(
+        responses={
+            "CALCulate:MATH1:FFT:AVERAGE:COMPLETE?": "1",
+            "CALCulate:MATH1:FFT:BANDwidth:RESolution:ADJusted?": "10",
+            "CALCulate:MATH1:FFT:SRATe?": "1000000",
+        }
+    )
+
+    status = RTM2032Scope(transport).get_fft_status(1, configured_fft=True)
+
+    assert status == ScopeFftStatus(1, True, 10.0, 1_000_000.0)
+    assert transport.writes == []
+
+
+def test_cursor_readout_requires_configured_confirmation_before_io():
+    transport = FakeTransport()
+
+    with pytest.raises(ValueError, match="already configured"):
+        RTM2032Scope(transport).get_cursor_readout(1, configured_cursor=False)
+
+    assert transport.queries == []
+
+
+@pytest.mark.parametrize(
+    ("function", "responses", "expected"),
+    [
+        ("RMS", {"CURSor1:RESult?": "1.25"}, ScopeCursorReadout(1, "CH1", "RMS", result=1.25)),
+        (
+            "VERTical",
+            {"CURSor1:XDELta:VALue?": "0.001", "CURSor1:XDELta:INVerse?": "1000"},
+            ScopeCursorReadout(1, "CH1", "VERTICAL", x_delta_s=0.001, inverse_x_delta_hz=1000.0),
+        ),
+        (
+            "HORIZontal",
+            {"CURSor1:YDELta:VALue?": "2", "CURSor1:YDELta:SLOPe?": "0.5"},
+            ScopeCursorReadout(1, "CH1", "HORIZONTAL", y_delta=2.0, inverse_y_delta=0.5),
+        ),
+        (
+            "PAIRed",
+            {"CURSor1:XDELta:VALue?": "0.001", "CURSor1:YDELta:VALue?": "2"},
+            ScopeCursorReadout(1, "CH1", "PAIRED", x_delta_s=0.001, y_delta=2.0),
+        ),
+        ("VRATio", {"CURSor1:XRATio:VALue?": "0.5"}, ScopeCursorReadout(1, "CH1", "VRATIO", x_ratio=0.5)),
+        ("HRATio", {"CURSor1:YRATio:VALue?": "0.25"}, ScopeCursorReadout(1, "CH1", "HRATIO", y_ratio=0.25)),
+    ],
+)
+def test_cursor_readout_queries_only_result_for_current_function(function, responses, expected):
+    responses = {
+        "CURSor1:SOURce?": "CH1",
+        "CURSor1:FUNCTION?": function,
+        **responses,
+    }
+    transport = FakeTransport(responses=responses)
+
+    assert RTM2032Scope(transport).get_cursor_readout(
+        1, configured_cursor=True
+    ) == expected
+    assert transport.writes == []
 
 
 def test_vendor_snapshot_names_are_core_compatible_aliases():
