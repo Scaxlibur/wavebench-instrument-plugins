@@ -192,8 +192,11 @@ Version 0.11.0 adds the read-only `scope.digital_status` surface. Every call fir
 exact B1 token from `*OPT?`, then reads the activity and existing display, technology, threshold,
 threshold-coupling, hysteresis, deskew, size, position, and label state for one explicit D0-D15
 channel. It does not read `DIGital:DATA?`, write digital configuration or transfer format, start or
-stop acquisition, or consume the error queue. The path has offline protocol tests but no independent
-real-instrument acceptance conclusion yet.
+stop acquisition, or consume the error queue. RTM2032 hardware acceptance covered all D0-D15
+channels in one session: 208 queries, zero writes, zero binary reads, correct four-group mapping,
+and stable repeated D0 results. End-to-end CLI reads also passed for D0 and D15. At acceptance time
+all digital channels were hidden, reported LOW activity, and used a 1.4 V threshold; those observed
+values do not constitute electrical-input or digital-waveform-payload acceptance.
 
 ## Development checks
 

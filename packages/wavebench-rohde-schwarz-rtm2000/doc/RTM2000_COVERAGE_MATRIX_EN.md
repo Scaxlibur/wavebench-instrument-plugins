@@ -8,7 +8,7 @@ This matrix compares the locally stored RTM2000 programming-manual command index
 
 The selected manual transcription has 1,490 lines containing 1,434 command-index entries and 1,417 exact unique command templates: 608 query-marked forms and 809 non-query forms. Further case-insensitive, whitespace-normalized parsing yields 1,416 templates (607 query-marked and 809 non-query); the final difference is one repeated/layout variant. These figures still include parameterized templates and a small number of OCR defects. They describe command-surface scale and are not a feature-completion denominator.
 
-The external plugin currently declares sixteen WaveBench capabilities. It is a hardware-accepted analog-waveform acquisition MVP with additional offline-tested, read-only status surfaces and one controlled average-acquisition transaction, not a general RTM2000 remote-control layer.
+The external plugin currently declares sixteen WaveBench capabilities. It is a hardware-accepted analog-waveform acquisition MVP with narrow read-only status and analysis surfaces plus one controlled average-acquisition transaction, not a general RTM2000 remote-control layer.
 
 Coverage labels:
 
@@ -35,7 +35,7 @@ Coverage labels:
 | Spectrum/spectrogram | 107 templates for spectrum waveforms, frequency axis, RBW, markers, history, and spectrogram | Not covered | None | Complete spectrum-analysis application absent | **P3, option gated** with a separate capability |
 | Search | About 119 templates for edge/width/runt/pattern, result lists, and protocol search | Not covered | None | No search plan, results, or navigation | **P3**, after history/trigger/protocol models mature |
 | Mask test | About 36 templates for mask data, counts, actions, save/load | Not covered | None | No mask lifecycle, violation model, or action safety policy | **P3**; separate read-only results from destructive actions |
-| Digital/MSO channels | About 33 templates for digital data, thresholds, technology, deskew, and history | Not covered | None | No digital waveform/logic-width/threshold model | **P3, option gated** |
+| Digital/MSO channels | About 33 templates for digital data, thresholds, technology, deskew, and history | B1-gated `scope.digital_status` for D0-D15 activity and existing scalar configuration | **Scalar status queries hardware accepted**: D0-D15, all four groups, repeated reads, and CLI D0/D15 passed with 208 queries, zero writes, and zero binary reads | No digital waveform payload, configuration writes, history, or bus decode; no electrical-input acceptance | Keep query-only; design packed waveform and electrical-input acceptance separately |
 | Serial/parallel bus decoding | About 249 templates for I²C, SPI/SSPI, UART, CAN, LIN, I²S, ARINC, MIL-STD, parallel buses, and frame results | Not covered | None | No bus setup, frame list, field parser, or history model | **P3, split by option**; do not fold into the basic scope capability |
 | Protocol trigger/search | Large protocol subsets under trigger and search | Not covered | None | Depends on bus sources, thresholds, protocol format, and options | **P3**, after read-only bus decode |
 | DVM and frequency counter | Six DVM and three counter templates | Not covered | None | No source/type/result/status API | **P2, option gated**, suitable for small read-only capabilities |
@@ -115,5 +115,5 @@ These domains must not be bypassed through a generic raw-SCPI entry point. They 
 
 - Manual side: a locally stored RTM2000 programming-manual command index used only for internal auditing and excluded from distributions.
 - Implementation side: current external `driver.py`/`descriptor.py`, the WaveBench bundled fallback, and ScopeService.
-- Hardware side: controlled RTM2032 evidence for `DEF/MAX/DMAX`, dual-channel single acquisition, autoscale, coupling, screenshot, repeat capture, restoration, configured-slot measurement statistics, math/FFT metadata, and vertical cursor readout. The latest session also records negative evidence for history timestamps and empty reference storage.
+- Hardware side: controlled RTM2032 evidence for `DEF/MAX/DMAX`, dual-channel single acquisition, autoscale, coupling, screenshot, repeat capture, restoration, configured-slot measurement statistics, math/FFT metadata, vertical cursor readout, and B1-gated D0-D15 digital scalar-status queries. The latest session also records negative evidence for history timestamps and empty reference storage.
 - Hardware labels require an explicit controlled probe and state-restoration check; code presence alone is never promoted to hardware acceptance.

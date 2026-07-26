@@ -162,7 +162,10 @@ point mode、时基、垂直档位、触发或 K15 history 状态。无论采集
 0.11.0 新增 `scope.digital_status` 只读状态面。每次调用先用 `*OPT?` 精确确认 B1，再读取
 D0–D15 中一个显式通道的 activity、display、technology、threshold、threshold coupling、
 hysteresis、deskew、size、position 和 label。该路径不读取 `DIGital:DATA?`，不写阈值/显示/
-传输格式，不启动或停止采集，也不消费错误队列；目前只有离线协议测试，尚未实机验收。
+传输格式，不启动或停止采集，也不消费错误队列。RTM2032 实机已完成 D0–D15 全通道验收：
+单会话共发出 208 条 query，write 与 binary read 均为 0，四组映射和 D0 重复读取一致性通过；
+CLI 的 D0/D15 端到端输出也通过。验收时全部数字通道均未显示、activity 为 LOW、阈值为
+1.4 V；这些值只记录当时仪器状态，不构成数字探头电气输入或数字波形 payload 验收。
 
 ## 开发验证
 

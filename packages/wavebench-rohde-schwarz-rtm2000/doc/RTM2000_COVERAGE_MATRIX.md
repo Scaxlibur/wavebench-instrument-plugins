@@ -35,7 +35,7 @@
 | Spectrum / spectrogram | 107 个模板：频谱波形、频率轴、RBW、marker、history、spectrogram | 未覆盖 | 无 | 完整频谱分析应用缺失 | **P3，选件门控**：先探测选件和 `SPECtrum[:STATe]`，再设计独立 capability |
 | Search | 约 119 个模板：edge/width/runt/pattern、结果和协议搜索 | 未覆盖 | 无 | 无搜索配置、结果列表或结果导航 | **P3**：依赖 history/trigger/protocol 模型成熟后再做 |
 | Mask test | 约 36 个模板：mask 数据、计数、动作、保存/加载 | 未覆盖 | 无 | 无 mask 生命周期、违规计数或 action 安全模型 | **P3，破坏性动作分离**：只读结果与保存/打印/脉冲动作必须分开 |
-| 数字通道 / MSO | 约 33 个模板：数字波形、阈值、技术类型、deskew、history | B1 门控的 `scope.digital_status`：D0–D15 activity 与既有配置只读快照 | **已实现，待实机验收** | 无数字波形 payload、配置写入、history 或总线解码 API | 保持 query-only；实机确认 B1 标量查询后，再独立设计 packed waveform contract |
+| 数字通道 / MSO | 约 33 个模板：数字波形、阈值、技术类型、deskew、history | B1 门控的 `scope.digital_status`：D0–D15 activity 与既有配置只读快照 | **标量状态查询实机通过**：D0–D15、四组映射、重复读取和 CLI D0/D15 均通过；208 query、0 write、0 binary read | 无数字波形 payload、配置写入、history 或总线解码 API；未做数字探头电气验收 | 保持 query-only；packed waveform contract 与电气输入验收另行设计 |
 | 串行/并行总线解码 | 约 249 个模板：I²C、SPI/SSPI、UART、CAN、LIN、I²S、ARINC、MIL-STD、并行总线及帧结果 | 未覆盖 | 无 | 无总线配置、帧列表、字段解析或 history | **P3，按选件拆包**；不要放进基础 scope capability |
 | 协议触发与协议搜索 | 触发和 search 内另有大量 CAN/LIN/I²C/SPI/UART/I²S/ARINC/MIL-STD 模板 | 未覆盖 | 无 | 依赖总线源、阈值、协议格式和选件探测 | **P3**：在总线只读解码之后实现 |
 | DVM 与频率计数器 | 6 个 DVM、3 个 counter 模板 | 未覆盖 | 无 | 无 source/type/result/status API | **P2，选件门控**：适合小型只读 capability |
@@ -115,5 +115,5 @@ HCOPy:LANGuage  HCOPy:COLor:SCHeme  HCOPy:MENU  HCOPy:DATA?
 
 - 手册侧：本地保存的 RTM2000 编程手册命令索引，仅用于内部审计，不进入发行包。
 - 实现侧：`driver.py` 和 `descriptor.py` 的当前外置插件实现，以及 WaveBench 内建 fallback 和 ScopeService。
-- 实机侧：RTM2032 `DEF/MAX/DMAX`、双通道单次采集、autoscale、coupling、截图、重复采集、恢复、已配置槽测量统计、math/FFT metadata 与 vertical cursor readout 的受控证据；本轮也保留 history timestamp timeout 与空 reference 存储的负向证据。
+- 实机侧：RTM2032 `DEF/MAX/DMAX`、双通道单次采集、autoscale、coupling、截图、重复采集、恢复、已配置槽测量统计、math/FFT metadata、vertical cursor readout，以及 B1 门控的 D0–D15 数字通道标量状态查询受控证据；本轮也保留 history timestamp timeout 与空 reference 存储的负向证据。
 - 只有明确的受控探测与状态恢复检查才能标为实机通过；不会仅因代码存在而升级状态。
