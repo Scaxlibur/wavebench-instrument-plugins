@@ -41,7 +41,7 @@ ranges, 10 MOhm input, AUTO trigger, and calculation disabled.
 
 ### Accepted queries
 
-Only the plugin's seven existing capabilities are formal APIs. Other commands below were controlled
+Only the plugin's ten existing capabilities are formal APIs. Other commands below were controlled
 diagnostic probes used to decide which milestones are feasible.
 
 | Domain | Accepted command surface | Note |
@@ -143,13 +143,20 @@ code `3` while at `10G` was rejected before the first configuration write and le
 Final state was verified as DCV, range code `0`, and `10M`. This proves protocol, constraint, and
 restoration behavior only, not range or input-impedance accuracy.
 
-### M4: query-only trigger and existing statistics — implementable
+### M4: query-only trigger and existing statistics — implemented; status queries hardware-accepted
 
 - `dmm.trigger_status` can cover the eight accepted trigger queries.
 - `dmm.calculation_status` can cover current mode, count, and dB/dBm references.
 - `dmm.calculation_statistics` may read min/max/average only when the caller confirms that the
   matching calculation is already active; it must not enable, clear, or trigger implicitly.
 - Controlled setters require a separate review; the AUTO interval setter is disabled.
+
+Version 0.4.0 completed zero-write status-query acceptance on the current DM3058. `trigger_status`
+returned AUTO, 400 ms, OFF, 1, 1, RISE, POS, and 7 ms; `calculation_status` returned NONE, count
+0, dB reference 0, and dBm reference 600 ohm. No matching calculation was active, so
+`calculation_statistics` was intentionally not called. Its explicit-confirmation and current-mode
+recheck gates are covered by exact FakeTransport tests; it never enables, clears, or triggers a
+calculation.
 
 ### M5: system and interface query-only status — conditionally implementable
 

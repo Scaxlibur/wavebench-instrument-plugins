@@ -30,11 +30,12 @@ and apparent copy errors, including an RS-232 parity section that repeats the ba
 matrix therefore reports auditable functional domains and public capabilities rather than a
 misleading completion percentage based on heading counts.
 
-The current external plugin is version `0.3.0` and declares seven capabilities: `dmm.idn`,
+The current external plugin is version `0.4.0` and declares ten capabilities: `dmm.idn`,
 `dmm.read`, `dmm.function_status`, `dmm.set_function`, query-only
-`dmm.measurement_profile`, `dmm.set_voltage_range`, and `dmm.set_dcv_impedance`. It is a narrow TCPIP/PyVISA LAN driver
+`dmm.measurement_profile`, `dmm.trigger_status`, `dmm.calculation_status`,
+`dmm.calculation_statistics`, `dmm.set_voltage_range`, and `dmm.set_dcv_impedance`. It is a narrow TCPIP/PyVISA LAN driver
 for a configured resource, not a general DM3000 SCPI shell. It exposes no error-queue, reset,
-trigger, datalog, scan, or interface-configuration path. The short aliases `dm3000` and
+trigger/calculation-control write, datalog, scan, or interface-configuration path. The short aliases `dm3000` and
 `dm3058` remain bound to the bundled fallback; its serial support is not transport coverage of
 this external package.
 
@@ -67,8 +68,8 @@ Coverage labels:
 | Beeper, language, clock, display, formatting | `:SYSTem:BEEPer*`, `LANGuage`, `CLOCk:*`, `DISPlay:*`, `FORMat:*` | Not public | **API not covered:** beeper/language/format/brightness queries passed; beeper and brightness restorative writes passed; clock and contrast queries did not respond | Decimal/separator changes may break parsing; global front-panel writes do not belong in normal measurement APIs | M5 may expose query-only status; keep format/language/clock writes denied |
 | Power-on and system defaults | `:SYSTem:CONFigure:POWeron`, `:SYSTem:CONFigure:DEFault` | Not public | **Denied by default** | Changes persistent or instrument-wide state | Maintenance workflows only |
 | LAN/GPIB/RS-232 configuration | `:UTILity:INTerface:LAN:*`, `GPIB:ADDRess`, `RS232:BAUD/PARity` | Not public | **Writes denied; query probes partly accepted:** LAN DHCP/IP/mask/gateway/DNS, GPIB address, and RS-232 baud/parity were readable; hostname/domain did not respond | Interface writes can sever the active session; the manual parity section repeats baud commands. This package accepts TCPIP/PyVISA only | M5 may expose redacted query-only status; never write connection settings in normal measurement flows |
-| Trigger system | `:TRIGger:SOURce`, auto interval/hold, single count/triggered, external, VMC polarity/pulse width | Not public | **API not covered; query probes accepted:** eight status fields parsed; distinct hold/sensitivity/single/ext/VMC pulse-width writes and restores passed. AUTO interval setter was ignored and failed acceptance | Changes timing or drives VMC; no trigger action or source change was performed | **M4:** query-only profile first; review setters individually and disable AUTO interval setter |
-| Math and statistics | `:CALCulate:FUNCtion`, min/max/average/count | Not public | **API not covered; controlled probes accepted:** AVERAGE/MIN/MAX/TOTAL, corresponding finite query, and restoration to NONE passed | A probe does not imply a public setter; statistics depend on the active mode and series | **M4:** read existing status/statistics without implicitly enabling, clearing, or triggering |
+| Trigger system | `:TRIGger:SOURce`, auto interval/hold, single count/triggered, external, VMC polarity/pulse width | Query-only `dmm.trigger_status`: source, auto interval/hold/sensitivity, single count, external slope, and VMC polarity/pulse width | **Implemented / external hardware status-query accepted:** eight fields parse; 0.4.0 sent queries only and returned AUTO, 400 ms, OFF, 1, 1, RISE, POS, and 7 ms | Changes timing or drives VMC; public API performs no trigger action or source change | Review setters individually; AUTO interval setter remains disabled |
+| Math and statistics | `:CALCulate:FUNCtion`, min/max/average/count | Query-only `dmm.calculation_status` (mode, count, dB/dBm references) and `dmm.calculation_statistics` (existing min/max/average) | **Implemented / exact offline coverage plus external hardware status-query accepted:** 0.4.0 accepts NONE, NULL, DB, DBM, AVERAGE, MIN, MAX, TOTAL, LIMIT offline; the current device status query reported NONE/count 0. Statistics have exact offline coverage | Statistics depend on active mode and series; API requires explicit caller confirmation and independently rechecks instrument mode | Never enable, clear, or trigger; do not read statistics without a matching active calculation |
 | NULL, dB, dBm, limit | `:CALCulate:NULL:OFFSet`, `DB[:REFerence]`, `DBM[:REFerence]`, `LIMit:*` | Not public | **Not covered** | Setters change the meaning of later readings; references and units depend on the active function | Expose only as an independent, snapshot-and-restore calculation profile |
 | Datalog status and configuration | `:DATAlog?`, `CONFigure:*`, `RUN`, `STOP` | Not public | **Writes denied; current DM3058 queries did not respond** | Status/configuration queries attempted in this run returned no complete response; start/stop/configuration also have significant state | **M7 blocked:** wait for a supported device and reliable status before designing bounded controlled capture |
 | Datalog binary retrieval | `:DATAlog:FETCHdata <packet>` | Not public | **Not covered / source uncertain** | Each packet contains 512 32-bit values; the manual calls for a vendor driver/DLL and configuration-dependent valid-count extraction; it is not an ordinary ASCII query | Do not implement until byte order, value format, and DLL-free decoding are established |
@@ -123,10 +124,27 @@ hardware acceptance for every command.
 :FUNCtion:CONTinuity
 :FUNCtion:DIODe
 :FUNCtion:CAPacitance
+
+:TRIGger:SOURce?
+:TRIGger:AUTO:INTerval?
+:TRIGger:AUTO:HOLD?
+:TRIGger:AUTO:HOLD:SENSitivity?
+:TRIGger:SINGle?
+:TRIGger:EXT?
+:TRIGger:VMComplete:POLar?
+:TRIGger:VMComplete:PULSewidth?
+
+:CALCulate:FUNCtion?
+:CALCulate:STATistic:COUNt?
+:CALCulate:STATistic:MIN?
+:CALCulate:STATistic:MAX?
+:CALCulate:STATistic:AVERage?
+:CALCulate:DB:REFerence?
+:CALCulate:DBM:REFerence?
 ```
 
-The implementation sends no `*RST`, `CMDSET`, resolution, trigger, calculate, datalog, scan,
-interface, or error-queue command and has no generic raw-SCPI path. A complete
+The implementation sends no `*RST`, `CMDSET`, resolution, trigger/calculation write, datalog,
+scan, interface, or error-queue command and has no generic raw-SCPI path. A complete
 `dmm.set_function` transaction is one function-selection write followed by one `:FUNCtion?`
 readback. A `dmm.read` operation is one measurement query only.
 

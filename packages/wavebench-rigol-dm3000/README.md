@@ -9,12 +9,12 @@ PyVISA 访问的 LAN/VXI-11 连接。
 
 - distribution：`wavebench-rigol-dm3000`
 - canonical driver ID：`rigol.dm3000`
-- WaveBench：`>=0.8.9,<0.9`
+- WaveBench：`>=0.8.10,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`（LAN-only）
 - VISA resource scheme：`TCPIP`；拒绝 `ASRL`、`USB` 和 `GPIB`
 
-当前包面向 WaveBench `v0.8.9` release，不自动声明兼容未来 `0.9`。
+当前包面向 WaveBench `v0.8.10` release，不自动声明兼容未来 `0.9`。
 
 本插件不声明 alias。安装后，显式 canonical ID `rigol.dm3000` 选择外置 LAN 实现；
 短 alias `dm3000` 和 `dm3058` 始终选择 WaveBench 内建 fallback，继续保留 serial 与
@@ -32,6 +32,9 @@ pyvisa 双 backend。卸载插件后，canonical ID 也回退到内建实现。
 - `dmm.function_status`：读取并规范化当前测量功能；
 - `dmm.set_function`：切换测量功能并回读确认；
 - `dmm.measurement_profile`：只读当前功能、离散量程码和 DCV 输入阻抗；
+- `dmm.trigger_status`：只读当前触发源、auto 相关设置、single count、外部触发和 VMC 设置；
+- `dmm.calculation_status`：只读当前 calculation 模式、统计 count 与 dB/dBm reference；
+- `dmm.calculation_statistics`：仅在调用者确认对应 calculation 已启用时读取已有 min/max/average；
 - `dmm.set_voltage_range`：仅为当前已激活的 DCV/ACV 设置 `0..4` 离散档位码并回读；
 - `dmm.set_dcv_impedance`：仅在 DCV 下设置 `10M`/`10G` 并回读，其中 `10G` 只允许档位码 `0..2`。
 
@@ -45,10 +48,16 @@ pyvisa 双 backend。卸载插件后，canonical ID 也回退到内建实现。
 锁停。CLI 入口为 `wavebench dmm range set dcv|acv 0..4` 和
 `wavebench dmm impedance set 10M|10G`。
 
+M4 查询不会切换 function、启用 calculation、清空统计或发出 trigger。统计 CLI 必须传入
+`--calculation-active-confirmed`，并且驱动会再次确认仪器当前 calculation 正是所请求的
+`average`、`min` 或 `max`。CLI 入口为 `wavebench dmm trigger status`、
+`wavebench dmm calculation status` 与 `wavebench dmm calculation statistics average|min|max
+--calculation-active-confirmed`。
+
 插件复用 WaveBench 公共 `DmmReading`、`DmmDriver` 和 `DmmService` 契约。Service 继续
 负责会话生命周期和读取前等待；插件只包含厂商 SCPI 协议与 descriptor。
 
-厂商编程手册各命令域、当前七项 capability、逐测量类型离线/实机证据和默认拒绝的
+厂商编程手册各命令域、当前十项 capability、逐测量类型离线/实机证据和默认拒绝的
 高风险操作见 [DM3000 功能覆盖矩阵](doc/DM3000_COVERAGE_MATRIX.md)。本地厂商手册保存在
 被忽略的 `doc/vendor-local/`，不进入发行包。
 
@@ -101,3 +110,6 @@ python -m wavebench plugin install packages/wavebench-rigol-dm3000 --dry-run
 
 0.3.0 增加功能门控、回读和失败恢复的 DCV/ACV 档位与 DCV 输入阻抗设置，并纠正
 `range_code=0` 被误标为自动量程的问题。
+
+0.4.0 增加只读触发状态、calculation 状态与已有 min/max/average 统计；不新增 trigger
+或 calculation 写入入口。

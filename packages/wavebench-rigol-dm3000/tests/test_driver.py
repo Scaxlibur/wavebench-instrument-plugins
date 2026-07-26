@@ -24,6 +24,25 @@ class FakeTransport:
         self.readings = {command: "1.250000E+00" for command in DMM_FUNCTION_COMMANDS.values()}
         self.readings.update({query: "0" for query in DMM_FUNCTION_RANGE_QUERIES.values()})
         self.readings[":MEASure:VOLTage:DC:IMPedance?"] = "10M"
+        self.readings.update(
+            {
+                ":TRIGger:SOURce?": "AUTO",
+                ":TRIGger:AUTO:INTerval?": "400ms",
+                ":TRIGger:AUTO:HOLD?": "OFF",
+                ":TRIGger:AUTO:HOLD:SENSitivity?": "1",
+                ":TRIGger:SINGle?": "1",
+                ":TRIGger:EXT?": "RISE",
+                ":TRIGger:VMComplete:POLar?": "POS",
+                ":TRIGger:VMComplete:PULSewidth?": "7ms",
+                ":CALCulate:FUNCtion?": "NONE",
+                ":CALCulate:STATistic:COUNt?": "0.00000000E+00",
+                ":CALCulate:DB:REFerence?": "0.00000000E+00",
+                ":CALCulate:DBM:REFerence?": "6.00000000E+02",
+                ":CALCulate:STATistic:AVERage?": "1.25000000E+00",
+                ":CALCulate:STATistic:MIN?": "1.00000000E+00",
+                ":CALCulate:STATistic:MAX?": "1.50000000E+00",
+            }
+        )
         self.closed = False
 
     def write(self, command: str) -> None:
@@ -65,11 +84,14 @@ def test_descriptor_is_canonical_lan_only_and_alias_free() -> None:
         "dmm.function_status",
         "dmm.set_function",
         "dmm.measurement_profile",
+        "dmm.trigger_status",
+        "dmm.calculation_status",
+        "dmm.calculation_statistics",
         "dmm.set_voltage_range",
         "dmm.set_dcv_impedance",
     )
-    assert item.wavebench_min_version == "0.8.9"
-    assert item.version == "0.3.0"
+    assert item.wavebench_min_version == "0.8.10"
+    assert item.version == "0.4.0"
     assert not any("baud" in field or "termination" in field for field in item.config_fields)
 
 
@@ -172,6 +194,108 @@ def test_measurement_profile_omits_unaccepted_range_query() -> None:
     assert profile.impedance is None
     assert transport.writes == []
     assert transport.queries == [":FUNCtion?"]
+
+
+def test_trigger_status_is_query_only_and_parses_units() -> None:
+    transport = FakeTransport()
+
+    status = DM3000Dmm(transport).trigger_status()
+
+    assert status.source == "AUTO"
+    assert status.auto_interval_s == 0.4
+    assert status.auto_hold is False
+    assert status.auto_hold_sensitivity == 1
+    assert status.single_count == 1
+    assert status.external_slope == "RISE"
+    assert status.vmc_polarity == "POS"
+    assert status.vmc_pulse_width_s == 0.007
+    assert transport.writes == []
+
+
+def test_trigger_status_rejects_unknown_time_units() -> None:
+    transport = FakeTransport()
+    transport.readings[":TRIGger:AUTO:INTerval?"] = "400ticks"
+
+    with pytest.raises(DataError, match="trigger auto interval"):
+        DM3000Dmm(transport).trigger_status()
+
+
+def test_trigger_status_rejects_out_of_contract_discrete_response() -> None:
+    transport = FakeTransport()
+    transport.readings[":TRIGger:SOURce?"] = "UNKNOWN"
+
+    with pytest.raises(DataError, match="unsupported DMM trigger source"):
+        DM3000Dmm(transport).trigger_status()
+
+
+def test_calculation_status_is_query_only_and_typed() -> None:
+    transport = FakeTransport()
+
+    status = DM3000Dmm(transport).calculation_status()
+
+    assert status.function == "none"
+    assert status.statistic_count == 0
+    assert status.db_reference == 0.0
+    assert status.dbm_reference_ohm == 600.0
+    assert transport.writes == []
+
+
+def test_calculation_status_rejects_nonfinite_response() -> None:
+    transport = FakeTransport()
+    transport.readings[":CALCulate:DB:REFerence?"] = "nan"
+
+    with pytest.raises(DataError, match="non-finite.*dB reference"):
+        DM3000Dmm(transport).calculation_status()
+
+
+@pytest.mark.parametrize(
+    "reported",
+    ["NONE", "NULL", "DB", "DBM", "AVERAGE", "MIN", "MAX", "TOTAL", "LIMIT"],
+)
+def test_calculation_status_accepts_all_documented_modes(reported: str) -> None:
+    transport = FakeTransport()
+    transport.readings[":CALCulate:FUNCtion?"] = reported
+
+    status = DM3000Dmm(transport).calculation_status()
+
+    assert status.function == reported.lower()
+    assert status.statistic_count == 0
+    assert status.db_reference == 0.0
+    assert status.dbm_reference_ohm == 600.0
+    assert transport.writes == []
+    assert transport.queries == [
+        ":CALCulate:FUNCtion?",
+        ":CALCulate:STATistic:COUNt?",
+        ":CALCulate:DB:REFerence?",
+        ":CALCulate:DBM:REFerence?",
+    ]
+
+
+def test_calculation_statistics_requires_matching_active_mode() -> None:
+    transport = FakeTransport()
+
+    with pytest.raises(InstrumentError, match="current function is none"):
+        DM3000Dmm(transport).calculation_statistics("average")
+
+    assert transport.writes == []
+    assert transport.queries == [":CALCulate:FUNCtion?"]
+
+
+def test_calculation_statistics_reads_existing_mode_without_writes() -> None:
+    transport = FakeTransport()
+    transport.readings[":CALCulate:FUNCtion?"] = "AVERAGE"
+
+    result = DM3000Dmm(transport).calculation_statistics("average")
+
+    assert result.function == "average"
+    assert result.value == 1.25
+    assert result.count == 0
+    assert transport.writes == []
+    assert transport.queries == [
+        ":CALCulate:FUNCtion?",
+        ":CALCulate:STATistic:AVERage?",
+        ":CALCulate:STATistic:COUNt?",
+    ]
 
 
 def test_set_voltage_range_is_function_gated_and_read_back() -> None:

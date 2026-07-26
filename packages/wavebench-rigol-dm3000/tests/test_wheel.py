@@ -52,7 +52,7 @@ def test_wheel_install_routes_canonical_and_uninstall_restores_builtin(tmp_path:
         ],
         cwd=tmp_path,
     )
-    wheel = next(wheelhouse.glob("wavebench_rigol_dm3000-0.3.0-*.whl"))
+    wheel = next(wheelhouse.glob("wavebench_rigol_dm3000-0.4.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"

@@ -135,13 +135,19 @@ API；其余命令是为里程碑筛选而执行的受控诊断探针。
 最终状态核验为 DCV、档位码 `0`、`10M`。该证据只证明协议、约束和恢复行为，不证明
 量程或输入阻抗准确度。
 
-### M4：只读触发与已有统计 — 可实施
+### M4：只读触发与已有统计 — 已实现；状态查询实机通过
 
 - `dmm.trigger_status` 可覆盖本轮已接受的八个触发查询。
 - `dmm.calculation_status` 可覆盖当前运算模式、count、dB/dBm reference。
 - `dmm.calculation_statistics` 只在调用者确认对应运算已启用时读取 min/max/average；不得
   隐式启用、清空或触发测量。
 - 受控 trigger/calculation setter 可后续单独评审；`AUTO:INTerval` setter 当前禁用。
+
+0.4.0 在当前 DM3058 上完成零写入状态查询验收：`trigger_status` 依次返回
+`AUTO`、400 ms、OFF、1、1、RISE、POS、7 ms；`calculation_status` 返回 NONE、count 0、
+dB reference 0、dBm reference 600 Ω。当前没有 matching active calculation，因此没有执行
+`calculation_statistics`；该路径仅由精确 FakeTransport 测试验证其“显式确认 + 当前模式复核”
+门槛，绝不启用、清空或触发 calculation。
 
 ### M5：系统与接口只读状态 — 有条件实施
 

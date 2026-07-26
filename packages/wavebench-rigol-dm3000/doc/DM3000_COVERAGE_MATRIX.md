@@ -25,12 +25,13 @@ sdist。手册封面列出 DM3061/2/3/4 与 DM3051/2/3/4，没有单独点名实
 命令名断裂和明显复制错误，例如 RS-232 parity 小节重复了 baud 命令。因此，本矩阵按
 可审计的功能域和公开 capability 报告状态，不用标题数量计算伪精确的完成百分比。
 
-当前外置插件版本为 `0.3.0`，声明七项 capability：`dmm.idn`、`dmm.read`、
+当前外置插件版本为 `0.4.0`，声明十项 capability：`dmm.idn`、`dmm.read`、
 `dmm.function_status`、`dmm.set_function`、只读 `dmm.measurement_profile`、
+`dmm.trigger_status`、`dmm.calculation_status`、`dmm.calculation_statistics`、
 `dmm.set_voltage_range` 和 `dmm.set_dcv_impedance`。它是经配置的
 TCPIP/PyVISA LAN 窄驱动，
-不是通用 DM3000 SCPI shell，也不公开 error-queue、reset、trigger、datalog、
-scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench 内建 fallback；
+不是通用 DM3000 SCPI shell，也不公开 error-queue、reset、trigger/calculation 控制写入、
+datalog、scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench 内建 fallback；
 其 serial 支持不能计作此外置包的 transport 覆盖。
 
 覆盖标签：
@@ -62,8 +63,8 @@ scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench �
 | 蜂鸣器、语言、时钟和显示 | `:SYSTem:BEEPer*`、`LANGuage`、`CLOCk:*`、`DISPlay:*`、`FORMat:*` | 未公开 | **未覆盖 API**；DM3058 蜂鸣器状态/语言/格式/亮度查询通过，蜂鸣器状态和亮度受控恢复通过；时钟和对比度查询无响应 | 改小数点/分隔符可能破坏解析；全局前面板写入仍不属于普通测量 API | M5 仅考虑只读、脱敏状态；格式/语言/时钟写入继续拒绝 |
 | 上电与系统默认 | `:SYSTem:CONFigure:POWeron`、`:SYSTem:CONFigure:DEFault` | 未公开 | **默认拒绝** | 会改变持久或整机状态 | 仅限人工维护流程 |
 | LAN/GPIB/RS-232 设置 | `:UTILity:INTerface:LAN:*`、`GPIB:ADDRess`、`RS232:BAUD/PARity` | 未公开 | **写入默认拒绝；查询探针部分通过**：LAN DHCP/IP/mask/gateway/DNS、GPIB address、RS-232 baud/parity 可读；hostname/domain 无响应 | 修改接口会断开会话；parity 小节在转录中错误重复 baud 命令。外置包本身仅允许 TCPIP/PyVISA | M5 可做脱敏 query-only 状态；网络和串口参数永不经普通测量工作流写入 |
-| 触发系统 | `:TRIGger:SOURce`、auto interval/hold、single count/triggered、external、VMC polarity/pulsewidth | 未公开 | **未覆盖 API；查询探针通过**：八项状态可解析；hold/sensitivity/single/ext/VMC pulsewidth 的不同值写入和恢复通过。`AUTO:INTerval` setter 被设备忽略，未通过 | 会改变采样时序或产生 VMC 输出；没有执行 trigger action 或改变 source | **M4**：先定义 query-only trigger profile；setter 逐项评审，禁用 auto interval setter |
-| 数学函数与统计 | `:CALCulate:FUNCtion`、min/max/average/count | 未公开 | **未覆盖 API；受控探针通过**：AVERAGE/MIN/MAX/TOTAL 模式、对应有限查询和恢复到 NONE 通过 | 统计 query 依赖已激活的运算和当前测量序列；一次探针不等于公开 setter | **M4**：先读已有状态/统计，不得隐式启用、清空或触发 |
+| 触发系统 | `:TRIGger:SOURce`、auto interval/hold、single count/triggered、external、VMC polarity/pulsewidth | 只读 `dmm.trigger_status`，覆盖 source、auto interval/hold/sensitivity、single count、external slope、VMC polarity/pulsewidth | **已实现 / 外置实机查询通过**：八项状态可解析；0.4.0 实机只发送 query，返回 AUTO、400 ms、OFF、1、1、RISE、POS、7 ms | 会改变采样时序或产生 VMC 输出；公开 API 不执行 trigger action 或改变 source | setter 逐项独立评审；`AUTO:INTerval` setter 继续禁用 |
+| 数学函数与统计 | `:CALCulate:FUNCtion`、min/max/average/count | 只读 `dmm.calculation_status`（模式、count、dB/dBm reference）与 `dmm.calculation_statistics`（已有 min/max/average） | **已实现 / 精确离线覆盖加外置实机状态查询通过**：0.4.0 离线识别 NONE、NULL、DB、DBM、AVERAGE、MIN、MAX、TOTAL、LIMIT；当前实机状态查询为 NONE/count 0。统计路径有精确离线测试 | 统计 query 依赖已激活的运算和当前测量序列；统计 API 要求显式 caller confirmation 且再次核对仪器当前模式 | 不得隐式启用、清空或触发；当前无匹配 active calculation 时不读取统计 |
 | NULL、dB、dBm 与 limit | `:CALCulate:NULL:OFFSet`、`DB[:REFerence]`、`DBM[:REFerence]`、`LIMit:*` | 未公开 | **未覆盖** | setter 改变后续读数语义；参考值和单位依赖当前测量功能 | 只作为独立、可快照与恢复的 calculation profile |
 | Datalog 配置与状态 | `:DATAlog?`、`CONFigure:*`、`RUN`、`STOP` | 未公开 | **默认拒绝写入；当前 DM3058 查询无响应** | 本轮状态和配置查询均未得到完整响应；启动/停止和配置还有明显状态副作用 | **M7 阻塞**：等待支持设备和可靠只读状态，再讨论有上限、超时、停止和恢复的采集 |
 | Datalog 二进制读取 | `:DATAlog:FETCHdata <packet>` | 未公开 | **未覆盖 / 资料不确定** | 每包 512 个 32-bit 数据，手册要求厂商驱动/DLL 转换且需结合配置判断有效点数；不是普通 ASCII query | 在确认端序、数据格式和无 DLL 解码方法前不实现 |
@@ -117,10 +118,27 @@ scan 或接口配置入口。短 alias `dm3000` / `dm3058` 仍指向 WaveBench �
 :FUNCtion:CONTinuity
 :FUNCtion:DIODe
 :FUNCtion:CAPacitance
+
+:TRIGger:SOURce?
+:TRIGger:AUTO:INTerval?
+:TRIGger:AUTO:HOLD?
+:TRIGger:AUTO:HOLD:SENSitivity?
+:TRIGger:SINGle?
+:TRIGger:EXT?
+:TRIGger:VMComplete:POLar?
+:TRIGger:VMComplete:PULSewidth?
+
+:CALCulate:FUNCtion?
+:CALCulate:STATistic:COUNt?
+:CALCulate:STATistic:MIN?
+:CALCulate:STATistic:MAX?
+:CALCulate:STATistic:AVERage?
+:CALCulate:DB:REFerence?
+:CALCulate:DBM:REFerence?
 ```
 
-实现不会发送 `*RST`、`CMDSET`、resolution、trigger、calculate、datalog、scan、interface
-或 error-queue 命令，也没有通用 raw-SCPI 入口。`dmm.set_function` 的完整事务
+实现不会发送 `*RST`、`CMDSET`、resolution、trigger/calculation 写入、datalog、scan、
+interface 或 error-queue 命令，也没有通用 raw-SCPI 入口。`dmm.set_function` 的完整事务
 是“一条功能选择写入 + 一条 `:FUNCtion?` 回读”；`dmm.read` 则只有一条测量 query。
 
 ## 逐测量类型证据
