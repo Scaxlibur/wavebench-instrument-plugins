@@ -21,6 +21,7 @@ from wavebench.instruments.models import (
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
     ScopeDigitalChannelStatus,
+    ScopeDigitalWaveformRequest,
     ScopeFftStatus,
     ScopeIdentitySnapshot,
     ScopeProbeSnapshot,
@@ -381,6 +382,158 @@ def test_digital_status_normalizes_documented_abbreviations():
     assert status.hysteresis == "MAXIMUM"
     assert status.size == "MEDIUM"
     assert (status.group_start_channel, status.group_stop_channel) == (12, 15)
+
+
+def _digital_waveform_responses(channel, *, start=-2e-6, stop=1e-6, points=4):
+    prefix = f"DIGital{channel}:DATA"
+    return {
+        f"{prefix}:POINts?": str(points),
+        f"{prefix}:HEADer?": f"{start},{stop},{points},1",
+        f"{prefix}:XORigin?": str(start),
+        f"{prefix}:XINCrement?": "1e-6",
+    }
+
+
+def test_digital_waveform_is_b1_gated_query_only_and_packed_by_channel_number():
+    responses = {"*OPT?": "B1,K15", "FORMat?": "ASC,0"}
+    responses.update(_digital_waveform_responses(0))
+    responses.update(_digital_waveform_responses(3))
+    responses.update(_digital_waveform_responses(15))
+    transport = FakeTransport(
+        responses=responses,
+        float_lists={
+            "DIGital0:DATA?": [0, 1, 1, 0],
+            "DIGital3:DATA?": [1, 0, 1, 0],
+            "DIGital15:DATA?": [0, 0, 1, 1],
+        },
+    )
+
+    waveform = RTM2032Scope(transport).get_digital_waveform(
+        ScopeDigitalWaveformRequest((0, 3, 15), True)
+    )
+
+    assert waveform.channels == (0, 3, 15)
+    assert waveform.samples.tolist() == [8, 1, 32777, 32768]
+    assert waveform.samples.dtype == np.uint16
+    assert waveform.x_start_s == -2e-6
+    assert waveform.x_stop_s == 1e-6
+    assert waveform.x_increment_s == 1e-6
+    assert transport.writes == []
+    assert transport.float_list_calls == [
+        ("DIGital0:DATA?", 300_000),
+        ("DIGital3:DATA?", 300_000),
+        ("DIGital15:DATA?", 300_000),
+    ]
+    assert all(
+        "SYST" not in command and "EVENT" not in command
+        for command in transport.queries
+    )
+
+
+def test_digital_waveform_refuses_to_change_non_ascii_format():
+    transport = FakeTransport(responses={"*OPT?": "B1", "FORMat?": "REAL,32"})
+
+    with pytest.raises(DataError, match="ASC,0 or CSV,0"):
+        RTM2032Scope(transport).get_digital_waveform(
+            ScopeDigitalWaveformRequest((0,), True)
+        )
+
+    assert transport.queries == ["*OPT?", "FORMat?"]
+    assert transport.writes == []
+
+
+def test_digital_waveform_accepts_rtm2032_csv_ascii_format_readback():
+    responses = {"*OPT?": "B1", "FORMat?": "CSV,0"}
+    responses.update(_digital_waveform_responses(0))
+    transport = FakeTransport(
+        responses=responses,
+        float_lists={"DIGital0:DATA?": [0, 1, 0, 1]},
+    )
+
+    waveform = RTM2032Scope(transport).get_digital_waveform(
+        ScopeDigitalWaveformRequest((0,), True)
+    )
+
+    assert waveform.samples.tolist() == [0, 1, 0, 1]
+    assert transport.writes == []
+
+
+def test_digital_waveform_requires_b1_before_data_queries():
+    transport = FakeTransport(responses={"*OPT?": "K15"})
+
+    with pytest.raises(InstrumentError, match="B1"):
+        RTM2032Scope(transport).get_digital_waveform(
+            ScopeDigitalWaveformRequest((0,), True)
+        )
+
+    assert transport.queries == ["*OPT?"]
+    assert transport.writes == []
+
+
+def test_digital_waveform_rejects_cross_channel_axis_mismatch():
+    responses = {"*OPT?": "B1", "FORMat?": "ASC,0"}
+    responses.update(_digital_waveform_responses(0))
+    responses.update(_digital_waveform_responses(1, start=-1e-6, stop=2e-6))
+    transport = FakeTransport(
+        responses=responses,
+        float_lists={"DIGital0:DATA?": [0, 1, 0, 1]},
+    )
+
+    with pytest.raises(DataError, match="does not match"):
+        RTM2032Scope(transport).get_digital_waveform(
+            ScopeDigitalWaveformRequest((0, 1), True)
+        )
+
+    assert "DIGital1:DATA?" not in transport.queries
+    assert transport.writes == []
+
+
+def test_digital_waveform_rejects_header_axis_length_mismatch():
+    responses = {"*OPT?": "B1", "FORMat?": "ASC,0"}
+    responses.update(_digital_waveform_responses(0, stop=5e-6))
+    transport = FakeTransport(responses=responses)
+
+    with pytest.raises(DataError, match="point count"):
+        RTM2032Scope(transport).get_digital_waveform(
+            ScopeDigitalWaveformRequest((0,), True)
+        )
+
+    assert "DIGital0:DATA?" not in transport.queries
+    assert transport.writes == []
+
+
+def test_digital_waveform_rejects_nonbinary_samples():
+    responses = {"*OPT?": "B1", "FORMat?": "ASC,0"}
+    responses.update(_digital_waveform_responses(0))
+    transport = FakeTransport(
+        responses=responses,
+        float_lists={"DIGital0:DATA?": [0, 1, 2, 0]},
+    )
+
+    with pytest.raises(DataError, match="0 or 1"):
+        RTM2032Scope(transport).get_digital_waveform(
+            ScopeDigitalWaveformRequest((0,), True)
+        )
+
+    assert transport.writes == []
+
+
+def test_digital_waveform_rejects_zero_points_as_data_error():
+    transport = FakeTransport(
+        responses={
+            "*OPT?": "B1",
+            "FORMat?": "ASC,0",
+            "DIGital0:DATA:POINts?": "0",
+        }
+    )
+
+    with pytest.raises(DataError, match="out-of-range"):
+        RTM2032Scope(transport).get_digital_waveform(
+            ScopeDigitalWaveformRequest((0,), True)
+        )
+
+    assert transport.writes == []
+    assert transport.float_list_calls == []
 
 
 def test_identity_and_health_snapshots_are_read_only_and_typed():

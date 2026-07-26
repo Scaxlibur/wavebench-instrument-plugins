@@ -42,7 +42,7 @@ def test_expected_state_tracks_core_and_plugin_metadata():
     assert state["schema_version"] == 1
     assert state["build_requirements"] == ["hatchling>=1.25"]
     assert state["wavebench"]["distribution"] == "wavebench"
-    assert state["wavebench"]["version"] == "0.8.6"
+    assert state["wavebench"]["version"] == "0.8.7"
     assert len(state["wavebench"]["pyproject_sha256"]) == 64
     assert len(state["plugins"]) == 6
     assert all(len(plugin["pyproject_sha256"]) == 64 for plugin in state["plugins"])

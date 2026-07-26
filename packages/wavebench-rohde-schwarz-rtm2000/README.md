@@ -8,12 +8,12 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `0.8.6`
-- WaveBench：`>=0.8.6,<0.9`
+- 开发基线：WaveBench `0.8.7`
+- WaveBench：`>=0.8.7,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件的 0.11.0 开发线对齐 WaveBench `v0.8.6`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.12.0 开发线对齐 WaveBench `v0.8.7`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -166,6 +166,15 @@ hysteresis、deskew、size、position 和 label。该路径不读取 `DIGital:DA
 单会话共发出 208 条 query，write 与 binary read 均为 0，四组映射和 D0 重复读取一致性通过；
 CLI 的 D0/D15 端到端输出也通过。验收时全部数字通道均未显示、activity 为 LOW、阈值为
 1.4 V；这些值只记录当时仪器状态，不构成数字探头电气输入或数字波形 payload 验收。
+
+0.12.0 新增 `scope.digital_waveform` 只读数字波形面。调用方必须显式确认采集已经停止；
+驱动先以 `*OPT?` 门控 B1，并要求仪器当前传输格式已经是 ASCII（手册记为 `ASC,0`；
+RTM2032 实机会回读 `CSV,0`）。随后逐通道查询
+`DIGital<n>:DATA:POINts?`、`HEADER?`、`XORigin?`、`XINCrement?` 与 `DATA?`，严格核对
+所有通道的采样数和 X 轴，再在主机侧按 Dn→`uint16` bit n 合并。该路径不发送写命令，
+不切换 STOP/RUN，不修改格式、点数、显示或阈值，也不读取错误队列。当前只有 FakeTransport
+离线验收。RTM2032 只读预检已确认 B1 和 `CSV,0` 门控可通过，但当时 D0 未显示且
+`DIGital0:DATA:POINts?` 返回 0，驱动在 `DATA?` 前拒绝继续；因此数字波形 payload 仍未验收。
 
 ## 开发验证
 

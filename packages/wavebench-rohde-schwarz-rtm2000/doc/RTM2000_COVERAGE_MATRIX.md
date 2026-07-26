@@ -35,7 +35,7 @@
 | Spectrum / spectrogram | 107 个模板：频谱波形、频率轴、RBW、marker、history、spectrogram | 未覆盖 | 无 | 完整频谱分析应用缺失 | **P3，选件门控**：先探测选件和 `SPECtrum[:STATe]`，再设计独立 capability |
 | Search | 约 119 个模板：edge/width/runt/pattern、结果和协议搜索 | 未覆盖 | 无 | 无搜索配置、结果列表或结果导航 | **P3**：依赖 history/trigger/protocol 模型成熟后再做 |
 | Mask test | 约 36 个模板：mask 数据、计数、动作、保存/加载 | 未覆盖 | 无 | 无 mask 生命周期、违规计数或 action 安全模型 | **P3，破坏性动作分离**：只读结果与保存/打印/脉冲动作必须分开 |
-| 数字通道 / MSO | 约 33 个模板：数字波形、阈值、技术类型、deskew、history | B1 门控的 `scope.digital_status`：D0–D15 activity 与既有配置只读快照 | **标量状态查询实机通过**：D0–D15、四组映射、重复读取和 CLI D0/D15 均通过；208 query、0 write、0 binary read | 无数字波形 payload、配置写入、history 或总线解码 API；未做数字探头电气验收 | 保持 query-only；packed waveform contract 与电气输入验收另行设计 |
+| 数字通道 / MSO | 约 33 个模板：数字波形、阈值、技术类型、deskew、history | B1 门控的 `scope.digital_status`；`scope.digital_waveform` 在既有 ASCII 格式（手册 `ASC,0`，RTM2032 回读 `CSV,0`）下逐 Dn 只读并主机侧合并为 uint16 | **标量状态查询实机通过**：D0–D15、四组映射、重复读取和 CLI D0/D15 均通过；数字波形 FakeTransport 通过，实机只读预检通过 B1/格式门控后因 D0 未显示、点数为 0 在 `DATA?` 前终止 | 数字 waveform payload 尚未实机验收；无配置写入、history 或总线解码 API；未做数字探头电气验收 | 在停止采集的稳定记录上做零写入 payload/轴一致性实机验收；电气输入验收另行设计 |
 | 串行/并行总线解码 | 约 249 个模板：I²C、SPI/SSPI、UART、CAN、LIN、I²S、ARINC、MIL-STD、并行总线及帧结果 | 未覆盖 | 无 | 无总线配置、帧列表、字段解析或 history | **P3，按选件拆包**；不要放进基础 scope capability |
 | 协议触发与协议搜索 | 触发和 search 内另有大量 CAN/LIN/I²C/SPI/UART/I²S/ARINC/MIL-STD 模板 | 未覆盖 | 无 | 依赖总线源、阈值、协议格式和选件探测 | **P3**：在总线只读解码之后实现 |
 | DVM 与频率计数器 | 6 个 DVM、3 个 counter 模板 | 未覆盖 | 无 | 无 source/type/result/status API | **P2，选件门控**：适合小型只读 capability |

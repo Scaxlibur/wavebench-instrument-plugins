@@ -22,6 +22,8 @@ from wavebench.instruments.models import (
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
     ScopeDigitalChannelStatus,
+    ScopeDigitalWaveform,
+    ScopeDigitalWaveformRequest,
     ScopeEdgeTriggerSnapshot,
     ScopeFftStatus,
     ScopeHealthSnapshot,
@@ -590,6 +592,119 @@ class RTM2032Scope:
                     self.transport.query(f"{prefix}:LABel:STATe?"),
                     command=f"{prefix}:LABel:STATe?",
                 ),
+            )
+
+    @_serialized_io
+    def get_digital_waveform(
+        self,
+        request: ScopeDigitalWaveformRequest,
+    ) -> ScopeDigitalWaveform:
+        with self._io_lock:
+            options = _parse_options(self.transport.query("*OPT?"))
+            if not _has_option(options, "B1"):
+                raise InstrumentError(
+                    "RTM2000 digital waveform read requires installed option B1; "
+                    "*OPT? did not report B1"
+                )
+            data_format = self.transport.query("FORMat?").strip().upper().replace(
+                " ", ""
+            )
+            if data_format not in {"ASC,0", "CSV,0"}:
+                raise DataError(
+                    "RTM2000 digital waveform read requires the existing transfer "
+                    "format to be ASC,0 or CSV,0; refusing to change FORMAT"
+                )
+
+            packed: np.ndarray | None = None
+            expected_axis: tuple[float, float, float, int] | None = None
+            for channel in request.channels:
+                _validate_rtm2000_digital_channel(channel)
+                prefix = f"DIGital{channel}:DATA"
+                points = _parse_decimal_integer(
+                    self.transport.query(f"{prefix}:POINts?"),
+                    command=f"{prefix}:POINts?",
+                    minimum=1,
+                )
+                header, values_per_sample = _parse_waveform_header_response(
+                    self.transport.query(f"{prefix}:HEADer?")
+                )
+                if values_per_sample != 1:
+                    raise DataError(
+                        f"{prefix}:HEADer? reported {values_per_sample} values per "
+                        "sample; expected exactly 1"
+                    )
+                if header.points != points:
+                    raise DataError(
+                        f"{prefix} point-count mismatch: POINTS? returned {points}, "
+                        f"header returned {header.points}"
+                    )
+                x_origin = _parse_finite_float(
+                    self.transport.query(f"{prefix}:XORigin?"),
+                    command=f"{prefix}:XORigin?",
+                )
+                x_increment = _parse_positive_float(
+                    self.transport.query(f"{prefix}:XINCrement?"),
+                    command=f"{prefix}:XINCrement?",
+                )
+                if x_origin != header.x_start:
+                    raise DataError(
+                        f"{prefix} X origin mismatch: HEADER? returned "
+                        f"{header.x_start}, XORigin? returned {x_origin}"
+                    )
+                axis = (header.x_start, header.x_stop, x_increment, points)
+                expected_stop = header.x_start + (points - 1) * x_increment
+                axis_tolerance = max(
+                    abs(x_increment) * 1.0e-6,
+                    abs(header.x_stop) * 1.0e-12,
+                    1.0e-18,
+                )
+                if points and not np.isclose(
+                    expected_stop,
+                    header.x_stop,
+                    rtol=0.0,
+                    atol=axis_tolerance,
+                ):
+                    raise DataError(
+                        f"{prefix} X axis is inconsistent with point count"
+                    )
+                if expected_axis is None:
+                    expected_axis = axis
+                    packed = np.zeros(points, dtype=np.uint16)
+                elif axis != expected_axis:
+                    raise DataError(
+                        f"{prefix} X axis does not match the first requested "
+                        "digital channel"
+                    )
+
+                values = np.asarray(
+                    self.transport.query_float_list(
+                        f"{prefix}?",
+                        timeout_ms=self.long_waveform_timeout_ms,
+                    ),
+                    dtype=np.float64,
+                )
+                if values.ndim != 1 or values.size != points:
+                    raise DataError(
+                        f"{prefix}? length mismatch: expected {points}, got "
+                        f"{values.size}"
+                    )
+                if not np.all(np.isfinite(values)) or not np.all(
+                    np.logical_or(values == 0.0, values == 1.0)
+                ):
+                    raise DataError(
+                        f"{prefix}? must contain only finite digital values 0 or 1"
+                    )
+                assert packed is not None
+                packed |= values.astype(np.uint16) << np.uint16(channel)
+
+            assert expected_axis is not None and packed is not None
+            x_start, x_stop, x_increment, _ = expected_axis
+            return ScopeDigitalWaveform(
+                channels=request.channels,
+                x_start_s=x_start,
+                x_stop_s=x_stop,
+                x_increment_s=x_increment,
+                samples=packed,
             )
 
     @_serialized_io

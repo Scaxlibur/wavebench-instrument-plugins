@@ -9,12 +9,12 @@ RTM2032 as the current hardware baseline.
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
-- development baseline: WaveBench `0.8.6`
-- WaveBench: `>=0.8.6,<0.9`
+- development baseline: WaveBench `0.8.7`
+- WaveBench: `>=0.8.7,<0.9`
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-The plugin's 0.11.0 development line targets WaveBench `v0.8.6`, does not maintain a legacy-core
+The plugin's 0.12.0 development line targets WaveBench `v0.8.7`, does not maintain a legacy-core
 compatibility matrix, and does not automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
@@ -197,6 +197,16 @@ channels in one session: 208 queries, zero writes, zero binary reads, correct fo
 and stable repeated D0 results. End-to-end CLI reads also passed for D0 and D15. At acceptance time
 all digital channels were hidden, reported LOW activity, and used a 1.4 V threshold; those observed
 values do not constitute electrical-input or digital-waveform-payload acceptance.
+
+Version 0.12.0 adds the read-only `scope.digital_waveform` surface. The caller must explicitly
+confirm that acquisition is stopped. The driver gates B1 through `*OPT?`, requires the existing
+transfer format to be ASCII (documented as `ASC,0`; RTM2032 hardware reports `CSV,0`), then queries `DIGital<n>:DATA:POINts?`, `HEADER?`, `XORigin?`,
+`XINCrement?`, and `DATA?` for every selected channel. Sample counts and X axes must match exactly
+before host-side Dn→`uint16` bit n packing. The path sends no writes, does not switch STOP/RUN,
+does not alter format, points, display, or thresholds, and does not consume the error queue. It has
+FakeTransport acceptance. An RTM2032 read-only preflight passed the B1 and `CSV,0` gates, but D0
+was hidden and `DIGital0:DATA:POINts?` returned zero, so the driver stopped before `DATA?` and
+digital-payload hardware acceptance remains pending.
 
 ## Development checks
 
