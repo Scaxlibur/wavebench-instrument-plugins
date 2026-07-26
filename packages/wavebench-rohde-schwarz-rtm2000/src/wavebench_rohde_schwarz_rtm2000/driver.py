@@ -20,6 +20,7 @@ from wavebench.instruments.models import (
     ScopeHealthSnapshot,
     ScopeHistoryTimestamp,
     ScopeHistoryTimestamps,
+    ScopeMeasurementStatistics,
     ScopeIdentitySnapshot,
     ScopeProbeSnapshot,
     ScopeSnapshot,
@@ -198,6 +199,13 @@ def _parse_history_times(response: str) -> tuple[tuple[int, int, float], ...]:
             raise DataError(f"out-of-range {command} response: {response!r}")
         result.append((hour, minute, second))
     return tuple(result)
+
+
+def _parse_optional_measurement_float(response: str, *, command: str) -> float | None:
+    value = response.strip().upper()
+    if value == "NAN":
+        return None
+    return _parse_finite_float(response, command=command)
 
 
 def _parse_token(
@@ -432,6 +440,79 @@ class RTM2032Scope:
                         start=1,
                     )
                 ),
+            )
+
+    @_serialized_io
+    def get_measurement_statistics(
+        self,
+        slot: int,
+        *,
+        configured_slot: bool,
+        include_buffer: bool = False,
+        acquisition_stopped: bool = False,
+    ) -> ScopeMeasurementStatistics:
+        if slot not in {1, 2, 3, 4}:
+            raise ValueError("RTM2000 automatic measurement slot must be 1, 2, 3, or 4")
+        if not configured_slot:
+            raise ValueError(
+                "reading an RTM2000 automatic measurement requires explicit confirmation "
+                "that the slot is already configured"
+            )
+        if include_buffer and not acquisition_stopped:
+            raise ValueError(
+                "reading the RTM2000 statistics buffer requires explicit confirmation "
+                "that acquisition is stopped"
+            )
+        prefix = f"MEASurement{slot}"
+        with self._io_lock:
+            category = _parse_token(
+                self.transport.query(f"{prefix}:CATegory?"),
+                command=f"{prefix}:CATegory?",
+                allowed=frozenset({"AMPT", "AMPTIME"}),
+            )
+            fields = {
+                "actual": f"{prefix}:RESult:ACTual?",
+                "average": f"{prefix}:RESult:AVG?",
+                "standard_deviation": f"{prefix}:RESult:STDDev?",
+                "minimum": f"{prefix}:RESult:NPEak?",
+                "maximum": f"{prefix}:RESult:PPEak?",
+            }
+            values = {
+                name: _parse_optional_measurement_float(
+                    self.transport.query(command),
+                    command=command,
+                )
+                for name, command in fields.items()
+            }
+            waveform_count_command = f"{prefix}:RESult:WFMCount?"
+            waveform_count = _parse_decimal_integer(
+                self.transport.query(waveform_count_command),
+                command=waveform_count_command,
+                minimum=0,
+            )
+            buffered_values = None
+            if include_buffer:
+                buffer_command = f"{prefix}:STATistics:VALue:ALL?"
+                fields_response = _parse_csv_fields(
+                    self.transport.query(buffer_command),
+                    command=buffer_command,
+                )
+                if len(fields_response) > 1000:
+                    raise DataError(f"too many values in {buffer_command} response")
+                buffered_values = tuple(
+                    _parse_finite_float(value, command=buffer_command)
+                    for value in fields_response
+                )
+            return ScopeMeasurementStatistics(
+                slot=slot,
+                category=category,
+                actual=values["actual"],
+                average=values["average"],
+                standard_deviation=values["standard_deviation"],
+                minimum=values["minimum"],
+                maximum=values["maximum"],
+                waveform_count=waveform_count,
+                buffered_values=buffered_values,
             )
 
     @_serialized_io

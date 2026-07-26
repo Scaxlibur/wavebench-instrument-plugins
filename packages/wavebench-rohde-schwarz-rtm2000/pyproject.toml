@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-rohde-schwarz-rtm2000"
-version = "0.7.0"
+version = "0.8.0"
 description = "Rohde & Schwarz RTM2000 oscilloscope plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["wavebench>=0.8.2,<0.9"]
+dependencies = ["wavebench>=0.8.3,<0.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "ruff>=0.8.0"]

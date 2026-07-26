@@ -15,6 +15,7 @@ from wavebench.instruments.models import (
     ScopeHealthSnapshot,
     ScopeHistoryTimestamp,
     ScopeHistoryTimestamps,
+    ScopeMeasurementStatistics,
     ScopeIdentitySnapshot,
     ScopeProbeSnapshot,
     ScopeSnapshot,
@@ -382,6 +383,133 @@ def test_history_timestamps_rejects_calendar_order_mismatch():
 
     with pytest.raises(DataError, match="not oldest-to-newest"):
         RTM2032Scope(transport).get_history_timestamps(1)
+
+
+def test_measurement_statistics_reads_existing_slot_without_writes_or_error_queue():
+    transport = FakeTransport(
+        responses={
+            "MEASurement2:CATegory?": "AMPTime",
+            "MEASurement2:RESult:ACTual?": "NAN",
+            "MEASurement2:RESult:AVG?": "0.9",
+            "MEASurement2:RESult:STDDev?": "0.1",
+            "MEASurement2:RESult:NPEak?": "0.7",
+            "MEASurement2:RESult:PPEak?": "1.1",
+            "MEASurement2:RESult:WFMCount?": "42",
+        }
+    )
+
+    stats = RTM2032Scope(transport).get_measurement_statistics(
+        2,
+        configured_slot=True,
+    )
+
+    assert stats == ScopeMeasurementStatistics(
+        2, "AMPTIME", None, 0.9, 0.1, 0.7, 1.1, 42
+    )
+    assert transport.writes == []
+    assert transport.queries == [
+        "MEASurement2:CATegory?",
+        "MEASurement2:RESult:ACTual?",
+        "MEASurement2:RESult:AVG?",
+        "MEASurement2:RESult:STDDev?",
+        "MEASurement2:RESult:NPEak?",
+        "MEASurement2:RESult:PPEak?",
+        "MEASurement2:RESult:WFMCount?",
+    ]
+
+
+def test_measurement_statistics_reads_buffer_only_with_stopped_confirmation():
+    transport = FakeTransport(
+        responses={
+            "MEASurement1:CATegory?": "AMPT",
+            "MEASurement1:RESult:ACTual?": "1.0",
+            "MEASurement1:RESult:AVG?": "0.9",
+            "MEASurement1:RESult:STDDev?": "0.1",
+            "MEASurement1:RESult:NPEak?": "0.7",
+            "MEASurement1:RESult:PPEak?": "1.1",
+            "MEASurement1:RESult:WFMCount?": "2",
+            "MEASurement1:STATistics:VALue:ALL?": "0.8,1.0",
+        }
+    )
+
+    stats = RTM2032Scope(transport).get_measurement_statistics(
+        1,
+        configured_slot=True,
+        include_buffer=True,
+        acquisition_stopped=True,
+    )
+
+    assert stats.buffered_values == (0.8, 1.0)
+    assert transport.queries[-1] == "MEASurement1:STATistics:VALue:ALL?"
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("slot", [0, 5])
+def test_measurement_statistics_rejects_invalid_slot_before_io(slot):
+    transport = FakeTransport()
+
+    with pytest.raises(ValueError, match="slot must be"):
+        RTM2032Scope(transport).get_measurement_statistics(
+            slot,
+            configured_slot=True,
+        )
+
+    assert transport.queries == []
+
+
+def test_measurement_statistics_requires_configured_slot_before_io():
+    transport = FakeTransport()
+
+    with pytest.raises(ValueError, match="slot is already configured"):
+        RTM2032Scope(transport).get_measurement_statistics(
+            1,
+            configured_slot=False,
+        )
+
+    assert transport.queries == []
+
+
+def test_measurement_statistics_requires_stopped_acquisition_before_buffer_io():
+    transport = FakeTransport()
+
+    with pytest.raises(ValueError, match="acquisition is stopped"):
+        RTM2032Scope(transport).get_measurement_statistics(
+            1,
+            configured_slot=True,
+            include_buffer=True,
+        )
+
+    assert transport.queries == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        ("MEASurement1:RESult:ACTual?", "inf", "non-finite"),
+        ("MEASurement1:RESult:WFMCount?", "-1", "out-of-range"),
+        ("MEASurement1:STATistics:VALue:ALL?", "1,nan", "non-finite"),
+    ],
+)
+def test_measurement_statistics_rejects_invalid_values(command, response, message):
+    responses = {
+        "MEASurement1:CATegory?": "AMPT",
+        "MEASurement1:RESult:ACTual?": "1.0",
+        "MEASurement1:RESult:AVG?": "0.9",
+        "MEASurement1:RESult:STDDev?": "0.1",
+        "MEASurement1:RESult:NPEak?": "0.7",
+        "MEASurement1:RESult:PPEak?": "1.1",
+        "MEASurement1:RESult:WFMCount?": "2",
+        "MEASurement1:STATistics:VALue:ALL?": "0.8,1.0",
+    }
+    responses[command] = response
+
+    with pytest.raises(DataError, match=message):
+        RTM2032Scope(FakeTransport(responses=responses)).get_measurement_statistics(
+            1,
+            configured_slot=True,
+            include_buffer=command.endswith("ALL?"),
+            acquisition_stopped=command.endswith("ALL?"),
+        )
 
 
 def test_vendor_snapshot_names_are_core_compatible_aliases():
