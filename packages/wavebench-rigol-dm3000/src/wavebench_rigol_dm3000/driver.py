@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import math
 
 from wavebench.errors import DataError
-from wavebench.instruments import DmmReading
+from wavebench.instruments import DmmMeasurementProfile, DmmReading
 
 
 DMM_FUNCTION_ALIASES = {
@@ -45,6 +45,18 @@ DMM_FUNCTION_UNITS = {
     "continuity": "ohm",
     "diode": "V",
     "cap": "F",
+}
+
+DMM_FUNCTION_RANGE_QUERIES = {
+    "dcv": ":MEASure:VOLTage:DC:RANGe?",
+    "acv": ":MEASure:VOLTage:AC:RANGe?",
+    "dci": ":MEASure:CURRent:DC:RANGe?",
+    "aci": ":MEASure:CURRent:AC:RANGe?",
+    "res": ":MEASure:RESistance:RANGe?",
+    "fres": ":MEASure:FRESistance:RANGe?",
+    "freq": ":MEASure:FREQuency:RANGe?",
+    "period": ":MEASure:PERiod:RANGe?",
+    "cap": ":MEASure:CAPacitance:RANGe?",
 }
 
 DMM_FUNCTION_SET_COMMANDS = {
@@ -119,6 +131,36 @@ class DM3000Dmm:
             raise DataError(f"unsupported DMM function {function!r}; supported: {supported}")
         self.transport.write(DMM_FUNCTION_SET_COMMANDS[key])
         return key
+
+    def measurement_profile(self) -> DmmMeasurementProfile:
+        function = self.function_status()
+        range_query = DMM_FUNCTION_RANGE_QUERIES.get(function)
+        range_code = None
+        auto_range = None
+        if range_query is not None:
+            raw_range = self.transport.query(range_query).strip()
+            try:
+                range_code = int(raw_range)
+            except ValueError as exc:
+                raise DataError(
+                    f"unexpected DM3000 range code for {function}: {raw_range!r}"
+                ) from exc
+            if range_code < 0:
+                raise DataError(
+                    f"unexpected DM3000 range code for {function}: {raw_range!r}"
+                )
+            auto_range = range_code == 0
+        impedance = None
+        if function == "dcv":
+            impedance = self.transport.query(":MEASure:VOLTage:DC:IMPedance?").strip().upper()
+            if not impedance:
+                raise DataError("unexpected empty DM3000 DCV impedance response")
+        return DmmMeasurementProfile(
+            function=function,
+            range_code=range_code,
+            auto_range=auto_range,
+            impedance=impedance,
+        )
 
     def read(self, function: str = "dcv") -> DmmReading:
         key = normalize_dmm_function(function)

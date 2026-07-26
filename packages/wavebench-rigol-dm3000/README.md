@@ -9,12 +9,12 @@ PyVISA 访问的 LAN/VXI-11 连接。
 
 - distribution：`wavebench-rigol-dm3000`
 - canonical driver ID：`rigol.dm3000`
-- WaveBench：`>=0.8,<0.9`
+- WaveBench：`>=0.8.8,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`（LAN-only）
 - VISA resource scheme：`TCPIP`；拒绝 `ASRL`、`USB` 和 `GPIB`
 
-当前包面向 WaveBench `v0.8.0` release，不能与 `v0.7.0` 配套运行，也不自动声明兼容未来 `0.9`。
+当前包面向 WaveBench `v0.8.8` release，不自动声明兼容未来 `0.9`。
 
 本插件不声明 alias。安装后，显式 canonical ID `rigol.dm3000` 选择外置 LAN 实现；
 短 alias `dm3000` 和 `dm3058` 始终选择 WaveBench 内建 fallback，继续保留 serial 与
@@ -30,12 +30,16 @@ pyvisa 双 backend。卸载插件后，canonical ID 也回退到内建实现。
 - `dmm.read`：读取 DCV、ACV、DCI、ACI、二线/四线电阻、频率、周期、通断、二极管和
   电容；
 - `dmm.function_status`：读取并规范化当前测量功能；
-- `dmm.set_function`：切换测量功能并回读确认。
+- `dmm.set_function`：切换测量功能并回读确认；
+- `dmm.measurement_profile`：只读当前功能、离散量程码、自动量程状态和 DCV 输入阻抗。
+
+`wavebench dmm profile` 不切换功能、不写量程、不读取错误队列。DM3058 的档位码 `0`
+表示自动量程；通断和二极管没有可验收的量程查询，因此相应字段返回 `n/a`。
 
 插件复用 WaveBench 公共 `DmmReading`、`DmmDriver` 和 `DmmService` 契约。Service 继续
 负责会话生命周期和读取前等待；插件只包含厂商 SCPI 协议与 descriptor。
 
-厂商编程手册各命令域、当前四项 capability、逐测量类型离线/实机证据和默认拒绝的
+厂商编程手册各命令域、当前五项 capability、逐测量类型离线/实机证据和默认拒绝的
 高风险操作见 [DM3000 功能覆盖矩阵](doc/DM3000_COVERAGE_MATRIX.md)。本地厂商手册保存在
 被忽略的 `doc/vendor-local/`，不进入发行包。
 
@@ -83,3 +87,5 @@ python -m wavebench plugin install packages/wavebench-rigol-dm3000 --dry-run
 
 0.1.0 从 WaveBench 内建 DM3000/DM3058 协议实现迁移而来，保留原有 SCPI、解析与异常
 语义。插件采用 [MIT License](LICENSE)。
+
+0.2.0 增加只读当前测量 profile，不改变仪器配置。

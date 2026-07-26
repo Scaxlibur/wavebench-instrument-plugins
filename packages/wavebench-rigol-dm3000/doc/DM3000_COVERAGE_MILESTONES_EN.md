@@ -41,7 +41,7 @@ ranges, 10 MOhm input, AUTO trigger, and calculation disabled.
 
 ### Accepted queries
 
-Only the plugin's four existing capabilities are formal APIs. Other commands below were controlled
+Only the plugin's five existing capabilities are formal APIs. Other commands below were controlled
 diagnostic probes used to decide which milestones are feasible.
 
 | Domain | Accepted command surface | Note |
@@ -103,27 +103,29 @@ supported write API.
   sdists.
 - DM3058 hardware evidence remains separate from manual model coverage.
 
-### M1: harden the four current capabilities — partially complete
+### M1: harden the original four capabilities — complete
 
-Public capabilities remain `dmm.idn`, `dmm.read`, `dmm.function_status`, and `dmm.set_function`.
+The original capabilities are `dmm.idn`, `dmm.read`, `dmm.function_status`, and `dmm.set_function`.
 
 - IDN, current function, finite DCV/ACV/FREQ/PERIOD responses, and voltage-input restoration are
   hardware-confirmed.
-- Pending: explicitly reject `NaN` and infinity in `dmm.read`.
-- Pending: optional preflight requiring requested and current function to match.
-- DCI, ACI, resistance, continuity, diode, and capacitance remain offline mappings only.
+- `dmm.read` rejects `NaN` and infinity, and all eleven selectors have exact offline tests.
+- All eleven functions passed open-probe hardware switching, finite-response, and per-run DCV
+  restoration; this is not measurement-accuracy acceptance.
+- Optional requested/current-function consistency preflight remains out of scope for this milestone.
 
-### M2: query-only measurement profile — next implementation target
+### M2: query-only measurement profile — complete
 
-Proposed `dmm.measurement_profile` should query only fields applicable to the current function:
+`dmm.measurement_profile` queries only accepted fields applicable to the current function:
 
-- Common: `:FUNCtion?`, `:MEASure?`;
-- DCV: reading, range, input impedance;
-- ACV: reading and range;
-- FREQ: reading and input-voltage range;
-- PERIOD: reading and input-voltage range.
+- Common: `:FUNCtion?`;
+- DCV: discrete range code, autorange state, and input impedance;
+- ACV/DCI/ACI/RES/FRES/FREQ/PERIOD/CAP: discrete range code and autorange state;
+- CONT/DIODE: no unaccepted range query; unavailable fields remain explicit.
 
-Unsupported digits/resolution/filter fields must be explicitly unavailable, never fabricated.
+The path does not switch function, read a measurement, query `:MEASure?`, or consume the error
+queue. It does not mislabel the discrete range code as an SI range limit. Nonresponding
+digits/resolution/filter fields are absent from the model.
 
 ### M3: controlled voltage-input configuration — implementable
 

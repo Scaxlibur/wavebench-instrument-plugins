@@ -53,7 +53,7 @@ def test_managed_install_routes_canonical_and_remove_restores_builtin(tmp_path: 
         ],
         cwd=tmp_path,
     )
-    wheel = next(wheelhouse.glob("wavebench_rigol_dm3000-0.1.0-*.whl"))
+    wheel = next(wheelhouse.glob("wavebench_rigol_dm3000-0.2.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"
@@ -69,7 +69,7 @@ def test_managed_install_routes_canonical_and_remove_restores_builtin(tmp_path: 
 
     assert result.status == "installed"
     assert installed.distribution == "wavebench-rigol-dm3000"
-    assert installed.version == "0.1.0"
+    assert installed.version == "0.2.0"
     assert installed.status == "healthy"
     load_script = """
 from wavebench.errors import ConfigError

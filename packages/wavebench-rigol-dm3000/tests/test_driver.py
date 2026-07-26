@@ -10,6 +10,7 @@ from wavebench.logging import CommandLogger
 from wavebench_rigol_dm3000 import descriptor
 from wavebench_rigol_dm3000.driver import (
     DMM_FUNCTION_COMMANDS,
+    DMM_FUNCTION_RANGE_QUERIES,
     DMM_FUNCTION_SET_COMMANDS,
     DM3000Dmm,
 )
@@ -21,6 +22,8 @@ class FakeTransport:
         self.queries: list[str] = []
         self.function = "DCV"
         self.readings = {command: "1.250000E+00" for command in DMM_FUNCTION_COMMANDS.values()}
+        self.readings.update({query: "0" for query in DMM_FUNCTION_RANGE_QUERIES.values()})
+        self.readings[":MEASure:VOLTage:DC:IMPedance?"] = "10M"
         self.closed = False
 
     def write(self, command: str) -> None:
@@ -55,7 +58,10 @@ def test_descriptor_is_canonical_lan_only_and_alias_free() -> None:
         "dmm.read",
         "dmm.function_status",
         "dmm.set_function",
+        "dmm.measurement_profile",
     )
+    assert item.wavebench_min_version == "0.8.8"
+    assert item.version == "0.2.0"
     assert not any("baud" in field or "termination" in field for field in item.config_fields)
 
 
@@ -127,6 +133,48 @@ def test_set_function_preserves_write_then_readback_semantics() -> None:
     assert result == "acv"
     assert transport.writes == [":FUNCtion:VOLTage:AC"]
     assert transport.queries == [":FUNCtion?"]
+
+
+def test_measurement_profile_is_query_only_and_typed() -> None:
+    transport = FakeTransport()
+
+    profile = DM3000Dmm(transport).measurement_profile()
+
+    assert profile.function == "dcv"
+    assert profile.range_code == 0
+    assert profile.auto_range is True
+    assert profile.impedance == "10M"
+    assert transport.writes == []
+    assert transport.queries == [
+        ":FUNCtion?",
+        ":MEASure:VOLTage:DC:RANGe?",
+        ":MEASure:VOLTage:DC:IMPedance?",
+    ]
+
+
+def test_measurement_profile_omits_unaccepted_range_query() -> None:
+    transport = FakeTransport()
+    transport.function = "CONT"
+
+    profile = DM3000Dmm(transport).measurement_profile()
+
+    assert profile.function == "continuity"
+    assert profile.range_code is None
+    assert profile.auto_range is None
+    assert profile.impedance is None
+    assert transport.writes == []
+    assert transport.queries == [":FUNCtion?"]
+
+
+@pytest.mark.parametrize("raw", ["bad", "-1"])
+def test_measurement_profile_rejects_invalid_range_code(raw: str) -> None:
+    transport = FakeTransport()
+    transport.readings[":MEASure:VOLTage:DC:RANGe?"] = raw
+
+    with pytest.raises(DataError, match="unexpected DM3000 range code"):
+        DM3000Dmm(transport).measurement_profile()
+
+    assert transport.writes == []
 
 
 @pytest.mark.parametrize(

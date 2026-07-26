@@ -34,7 +34,7 @@
 
 ### 已接受的查询
 
-以下查询在当前 DM3058 上得到可解析响应。只有当前插件公开的四项 capability 才属于正式
+以下查询在当前 DM3058 上得到可解析响应。只有当前插件公开的五项 capability 才属于正式
 API；其余命令是为里程碑筛选而执行的受控诊断探针。
 
 | 域 | 已接受命令 | 备注 |
@@ -94,26 +94,26 @@ API；其余命令是为里程碑筛选而执行的受控诊断探针。
 - 厂商手册只保存在 `doc/vendor-local/`，并由 wheel 与 sdist 显式排除。
 - DM3058 实机证据和手册型号边界分开记录。
 
-### M1：现有四项 capability 收紧 — 部分完成
+### M1：原有四项 capability 收紧 — 完成
 
-当前公开能力仍为 `dmm.idn`、`dmm.read`、`dmm.function_status`、`dmm.set_function`。
+原有能力为 `dmm.idn`、`dmm.read`、`dmm.function_status`、`dmm.set_function`。
 
 - 已实机确认 IDN、当前功能、DCV/ACV/FREQ/PERIOD 有限读数和电压端功能恢复。
-- 待实现：`dmm.read` 显式拒绝 `NaN`/`inf`。
-- 待实现：可选的“目标 function 必须与当前功能一致”前置检查。
-- DCI、ACI、电阻、通断、二极管和电容只有离线命令映射，不提升为实机通过。
+- `dmm.read` 已显式拒绝 `NaN`/`inf`，11 类 selector 均有精确离线测试。
+- 11 类功能均按开放探针标准完成实机切换、有限读数和逐次恢复；不代表测量准确度验收。
+- 可选的“目标 function 必须与当前功能一致”前置检查未纳入本轮范围。
 
-### M2：只读测量 profile — 下一实现目标
+### M2：只读测量 profile — 完成
 
-建议新增 `dmm.measurement_profile`，只查询当前功能适用的字段：
+新增 `dmm.measurement_profile`，只查询当前功能适用且已验收的字段：
 
-- 共通：`:FUNCtion?`、`:MEASure?`；
-- DCV：读数、量程、输入阻抗；
-- ACV：读数、量程；
-- FREQ：读数、输入电压量程；
-- PERIOD：读数、输入电压量程。
+- 共通：`:FUNCtion?`；
+- DCV：离散量程码、自动量程状态、输入阻抗；
+- ACV/DCI/ACI/RES/FRES/FREQ/PERIOD/CAP：离散量程码和自动量程状态；
+- CONT/DIODE：不发送未验收的量程 query，返回 unavailable。
 
-不把无响应的 digits/resolution/filter 字段伪造为支持；公共模型应显式返回 unavailable。
+该路径不切换功能、不读取测量值、不读取 `:MEASure?` 或错误队列，也不把离散档位码
+伪装成 SI 量程上限。无响应的 digits/resolution/filter 字段未加入模型。
 
 ### M3：受控电压端配置 — 可实施
 

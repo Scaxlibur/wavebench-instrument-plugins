@@ -7,12 +7,12 @@ package supports LAN/VXI-11 connections through PyVISA only.
 
 - Distribution: `wavebench-rigol-dm3000`
 - Canonical driver ID: `rigol.dm3000`
-- WaveBench: `>=0.8,<0.9`
+- WaveBench: `>=0.8.8,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa` (LAN only)
 - VISA resource scheme: `TCPIP`; `ASRL`, `USB`, and `GPIB` are rejected
 
-This package targets the WaveBench `v0.8.0` release. It does not run with `v0.7.0` and does not automatically claim compatibility with a future `0.9` core.
+This package targets WaveBench `v0.8.8` and does not automatically claim compatibility with a future `0.9` core.
 
 The plugin declares no aliases. When installed, the canonical ID selects this external LAN
 implementation. The short aliases `dm3000` and `dm3058` keep resolving to WaveBench's built-in
@@ -29,12 +29,17 @@ backends before any transport opens. Use a short alias when the built-in RS-232 
 - `dmm.read`
 - `dmm.function_status`
 - `dmm.set_function`
+- `dmm.measurement_profile`
+
+`wavebench dmm profile` does not switch function, write range, or consume the error queue. On the
+DM3058, range code `0` means autorange. Continuity and diode report `n/a` for range fields because
+no accepted range query is available for those modes.
 
 The package reuses WaveBench's public `DmmReading`, `DmmDriver`, and `DmmService` contracts. It
 contains only the vendor protocol implementation and its descriptor.
 
 See the [DM3000 coverage matrix](doc/DM3000_COVERAGE_MATRIX_EN.md) for the vendor-manual command
-domains, the four current capabilities, per-measurement offline/hardware evidence, and commands
+domains, the five current capabilities, per-measurement offline/hardware evidence, and commands
 denied by default. The local vendor manual is under ignored `doc/vendor-local/` and is excluded
 from release packages.
 
@@ -70,3 +75,5 @@ the built-in short-alias path.
 
 Version 0.1.0 was migrated from WaveBench's built-in DM3000/DM3058 implementation and preserves
 its SCPI, parsing, and error semantics. This package is licensed under the [MIT License](LICENSE).
+
+Version 0.2.0 adds the query-only current measurement profile without changing instrument state.
