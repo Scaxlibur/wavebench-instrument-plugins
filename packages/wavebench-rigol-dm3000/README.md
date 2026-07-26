@@ -35,6 +35,14 @@ pyvisa 双 backend。卸载插件后，canonical ID 也回退到内建实现。
 插件复用 WaveBench 公共 `DmmReading`、`DmmDriver` 和 `DmmService` 契约。Service 继续
 负责会话生命周期和读取前等待；插件只包含厂商 SCPI 协议与 descriptor。
 
+厂商编程手册各命令域、当前四项 capability、逐测量类型离线/实机证据和默认拒绝的
+高风险操作见 [DM3000 功能覆盖矩阵](doc/DM3000_COVERAGE_MATRIX.md)。本地厂商手册保存在
+被忽略的 `doc/vendor-local/`，不进入发行包。
+
+分阶段可实施能力、精确实机命令清单、协议验收口径及 2026-07-26 的通过/失败边界见
+[DM3000 功能覆盖里程碑](doc/DM3000_COVERAGE_MILESTONES.md)。诊断探针不等于公开 capability，
+本轮也不构成测量准确度或校准验收。
+
 ## 配置示例
 
 示例使用 RFC 5737 文档地址，不是实验室真实地址：

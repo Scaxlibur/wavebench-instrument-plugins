@@ -33,6 +33,16 @@ backends before any transport opens. Use a short alias when the built-in RS-232 
 The package reuses WaveBench's public `DmmReading`, `DmmDriver`, and `DmmService` contracts. It
 contains only the vendor protocol implementation and its descriptor.
 
+See the [DM3000 coverage matrix](doc/DM3000_COVERAGE_MATRIX_EN.md) for the vendor-manual command
+domains, the four current capabilities, per-measurement offline/hardware evidence, and commands
+denied by default. The local vendor manual is under ignored `doc/vendor-local/` and is excluded
+from release packages.
+
+See the [DM3000 feature-coverage milestones](doc/DM3000_COVERAGE_MILESTONES_EN.md) for the staged
+implementation plan, exact hardware command surface, protocol-acceptance rules, and the accepted,
+failed, and skipped boundaries from 2026-07-26. Diagnostic probes are not public capabilities and
+do not establish measurement accuracy or calibration acceptance.
+
 ## Example
 
 The address below is reserved for documentation:
