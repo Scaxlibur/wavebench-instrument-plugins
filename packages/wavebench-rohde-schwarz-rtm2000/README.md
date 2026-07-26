@@ -156,7 +156,8 @@ metadata、FFT status 与 vertical cursor delta readout 已完成受控验收并
 一次 `SINGle`，确认 `ACQuire:AVERage:COMPlete?` 后读取当前波形。它不写 `FORMat`、byte order、
 point mode、时基、垂直档位、触发或 K15 history 状态。无论采集或波形读取成功与否，都会恢复并
 回读三项配置；恢复失败或结果不一致会锁存该实例的 average 写路径，后续调用零 I/O 拒绝。该实现
-目前有离线事务测试，尚无独立实机验收结论。
+目前有离线事务测试，尚无独立实机验收结论。任一配置写（包括第一条）超时都会按“结果未知”
+处理：即使随后的恢复回读一致，也会永久锁存当前驱动实例，避免继续依赖一次无法证明结果的写事务。
 
 ## 开发验证
 

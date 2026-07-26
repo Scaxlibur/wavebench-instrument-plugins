@@ -651,6 +651,13 @@ class RTM2032Scope:
                             "configuration restoration failed",
                             phase="restore",
                         ) from restore_exc
+                if phase == "configure":
+                    self._average_writes_blocked = True
+                    raise RTM2000AverageCaptureError(
+                        "RTM2032 average configuration write outcome is ambiguous; "
+                        "configuration was restored but further average writes are blocked",
+                        phase="write-uncertain",
+                    ) from exc
                 if acquisition_started and not acquisition_completed:
                     self._average_writes_blocked = True
                     raise RTM2000AverageCaptureError(

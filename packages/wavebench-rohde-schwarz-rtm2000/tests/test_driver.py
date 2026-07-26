@@ -472,16 +472,23 @@ def test_controlled_average_capture_treats_first_write_timeout_as_ambiguous():
     transport = AverageCaptureTransport(fail_write_at=1)
     scope = RTM2032Scope(transport)
 
-    with pytest.raises(RTM2000AverageCaptureError, match="configuration was restored"):
+    with pytest.raises(RTM2000AverageCaptureError) as first:
         scope.capture_average(ScopeAverageCaptureRequest((1,), 8, True))
 
+    assert first.value.phase == "write-uncertain"
     assert transport.writes == [
         "ACQuire:AVERage:COUNt 8",
         "ACQuire:AVERage:COUNt 8",
         "ACQuire:NSINgle:COUNt 1",
         "CHANnel1:ARITHmetics OFF",
     ]
-    assert scope.average_writes_blocked is False
+    assert scope.average_writes_blocked is True
+
+    io_after_first = (tuple(transport.writes), tuple(transport.queries))
+    with pytest.raises(RTM2000AverageCaptureError) as second:
+        scope.capture_average(ScopeAverageCaptureRequest((1,), 8, True))
+    assert second.value.phase == "blocked"
+    assert (tuple(transport.writes), tuple(transport.queries)) == io_after_first
 
 
 def test_controlled_average_capture_latches_when_restore_is_ambiguous():
