@@ -15,6 +15,9 @@ import numpy as np
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import (
     ScopeAcquisitionStatus,
+    ScopeAverageCaptureRequest,
+    ScopeAverageCaptureResult,
+    ScopeAverageConfiguration,
     ScopeAnalogChannelSnapshot,
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
@@ -369,6 +372,12 @@ class RTM2000TriggerControlError(InstrumentError):
         self.phase = phase
 
 
+class RTM2000AverageCaptureError(InstrumentError):
+    def __init__(self, message: str, *, phase: str):
+        super().__init__(message)
+        self.phase = phase
+
+
 def _parse_waveform_header_response(
     response: str,
 ) -> tuple[WaveformHeader, int | None]:
@@ -435,6 +444,7 @@ class RTM2032Scope:
     long_waveform_timeout_ms: int = 300_000
     _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _trigger_writes_blocked: bool = field(default=False, init=False, repr=False)
+    _average_writes_blocked: bool = field(default=False, init=False, repr=False)
 
     @_serialized_io
     def idn(self) -> str:
@@ -499,6 +509,186 @@ class RTM2032Scope:
                     command="ACQuire:AVAilable?",
                     minimum=0,
                 ),
+            )
+
+    def _average_configuration_unlocked(
+        self,
+    ) -> ScopeAverageConfiguration:
+        average_count = _parse_decimal_integer(
+            self.transport.query("ACQuire:AVERage:COUNt?"),
+            command="ACQuire:AVERage:COUNt?",
+            minimum=2,
+            maximum=1024,
+        )
+        single_count = _parse_decimal_integer(
+            self.transport.query("ACQuire:NSINgle:COUNt?"),
+            command="ACQuire:NSINgle:COUNt?",
+            minimum=1,
+        )
+        arithmetic = tuple(
+            (
+                channel,
+                _parse_token(
+                    self.transport.query(f"CHANnel{channel}:ARITHmetics?"),
+                    command=f"CHANnel{channel}:ARITHmetics?",
+                    allowed=frozenset(
+                        {"OFF", "ENVELOPE", "AVERAGE", "SMOOTH", "FILTER"}
+                    ),
+                ),
+            )
+            for channel in (1, 2)
+        )
+        if arithmetic[0][1] != arithmetic[1][1]:
+            raise DataError(
+                "RTM2032 channel arithmetic readback is inconsistent even though the "
+                "documented setting affects all channels"
+            )
+        return ScopeAverageConfiguration(
+            average_count=average_count,
+            single_count=single_count,
+            channel_arithmetic=arithmetic,
+        )
+
+    def _restore_average_configuration_unlocked(
+        self,
+        configuration: ScopeAverageConfiguration,
+    ) -> None:
+        self.transport.write(
+            f"ACQuire:AVERage:COUNt {configuration.average_count}"
+        )
+        self.transport.write(
+            f"ACQuire:NSINgle:COUNt {configuration.single_count}"
+        )
+        self.transport.write(
+            f"CHANnel1:ARITHmetics {configuration.channel_arithmetic[0][1]}"
+        )
+
+    def _require_real_waveform_transfer_unlocked(self) -> None:
+        data_format = self.transport.query("FORMat?").strip().upper().replace(" ", "")
+        byte_order = self.transport.query("FORMat:BORDer?").strip().upper()
+        if data_format != "REAL,32" or byte_order != "LSBF":
+            raise DataError(
+                "controlled average capture requires the existing waveform transfer "
+                "format to be REAL,32 with LSBF byte order"
+            )
+
+    @property
+    def average_writes_blocked(self) -> bool:
+        with self._io_lock:
+            return self._average_writes_blocked
+
+    def capture_average(
+        self,
+        request: ScopeAverageCaptureRequest,
+    ) -> ScopeAverageCaptureResult:
+        for channel in request.channels:
+            _validate_rtm2032_channel(channel)
+        with self._io_lock:
+            if self._average_writes_blocked:
+                raise RTM2000AverageCaptureError(
+                    "average writes are blocked after an earlier ambiguous transaction",
+                    phase="blocked",
+                )
+            phase = "preflight"
+            self._require_real_waveform_transfer_unlocked()
+            configuration_before = self._average_configuration_unlocked()
+            wrote = False
+            acquisition_started = False
+            acquisition_completed = False
+            try:
+                phase = "configure"
+                wrote = True
+                self.transport.write(
+                    f"ACQuire:AVERage:COUNt {request.average_count}"
+                )
+                self.transport.write(
+                    f"ACQuire:NSINgle:COUNt {request.average_count}"
+                )
+                self.transport.write("CHANnel1:ARITHmetics AVERage")
+
+                phase = "configure-readback"
+                configured = self._average_configuration_unlocked()
+                expected = ScopeAverageConfiguration(
+                    average_count=request.average_count,
+                    single_count=request.average_count,
+                    channel_arithmetic=((1, "AVERAGE"), (2, "AVERAGE")),
+                )
+                if configured != expected:
+                    raise DataError("average configuration readback mismatch")
+
+                phase = "acquire"
+                acquisition_started = True
+                self.transport.write("SINGle")
+                self.transport.query_opc()
+
+                phase = "average-complete"
+                average_complete = _parse_bool(
+                    self.transport.query("ACQuire:AVERage:COMPlete?"),
+                    command="ACQuire:AVERage:COMPlete?",
+                )
+                if not average_complete:
+                    raise DataError("average acquisition did not complete")
+                acquisition_completed = True
+
+                phase = "read-waveforms"
+                waveforms = tuple(
+                    self._read_waveform(channel=channel, points="current")
+                    for channel in request.channels
+                )
+            except Exception as exc:
+                if wrote:
+                    try:
+                        self._restore_average_configuration_unlocked(
+                            configuration_before
+                        )
+                        restored = self._average_configuration_unlocked()
+                        if restored != configuration_before:
+                            raise DataError("average configuration restore mismatch")
+                    except Exception as restore_exc:
+                        self._average_writes_blocked = True
+                        raise RTM2000AverageCaptureError(
+                            f"ambiguous RTM2032 average transaction during {phase}; "
+                            "configuration restoration failed",
+                            phase="restore",
+                        ) from restore_exc
+                if acquisition_started and not acquisition_completed:
+                    self._average_writes_blocked = True
+                    raise RTM2000AverageCaptureError(
+                        f"RTM2032 average capture failed during {phase}; "
+                        "configuration was restored but acquisition state is unknown",
+                        phase="acquisition-unknown",
+                    ) from exc
+                raise RTM2000AverageCaptureError(
+                    f"RTM2032 average capture failed during {phase}; "
+                    "configuration was restored",
+                    phase=phase,
+                ) from exc
+
+            phase = "restore"
+            try:
+                self._restore_average_configuration_unlocked(configuration_before)
+                configuration_after = self._average_configuration_unlocked()
+                if configuration_after != configuration_before:
+                    raise DataError("average configuration restore mismatch")
+            except Exception as exc:
+                self._average_writes_blocked = True
+                raise RTM2000AverageCaptureError(
+                    "average capture completed but configuration restoration is ambiguous",
+                    phase=phase,
+                ) from exc
+
+            restored_fields = (
+                "ACQuire:AVERage:COUNt",
+                "ACQuire:NSINgle:COUNt",
+                "CHANnel:ARITHmetics",
+            )
+            return ScopeAverageCaptureResult(
+                request=request,
+                waveforms=waveforms,
+                average_complete=average_complete,
+                configuration_before=configuration_before,
+                configuration_after=configuration_after,
+                restored_fields=restored_fields,
             )
 
     @_serialized_io

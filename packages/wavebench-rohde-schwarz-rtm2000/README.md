@@ -8,12 +8,12 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `0.8.4`
-- WaveBench：`>=0.8.4,<0.9`
+- 开发基线：WaveBench `0.8.5`
+- WaveBench：`>=0.8.5,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件的 0.9.0 开发线对齐 WaveBench `v0.8.4`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.10.0 开发线对齐 WaveBench `v0.8.5`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -25,6 +25,7 @@
 - 当前波形的类型化 X/Y 缩放、点数、量化位数和每采样值数量快照；
 - RTM2032 CH1/CH2 基础 edge-trigger 类型化只读快照；
 - 只读 average/segmented acquisition 状态，K15 专属查询受选件门控；
+- 受控 average acquisition：调用方须明确确认 acquisition 已停止；仅暂时修改 average count、single count 和全局 channel arithmetic，成功或失败后均回读恢复，恢复不确定会锁存该实例后续 average 写入；
 - RTM2032 CH1/CH2 的只读 K15 history 时间戳表；
 - 显式确认已配置槽位后的自动测量只读统计；
 - 现有 math、FFT、reference、cursor 状态的只读 metadata/readout；
@@ -148,6 +149,14 @@ buffer 仍待验收。
 cursor、不 update/save/load reference、不启动采集，也不消费错误队列。RTM2032 的 math
 metadata、FFT status 与 vertical cursor delta readout 已完成受控验收并恢复前面板状态；reference
 存储为空，故 metadata 实机验收保持阻塞，未调用 `UPDATE` 制造测试数据。
+
+0.10.0 接入 WaveBench 0.8.5 的 `scope.capture_average`。这是一条窄的、需要调用方显式
+`--acquisition-stopped` 确认的受控写路径：预检既有 `REAL,32` / `LSBF` 传输格式，然后仅临时
+写入 `ACQuire:AVERage:COUNt`、`ACQuire:NSINgle:COUNt` 和全局 `CHANnel:ARITHmetics`，执行
+一次 `SINGle`，确认 `ACQuire:AVERage:COMPlete?` 后读取当前波形。它不写 `FORMat`、byte order、
+point mode、时基、垂直档位、触发或 K15 history 状态。无论采集或波形读取成功与否，都会恢复并
+回读三项配置；恢复失败或结果不一致会锁存该实例的 average 写路径，后续调用零 I/O 拒绝。该实现
+目前有离线事务测试，尚无独立实机验收结论。
 
 ## 开发验证
 

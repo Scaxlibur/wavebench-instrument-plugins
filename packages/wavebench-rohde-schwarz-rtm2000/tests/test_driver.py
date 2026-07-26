@@ -10,6 +10,8 @@ from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import (
     ScopeAcquisitionStatus,
+    ScopeAverageCaptureRequest,
+    ScopeAverageConfiguration,
     ScopeAnalogChannelSnapshot,
     ScopeEdgeTriggerSnapshot,
     ScopeHealthSnapshot,
@@ -35,6 +37,7 @@ from wavebench_rohde_schwarz_rtm2000.driver import (
     RTM2000ProbeSnapshot,
     RTM2000TimebaseSnapshot,
     RTM2000TriggerControlError,
+    RTM2000AverageCaptureError,
     RTM2000WaveformMetadataSnapshot,
     RTM2032Scope,
     parse_waveform_header,
@@ -160,6 +163,70 @@ class TriggerControlTransport(FakeTransport):
             "CHANnel2:LABel:STATE?": "ON",
             "CHANnel2:OVERload?": self.channel_overload,
             "CHANnel2:TYPE?": "SAMP",
+        }
+        return responses[command]
+
+
+class AverageCaptureTransport(FakeTransport):
+    def __init__(
+        self,
+        *,
+        arithmetic="OFF",
+        fail_write_at=None,
+        ignore_restore=False,
+        average_complete="1",
+        opc_error=None,
+    ):
+        super().__init__(
+            responses={
+                "CHAN1:DATA:HEAD?": "0,1,2,1",
+                "CHAN2:DATA:HEAD?": "0,1,2,1",
+            },
+            float_lists={
+                "CHAN1:DATA?": [0.0, 1.0],
+                "CHAN2:DATA?": [1.0, 0.0],
+            },
+        )
+        self.average_count = 8
+        self.single_count = 1
+        self.arithmetic = arithmetic
+        self.fail_write_at = fail_write_at
+        self.ignore_restore = ignore_restore
+        self.average_complete = average_complete
+        self.opc_error = opc_error
+
+    def write(self, command):
+        self.writes.append(command)
+        if self.fail_write_at == len(self.writes):
+            raise TimeoutError("simulated write timeout")
+        if command == "SINGle":
+            return
+        field, value = command.rsplit(" ", 1)
+        if field == "ACQuire:AVERage:COUNt":
+            parsed = int(value)
+            if not self.ignore_restore or parsed != 8:
+                self.average_count = parsed
+        elif field == "ACQuire:NSINgle:COUNt":
+            parsed = int(value)
+            if not self.ignore_restore or parsed != 1:
+                self.single_count = parsed
+        elif field == "CHANnel1:ARITHmetics":
+            if not self.ignore_restore or value != "OFF":
+                self.arithmetic = value.upper()
+        else:
+            raise KeyError(command)
+
+    def query(self, command):
+        self.queries.append(command)
+        responses = {
+            "FORMat?": "REAL,32",
+            "FORMat:BORDer?": "LSBF",
+            "ACQuire:AVERage:COUNt?": str(self.average_count),
+            "ACQuire:NSINgle:COUNt?": str(self.single_count),
+            "CHANnel1:ARITHmetics?": self.arithmetic,
+            "CHANnel2:ARITHmetics?": self.arithmetic,
+            "ACQuire:AVERage:COMPlete?": self.average_complete,
+            **self.responses,
         }
         return responses[command]
 
@@ -297,6 +364,139 @@ def test_acquisition_status_skips_k15_queries_when_option_is_absent():
         "ACQuire:AVERage:COUNt?",
         "ACQuire:AVERage:COMPlete?",
     ]
+
+
+def test_controlled_average_capture_restores_global_configuration():
+    transport = AverageCaptureTransport()
+    request = ScopeAverageCaptureRequest((1, 2), 16, True)
+
+    result = RTM2032Scope(transport).capture_average(request)
+
+    assert result.request == request
+    assert tuple(waveform.channel for waveform in result.waveforms) == (1, 2)
+    assert result.configuration_before == ScopeAverageConfiguration(
+        8, 1, ((1, "OFF"), (2, "OFF"))
+    )
+    assert result.configuration_after == result.configuration_before
+    assert result.restored_fields == (
+        "ACQuire:AVERage:COUNt",
+        "ACQuire:NSINgle:COUNt",
+        "CHANnel:ARITHmetics",
+    )
+    assert transport.writes == [
+        "ACQuire:AVERage:COUNt 16",
+        "ACQuire:NSINgle:COUNt 16",
+        "CHANnel1:ARITHmetics AVERage",
+        "SINGle",
+        "ACQuire:AVERage:COUNt 8",
+        "ACQuire:NSINgle:COUNt 1",
+        "CHANnel1:ARITHmetics OFF",
+    ]
+    assert not any(
+        command.startswith(("*CLS", "FORMat ", "FORMat:BORDer ", "CHAN:DATA:POIN"))
+        for command in transport.writes
+    )
+
+
+def test_controlled_average_capture_requires_existing_real_lsbf_transfer():
+    transport = AverageCaptureTransport()
+    transport.query = lambda command: "ASCii" if command == "FORMat?" else "MSBF"
+
+    with pytest.raises(DataError, match="REAL,32 with LSBF"):
+        RTM2032Scope(transport).capture_average(
+            ScopeAverageCaptureRequest((1,), 8, True)
+        )
+
+    assert transport.writes == []
+
+
+def test_controlled_average_capture_rejects_ambiguous_real_transfer_width():
+    transport = AverageCaptureTransport()
+    original_query = transport.query
+    transport.query = lambda command: "REAL" if command == "FORMat?" else original_query(command)
+
+    with pytest.raises(DataError, match="REAL,32 with LSBF"):
+        RTM2032Scope(transport).capture_average(
+            ScopeAverageCaptureRequest((1,), 8, True)
+        )
+
+    assert transport.writes == []
+
+
+def test_controlled_average_capture_rejects_inconsistent_global_arithmetic():
+    transport = AverageCaptureTransport()
+    original_query = transport.query
+
+    def query(command):
+        if command == "CHANnel2:ARITHmetics?":
+            transport.queries.append(command)
+            return "SMOOTH"
+        return original_query(command)
+
+    transport.query = query
+
+    with pytest.raises(DataError, match="affects all channels"):
+        RTM2032Scope(transport).capture_average(
+            ScopeAverageCaptureRequest((1,), 8, True)
+        )
+
+    assert transport.writes == []
+
+
+def test_controlled_average_capture_restores_after_acquisition_failure():
+    transport = AverageCaptureTransport(average_complete="0")
+    scope = RTM2032Scope(transport)
+
+    with pytest.raises(RTM2000AverageCaptureError) as failure:
+        scope.capture_average(ScopeAverageCaptureRequest((1,), 8, True))
+
+    assert failure.value.phase == "acquisition-unknown"
+    assert transport.average_count == 8
+    assert transport.single_count == 1
+    assert transport.arithmetic == "OFF"
+    assert scope.average_writes_blocked is True
+
+
+def test_controlled_average_capture_latches_after_opc_timeout():
+    transport = AverageCaptureTransport(opc_error=TimeoutError("timeout"))
+    scope = RTM2032Scope(transport)
+
+    with pytest.raises(RTM2000AverageCaptureError) as failure:
+        scope.capture_average(ScopeAverageCaptureRequest((1,), 8, True))
+
+    assert failure.value.phase == "acquisition-unknown"
+    assert scope.average_writes_blocked is True
+
+
+def test_controlled_average_capture_treats_first_write_timeout_as_ambiguous():
+    transport = AverageCaptureTransport(fail_write_at=1)
+    scope = RTM2032Scope(transport)
+
+    with pytest.raises(RTM2000AverageCaptureError, match="configuration was restored"):
+        scope.capture_average(ScopeAverageCaptureRequest((1,), 8, True))
+
+    assert transport.writes == [
+        "ACQuire:AVERage:COUNt 8",
+        "ACQuire:AVERage:COUNt 8",
+        "ACQuire:NSINgle:COUNt 1",
+        "CHANnel1:ARITHmetics OFF",
+    ]
+    assert scope.average_writes_blocked is False
+
+
+def test_controlled_average_capture_latches_when_restore_is_ambiguous():
+    transport = AverageCaptureTransport(ignore_restore=True)
+    scope = RTM2032Scope(transport)
+
+    with pytest.raises(RTM2000AverageCaptureError) as first:
+        scope.capture_average(ScopeAverageCaptureRequest((1,), 8, True))
+
+    assert first.value.phase == "restore"
+    writes_after_first = tuple(transport.writes)
+    with pytest.raises(RTM2000AverageCaptureError) as second:
+        scope.capture_average(ScopeAverageCaptureRequest((1,), 8, True))
+    assert second.value.phase == "blocked"
+    assert tuple(transport.writes) == writes_after_first
 
 
 def test_history_timestamps_requires_k15_before_querying_tables():

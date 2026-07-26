@@ -9,12 +9,12 @@ RTM2032 as the current hardware baseline.
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
-- development baseline: WaveBench `0.8.4`
-- WaveBench: `>=0.8.4,<0.9`
+- development baseline: WaveBench `0.8.5`
+- WaveBench: `>=0.8.5,<0.9`
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-The plugin's 0.9.0 development line targets WaveBench `v0.8.4`, does not maintain a legacy-core
+The plugin's 0.10.0 development line targets WaveBench `v0.8.5`, does not maintain a legacy-core
 compatibility matrix, and does not automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
@@ -27,6 +27,7 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 - typed current-waveform X/Y scaling, point-count, quantization, and values-per-sample metadata;
 - a typed read-only basic edge-trigger snapshot for RTM2032 CH1/CH2;
 - read-only average/segmented acquisition state, with K15-only queries option-gated;
+- controlled average acquisition, requiring the caller to confirm acquisition is stopped; it temporarily changes only average count, single count, and global channel arithmetic, reads the original configuration back after restoration, and latches further average writes if restoration is ambiguous;
 - read-only K15 history timestamp tables for RTM2032 CH1/CH2;
 - read-only statistics for an explicitly preconfigured automatic-measurement slot;
 - read-only metadata/status for existing math, FFT, reference, and cursor state;
@@ -176,6 +177,16 @@ does not define an FFT expression, move cursors, update/save/load references, st
 consume the error queue. Math metadata, FFT status, and vertical cursor delta readout passed controlled
 RTM2032 acceptance with front-panel restoration. Reference metadata remains blocked because reference
 storage was empty; `UPDATE` was not used to manufacture test data.
+
+Version 0.10.0 connects the WaveBench 0.8.5 `scope.capture_average` contract. This is a narrow,
+controlled write path that requires explicit `--acquisition-stopped` caller confirmation. It preflights
+the existing `REAL,32` / `LSBF` transfer format, temporarily writes only `ACQuire:AVERage:COUNt`,
+`ACQuire:NSINgle:COUNt`, and global `CHANnel:ARITHmetics`, issues one `SINGle`, confirms
+`ACQuire:AVERage:COMPlete?`, and reads the current waveforms. It does not write `FORMat`, byte order,
+point mode, timebase, vertical scale, trigger, or K15 history state. Both successful and failed
+acquisitions restore and read back all three configuration fields; failed or mismatched restoration
+latches that instance's average-write path, so later calls fail with zero I/O. This has offline
+transaction coverage but no independent hardware-acceptance conclusion yet.
 
 ## Development checks
 

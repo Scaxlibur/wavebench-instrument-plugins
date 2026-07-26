@@ -8,7 +8,7 @@ This matrix compares the locally stored RTM2000 programming-manual command index
 
 The selected manual transcription has 1,490 lines containing 1,434 command-index entries and 1,417 exact unique command templates: 608 query-marked forms and 809 non-query forms. Further case-insensitive, whitespace-normalized parsing yields 1,416 templates (607 query-marked and 809 non-query); the final difference is one repeated/layout variant. These figures still include parameterized templates and a small number of OCR defects. They describe command-surface scale and are not a feature-completion denominator.
 
-The external plugin currently declares fifteen WaveBench capabilities. It is a hardware-accepted analog-waveform acquisition MVP with additional offline-tested, read-only status surfaces, not a general RTM2000 remote-control layer.
+The external plugin currently declares sixteen WaveBench capabilities. It is a hardware-accepted analog-waveform acquisition MVP with additional offline-tested, read-only status surfaces and one controlled average-acquisition transaction, not a general RTM2000 remote-control layer.
 
 Coverage labels:
 
@@ -24,7 +24,7 @@ Coverage labels:
 | Feature domain | Manual surface | Current coverage | Hardware state | Main gap | Recommendation |
 |---|---|---|---|---|---|
 | Identity, synchronization, basic errors | IEEE 488.2 common commands and `SYSTem:ERRor:*` | `*IDN?`, `*OPT?`, non-consuming health snapshot, `*CLS`, `*OPC?` wait, explicit error queue | **Hardware accepted** | No self-test or complete event-register API | Identity/options/health P1 complete; keep EVENT reads explicit |
-| Acquisition control | 16 templates for modes, averaging, sample/record rates, interpolation, segmented acquisition, and availability | Read-only available/count/sample-rate plus average/segmented status, `SINGle` acquisition, and explicit `AUToscale` | **Read-only status hardware accepted; acquisition actions partially accepted** | No run/stop, average/segmented acquisition, write-rate, or interpolation API | Read-only status complete; **P2** bounded average/segmented plans |
+| Acquisition control | 16 templates for modes, averaging, sample/record rates, interpolation, segmented acquisition, and availability | Read-only available/count/sample-rate plus average/segmented status, `SINGle` acquisition, explicit `AUToscale`, and controlled `scope.capture_average` | **Read-only status hardware accepted; average transaction implemented, pending independent hardware acceptance** | No run/stop, segmented acquisition, write-rate, or interpolation API | Keep explicit stopped confirmation, readback restoration, and latching for average; **P2** segmented plans |
 | Analog channel setup | About 48 templates for state, coupling, range, scale, offset, position, bandwidth, polarity, skew, label, overload, and thresholds | Typed read-only RTM2032 CH1/CH2 state plus existing enable/scale/position writes | **Hardware accepted** | No threshold readback; setters lack general snapshot/restoration | Read-only P1 complete; retain impedance and restoration guards for writes |
 | Analog waveform transfer | `CHANnel<m>:DATA*`, envelope data, independent X/Y metadata | REAL/LSBF, header + data, `DEF/MAX/DMAX`, sequential channel reads after one acquisition, and typed X/Y scaling, point-count, quantization, and values-per-sample snapshots | **Hardware accepted** | No envelope, history/segment selection, or streaming-block API; no added cross-channel hardware-synchronization guarantee | Metadata complete; **P2** segmented/history/envelope |
 | Timebase, zoom, timestamp | 12 timebase templates plus zoom and timestamp navigation | Typed read-only acquisition time/divisions/position/range/reference/scale/roll plus existing `TIMebase:RANGe` write; K15-gated strict history timestamp-table API | **Basic timebase hardware accepted; history timestamp query blocked by instrument timeout** | No zoom; no successful timestamp-table hardware evidence | Keep the strict K15 gate and do not retry/clear errors implicitly; investigate history state separately |
@@ -88,7 +88,7 @@ These improve experiment safety and traceability but do not count as RTM2000 man
 
 ### P2: analysis and specialized acquisition
 
-- average/segmented acquisition and history/timestamps; **read-only average/segmented status is hardware accepted; the K15 timestamp-table query timed out and remains blocked; configuration and segment waveform selection remain deferred**;
+- average/segmented acquisition and history/timestamps; **the controlled average transaction is implemented but awaits independent hardware acceptance; segmented acquisition remains deferred; the K15 timestamp-table query timed out and remains blocked**;
 - math/FFT/reference waveforms; **math metadata and FFT status are hardware accepted; reference metadata awaits a valid pre-existing reference**;
 - cursor, DVM, and counter results; **vertical cursor readout is hardware accepted; DVM/counter remain uncovered**;
 - read-only probe identity and attenuation/impedance safety integration.

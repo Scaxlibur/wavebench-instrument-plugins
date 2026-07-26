@@ -8,7 +8,7 @@
 
 指定手册的 1490 行转录中共有 1434 个命令索引条目，精确去重后为 1417 个命令模板（608 个带查询标记、809 个非查询形式）。进一步按大小写不敏感并去除排版空白后为 1416 个模板（607 个查询、809 个非查询）；最后一个差异来自重复/排版变体。这个数字仍包含参数化模板和少量 OCR 异常，因此只用于描述命令面规模，不作为功能完成率分母。
 
-当前外置插件公开 15 项 WaveBench capability。它是经过实机验收的模拟波形采集 MVP，并包含一组窄的只读状态/分析能力，不是通用 RTM2000 远程控制层。
+当前外置插件公开 16 项 WaveBench capability。它是经过实机验收的模拟波形采集 MVP，并包含一组窄的只读状态/分析能力和一条受控平均采集事务，不是通用 RTM2000 远程控制层。
 
 覆盖状态：
 
@@ -24,7 +24,7 @@
 | 功能域 | 手册命令面 | 当前覆盖 | 实机状态 | 主要缺口 | 建议 |
 |---|---|---|---|---|---|
 | 身份、同步与基本错误 | IEEE 488.2 公共命令，`SYSTem:ERRor:*` | `*IDN?`、`*OPT?`、非消费型 health snapshot、`*CLS`、`*OPC?` 等待、显式错误队列 | **实机通过** | 自检和完整事件寄存器 API 未暴露 | identity/options/health P1 已完成；EVENT 保持显式边界 |
-| Acquisition 控制 | 16 个模板：模式、平均、采样率、记录长度、插值、分段和可用点数 | 只读 available/count/sample-rate 及 average/segmented 状态；`SINGle` 单次采集；显式 `AUToscale` | **只读状态实机通过，采集动作部分通过** | 连续运行/停止、平均/分段采集、写入率和插值仍缺失 | 只读状态已完成；**P2**：有界 average/segmented plan |
+| Acquisition 控制 | 16 个模板：模式、平均、采样率、记录长度、插值、分段和可用点数 | 只读 available/count/sample-rate 及 average/segmented 状态；`SINGle` 单次采集；显式 `AUToscale`；受控 `scope.capture_average` | **只读状态实机通过；平均事务已实现、待独立实机验收** | 连续运行/停止、分段采集、写入率和插值仍缺失 | 保持 average 的显式 stopped 确认、回读恢复与锁存；**P2**：分段 plan |
 | 模拟通道配置 | 约 48 个模板：状态、耦合、量程、比例、偏置、位置、带宽、极性、skew、标签、过载、阈值 | RTM2032 CH1/CH2 类型化只读状态；既有状态开、比例、位置归零写路径 | **实机通过** | 无阈值读回；setter 没有通用快照与回滚 | 只读 P1 已完成；写入继续受高阻和恢复策略约束 |
 | 模拟波形传输 | `CHANnel<m>:DATA*`、envelope、独立 X/Y 元数据 | REAL/LSBF、header + data、`DEF/MAX/DMAX`、一次 acquisition 后逐通道读取；类型化 X/Y 缩放、点数、量化位数和 values-per-sample 快照 | **实机通过** | 无 envelope、history/segment 选择或流式块 API；不承诺跨通道硬件同步 | 波形元数据已完成；**P2**：分段/history/envelope |
 | 时基、缩放与时间戳 | 12 个 timebase 模板、zoom、timestamp 导航 | 类型化 acquisition time/divisions/position/range/reference/scale/roll 只读状态；既有 `TIMebase:RANGe` 写入；K15 门控的严格 history timestamp table API | **基础时基实机通过；history timestamp 查询因仪器 timeout 阻塞** | 无 zoom；没有成功的 timestamp table 实机证据 | 保留严格 K15 gate，禁止隐式重试/清错；history 状态另行调查 |
@@ -88,7 +88,7 @@ HCOPy:LANGuage  HCOPy:COLor:SCHeme  HCOPy:MENU  HCOPy:DATA?
 
 ### P2：扩展分析与特殊采集
 
-- average/segmented acquisition、history/timestamp；**average/segmented 只读状态实机通过，K15 timestamp table 查询 timeout，配置与 segment waveform 选择仍延后**；
+- average/segmented acquisition、history/timestamp；**average 受控事务已实现但尚待独立实机验收，segmented 仍未实现；K15 timestamp table 查询 timeout**；
 - math/FFT/reference waveform；**math metadata 与 FFT status 实机通过，reference metadata 等待有效的既有 reference**；
 - cursor、DVM、counter；**vertical cursor readout 实机通过，DVM/counter 未覆盖**；
 - probe 身份和衰减/阻抗只读安全联动。
