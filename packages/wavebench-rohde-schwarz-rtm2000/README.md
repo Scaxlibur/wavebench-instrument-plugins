@@ -8,12 +8,12 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `0.8.5`
-- WaveBench：`>=0.8.5,<0.9`
+- 开发基线：WaveBench `0.8.6`
+- WaveBench：`>=0.8.6,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件的 0.10.0 开发线对齐 WaveBench `v0.8.5`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.11.0 开发线对齐 WaveBench `v0.8.6`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -158,6 +158,11 @@ point mode、时基、垂直档位、触发或 K15 history 状态。无论采集
 回读三项配置；恢复失败或结果不一致会锁存该实例的 average 写路径，后续调用零 I/O 拒绝。该实现
 目前有离线事务测试，尚无独立实机验收结论。任一配置写（包括第一条）超时都会按“结果未知”
 处理：即使随后的恢复回读一致，也会永久锁存当前驱动实例，避免继续依赖一次无法证明结果的写事务。
+
+0.11.0 新增 `scope.digital_status` 只读状态面。每次调用先用 `*OPT?` 精确确认 B1，再读取
+D0–D15 中一个显式通道的 activity、display、technology、threshold、threshold coupling、
+hysteresis、deskew、size、position 和 label。该路径不读取 `DIGital:DATA?`，不写阈值/显示/
+传输格式，不启动或停止采集，也不消费错误队列；目前只有离线协议测试，尚未实机验收。
 
 ## 开发验证
 

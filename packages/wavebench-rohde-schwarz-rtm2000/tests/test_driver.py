@@ -20,6 +20,7 @@ from wavebench.instruments.models import (
     ScopeMeasurementStatistics,
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
+    ScopeDigitalChannelStatus,
     ScopeFftStatus,
     ScopeIdentitySnapshot,
     ScopeProbeSnapshot,
@@ -272,6 +273,114 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
     assert driver.transport is transport
     assert driver.check_errors_after_ops is False
     assert transport_opens == 1
+
+
+def test_digital_status_is_b1_gated_and_query_only():
+    responses = {
+        "*OPT?": "K15,B1",
+        "DIGital5:CURRENT:STATE:MINimum?": "0",
+        "DIGital5:CURRENT:STATE:MAXimum?": "1",
+        "DIGital5:DISPLAY?": "ON",
+        "DIGital5:TECHnology?": "TTL",
+        "DIGital5:THReshold?": "1.4",
+        "DIGital5:THCoupling?": "OFF",
+        "DIGital5:Hysteresis?": "NORM",
+        "DIGital5:DESKew?": "2e-9",
+        "DIGital5:SIZE?": "SMAL",
+        "DIGital5:POSITION?": "2.5",
+        "DIGital5:LABel?": '"DATA"',
+        "DIGital5:LABel:STATe?": "1",
+    }
+    transport = FakeTransport(responses=responses)
+
+    status = RTM2032Scope(transport).get_digital_status(5)
+
+    assert status == ScopeDigitalChannelStatus(
+        channel=5,
+        group_start_channel=4,
+        group_stop_channel=7,
+        displayed=True,
+        activity="TOGGLE",
+        technology="TTL",
+        threshold_v=1.4,
+        threshold_coupled=False,
+        hysteresis="NORMAL",
+        deskew_s=2e-9,
+        size="SMALL",
+        position_div=2.5,
+        label="DATA",
+        label_enabled=True,
+    )
+    assert transport.writes == []
+    assert transport.queries == list(responses)
+    assert not any(":DATA" in command for command in transport.queries)
+
+
+def test_digital_status_requires_b1_before_channel_queries():
+    transport = FakeTransport(responses={"*OPT?": "K15"})
+
+    with pytest.raises(InstrumentError, match="option B1"):
+        RTM2032Scope(transport).get_digital_status(0)
+
+    assert transport.writes == []
+    assert transport.queries == ["*OPT?"]
+
+
+@pytest.mark.parametrize("channel", [-1, 16, True, 1.0, "1"])
+def test_digital_status_rejects_invalid_channel_before_io(channel):
+    transport = FakeTransport()
+
+    with pytest.raises(DataError, match="0 through 15"):
+        RTM2032Scope(transport).get_digital_status(channel)
+
+    assert transport.writes == []
+    assert transport.queries == []
+
+
+def test_digital_status_rejects_impossible_activity_pair():
+    transport = FakeTransport(
+        responses={
+            "*OPT?": "B1",
+            "DIGital0:CURRENT:STATE:MINimum?": "1",
+            "DIGital0:CURRENT:STATE:MAXimum?": "0",
+        }
+    )
+
+    with pytest.raises(DataError, match="minimum is high but maximum is low"):
+        RTM2032Scope(transport).get_digital_status(0)
+
+    assert transport.writes == []
+    assert transport.queries == [
+        "*OPT?",
+        "DIGital0:CURRENT:STATE:MINimum?",
+        "DIGital0:CURRENT:STATE:MAXimum?",
+    ]
+
+
+def test_digital_status_normalizes_documented_abbreviations():
+    responses = {
+        "*OPT?": "B1",
+        "DIGital15:CURRENT:STATE:MINimum?": "1",
+        "DIGital15:CURRENT:STATE:MAXimum?": "1",
+        "DIGital15:DISPLAY?": "0",
+        "DIGital15:TECHnology?": "MAN",
+        "DIGital15:THReshold?": "-1.3",
+        "DIGital15:THCoupling?": "ON",
+        "DIGital15:Hysteresis?": "MAX",
+        "DIGital15:DESKew?": "0",
+        "DIGital15:SIZE?": "MED",
+        "DIGital15:POSITION?": "-2",
+        "DIGital15:LABel?": '"D15"',
+        "DIGital15:LABel:STATe?": "OFF",
+    }
+
+    status = RTM2032Scope(FakeTransport(responses=responses)).get_digital_status(15)
+
+    assert status.activity == "HIGH"
+    assert status.technology == "MANUAL"
+    assert status.hysteresis == "MAXIMUM"
+    assert status.size == "MEDIUM"
+    assert (status.group_start_channel, status.group_stop_channel) == (12, 15)
 
 
 def test_identity_and_health_snapshots_are_read_only_and_typed():

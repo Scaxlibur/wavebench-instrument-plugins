@@ -21,6 +21,7 @@ from wavebench.instruments.models import (
     ScopeAnalogChannelSnapshot,
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
+    ScopeDigitalChannelStatus,
     ScopeEdgeTriggerSnapshot,
     ScopeFftStatus,
     ScopeHealthSnapshot,
@@ -357,6 +358,54 @@ def _validate_rtm2032_channel(channel: int) -> None:
         raise DataError("RTM2032 channel must be 1 or 2")
 
 
+def _validate_rtm2000_digital_channel(channel: int) -> None:
+    if isinstance(channel, bool) or not isinstance(channel, int) or channel not in range(16):
+        raise DataError("RTM2000 digital channel must be an integer from 0 through 15")
+
+
+_DIGITAL_TECHNOLOGY_ALIASES = {
+    "TTL": "TTL",
+    "ECL": "ECL",
+    "CMOS": "CMOS",
+    "MAN": "MANUAL",
+    "MANUAL": "MANUAL",
+}
+_DIGITAL_HYSTERESIS_ALIASES = {
+    "MAX": "MAXIMUM",
+    "MAXIMUM": "MAXIMUM",
+    "ROB": "ROBUST",
+    "ROBUST": "ROBUST",
+    "NORM": "NORMAL",
+    "NORMAL": "NORMAL",
+}
+_DIGITAL_SIZE_ALIASES = {
+    "SMAL": "SMALL",
+    "SMALI": "SMALL",
+    "SMALL": "SMALL",
+    "MED": "MEDIUM",
+    "MEDIUM": "MEDIUM",
+    "LARG": "LARGE",
+    "LARGE": "LARGE",
+    "DIV1": "DIV1",
+    "DIV2": "DIV2",
+    "DIV4": "DIV4",
+    "DIV8": "DIV8",
+}
+
+
+def _parse_alias_token(
+    response: str,
+    *,
+    command: str,
+    aliases: dict[str, str],
+) -> str:
+    value = _parse_token(response, command=command)
+    try:
+        return aliases[value]
+    except KeyError as exc:
+        raise DataError(f"invalid {command} response: {response!r}") from exc
+
+
 RTM2000IdentitySnapshot = ScopeIdentitySnapshot
 RTM2000HealthSnapshot = ScopeHealthSnapshot
 RTM2000AnalogChannelSnapshot = ScopeAnalogChannelSnapshot
@@ -460,6 +509,87 @@ class RTM2032Scope:
                 serial_number=serial_number,
                 firmware=firmware,
                 options=_parse_options(self.transport.query("*OPT?")),
+            )
+
+    @_serialized_io
+    def get_digital_status(self, channel: int) -> ScopeDigitalChannelStatus:
+        _validate_rtm2000_digital_channel(channel)
+        with self._io_lock:
+            options = _parse_options(self.transport.query("*OPT?"))
+            if not _has_option(options, "B1"):
+                raise InstrumentError(
+                    "RTM2000 digital-channel status requires installed option B1; "
+                    "*OPT? did not report B1"
+                )
+            prefix = f"DIGital{channel}"
+            activity_minimum = _parse_bool(
+                self.transport.query(f"{prefix}:CURRENT:STATE:MINimum?"),
+                command=f"{prefix}:CURRENT:STATE:MINimum?",
+            )
+            activity_maximum = _parse_bool(
+                self.transport.query(f"{prefix}:CURRENT:STATE:MAXimum?"),
+                command=f"{prefix}:CURRENT:STATE:MAXimum?",
+            )
+            activity_lookup = {
+                (False, False): "LOW",
+                (True, True): "HIGH",
+                (False, True): "TOGGLE",
+            }
+            try:
+                activity = activity_lookup[(activity_minimum, activity_maximum)]
+            except KeyError as exc:
+                raise DataError(
+                    f"inconsistent {prefix} activity response: minimum is high but maximum is low"
+                ) from exc
+            group_start = (channel // 4) * 4
+            return ScopeDigitalChannelStatus(
+                channel=channel,
+                group_start_channel=group_start,
+                group_stop_channel=group_start + 3,
+                displayed=_parse_bool(
+                    self.transport.query(f"{prefix}:DISPLAY?"),
+                    command=f"{prefix}:DISPLAY?",
+                ),
+                activity=activity,
+                technology=_parse_alias_token(
+                    self.transport.query(f"{prefix}:TECHnology?"),
+                    command=f"{prefix}:TECHnology?",
+                    aliases=_DIGITAL_TECHNOLOGY_ALIASES,
+                ),
+                threshold_v=_parse_finite_float(
+                    self.transport.query(f"{prefix}:THReshold?"),
+                    command=f"{prefix}:THReshold?",
+                ),
+                threshold_coupled=_parse_bool(
+                    self.transport.query(f"{prefix}:THCoupling?"),
+                    command=f"{prefix}:THCoupling?",
+                ),
+                hysteresis=_parse_alias_token(
+                    self.transport.query(f"{prefix}:Hysteresis?"),
+                    command=f"{prefix}:Hysteresis?",
+                    aliases=_DIGITAL_HYSTERESIS_ALIASES,
+                ),
+                deskew_s=_parse_finite_float(
+                    self.transport.query(f"{prefix}:DESKew?"),
+                    command=f"{prefix}:DESKew?",
+                ),
+                size=_parse_alias_token(
+                    self.transport.query(f"{prefix}:SIZE?"),
+                    command=f"{prefix}:SIZE?",
+                    aliases=_DIGITAL_SIZE_ALIASES,
+                ),
+                position_div=_parse_finite_float(
+                    self.transport.query(f"{prefix}:POSITION?"),
+                    command=f"{prefix}:POSITION?",
+                ),
+                label=_parse_quoted_text(
+                    self.transport.query(f"{prefix}:LABel?"),
+                    command=f"{prefix}:LABel?",
+                ),
+                label_enabled=_parse_bool(
+                    self.transport.query(f"{prefix}:LABel:STATe?"),
+                    command=f"{prefix}:LABel:STATe?",
+                ),
             )
 
     @_serialized_io

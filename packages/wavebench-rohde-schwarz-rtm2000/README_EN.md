@@ -9,12 +9,12 @@ RTM2032 as the current hardware baseline.
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
-- development baseline: WaveBench `0.8.5`
-- WaveBench: `>=0.8.5,<0.9`
+- development baseline: WaveBench `0.8.6`
+- WaveBench: `>=0.8.6,<0.9`
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-The plugin's 0.10.0 development line targets WaveBench `v0.8.5`, does not maintain a legacy-core
+The plugin's 0.11.0 development line targets WaveBench `v0.8.6`, does not maintain a legacy-core
 compatibility matrix, and does not automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
@@ -187,6 +187,13 @@ point mode, timebase, vertical scale, trigger, or K15 history state. Both succes
 acquisitions restore and read back all three configuration fields; failed or mismatched restoration
 latches that instance's average-write path, so later calls fail with zero I/O. This has offline
 transaction coverage but no independent hardware-acceptance conclusion yet.
+
+Version 0.11.0 adds the read-only `scope.digital_status` surface. Every call first requires an
+exact B1 token from `*OPT?`, then reads the activity and existing display, technology, threshold,
+threshold-coupling, hysteresis, deskew, size, position, and label state for one explicit D0-D15
+channel. It does not read `DIGital:DATA?`, write digital configuration or transfer format, start or
+stop acquisition, or consume the error queue. The path has offline protocol tests but no independent
+real-instrument acceptance conclusion yet.
 
 ## Development checks
 

@@ -35,7 +35,7 @@
 | Spectrum / spectrogram | 107 个模板：频谱波形、频率轴、RBW、marker、history、spectrogram | 未覆盖 | 无 | 完整频谱分析应用缺失 | **P3，选件门控**：先探测选件和 `SPECtrum[:STATe]`，再设计独立 capability |
 | Search | 约 119 个模板：edge/width/runt/pattern、结果和协议搜索 | 未覆盖 | 无 | 无搜索配置、结果列表或结果导航 | **P3**：依赖 history/trigger/protocol 模型成熟后再做 |
 | Mask test | 约 36 个模板：mask 数据、计数、动作、保存/加载 | 未覆盖 | 无 | 无 mask 生命周期、违规计数或 action 安全模型 | **P3，破坏性动作分离**：只读结果与保存/打印/脉冲动作必须分开 |
-| 数字通道 / MSO | 约 33 个模板：数字波形、阈值、技术类型、deskew、history | 未覆盖 | 无 | 无数字波形模型、逻辑位宽或阈值 API | **P3，选件门控** |
+| 数字通道 / MSO | 约 33 个模板：数字波形、阈值、技术类型、deskew、history | B1 门控的 `scope.digital_status`：D0–D15 activity 与既有配置只读快照 | **已实现，待实机验收** | 无数字波形 payload、配置写入、history 或总线解码 API | 保持 query-only；实机确认 B1 标量查询后，再独立设计 packed waveform contract |
 | 串行/并行总线解码 | 约 249 个模板：I²C、SPI/SSPI、UART、CAN、LIN、I²S、ARINC、MIL-STD、并行总线及帧结果 | 未覆盖 | 无 | 无总线配置、帧列表、字段解析或 history | **P3，按选件拆包**；不要放进基础 scope capability |
 | 协议触发与协议搜索 | 触发和 search 内另有大量 CAN/LIN/I²C/SPI/UART/I²S/ARINC/MIL-STD 模板 | 未覆盖 | 无 | 依赖总线源、阈值、协议格式和选件探测 | **P3**：在总线只读解码之后实现 |
 | DVM 与频率计数器 | 6 个 DVM、3 个 counter 模板 | 未覆盖 | 无 | 无 source/type/result/status API | **P2，选件门控**：适合小型只读 capability |
