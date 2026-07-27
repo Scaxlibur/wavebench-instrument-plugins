@@ -6,7 +6,7 @@
 
 This document divides the broad DG4000 programming surface into M0-M12. Milestone numbers express risk order, not command counts or completion percentages. A milestone is complete only when code, failure paths, release artifacts, and the required hardware evidence all pass its exit gate.
 
-Current version: `wavebench-rigol-dg4000 0.4.0`.
+Current version: `wavebench-rigol-dg4000 0.5.0`.
 
 | Milestone | Status | Scope |
 |---|---|---|
@@ -15,7 +15,7 @@ Current version: `wavebench-rigol-dg4000 0.4.0`.
 | M2 | **Complete** | Transactional fixed-wave and output writes |
 | M3 | **Complete** | Complete read-only channel profile and bounded restore contract |
 | M4 | **Complete** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
-| M5 | Not started | Query-only sweep profile |
+| M5 | **Complete** | Query-only sweep profile |
 | M6 | Not started | Non-destructive counter profile |
 | M7 | Not started | Controlled sweep transaction and trigger |
 | M8 | Not started | Controlled pulse/burst/marker profiles |
@@ -24,8 +24,8 @@ Current version: `wavebench-rigol-dg4000 0.4.0`.
 | M11 | Not started | Advanced modulation, harmonics, and arbitrary-wave formats |
 | M12 | Not started | Model/channel acceptance matrix and release convergence |
 
-M0 completion adds no instrument function. Version 0.4.0 completes M1/M2/M3 and the complete M4
-hardware exit gate on both CH1 and CH2.
+M0 completion adds no instrument function. Version 0.5.0 completes the M1-M5 hardware exit gates
+on DG4202 CH1 and CH2.
 
 ## 2. Rules shared by all milestones
 
@@ -211,11 +211,25 @@ across the gate. Both uploads overwrote volatile USER data.
 
 ## 9. M5 — Query-only sweep profile
 
-**Status: not started; P2.** Query an existing sweep without starting, stopping, or triggering it.
+**Status: complete.** Query an existing sweep without starting, stopping, or triggering it.
 
 At minimum, capture `SWEep:STATe?`, `FREQuency:STARt?/STOP?/CENTer?/SPAN?`, `SWEep:SPACing?`, `SWEep:STEP?`, `SWEep:TIME?`, hold/return time, trigger source/slope/trigger-out, and marker state/frequency.
 
-Exit gate: strict enums and internal relationship checks; no partial profile after any failed query. Validate three zero-write rounds with instrument output OFF and sweep preset both OFF and ON.
+Exit gate: strict enums and internal relationship checks; no partial profile after any failed query.
+Validate three rounds with instrument output OFF and sweep preset both OFF and ON. Each profile-read
+session must be strictly zero-write. Establish preset states and final restoration in separate,
+controlled write sessions that are not counted as query-only capability evidence.
+
+2026-07-27 evidence: external plugin `0.5.0` completed dual-channel acceptance on DG4202 firmware
+`00.01.14`. Both channels initially had output ON, FIX mode, and sweep/burst/modulation/marker OFF.
+Controlled staging disabled output and separately established sweep OFF and sweep ON. Two guarded
+zero-write transport sessions each read both channels for three consecutive rounds; each session
+issued 104 queries, zero text writes, and zero binary writes, with field-identical rounds in each
+preset state. Returned fields cover start/stop/center/span, spacing, steps, sweep/hold/return time,
+trigger source/slope/out, and marker. Offline tests also cover every query position, empty/nonfinite/
+unknown-enum responses, non-integral steps, and cross-field inconsistency. After restoration, both
+complete channel profiles and sweep profiles matched their initial snapshots and the error queue
+was clear. No immediate trigger or `*TRG` was sent, and no sweep setter was exposed.
 
 ## 10. M6 — Non-destructive counter profile
 
@@ -285,9 +299,8 @@ Final exit requires every public write capability to have normal-path, failure-m
 
 ## 17. Current evidence boundary
 
-- External-plugin hardware accepted: M1/M2/M3 dual-channel gates and complete M4 CH1/CH2 gates
-  on DG4202 firmware `00.01.14`.
+- External-plugin hardware accepted: M1-M5 CH1/CH2 gates on DG4202 firmware `00.01.14`.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: M5-M12.
+- Not passed: M6-M12.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

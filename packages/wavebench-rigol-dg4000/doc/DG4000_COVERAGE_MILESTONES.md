@@ -6,7 +6,7 @@
 
 本文把 DG4000 编程手册的广阔命令面拆成 M0–M12。里程碑编号是风险顺序，不是命令数量或完成率；每一级只有在代码、失败路径、发行包和相应实机证据同时满足退出门后才算完成。
 
-当前版本：`wavebench-rigol-dg4000 0.4.0`。
+当前版本：`wavebench-rigol-dg4000 0.5.0`。
 
 | 里程碑 | 状态 | 范围 |
 |---|---|---|
@@ -15,7 +15,7 @@
 | M2 | **完成** | 现有固定波形/输出写路径事务化 |
 | M3 | **完成** | 完整只读通道 profile 与受限恢复契约 |
 | M4 | **完成** | DAC14 任意波事务与外置插件实机复验 |
-| M5 | 未开始 | Sweep 只读 profile |
+| M5 | **完成** | Sweep 只读 profile |
 | M6 | 未开始 | Counter 非破坏性只读 profile |
 | M7 | 未开始 | Sweep 受控事务与触发 |
 | M8 | 未开始 | Pulse/Burst/Marker 受控 profile |
@@ -24,7 +24,7 @@
 | M11 | 未开始 | 高级调制、谐波和高级任意波格式 |
 | M12 | 未开始 | 型号/通道验收矩阵与发布收口 |
 
-M0 完成不表示仪器功能增加。0.4.0 完成 M1/M2/M3，并完成 M4 的 CH1/CH2 完整实机退出门。
+M0 完成不表示仪器功能增加。0.5.0 已完成 M1–M5 的 DG4202 CH1/CH2 实机退出门。
 
 ## 2. 所有阶段共同规则
 
@@ -204,11 +204,22 @@ RMSE 为 0.2196，比值为 0.4229。DG4202 CH2 原始状态随后恢复，错�
 
 ## 9. M5 — Sweep 只读 profile
 
-**状态：未开始；P2。** 只查询已经存在的 sweep，不启动、不停止、不触发。
+**状态：完成。** 只查询已经存在的 sweep，不启动、不停止、不触发。
 
 profile 至少包含 `SWEep:STATe?`、`FREQuency:STARt?/STOP?/CENTer?/SPAN?`、`SWEep:SPACing?`、`SWEep:STEP?`、`SWEep:TIME?`、hold/return time、trigger source/slope/trigger-out 和 marker 状态/频率。
 
-退出门：严格枚举、内部字段关系校验、任一查询失败时不返回部分 profile；在仪器 OFF 且 sweep OFF/ON 两种预置状态各验证三轮，整个验收零写入。
+退出门：严格枚举、内部字段关系校验、任一查询失败时不返回部分 profile；在仪器 output
+OFF 且 sweep OFF/ON 两种预置状态各验证三轮。每个 profile 读取会话必须严格零写；制造
+预置状态与最终恢复使用单独的受控写会话，不混入 query-only 能力证据。
+
+2026-07-27 证据：外置插件 `0.5.0` 在 DG4202 固件 `00.01.14` 上完成 CH1/CH2 双通道
+验收。初始两路均为 output ON、FIX、sweep/burst/modulation/marker OFF。受控预置先关闭
+输出，再分别建立 sweep OFF 与 sweep ON；两个独立零写 transport 会话各对两路连续读取
+三轮，每个会话均为 104 queries、0 text writes、0 binary writes，各状态下三轮逐字段
+一致。返回字段覆盖 start/stop/center/span、spacing、steps、sweep/hold/return time、trigger
+source/slope/out 与 marker；离线测试同时覆盖每个查询位置失败、空/非有限/未知枚举、非整数
+steps 和跨字段关系错误。恢复后，CH1/CH2 完整 channel profile 与 sweep profile 均和初始
+快照一致，错误队列为空。未发送 immediate trigger 或 `*TRG`，未开放 sweep setter。
 
 ## 10. M6 — Counter 非破坏性只读 profile
 
@@ -278,9 +289,8 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 
 ## 17. 当前证据边界
 
-- 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1/M2/M3 双通道门及 M4 CH1/CH2
-  完整实机门。
+- 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
-- 尚未通过：M5–M12。
+- 尚未通过：M6–M12。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

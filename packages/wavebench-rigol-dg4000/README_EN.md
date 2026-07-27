@@ -8,35 +8,37 @@ An executable WaveBench instrument plugin for the dual-channel RIGOL DG4202 and 
 
 - Distribution: `wavebench-rigol-dg4000`
 - Canonical driver ID: `rigol.dg4202`
-- WaveBench: `>=0.8.15,<0.9`
+- WaveBench: `>=0.8.16,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa`
 
-This package uses the public `SourceChannelProfile` contract first available in WaveBench
-`v0.8.15`. It does not run with an older core and does not automatically claim compatibility with
-a future `0.9` core.
+This package uses both the public `SourceChannelProfile` contract first available in WaveBench
+`v0.8.15` and the `SourceSweepProfile` contract added in `v0.8.16`. It does not run with a core
+older than `v0.8.16` and does not automatically claim compatibility with a future `0.9` core.
 
 The plugin defines no aliases. After installation, the explicit canonical ID `rigol.dg4202` selects the external implementation, while the short `dg4202` alias always selects WaveBench's built-in fallback. Removing the plugin also restores the built-in canonical implementation.
 
 ## Capabilities and boundaries
 
 The driver supports identity/error queries, CH1/CH2 state, strict read-only channel profiles for
-load, polarity, noise, sync, burst, modulation, marker, and pulse hold, fixed frequency, function,
-VPP amplitude, square duty cycle, explicit output control, query-only arbitrary-wave capability
-probes, and upload of validated DAC14 blocks through WaveBench's public `DG4000DacBlock` contract.
+load, polarity, noise, sync, burst, modulation, marker, and pulse hold, strict read-only sweep
+profiles for the frequency window, spacing, timing, trigger, and marker, fixed frequency,
+function, VPP amplitude, square duty cycle, explicit output control, query-only arbitrary-wave
+capability probes, and upload of validated DAC14 blocks through WaveBench's public
+`DG4000DacBlock` contract.
 
 WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
 
-Version `0.4.0` completes the M3 read-only channel profile while preserving the M1/M2/M4
-transaction boundaries from `0.3.0`: all I/O shares one reentrant lock;
+Version `0.5.0` adds the M5 read-only sweep profile on top of the M3 channel profile from `0.4.0`
+while preserving the M1/M2/M4 transaction boundaries from `0.3.0`: all I/O shares one reentrant lock;
 fixed-wave writes use a pre-write snapshot, per-step readback, off-first recovery, and ambiguous-
 write latching; DAC14 upload is accepted only while the target channel is already OFF, in FIX
 mode, with sweep OFF. Overwriting the volatile USER waveform is reported as an irreversible side
-effect. DG4202 firmware `00.01.14` has passed the M1/M2/M3 hardware exit gates. The complete M4
-hardware exit gate has also passed on both CH1 and CH2. The M3 profile is read-only context: it
-does not widen core basic restoration or promise restoration of load, polarity, noise, sync,
-burst, modulation, marker, pulse hold, or volatile USER contents. No result is extrapolated to
-another model, firmware, or channel wiring.
+effect. DG4202 firmware `00.01.14` has passed the M1-M5 hardware exit gates. The M3 and M5
+profiles are read-only contexts: they do not widen core basic restoration or promise restoration
+of load, polarity, noise, sync,
+burst, modulation, marker, pulse hold, a complete sweep profile, or volatile USER contents. No
+result is extrapolated to another model, firmware, or channel wiring.
 
 The [DG4000 coverage matrix](doc/DG4000_COVERAGE_MATRIX_EN.md) maps vendor command domains to
 current public APIs, offline/hardware evidence, and high-risk commands denied by default. The
@@ -80,10 +82,22 @@ unchanged across the gate. RTM2032 waveform fetch uses controlled transfer-forma
 is not a zero-write scope session. Both uploads overwrite volatile USER data, an acknowledged
 irreversible side effect. No real resource, serial number, raw waveform, or command log is stored.
 
+M5 used external plugin `0.5.0` for query-only sweep-profile acceptance on CH1 and CH2. Both
+channels initially had output ON, FIX mode, and sweep/burst/modulation/marker OFF. A controlled
+staging session first disabled output and separately established sweep OFF and sweep ON. For each
+state, a guarded read-only session read both channels three consecutive times. Each session issued
+104 queries, zero text writes, and zero binary writes, and all six profiles matched field by field
+within their preset state. The profile covers start/stop/center/span, linear/log/step spacing,
+steps, sweep/hold/return timing, trigger source/slope/out, and marker. Any failed query or invalid
+relationship rejects the whole profile. Staging and restoration writes were outside the two
+zero-write read sessions. After restoration, both complete channel profiles and sweep profiles
+matched their initial snapshots and the error queue was clear. No immediate trigger or `*TRG` was
+sent, and no sweep-write capability was created.
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an
-environment containing WaveBench `v0.8.15` or newer within the declared `<0.9` range.
+environment containing WaveBench `v0.8.16` or newer within the declared `<0.9` range.
 
 Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for daily source work. Formal acceptance still uses a real wheel and a disposable virtual environment.
 
@@ -95,3 +109,6 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
 - `0.4.0` requires WaveBench `>=0.8.15` and adds `source.channel_profile`. DG4202 `00.01.14`
   passes the strict zero-write M3 gate and complete M4 hardware gate on CH1/CH2 without widening
   automatic restoration or the capability surface.
+- `0.5.0` requires WaveBench `>=0.8.16` and adds `source.sweep_profile`. DG4202 `00.01.14`
+  passes three strict zero-write M5 rounds on CH1/CH2 in both sweep-OFF and sweep-ON preset states
+  without adding a sweep setter, trigger, or automatic-restoration field.

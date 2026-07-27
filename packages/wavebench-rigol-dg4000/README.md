@@ -8,12 +8,13 @@
 
 - distribution：`wavebench-rigol-dg4000`
 - canonical driver ID：`rigol.dg4202`
-- WaveBench：`>=0.8.15,<0.9`
+- WaveBench：`>=0.8.16,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
 
-当前包使用 WaveBench `v0.8.15` 首次提供的 `SourceChannelProfile` 公共契约，不能与更早
-的 core 配套运行，也不自动声明兼容未来 `0.9`。
+当前包同时使用 WaveBench `v0.8.15` 首次提供的 `SourceChannelProfile` 与 `v0.8.16`
+新增的 `SourceSweepProfile` 公共契约，因此不能与早于 `v0.8.16` 的 core 配套运行，也不
+自动声明兼容未来 `0.9`。
 
 该插件不声明 alias。安装后，显式 canonical ID `rigol.dg4202` 选择外置实现；短 alias `dg4202` 始终选择 WaveBench 内建 fallback。卸载插件后，canonical ID 也回退到内建实现。
 
@@ -21,6 +22,7 @@
 
 - `*IDN?`、错误队列与 CH1/CH2 状态读取；
 - CH1/CH2 负载、极性、noise、sync、burst、modulation、marker 和 pulse-hold 的严格只读 profile；
+- CH1/CH2 sweep 状态、频率窗口、spacing/steps/time、hold/return、trigger 和 marker 的严格只读 profile；
 - 固定频率、函数、VPP 幅度、方波占空比和显式输出控制；
 - 只读任意波形 SCPI 能力探测；
 - 使用 WaveBench 公共 `DG4000DacBlock` 契约上传已校验的 DAC14 binary block。
@@ -36,13 +38,14 @@ WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅�
 
 descriptor 导入不连接仪器。factory 只通过 `DriverContext` 打开当前配置的 transport。默认离线测试不扫描资源、不连接仪器，也不发送真实 SCPI。输出控制、任意波形上传和其他写操作不会盲目重试。
 
-`0.4.0` 完成 M3 只读通道 profile，并保留 `0.3.0` 的 M1/M2/M4 事务边界：所有 I/O 使用同一可重入锁，固定波写入采用
+`0.5.0` 在 `0.4.0` 的 M3 只读通道 profile 上新增 M5 只读 sweep profile，并保留
+`0.3.0` 的 M1/M2/M4 事务边界：所有 I/O 使用同一可重入锁，固定波写入采用
 写前快照、逐步回读、off-first 恢复和歧义写锁存；DAC14 上传仅允许目标通道已 OFF、
 FIX 且 sweep OFF，并明确把被覆盖的 volatile USER 波表视为不可恢复副作用。DG4202
-固件 `00.01.14` 已通过 M1/M2/M3 实机退出门；M4 的 CH1/CH2 完整实机退出门也均已通过。
-M3 profile 是只读上下文，不扩大 core 的
+固件 `00.01.14` 已通过 M1–M5 实机退出门。M3/M5 profile 是只读上下文，不扩大 core 的
 basic restore，也不承诺恢复 load、polarity、noise、sync、burst、modulation、marker、
-pulse hold 或 volatile USER 内容。结论不外推到其它型号、固件或通道接线。
+pulse hold、完整 sweep profile 或 volatile USER 内容。结论不外推到其它型号、固件或
+通道接线。
 
 示例使用文档保留地址：
 
@@ -88,6 +91,16 @@ CH2 随后接入 RTM2032 CH2 高阻输入，以 1 kHz、1 Vpp 三角波完成独
 示波器零写入会话。两路 volatile USER 内容均被本次上传覆盖，这是已知且不可恢复的
 副作用；未保存真实地址、序列号、原始波形或命令日志。
 
+M5 使用外置插件 `0.5.0` 对 CH1/CH2 完成 query-only sweep profile 验收。初始两路均为
+output ON、FIX、sweep/burst/modulation/marker OFF；受控预置会话先将输出关闭，再分别
+建立 sweep OFF 与 sweep ON 状态。每个状态都在独立 transport 守卫下对两通道连续读取
+三轮，单个只读会话完成 104 次 query、0 次 text write、0 次 binary write，六份 profile
+在各状态下逐字段一致。profile 覆盖 start/stop/center/span、linear/log/step、steps、
+sweep/hold/return time、trigger source/slope/out 和 marker；任何查询或关系校验失败均不会
+返回部分结果。预置与恢复写入不属于这两个零写读取会话；恢复完成后，CH1/CH2 的完整
+channel profile 与 sweep profile 均与初始快照相等，错误队列为空。未发送 immediate
+trigger 或 `*TRG`，也未形成 sweep 写 capability。
+
 ## 开发验证
 
 ```bash
@@ -107,3 +120,6 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
 - `0.2.0`：增加 M0–M12 双语覆盖里程碑与发行包防泄漏回归；不扩大 capability。
 - `0.3.0`：交付现有 API 的严格收口、固定波事务化和 DAC14 fail-closed 实现；DG4202 `00.01.14` 的 M1/M2 与 M4 CH1 实机退出门通过，M4 CH2 仅协议/恢复通过，未扩大 capability。
 - `0.4.0`：要求 WaveBench `>=0.8.15`，新增 `source.channel_profile`；DG4202 `00.01.14` 的 CH1/CH2 严格零写 M3 实机门及 M4 完整实机门通过，不扩大自动恢复范围或 capability。
+- `0.5.0`：要求 WaveBench `>=0.8.16`，新增 `source.sweep_profile`；DG4202 `00.01.14`
+  的 CH1/CH2 在 sweep OFF/ON 两种预置状态下各完成三轮严格零写 M5 实机门，不增加
+  sweep setter、trigger 或自动恢复字段。

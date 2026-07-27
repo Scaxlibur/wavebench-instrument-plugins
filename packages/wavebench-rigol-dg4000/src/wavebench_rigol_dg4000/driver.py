@@ -9,6 +9,7 @@ from wavebench.instruments import DG4000DacBlock
 from wavebench.instruments.models import (
     ArbitraryQueryProbeResult,
     SourceChannelProfile,
+    SourceSweepProfile,
     SourceStatus,
 )
 from wavebench.transport.base import InstrumentTransport
@@ -47,6 +48,29 @@ _FUNCTION_ALIASES = {
     "HARM": "HARM",
 }
 _STATE_ALIASES = {"0": "OFF", "OFF": "OFF", "1": "ON", "ON": "ON"}
+_SWEEP_SPACING_ALIASES = {
+    "LIN": "LINEAR",
+    "LINEAR": "LINEAR",
+    "LOG": "LOGARITHMIC",
+    "LOGARITHMIC": "LOGARITHMIC",
+    "STE": "STEP",
+    "STEP": "STEP",
+}
+_SWEEP_TRIGGER_SOURCE_ALIASES = {
+    "INT": "INTERNAL",
+    "INTERNAL": "INTERNAL",
+    "EXT": "EXTERNAL",
+    "EXTERNAL": "EXTERNAL",
+    "MAN": "MANUAL",
+    "MANUAL": "MANUAL",
+}
+_EDGE_ALIASES = {
+    "POS": "POSITIVE",
+    "POSITIVE": "POSITIVE",
+    "NEG": "NEGATIVE",
+    "NEGATIVE": "NEGATIVE",
+}
+_TRIGGER_OUT_ALIASES = {"OFF": "OFF", **_EDGE_ALIASES}
 _MODULATION_TYPE_ALIASES = {
     name: name
     for name in ("AM", "FM", "PM", "ASK", "FSK", "PSK", "PWM", "BPSK", "QPSK", "3FSK", "4FSK", "OSK")
@@ -550,6 +574,92 @@ class DG4202Source:
                 marker_enabled=marker_enabled,
                 pulse_hold=pulse_hold,
             )
+
+    def get_sweep_profile(self, channel: int) -> SourceSweepProfile:
+        _validate_channel(channel)
+        with self._io_lock:
+            self._ensure_identity()
+            enabled = self._query_state(
+                f":SOUR{channel}:SWE:STAT?", field_name="sweep state"
+            )
+            start_hz = self._query_finite_float(
+                f":SOUR{channel}:FREQ:STAR?", field_name="sweep start frequency"
+            )
+            stop_hz = self._query_finite_float(
+                f":SOUR{channel}:FREQ:STOP?", field_name="sweep stop frequency"
+            )
+            center_hz = self._query_finite_float(
+                f":SOUR{channel}:FREQ:CENT?", field_name="sweep center frequency"
+            )
+            span_hz = self._query_finite_float(
+                f":SOUR{channel}:FREQ:SPAN?", field_name="sweep span"
+            )
+            spacing = _normalize_enum(
+                self.transport.query(f":SOUR{channel}:SWE:SPAC?"),
+                field_name="sweep spacing",
+                aliases=_SWEEP_SPACING_ALIASES,
+            )
+            steps_raw = self._query_finite_float(
+                f":SOUR{channel}:SWE:STEP?", field_name="sweep steps"
+            )
+            if not steps_raw.is_integer():
+                raise DataError("sweep steps response must be an integer")
+            steps = int(steps_raw)
+            sweep_time_s = self._query_finite_float(
+                f":SOUR{channel}:SWE:TIME?", field_name="sweep time"
+            )
+            start_hold_s = self._query_finite_float(
+                f":SOUR{channel}:SWE:HTIM:STAR?", field_name="sweep start hold"
+            )
+            stop_hold_s = self._query_finite_float(
+                f":SOUR{channel}:SWE:HTIM:STOP?", field_name="sweep stop hold"
+            )
+            return_time_s = self._query_finite_float(
+                f":SOUR{channel}:SWE:RTIM?", field_name="sweep return time"
+            )
+            trigger_source = _normalize_enum(
+                self.transport.query(f":SOUR{channel}:SWE:TRIG:SOUR?"),
+                field_name="sweep trigger source",
+                aliases=_SWEEP_TRIGGER_SOURCE_ALIASES,
+            )
+            trigger_slope = _normalize_enum(
+                self.transport.query(f":SOUR{channel}:SWE:TRIG:SLOP?"),
+                field_name="sweep trigger slope",
+                aliases=_EDGE_ALIASES,
+            )
+            trigger_out = _normalize_enum(
+                self.transport.query(f":SOUR{channel}:SWE:TRIG:TRIGOUT?"),
+                field_name="sweep trigger output",
+                aliases=_TRIGGER_OUT_ALIASES,
+            )
+            marker_enabled = self._query_state(
+                f":SOUR{channel}:MARK:STAT?", field_name="marker state"
+            )
+            marker_frequency_hz = self._query_finite_float(
+                f":SOUR{channel}:MARK:FREQ?", field_name="marker frequency"
+            )
+            try:
+                return SourceSweepProfile(
+                    channel=channel,
+                    enabled=enabled,
+                    start_hz=start_hz,
+                    stop_hz=stop_hz,
+                    center_hz=center_hz,
+                    span_hz=span_hz,
+                    spacing=spacing,
+                    steps=steps,
+                    sweep_time_s=sweep_time_s,
+                    start_hold_s=start_hold_s,
+                    stop_hold_s=stop_hold_s,
+                    return_time_s=return_time_s,
+                    trigger_source=trigger_source,
+                    trigger_slope=trigger_slope,
+                    trigger_out=trigger_out,
+                    marker_enabled=marker_enabled,
+                    marker_frequency_hz=marker_frequency_hz,
+                )
+            except ValueError as exc:
+                raise DataError(f"inconsistent DG4000 sweep profile: {exc}") from exc
 
     def set_frequency(
         self,

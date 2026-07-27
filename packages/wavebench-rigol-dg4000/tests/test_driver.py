@@ -50,7 +50,21 @@ class FakeTransport:
             "modulation": "OFF",
             "modulation_type": "AM",
             "marker": "OFF",
+            "marker_frequency": 550.0,
             "pulse_hold": "DUTY",
+            "sweep_start": 100.0,
+            "sweep_stop": 1000.0,
+            "sweep_center": 550.0,
+            "sweep_span": 900.0,
+            "sweep_spacing": "LIN",
+            "sweep_steps": 101.0,
+            "sweep_time": 1.0,
+            "sweep_start_hold": 0.0,
+            "sweep_stop_hold": 0.0,
+            "sweep_return_time": 0.0,
+            "sweep_trigger_source": "INT",
+            "sweep_trigger_slope": "POS",
+            "sweep_trigger_out": "OFF",
         }
 
     def write(self, command: str) -> None:
@@ -124,7 +138,21 @@ class FakeTransport:
             f":SOUR{channel}:MOD:STAT?": self.state["modulation"],
             f":SOUR{channel}:MOD:TYPE?": self.state["modulation_type"],
             f":SOUR{channel}:MARK:STAT?": self.state["marker"],
+            f":SOUR{channel}:MARK:FREQ?": str(self.state["marker_frequency"]),
             f":SOUR{channel}:PULS:HOLD?": self.state["pulse_hold"],
+            f":SOUR{channel}:FREQ:STAR?": str(self.state["sweep_start"]),
+            f":SOUR{channel}:FREQ:STOP?": str(self.state["sweep_stop"]),
+            f":SOUR{channel}:FREQ:CENT?": str(self.state["sweep_center"]),
+            f":SOUR{channel}:FREQ:SPAN?": str(self.state["sweep_span"]),
+            f":SOUR{channel}:SWE:SPAC?": self.state["sweep_spacing"],
+            f":SOUR{channel}:SWE:STEP?": str(self.state["sweep_steps"]),
+            f":SOUR{channel}:SWE:TIME?": str(self.state["sweep_time"]),
+            f":SOUR{channel}:SWE:HTIM:STAR?": str(self.state["sweep_start_hold"]),
+            f":SOUR{channel}:SWE:HTIM:STOP?": str(self.state["sweep_stop_hold"]),
+            f":SOUR{channel}:SWE:RTIM?": str(self.state["sweep_return_time"]),
+            f":SOUR{channel}:SWE:TRIG:SOUR?": self.state["sweep_trigger_source"],
+            f":SOUR{channel}:SWE:TRIG:SLOP?": self.state["sweep_trigger_slope"],
+            f":SOUR{channel}:SWE:TRIG:TRIGOUT?": self.state["sweep_trigger_out"],
             f":SOUR{channel}:FUNC:USER?": '"USER1"',
             f":SOUR{channel}:ARB:SRAT?": "1000000",
         }
@@ -144,9 +172,10 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert item.distribution == "wavebench-rigol-dg4000"
     assert item.aliases == ()
     assert item.kind == "source"
-    assert item.version == "0.4.0"
-    assert item.wavebench_min_version == "0.8.15"
+    assert item.version == "0.5.0"
+    assert item.wavebench_min_version == "0.8.16"
     assert "source.channel_profile" in item.capabilities
+    assert "source.sweep_profile" in item.capabilities
     assert "source.arbitrary_upload" in item.capabilities
 
 
@@ -263,6 +292,180 @@ def test_channel_profile_query_failure_returns_no_partial_profile_and_never_writ
 
     with pytest.raises(InstrumentError, match="injected query failure"):
         DG4202Source(transport).get_channel_profile(1)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+SWEEP_PROFILE_QUERIES = [
+    "*IDN?",
+    ":SOUR1:SWE:STAT?",
+    ":SOUR1:FREQ:STAR?",
+    ":SOUR1:FREQ:STOP?",
+    ":SOUR1:FREQ:CENT?",
+    ":SOUR1:FREQ:SPAN?",
+    ":SOUR1:SWE:SPAC?",
+    ":SOUR1:SWE:STEP?",
+    ":SOUR1:SWE:TIME?",
+    ":SOUR1:SWE:HTIM:STAR?",
+    ":SOUR1:SWE:HTIM:STOP?",
+    ":SOUR1:SWE:RTIM?",
+    ":SOUR1:SWE:TRIG:SOUR?",
+    ":SOUR1:SWE:TRIG:SLOP?",
+    ":SOUR1:SWE:TRIG:TRIGOUT?",
+    ":SOUR1:MARK:STAT?",
+    ":SOUR1:MARK:FREQ?",
+]
+
+
+def test_sweep_profile_is_complete_strict_and_query_only() -> None:
+    transport = FakeTransport()
+
+    profile = DG4202Source(transport).get_sweep_profile(1)
+
+    assert profile.as_dict() == {
+        "channel": 1,
+        "enabled": True,
+        "start_hz": 100.0,
+        "stop_hz": 1000.0,
+        "center_hz": 550.0,
+        "span_hz": 900.0,
+        "spacing": "LINEAR",
+        "steps": 101,
+        "sweep_time_s": 1.0,
+        "start_hold_s": 0.0,
+        "stop_hold_s": 0.0,
+        "return_time_s": 0.0,
+        "trigger_source": "INTERNAL",
+        "trigger_slope": "POSITIVE",
+        "trigger_out": "OFF",
+        "marker_enabled": False,
+        "marker_frequency_hz": 550.0,
+    }
+    assert transport.queries == SWEEP_PROFILE_QUERIES
+    assert all(command.endswith("?") for command in transport.queries)
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_sweep_profile_normalizes_documented_long_and_short_enums_on_channel_two() -> None:
+    transport = FakeTransport(channel=2)
+    transport.state.update(
+        {
+            "swe": "0",
+            "sweep_spacing": "LOGARITHMIC",
+            "sweep_steps": 2048.0,
+            "sweep_time": 300.0,
+            "sweep_start_hold": 1.25,
+            "sweep_stop_hold": 2.5,
+            "sweep_return_time": 3.75,
+            "sweep_trigger_source": "MAN",
+            "sweep_trigger_slope": "NEGATIVE",
+            "sweep_trigger_out": "POS",
+            "marker": "1",
+            "marker_frequency": 800.0,
+        }
+    )
+
+    profile = DG4202Source(transport).get_sweep_profile(2)
+
+    assert profile.channel == 2
+    assert profile.enabled is False
+    assert profile.spacing == "LOGARITHMIC"
+    assert profile.steps == 2048
+    assert profile.trigger_source == "MANUAL"
+    assert profile.trigger_slope == "NEGATIVE"
+    assert profile.trigger_out == "POSITIVE"
+    assert profile.marker_enabled is True
+    assert profile.marker_frequency_hz == 800.0
+    assert all(":SOUR1:" not in command for command in transport.queries)
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        (":SOUR1:SWE:STAT?", "MAYBE", "sweep state"),
+        (":SOUR1:FREQ:STAR?", "nan", "sweep start frequency"),
+        (":SOUR1:FREQ:STOP?", "inf", "sweep stop frequency"),
+        (":SOUR1:FREQ:CENT?", "nan", "sweep center frequency"),
+        (":SOUR1:FREQ:SPAN?", "nan", "sweep span"),
+        (":SOUR1:SWE:SPAC?", "RANDOM", "sweep spacing"),
+        (":SOUR1:SWE:STEP?", "2.5", "integer"),
+        (":SOUR1:SWE:TIME?", "", "sweep time"),
+        (":SOUR1:SWE:TIME?", "nan", "sweep time"),
+        (":SOUR1:SWE:HTIM:STAR?", "nan", "sweep start hold"),
+        (":SOUR1:SWE:HTIM:STOP?", "nan", "sweep stop hold"),
+        (":SOUR1:SWE:RTIM?", "nan", "sweep return time"),
+        (":SOUR1:SWE:TRIG:SOUR?", "BUS", "sweep trigger source"),
+        (":SOUR1:SWE:TRIG:SLOP?", "BOTH", "sweep trigger slope"),
+        (":SOUR1:SWE:TRIG:TRIGOUT?", "HIGH", "sweep trigger output"),
+        (":SOUR1:MARK:STAT?", "MAYBE", "marker state"),
+        (":SOUR1:MARK:FREQ?", "nan", "marker frequency"),
+    ],
+)
+def test_sweep_profile_rejects_untrusted_responses_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = FakeTransport()
+    transport.query_overrides[command] = response
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).get_sweep_profile(1)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        (":SOUR1:FREQ:STOP?", "50", "start frequency must not exceed"),
+        (":SOUR1:FREQ:CENT?", "600", "center frequency is inconsistent"),
+        (":SOUR1:FREQ:SPAN?", "901", "span is inconsistent"),
+        (":SOUR1:SWE:STEP?", "1", "steps"),
+        (":SOUR1:SWE:TIME?", "0", "sweep time"),
+        (":SOUR1:SWE:HTIM:STAR?", "301", "start hold"),
+        (":SOUR1:MARK:FREQ?", "1001", "marker frequency"),
+    ],
+)
+def test_sweep_profile_rejects_inconsistent_field_relationships(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = FakeTransport()
+    transport.query_overrides[command] = response
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).get_sweep_profile(1)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_sweep_profile_rejects_enabled_marker_with_step_spacing() -> None:
+    transport = FakeTransport()
+    transport.state["sweep_spacing"] = "STE"
+    transport.state["marker"] = "ON"
+
+    with pytest.raises(DataError, match="step spacing"):
+        DG4202Source(transport).get_sweep_profile(1)
+
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("command", SWEEP_PROFILE_QUERIES)
+def test_sweep_profile_query_failure_returns_no_partial_profile_and_never_writes(
+    command: str,
+) -> None:
+    transport = FakeTransport()
+    transport.fail_queries.add(command)
+
+    with pytest.raises(InstrumentError, match="injected query failure"):
+        DG4202Source(transport).get_sweep_profile(1)
 
     assert transport.writes == []
     assert transport.byte_writes == []
