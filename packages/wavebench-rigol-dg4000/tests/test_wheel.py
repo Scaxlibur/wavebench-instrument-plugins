@@ -34,7 +34,7 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
         ],
         cwd=tmp_path,
     )
-    wheel = next(wheelhouse.glob("wavebench_rigol_dg4000-0.2.0-*.whl"))
+    wheel = next(wheelhouse.glob("wavebench_rigol_dg4000-0.3.0-*.whl"))
 
     with ZipFile(wheel) as archive:
         names = archive.namelist()
@@ -68,7 +68,7 @@ def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) 
         ],
         cwd=PACKAGE_ROOT,
     )
-    sdist = next(dist_dir.glob("wavebench_rigol_dg4000-0.2.0.tar.gz"))
+    sdist = next(dist_dir.glob("wavebench_rigol_dg4000-0.3.0.tar.gz"))
 
     with tarfile.open(sdist) as archive:
         names = archive.getnames()
@@ -129,7 +129,7 @@ def test_wheel_install_migration_routing_and_uninstall_fallback(tmp_path: Path) 
         ],
         cwd=tmp_path,
     )
-    plugin_wheel = next(wheelhouse.glob("wavebench_rigol_dg4000-0.2.0-*.whl"))
+    plugin_wheel = next(wheelhouse.glob("wavebench_rigol_dg4000-0.3.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"

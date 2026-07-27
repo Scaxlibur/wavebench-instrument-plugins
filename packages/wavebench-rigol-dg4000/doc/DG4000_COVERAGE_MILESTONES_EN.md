@@ -6,15 +6,15 @@
 
 This document divides the broad DG4000 programming surface into M0-M12. Milestone numbers express risk order, not command counts or completion percentages. A milestone is complete only when code, failure paths, release artifacts, and the required hardware evidence all pass its exit gate.
 
-Current version: `wavebench-rigol-dg4000 0.2.0`.
+Current version: `wavebench-rigol-dg4000 0.3.0`.
 
 | Milestone | Status | Scope |
 |---|---|---|
 | M0 | **Complete** | Command audit, public boundary, evidence levels, artifact isolation |
-| M1 | **Next / incomplete** | Strict input, response, model, and read-only snapshot handling for current APIs |
-| M2 | Incomplete | Transactional fixed-wave and output writes |
+| M1 | **Complete** | Strict input, response, model, and read-only snapshot handling for current APIs |
+| M2 | **Complete** | Transactional fixed-wave and output writes |
 | M3 | Incomplete | Complete read-only channel profile and bounded restore contract |
-| M4 | Implementation exists; milestone not passed | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
+| M4 | **Partially hardware accepted; CH2 analog gate pending** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
 | M5 | Not started | Query-only sweep profile |
 | M6 | Not started | Non-destructive counter profile |
 | M7 | Not started | Controlled sweep transaction and trigger |
@@ -24,7 +24,8 @@ Current version: `wavebench-rigol-dg4000 0.2.0`.
 | M11 | Not started | Advanced modulation, harmonics, and arbitrary-wave formats |
 | M12 | Not started | Model/channel acceptance matrix and release convergence |
 
-M0 completion adds no instrument function. Version 0.2.0 delivers planning, bilingual documentation, and a release-artifact leakage regression only.
+M0 completion adds no instrument function. Version 0.3.0 completes M1/M2 and the M4 CH1 hardware
+gate plus CH2 protocol/restoration acceptance. CH2 analog-shape acceptance remains pending.
 
 ## 2. Rules shared by all milestones
 
@@ -76,7 +77,7 @@ Exit evidence:
 
 ## 5. M1 — Strict closure of current APIs
 
-**Status: incomplete; P0.** Adds no capability.
+**Status: complete.** Adds no capability. The CH1/CH2 zero-write gate passed on DG4202 firmware `00.01.14`.
 
 Target queries: `*IDN?`, `SYSTem:ERRor?`, `OUTPut<n>?`, `SOURce<n>:FUNCtion?`, `FREQuency?`, `VOLTage?`, `VOLTage:UNIT?`, `VOLTage:OFFSet?`, `PHASe?`, `FREQuency:MODE?`, `SWEep:STATe?`, `APPLy?`, and `FUNCtion:SQUare:DCYCle?`.
 
@@ -95,9 +96,13 @@ Exit gate:
 - relevant core/fallback and external-plugin behavior stays aligned;
 - real DG4202 CH1 and CH2 each complete one zero-write profile with sanitized query-set and final-error evidence.
 
+2026-07-27 evidence: one read-only CH1/CH2 session issued 24 queries and zero writes. Both channels
+reported ON/SIN/1 kHz/5 Vpp/0 V/FIX/sweep OFF and the final error queue was clear. Firmware is
+recorded as `00.01.14`; serial number and resource address are not recorded.
+
 ## 6. M2 — Fixed-wave and output write transactions
 
-**Status: incomplete; P0.** Covers current `source.set_frequency`, `set_function`, `set_amplitude_vpp`, `set_square_duty_cycle`, and `source.output`.
+**Status: complete.** Covers current `source.set_frequency`, `set_function`, `set_amplitude_vpp`, `set_square_duty_cycle`, and `source.output`.
 
 Target commands:
 
@@ -131,6 +136,12 @@ Exit gate:
 - separately accept low-Vpp/high-impedance fixed sine, square duty, ON→OFF, and field-by-field restore on DG4202 CH1 and CH2;
 - exercise first-write ambiguity and recovery failure through a controlled proxy/fault injector, not by unplugging the instrument and guessing the result.
 
+2026-07-27 evidence: CH1 and CH2 separately ran OFF, temporary SQU/different fixed frequencies/
+0.8 Vpp/37% duty, explicit ON-to-OFF, and off-first restoration. Fresh sessions verified each
+field. Both channels ended at their original ON/SIN/1 kHz/5 Vpp/0 V/FIX/sweep OFF state with a
+clear error queue. The fault matrix remains FakeTransport-injected; disconnects are not treated
+as state evidence.
+
 ## 7. M3 — Complete read-only channel profile and restore claims
 
 **Status: incomplete; P1.**
@@ -158,7 +169,8 @@ Exit gate: CH1/CH2 profiles are all-or-nothing, finite/enum strict, and zero-wri
 
 ## 8. M4 — DAC14 arbitrary-wave transaction and hardware reacceptance
 
-**Status: offline implementation exists; milestone not passed; P1.**
+**Status: partially hardware accepted. CH1 passes the complete gate and CH2 passes the protocol/
+restoration gate; the CH2 analog-shape gate remains pending.**
 
 Target commands: `TRACe:DATA:DAC VOLATILE,<IEEE-488.2 binary block>`, fixed playback frequency, `VOLTage:UNIT VPP`, Vpp, offset, `FUNCtion USER`, and explicit output.
 
@@ -166,7 +178,7 @@ Frozen boundary: accept only a core-generated and validated `DG4000DacBlock`; DA
 
 Preflight and transaction:
 
-- the target channel must already be OFF, FIX, non-sweep, non-burst, and non-modulated; do not silently make it safe;
+- the target channel must already be OFF, FIX, with sweep OFF; until M3 can read burst/modulation reliably, current M4 does not claim to validate those two contexts; do not silently make it safe;
 - `output_on=false` means the channel remains OFF after upload, not that a pre-existing ON state is preserved;
 - do not retry the binary block blindly. An ambiguous first binary write latches the driver and records unknown volatile-waveform state;
 - read back USER/frequency/Vpp/offset after upload; enable output only after an explicit request and a repeated safety check;
@@ -179,6 +191,14 @@ Hardware exit gate:
 3. Explicitly enable output, verify frequency/Vpp/shape with a high-impedance scope, then disable output.
 4. Restore and verify each field in a new session.
 5. Repeat separately on CH2. Historical built-in-driver evidence cannot substitute for external-plugin acceptance.
+
+2026-07-27 evidence: CH1 and CH2 each uploaded one 64-point little-endian DAC14 triangle while
+OFF/FIX/sweep OFF, read back USER/1 kHz/1 Vpp/0 V, observed a clear error queue, and confirmed the
+original state in a fresh session. CH1 separately drove a 2 Vpp triangle into a high-impedance
+RTM2032. A 10,000-point capture measured 997.26 Hz and 2.16 Vpp; triangle-template RMSE was
+0.0390 V, 49.2% of sine-template RMSE. The restored sine measured 998.25 Hz and 5.12 Vpp. CH2 is
+wired to a DMM, so its analog shape is not accepted. M4 stays partial until CH2 is connected to a
+high-impedance scope and repeats step 3. Both uploads overwrote volatile USER data.
 
 ## 9. M5 — Query-only sweep profile
 
@@ -256,9 +276,11 @@ Final exit requires every public write capability to have normal-path, failure-m
 
 ## 17. Current evidence boundary
 
-- External-plugin hardware accepted: controlled DG4202 CH1 1 kHz, 1 Vpp sine loop, clear error queues, and verified basic restore.
-- Offline: CH2 basic command prefixes and the current exact DAC14 command sequence.
-- Historical but unmigrated: built-in-driver DAC14 little-endian/triangle closed loop.
-- Not passed: M1-M3 strict/transaction foundations, external DAC14 reacceptance on CH1/CH2, and M5-M12.
+- External-plugin hardware accepted: M1/M2 dual-channel gates on DG4202 firmware `00.01.14`;
+  the complete M4 CH1 gate; and M4 CH2 output-off upload, readback, error-queue, and fresh-session
+  restoration gates.
+- Partial: M4 CH2 has no high-impedance-scope frequency/Vpp/shape evidence.
+- Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
+- Not passed: M3, the M4 CH2 analog gate, and M5-M12.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

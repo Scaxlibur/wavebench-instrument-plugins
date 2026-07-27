@@ -6,15 +6,15 @@
 
 本文把 DG4000 编程手册的广阔命令面拆成 M0–M12。里程碑编号是风险顺序，不是命令数量或完成率；每一级只有在代码、失败路径、发行包和相应实机证据同时满足退出门后才算完成。
 
-当前版本：`wavebench-rigol-dg4000 0.2.0`。
+当前版本：`wavebench-rigol-dg4000 0.3.0`。
 
 | 里程碑 | 状态 | 范围 |
 |---|---|---|
 | M0 | **完成** | 命令域审计、公开边界、证据等级、发行包隔离 |
-| M1 | **下一步 / 未完成** | 现有 API 的严格输入、回包、型号与只读快照收口 |
-| M2 | 未完成 | 现有固定波形/输出写路径事务化 |
+| M1 | **完成** | 现有 API 的严格输入、回包、型号与只读快照收口 |
+| M2 | **完成** | 现有固定波形/输出写路径事务化 |
 | M3 | 未完成 | 完整只读通道 profile 与受限恢复契约 |
-| M4 | 已有实现，里程碑未通过 | DAC14 任意波事务与外置插件实机复验 |
+| M4 | **部分实机通过；CH2 模拟门待完成** | DAC14 任意波事务与外置插件实机复验 |
 | M5 | 未开始 | Sweep 只读 profile |
 | M6 | 未开始 | Counter 非破坏性只读 profile |
 | M7 | 未开始 | Sweep 受控事务与触发 |
@@ -24,7 +24,8 @@
 | M11 | 未开始 | 高级调制、谐波和高级任意波格式 |
 | M12 | 未开始 | 型号/通道验收矩阵与发布收口 |
 
-M0 完成不表示仪器功能增加。0.2.0 只交付规划、双语文档和发行包防泄漏回归。
+M0 完成不表示仪器功能增加。0.3.0 完成 M1/M2，并完成 M4 的 CH1 实机退出门及 CH2
+协议/恢复验收；CH2 模拟形状验收仍未通过。
 
 ## 2. 所有阶段共同规则
 
@@ -75,7 +76,7 @@ M0 完成不表示仪器功能增加。0.2.0 只交付规划、双语文档和�
 
 ## 5. M1 — 现有 API 严格收口
 
-**状态：未完成；P0。** 不增加 capability。
+**状态：完成。** 不增加 capability。DG4202 固件 `00.01.14` 的 CH1/CH2 零写入实机门已通过。
 
 目标命令：`*IDN?`、`SYSTem:ERRor?`、`OUTPut<n>?`、`SOURce<n>:FUNCtion?`、`FREQuency?`、`VOLTage?`、`VOLTage:UNIT?`、`VOLTage:OFFSet?`、`PHASe?`、`FREQuency:MODE?`、`SWEep:STATe?`、`APPLy?`、`FUNCtion:SQUare:DCYCle?`。
 
@@ -94,9 +95,13 @@ M0 完成不表示仪器功能增加。0.2.0 只交付规划、双语文档和�
 - M1 相关 core/fallback 与外置插件行为保持一致；
 - 真实 DG4202 对 CH1/CH2 各完成一轮零写入 profile，查询集合和最终错误队列有脱敏证据。
 
+2026-07-27 证据：同一只读会话查询 CH1/CH2，共 24 queries、0 writes；两路均为
+ON/SIN/1 kHz/5 Vpp/0 V/FIX/sweep OFF，最终错误队列为空。固件记录为 `00.01.14`，
+不记录序列号与资源地址。
+
 ## 6. M2 — 固定波形与输出写事务
 
-**状态：未完成；P0。** 覆盖现有 `source.set_frequency`、`set_function`、`set_amplitude_vpp`、`set_square_duty_cycle` 和 `source.output`。
+**状态：完成。** 覆盖现有 `source.set_frequency`、`set_function`、`set_amplitude_vpp`、`set_square_duty_cycle` 和 `source.output`。
 
 目标命令：
 
@@ -129,6 +134,11 @@ M2 必须以目标固件探针和实机回读验证它，不能仅凭当前代�
 - DG4202 CH1 与 CH2 分别完成低 Vpp、高阻负载下的固定正弦、方波 duty、输出 ON→OFF 和逐字段恢复；
 - 首次写入歧义与恢复失败的实机故障路径只在可控代理/故障注入层执行，不通过拔线猜测成功。
 
+2026-07-27 证据：CH1/CH2 分别执行 OFF→临时 SQU/不同固定频率/0.8 Vpp/37% duty
+→ON→OFF→off-first 恢复；每路均由新会话逐字段复核。最终两路恢复为原始
+ON/SIN/1 kHz/5 Vpp/0 V/FIX/sweep OFF，错误队列为空。故障矩阵继续由离线
+FakeTransport 注入覆盖，不把断线实验当作状态证据。
+
 ## 7. M3 — 完整只读通道 profile 与恢复声明
 
 **状态：未完成；P1。**
@@ -156,7 +166,7 @@ profile 必须区分：
 
 ## 8. M4 — DAC14 任意波事务与实机复验
 
-**状态：已有离线实现，里程碑未通过；P1。**
+**状态：部分实机通过；CH1 完整退出门与 CH2 协议/恢复门通过，CH2 模拟形状门待完成。**
 
 目标命令：`TRACe:DATA:DAC VOLATILE,<IEEE-488.2 binary block>`、固定播放频率、`VOLTage:UNIT VPP`、Vpp、offset、`FUNCtion USER` 和显式 output。
 
@@ -164,7 +174,7 @@ profile 必须区分：
 
 前置与事务：
 
-- 目标通道必须已经 OFF，且处于 FIX、非 sweep、非 burst、非 modulation；不静默改为安全态；
+- 目标通道必须已经 OFF，且处于 FIX、sweep OFF；在 M3 能可靠读取 burst/modulation 前，当前 M4 不宣称验证这两项上下文；不静默改为安全态；
 - `output_on=false` 的含义是上传后保持 OFF，而不是保留原来的 ON；
 - binary block 不盲重试。首次 binary write 结果不明时锁存，并记录 volatile 波表状态未知；
 - 上传后逐项回读 USER/frequency/Vpp/offset；只有用户显式请求且 safety 再检查通过才启用输出；
@@ -177,6 +187,13 @@ profile 必须区分：
 3. 显式 ON，由高阻示波器闭环确认频率、Vpp 与形状，再 OFF；
 4. 恢复并新会话逐字段复核；
 5. CH2 单独重复；外置插件证据不能由内建驱动历史记录代替。
+
+2026-07-27 证据：CH1/CH2 各自在 OFF/FIX/sweep OFF 下上传一次 64 点 little-endian
+DAC14 三角波，逐项回读 USER/1 kHz/1 Vpp/0 V，错误队列为空，并在新会话确认原态
+恢复。CH1 另以 2 Vpp 显式输出并由高阻 RTM2032 采集 10,000 点，测得 997.26 Hz、
+2.16 Vpp；三角模板 RMSE 为 0.0390 V，是正弦模板的 49.2%。恢复后原正弦复测为
+998.25 Hz、5.12 Vpp。CH2 当前接 DMM，故不宣称其模拟形状通过；M4 在改接高阻
+示波器并重复第 3 步前保持“部分实机通过”。两路 volatile USER 内容均已被覆盖。
 
 ## 9. M5 — Sweep 只读 profile
 
@@ -254,9 +271,10 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 
 ## 17. 当前证据边界
 
-- 外置插件实机通过：DG4202 CH1 受控 1 kHz、1 Vpp 正弦闭环，错误队列为空，basic restore 回读通过。
-- 离线通过：CH2 基础命令前缀与现有 DAC14 精确命令序列。
-- 历史但未迁移：内建驱动 DAC14 little-endian/三角波闭环。
-- 尚未通过：M1–M3 严格/事务基础，外置 DAC14 CH1/CH2 实机复验，以及 M5–M12。
+- 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1/M2 双通道门；M4 CH1 完整门；
+  M4 CH2 的 output-off 上传、回读、错误队列和新会话恢复门。
+- 部分通过：M4 CH2 尚无高阻示波器模拟频率/Vpp/形状证据。
+- 历史证据仅保留来源区分，不再替代当前外置插件验收。
+- 尚未通过：M3、M4 CH2 模拟门，以及 M5–M12。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

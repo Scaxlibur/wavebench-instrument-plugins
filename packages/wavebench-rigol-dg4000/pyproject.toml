@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-rigol-dg4000"
-version = "0.2.0"
+version = "0.3.0"
 description = "RIGOL DG4000 function and arbitrary waveform generator plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
