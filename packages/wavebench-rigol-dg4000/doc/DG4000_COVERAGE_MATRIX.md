@@ -3,9 +3,9 @@
 [English](DG4000_COVERAGE_MATRIX_EN.md)
 
 分阶段实现顺序、事务规则和实机退出门见
-[DG4000 功能覆盖里程碑](DG4000_COVERAGE_MILESTONES.md)。当前 `0.5.0` 完成 M0–M5，
-其中 M4/M5 的 CH1/CH2 完整实机门均已通过。M6–M12 仍未通过。命令出现在本矩阵中不等于
-已实现。
+[DG4000 功能覆盖里程碑](DG4000_COVERAGE_MILESTONES.md)。当前 `0.6.0` 完成 M0–M6，
+其中 M4/M5 的 CH1/CH2 完整实机门和 M6 的全局 counter-OFF 实机门已通过。M7–M12
+仍未通过。命令出现在本矩阵中不等于已实现。
 
 ## 目的、范围与统计口径
 
@@ -28,9 +28,9 @@
 关键字、同义短写，以及转录中的缺失 `]`、缺失代码围栏和断裂标题都会造成歧义。因此矩阵
 按可审计的功能域和公开 capability 说明覆盖状态，而不报告一个伪精确的百分比。
 
-当前外置插件声明 12 项 WaveBench capability。它是对 DG4202 双通道基础输出、只读
-通道/sweep 上下文和窄任意波上传的受控实现，不是通用 DG4000 SCPI shell，也不承诺覆盖手册中
-所有 DG4000 型号、固件或外部附件能力。
+当前外置插件声明 13 项 WaveBench capability。它是对 DG4202 双通道基础输出、只读
+通道/sweep 上下文、全局 counter 上下文和窄任意波上传的受控实现，不是通用 DG4000
+SCPI shell，也不承诺覆盖手册中所有 DG4000 型号、固件或外部附件能力。
 
 覆盖标签：
 
@@ -60,7 +60,7 @@
 | 任意波上传：DAC14 | `TRACe:DATA:DAC VOLATILE,<binary-block>` 或十进制 DAC 数据 | `source.arbitrary_upload` 只接收结构与样本均校验的 little-endian `DG4000DacBlock`；目标必须已 OFF、FIX、sweep OFF；binary 后逐项回读，失败锁存且明确 volatile USER 波表不可恢复 | **M4 外置实机通过**：CH1/CH2 均完成 output-off 上传、回读、错误队列、模拟频率/Vpp/形状闭环和恢复 | 没有公开十进制/浮点上传、DAC16、任意波编辑/读回；上传会覆盖 volatile 波形且切换到 USER | 保持当前窄协议面；新增格式前分别建立生命周期、回读与恢复证据 |
 | 任意波诊断查询 | 当前插件候选含 `FUNC?`、`FUNC:USER?` 与若干 `SOURce:*ARB*` / `SOURce:*DATA*` 查询 | `source.arbitrary_probe`：仅允许问号结尾的候选并记录每条命令后的错误队列 | **诊断探针**；FakeTransport 覆盖 | 手册把 waveform data 放在 `TRACe:DATA`，不是 `SOURce:DATA`；某些候选本来就可能得到 `-113`。`errors()` 消费队列，因此它不是非侵入健康读取 | 保留为显式排障工具；不要将候选接受/拒绝升级为功能能力或实机验收 |
 | 任意波编辑、浮点与 DAC16 传输 | `TRACe:DATA`、`DAC16`、`POINts`、`VALue`、`LOAD?`、interpolate | 未公开 | **未覆盖** | 不同数据格式、内存长度、自动选择 USER 与本机编辑规则不同；手册对 DAC16 给出固定分包条件 | **P2**：在明确 RAM/DDR 生命周期、字节序和回读语义后再实现 |
-| 频率计 | `COUNter:*`：输入配置、gate、统计、测量结果 | 未公开 | **未覆盖** | 50 Ω / 1 MΩ 输入与计数器状态会影响接线安全；统计 clear 是破坏性操作 | **P2**：可先设计窄的只读 result/status capability |
+| 频率计 | `COUNter:*`：输入配置、gate、统计、测量结果 | `source.counter_profile` 全有或全无地只读 counter state、coupling、impedance、attenuation、gate、HF、level、sensitivity、统计状态/显示；仅在 counter ON 时查询五元组测量；无 setter/auto/clear | **M6 外置实机通过（OFF 边界）**：DG4202 `00.01.14` 连续三轮、39 queries、0 text/binary writes，前后 counter/statistics OFF、display DIGITAL，`measurement=None`；ON 五元组解析仅离线验证 | 50 Ω / 1 MΩ 输入与 counter enable 会影响接线安全；统计 clear 是破坏性操作；尚无 counter-ON 实机测量结论 | 保持只读；如需补 ON 证据，使用独立受控预置/恢复会话和安全信号夹具，不扩大 capability |
 | PA 外接功放 | `PA:*`：开关、增益、offset、极性、保存 | 未公开 | **默认拒绝** | 可直接造成更高功率输出，且 `PA:SAVE` 写内部状态 | 不纳入基础 DG4202 capability；必须有独立权限与人工安全检查 |
 | 显示与屏幕截图 | `DISPlay:*`、`HCOPy:SDUMp:DATA?` | 未公开 | **未覆盖** | brightness/saver 写入属于前面板全局状态；截图需要 binary transfer 和格式验收 | **P3**：仅在确有诊断价值时设计只读 screenshot |
 | 内部状态槽 | `MEMory:STATe:DELete/LOCK/VALid?`，以及 IEEE `*SAV/*RCL` | 未公开 | **默认拒绝** | 可能覆盖、删除、锁定或调用用户保存的状态；与 WaveBench 的临时恢复并非同一概念 | 保持主机侧 artifact 与恢复日志；不要写仪器内部槽位 |
@@ -94,6 +94,9 @@ SOURce<n>:SWEep:HTIMe:STARt?  SOURce<n>:SWEep:HTIMe:STOP?
 SOURce<n>:SWEep:RTIMe?  SOURce<n>:SWEep:TRIGger:SOURce?
 SOURce<n>:SWEep:TRIGger:SLOPe?  SOURce<n>:SWEep:TRIGger:TRIGOut?
 SOURce<n>:MARKer:FREQuency?
+COUNter[:STATe]?  COUNter:MEASure?  COUNter:COUPing?  COUNter:IMPedance?
+COUNter:ATTenuation?  COUNter:GATEtime?  COUNter:HF?  COUNter:LEVel?
+COUNter:SENSitive?  COUNter:STATIstics:STATe?  COUNter:STATIstics:DISPlay?
 
 OUTPut<n> ON|OFF
 SOURce<n>:FREQuency[:FIXed] <frequency>
@@ -119,20 +122,22 @@ SOURce<n>:VOLTage:OFFSet <voltage>  SOURce<n>:FUNCtion[:SHAPe] USER
   hold 纳入自动恢复。
 - `source.sweep_profile` 同样是独立、全有或全无的只读上下文。它不启动、停止或触发
   sweep，也不把 frequency window、spacing、timing、trigger 或 marker 纳入自动恢复。
+- `source.counter_profile` 是全局、全有或全无的只读上下文。counter OFF 时明确返回
+  `measurement=None` 且不查询测量值；它不自动 enable、不发送 `AUTO` 或 statistics clear，
+  也不把输入配置或统计状态纳入自动恢复。
 - descriptor capability 校验仅证明声明的方法存在且可调用；它不证明命令语义、返回值解析或实机兼容性。
 
 ## 推荐路线
 
-1. **P2：M6 counter 只读。** 先做不清统计、不自动启用 counter 的窄只读结果。
-2. **P2/P3：M7–M10 受控写事务。** Sweep、pulse/burst/marker、双通道 coupling 和基础调制按独立模型、快照、恢复与锁存实现。
-3. **P3：M11 高级功能。** 高级调制、harmonic 与 DAC16 分开建模；DAC16 在字节序、容量和资源生命周期有实证前保持 fail closed。
-4. **默认不做：文件系统、网络、内部状态槽、PA、restart/shutdown。** 它们需要与普通实验流程不同的权限模型和人工确认。
+1. **P2/P3：M7–M10 受控写事务。** Sweep、pulse/burst/marker、双通道 coupling 和基础调制按独立模型、快照、恢复与锁存实现。
+2. **P3：M11 高级功能。** 高级调制、harmonic 与 DAC16 分开建模；DAC16 在字节序、容量和资源生命周期有实证前保持 fail closed。
+3. **默认不做：文件系统、网络、内部状态槽、PA、restart/shutdown。** 它们需要与普通实验流程不同的权限模型和人工确认。
 
 ## 证据边界
 
 - **手册侧**：本地 `vendor-local` 中文 DG4000 手册，仅用于内部审计；本文不复制手册正文或将它打进发行包。
 - **实现侧**：外置插件的 `driver.py`、`descriptor.py` 和 FakeTransport 测试；内建 fallback 的历史文档仅用于区分来源，不自动成为外置插件验收。
-- **外置实机侧**：DG4202 固件 `00.01.14` 已通过 M1–M5 双通道门；M3 在禁止任何 write 的守卫下完成 45 queries、0 text/binary writes。M4 CH1 以 64 点 DAC14 三角波完成协议、2 Vpp 高阻 RTM2032 闭环和恢复；10,000 点测得 997.26 Hz、2.16 Vpp，三角模板 RMSE 0.0390 V。M4 CH2 以相同 64 点三角波完成协议、1 Vpp 高阻 RTM2032 闭环和恢复；测得 999.75 Hz、1.12 Vpp，归一化三角/正弦模板 RMSE 分别为 0.09285/0.2196，比值 0.4229，且示波器时基、量程和触发设置保持不变。M5 在 output OFF、sweep OFF/ON 两种预置状态下对 CH1/CH2 各读三轮；每个只读会话完成 104 queries、0 text/binary writes，恢复后完整 channel/sweep profile 与初始快照一致。
+- **外置实机侧**：DG4202 固件 `00.01.14` 已通过 M1–M5 双通道门和 M6 全局 counter-OFF 门；M3 在禁止任何 write 的守卫下完成 45 queries、0 text/binary writes。M4 CH1 以 64 点 DAC14 三角波完成协议、2 Vpp 高阻 RTM2032 闭环和恢复；10,000 点测得 997.26 Hz、2.16 Vpp，三角模板 RMSE 0.0390 V。M4 CH2 以相同 64 点三角波完成协议、1 Vpp 高阻 RTM2032 闭环和恢复；测得 999.75 Hz、1.12 Vpp，归一化三角/正弦模板 RMSE 分别为 0.09285/0.2196，比值 0.4229，且示波器时基、量程和触发设置保持不变。M5 在 output OFF、sweep OFF/ON 两种预置状态下对 CH1/CH2 各读三轮；每个只读会话完成 104 queries、0 text/binary writes，恢复后完整 channel/sweep profile 与初始快照一致。M6 在 counter OFF 下连续读取三轮，共 39 queries、0 text/binary writes；counter/statistics/display 状态前后不变并明确返回 `measurement=None`。counter-ON 五元组仍只有离线解析与关系校验证据。
 - **历史任意波侧**：旧内建 DG4202 证据仅用于来源区分；当前外置插件已有独立 CH1/CH2 协议证据，不再用历史结果替代验收。
 
 只有明确控制过的命令、实际回读/外部测量和所需恢复检查，才能提升为“外置实机通过”。

@@ -26,6 +26,7 @@ def descriptor() -> InstrumentDescriptor:
             "source.status",
             "source.channel_profile",
             "source.sweep_profile",
+            "source.counter_profile",
             "source.set_frequency",
             "source.set_function",
             "source.set_amplitude_vpp",
@@ -40,13 +41,13 @@ def descriptor() -> InstrumentDescriptor:
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary=(
-            "Installable RIGOL DG4000-series source driver for read-only channel and "
-            "sweep profiles, fixed waveforms, output control, and validated DAC14 uploads."
+            "Installable RIGOL DG4000-series source driver for read-only channel, sweep, "
+            "and counter profiles, fixed waveforms, output control, and validated DAC14 uploads."
         ),
-        wavebench_min_version="0.8.16",
+        wavebench_min_version="0.8.17",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-dg4000",
-        version="0.5.0",
+        version="0.6.0",
         source="entry_point:rigol.dg4202",
         config_fields=(
             "source.resource",

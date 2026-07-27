@@ -9,6 +9,8 @@ from wavebench.instruments import DG4000DacBlock
 from wavebench.instruments.models import (
     ArbitraryQueryProbeResult,
     SourceChannelProfile,
+    SourceCounterMeasurement,
+    SourceCounterProfile,
     SourceSweepProfile,
     SourceStatus,
 )
@@ -71,6 +73,15 @@ _EDGE_ALIASES = {
     "NEGATIVE": "NEGATIVE",
 }
 _TRIGGER_OUT_ALIASES = {"OFF": "OFF", **_EDGE_ALIASES}
+_COUNTER_GATE_TIME_ALIASES = {
+    name: name for name in ("AUTO", "USER1", "USER2", "USER3", "USER4", "USER5", "USER6")
+}
+_COUNTER_STATISTICS_DISPLAY_ALIASES = {
+    "DIG": "DIGITAL",
+    "DIGITAL": "DIGITAL",
+    "CURV": "CURVE",
+    "CURVE": "CURVE",
+}
 _MODULATION_TYPE_ALIASES = {
     name: name
     for name in ("AM", "FM", "PM", "ASK", "FSK", "PSK", "PWM", "BPSK", "QPSK", "3FSK", "4FSK", "OSK")
@@ -134,6 +145,51 @@ def _validate_apply_response(response: str) -> None:
         strict=True,
     ):
         _finite_float(value, field_name=field_name)
+
+
+def _parse_counter_measurement(response: str) -> SourceCounterMeasurement:
+    values = tuple(item.strip() for item in str(response).strip().strip('"').split(","))
+    if len(values) != 5 or any(not item for item in values):
+        raise DataError(
+            "counter measurement must contain frequency, period, duty cycle, "
+            "positive width, and negative width"
+        )
+    parsed = tuple(
+        _finite_float(value, field_name=f"counter measurement {field_name}")
+        for field_name, value in zip(
+            ("frequency", "period", "duty cycle", "positive width", "negative width"),
+            values,
+            strict=True,
+        )
+    )
+    try:
+        return SourceCounterMeasurement(
+            frequency_hz=parsed[0],
+            period_s=parsed[1],
+            duty_cycle_percent=parsed[2],
+            positive_width_s=parsed[3],
+            negative_width_s=parsed[4],
+        )
+    except ValueError as exc:
+        raise DataError(f"inconsistent DG4000 counter measurement: {exc}") from exc
+
+
+def _parse_counter_impedance(response: str) -> float:
+    normalized = str(response).strip().strip('"').upper().replace(" ", "")
+    aliases = {
+        "50": 50.0,
+        "50.0": 50.0,
+        "50OHM": 50.0,
+        "1M": 1_000_000.0,
+        "1MOHM": 1_000_000.0,
+        "1MEG": 1_000_000.0,
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+    parsed = _finite_float(normalized, field_name="counter impedance")
+    if parsed not in {50.0, 1_000_000.0}:
+        raise DataError("counter impedance response must be 50 or 1000000 ohms")
+    return parsed
 
 
 def _validate_dac14_block(block: DG4000DacBlock) -> None:
@@ -660,6 +716,67 @@ class DG4202Source:
                 )
             except ValueError as exc:
                 raise DataError(f"inconsistent DG4000 sweep profile: {exc}") from exc
+
+    def get_counter_profile(self) -> SourceCounterProfile:
+        with self._io_lock:
+            self._ensure_identity()
+            enabled = self._query_state(":COUN?", field_name="counter state")
+            measurement = (
+                _parse_counter_measurement(self.transport.query(":COUN:MEAS?"))
+                if enabled
+                else None
+            )
+            coupling = _normalize_enum(
+                self.transport.query(":COUN:COUP?"),
+                field_name="counter coupling",
+                aliases={"AC": "AC", "DC": "DC"},
+            )
+            impedance_ohm = _parse_counter_impedance(
+                self.transport.query(":COUN:IMP?")
+            )
+            attenuation_text = _normalize_enum(
+                self.transport.query(":COUN:ATT?"),
+                field_name="counter attenuation",
+                aliases={"1": "1", "1X": "1", "10": "10", "10X": "10"},
+            )
+            gate_time = _normalize_enum(
+                self.transport.query(":COUN:GATE?"),
+                field_name="counter gate time",
+                aliases=_COUNTER_GATE_TIME_ALIASES,
+            )
+            high_frequency_rejection_enabled = self._query_state(
+                ":COUN:HF?", field_name="counter high-frequency rejection state"
+            )
+            trigger_level_v = self._query_finite_float(
+                ":COUN:LEVE?", field_name="counter trigger level"
+            )
+            sensitivity_percent = self._query_finite_float(
+                ":COUN:SENS?", field_name="counter sensitivity"
+            )
+            statistics_enabled = self._query_state(
+                ":COUN:STATI:STAT?", field_name="counter statistics state"
+            )
+            statistics_display = _normalize_enum(
+                self.transport.query(":COUN:STATI:DISP?"),
+                field_name="counter statistics display",
+                aliases=_COUNTER_STATISTICS_DISPLAY_ALIASES,
+            )
+            try:
+                return SourceCounterProfile(
+                    enabled=enabled,
+                    measurement=measurement,
+                    coupling=coupling,
+                    impedance_ohm=impedance_ohm,
+                    attenuation=int(attenuation_text),
+                    gate_time=gate_time,
+                    high_frequency_rejection_enabled=high_frequency_rejection_enabled,
+                    trigger_level_v=trigger_level_v,
+                    sensitivity_percent=sensitivity_percent,
+                    statistics_enabled=statistics_enabled,
+                    statistics_display=statistics_display,
+                )
+            except ValueError as exc:
+                raise DataError(f"inconsistent DG4000 counter profile: {exc}") from exc
 
     def set_frequency(
         self,

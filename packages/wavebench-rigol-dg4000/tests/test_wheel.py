@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.5.0"
+PACKAGE_VERSION = "0.6.0"
 
 
 def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
@@ -52,7 +52,7 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
     assert distribution.version == PACKAGE_VERSION
     requires_dist = distribution.metadata.get_all("Requires-Dist") or []
     assert any(
-        requirement.replace(" ", "") == "wavebench<0.9,>=0.8.16"
+        requirement.replace(" ", "") == "wavebench<0.9,>=0.8.17"
         for requirement in requires_dist
     )
     assert [(item.name, item.value) for item in entry_points] == [

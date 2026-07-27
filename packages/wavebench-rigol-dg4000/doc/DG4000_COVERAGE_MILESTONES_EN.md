@@ -6,7 +6,7 @@
 
 This document divides the broad DG4000 programming surface into M0-M12. Milestone numbers express risk order, not command counts or completion percentages. A milestone is complete only when code, failure paths, release artifacts, and the required hardware evidence all pass its exit gate.
 
-Current version: `wavebench-rigol-dg4000 0.5.0`.
+Current version: `wavebench-rigol-dg4000 0.6.0`.
 
 | Milestone | Status | Scope |
 |---|---|---|
@@ -16,7 +16,7 @@ Current version: `wavebench-rigol-dg4000 0.5.0`.
 | M3 | **Complete** | Complete read-only channel profile and bounded restore contract |
 | M4 | **Complete** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
 | M5 | **Complete** | Query-only sweep profile |
-| M6 | Not started | Non-destructive counter profile |
+| M6 | **Complete** | Non-destructive counter profile |
 | M7 | Not started | Controlled sweep transaction and trigger |
 | M8 | Not started | Controlled pulse/burst/marker profiles |
 | M9 | Not started | Atomic dual-channel coupling |
@@ -24,8 +24,8 @@ Current version: `wavebench-rigol-dg4000 0.5.0`.
 | M11 | Not started | Advanced modulation, harmonics, and arbitrary-wave formats |
 | M12 | Not started | Model/channel acceptance matrix and release convergence |
 
-M0 completion adds no instrument function. Version 0.5.0 completes the M1-M5 hardware exit gates
-on DG4202 CH1 and CH2.
+M0 completion adds no instrument function. Version 0.6.0 completes the M1-M5 hardware exit gates
+on DG4202 CH1 and CH2 and the global counter-OFF M6 hardware gate.
 
 ## 2. Rules shared by all milestones
 
@@ -233,13 +233,27 @@ was clear. No immediate trigger or `*TRG` was sent, and no sweep setter was expo
 
 ## 10. M6 — Non-destructive counter profile
 
-**Status: not started; P2.**
+**Status: complete.** Read the global counter only; do not enable it, change input configuration,
+or clear statistics.
 
-Allowed queries: `COUNter:STATe?`, `MEASure?`, `COUPing?`, `IMPedance?`, `ATTenuation?`, `GATEtime?`, `HF?`, `LEVel?`, `SENSitive?`, and statistics state/display.
+Allowed queries: `COUNter[:STATe]?`, conditional `MEASure?`, `COUPing?`, `IMPedance?`,
+`ATTenuation?`, `GATEtime?`, `HF?`, `LEVel?`, `SENSitive?`, and statistics state/display. The
+production driver fixes the short paths verified on DG4202 firmware `00.01.14`, including
+`:COUN?`, `:COUN:LEVE?`, and `:COUN:STATI:*`; other abbreviations or long spellings are not
+promoted to hardware evidence.
 
 Default-deny `COUNter:AUTO`, `STATIstics:CLEAr`, and automatic counter enablement. If the counter is OFF, return that state and an explicit no-measurement result; never turn the input on. A 50-ohm value is read-only here; any future setter requires a separate cabling confirmation.
 
 Exit gate: unknown/non-finite responses fail closed, repeated queries do not change counter/statistics state, and a real DG4202 produces zero-write evidence.
+
+2026-07-27 evidence: external plugin `0.6.0` completed the counter-OFF gate on DG4202 firmware
+`00.01.14`. Three complete profiles matched field by field; the complete gate issued 39 queries,
+zero text writes, and zero binary writes. Counter and statistics state remained OFF and display
+remained DIGITAL. The profile returned AC, 1 megaohm, 1X, USER1, HF OFF, 0 V, 50% sensitivity, and
+`measurement=None`. The OFF branch issued no `MEASure?`, enable, `AUTO`, or statistics-clear
+command. The offline fault matrix covers every query position, unknown enums, non-finite/out-of-
+range configuration, and the counter-ON tuple's field count, finiteness, frequency/period,
+pulse-width/period, and duty/width relationships. Counter-ON has no hardware measurement conclusion.
 
 ## 11. M7 — Controlled sweep transaction
 
@@ -299,8 +313,9 @@ Final exit requires every public write capability to have normal-path, failure-m
 
 ## 17. Current evidence boundary
 
-- External-plugin hardware accepted: M1-M5 CH1/CH2 gates on DG4202 firmware `00.01.14`.
+- External-plugin hardware accepted: M1-M5 CH1/CH2 gates and the global M6 counter-OFF zero-write
+  gate on DG4202 firmware `00.01.14`.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: M6-M12.
+- Not passed: M7-M12. The M6 counter-ON tuple still has offline parsing evidence only.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

@@ -65,6 +65,17 @@ class FakeTransport:
             "sweep_trigger_source": "INT",
             "sweep_trigger_slope": "POS",
             "sweep_trigger_out": "OFF",
+            "counter": "OFF",
+            "counter_measurement": "1.000000E+03,1.000000E-03,4.000000E+01,4.000000E-04,6.000000E-04",
+            "counter_coupling": "AC",
+            "counter_impedance": "1M",
+            "counter_attenuation": "1X",
+            "counter_gate_time": "USER1",
+            "counter_hf": "OFF",
+            "counter_level": 0.0,
+            "counter_sensitivity": 50.0,
+            "counter_statistics": "OFF",
+            "counter_statistics_display": "DIGITAL",
         }
 
     def write(self, command: str) -> None:
@@ -153,6 +164,17 @@ class FakeTransport:
             f":SOUR{channel}:SWE:TRIG:SOUR?": self.state["sweep_trigger_source"],
             f":SOUR{channel}:SWE:TRIG:SLOP?": self.state["sweep_trigger_slope"],
             f":SOUR{channel}:SWE:TRIG:TRIGOUT?": self.state["sweep_trigger_out"],
+            ":COUN?": self.state["counter"],
+            ":COUN:MEAS?": self.state["counter_measurement"],
+            ":COUN:COUP?": self.state["counter_coupling"],
+            ":COUN:IMP?": self.state["counter_impedance"],
+            ":COUN:ATT?": self.state["counter_attenuation"],
+            ":COUN:GATE?": self.state["counter_gate_time"],
+            ":COUN:HF?": self.state["counter_hf"],
+            ":COUN:LEVE?": str(self.state["counter_level"]),
+            ":COUN:SENS?": str(self.state["counter_sensitivity"]),
+            ":COUN:STATI:STAT?": self.state["counter_statistics"],
+            ":COUN:STATI:DISP?": self.state["counter_statistics_display"],
             f":SOUR{channel}:FUNC:USER?": '"USER1"',
             f":SOUR{channel}:ARB:SRAT?": "1000000",
         }
@@ -172,10 +194,11 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert item.distribution == "wavebench-rigol-dg4000"
     assert item.aliases == ()
     assert item.kind == "source"
-    assert item.version == "0.5.0"
-    assert item.wavebench_min_version == "0.8.16"
+    assert item.version == "0.6.0"
+    assert item.wavebench_min_version == "0.8.17"
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
+    assert "source.counter_profile" in item.capabilities
     assert "source.arbitrary_upload" in item.capabilities
 
 
@@ -466,6 +489,182 @@ def test_sweep_profile_query_failure_returns_no_partial_profile_and_never_writes
 
     with pytest.raises(InstrumentError, match="injected query failure"):
         DG4202Source(transport).get_sweep_profile(1)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+COUNTER_PROFILE_OFF_QUERIES = [
+    "*IDN?",
+    ":COUN?",
+    ":COUN:COUP?",
+    ":COUN:IMP?",
+    ":COUN:ATT?",
+    ":COUN:GATE?",
+    ":COUN:HF?",
+    ":COUN:LEVE?",
+    ":COUN:SENS?",
+    ":COUN:STATI:STAT?",
+    ":COUN:STATI:DISP?",
+]
+COUNTER_PROFILE_ON_QUERIES = [
+    "*IDN?",
+    ":COUN?",
+    ":COUN:MEAS?",
+    *COUNTER_PROFILE_OFF_QUERIES[2:],
+]
+
+
+def test_counter_profile_off_is_complete_query_only_and_skips_measurement() -> None:
+    transport = FakeTransport()
+
+    profile = DG4202Source(transport).get_counter_profile()
+
+    assert profile.as_dict() == {
+        "enabled": False,
+        "measurement": None,
+        "coupling": "AC",
+        "impedance_ohm": 1_000_000.0,
+        "attenuation": 1,
+        "gate_time": "USER1",
+        "high_frequency_rejection_enabled": False,
+        "trigger_level_v": 0.0,
+        "sensitivity_percent": 50.0,
+        "statistics_enabled": False,
+        "statistics_display": "DIGITAL",
+    }
+    assert transport.queries == COUNTER_PROFILE_OFF_QUERIES
+    assert all(command.endswith("?") for command in transport.queries)
+    assert ":COUN:MEAS?" not in transport.queries
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_counter_profile_on_returns_complete_measurement_and_normalizes_responses() -> None:
+    transport = FakeTransport()
+    transport.state.update(
+        {
+            "counter": "1",
+            "counter_measurement": (
+                "1.000099993E+03,9.999000134E-04,1.422600068E+01,"
+                "1.422537019E-04,8.576463115E-04"
+            ),
+            "counter_coupling": "DC",
+            "counter_impedance": "5.000000E+01",
+            "counter_attenuation": "10",
+            "counter_gate_time": "USER6",
+            "counter_hf": "ON",
+            "counter_level": -2.5,
+            "counter_sensitivity": 100.0,
+            "counter_statistics": "1",
+            "counter_statistics_display": "CURV",
+        }
+    )
+
+    profile = DG4202Source(transport).get_counter_profile()
+
+    assert profile.enabled is True
+    assert profile.measurement is not None
+    assert profile.measurement.frequency_hz == pytest.approx(1000.099993)
+    assert profile.measurement.period_s == pytest.approx(0.0009999000134)
+    assert profile.measurement.duty_cycle_percent == pytest.approx(14.22600068)
+    assert profile.measurement.positive_width_s == pytest.approx(0.0001422537019)
+    assert profile.measurement.negative_width_s == pytest.approx(0.0008576463115)
+    assert profile.coupling == "DC"
+    assert profile.impedance_ohm == 50.0
+    assert profile.attenuation == 10
+    assert profile.gate_time == "USER6"
+    assert profile.high_frequency_rejection_enabled is True
+    assert profile.trigger_level_v == -2.5
+    assert profile.sensitivity_percent == 100.0
+    assert profile.statistics_enabled is True
+    assert profile.statistics_display == "CURVE"
+    assert transport.queries == COUNTER_PROFILE_ON_QUERIES
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        (":COUN?", "MAYBE", "counter state"),
+        (":COUN:COUP?", "GND", "counter coupling"),
+        (":COUN:IMP?", "75", "counter impedance"),
+        (":COUN:ATT?", "2X", "counter attenuation"),
+        (":COUN:GATE?", "USER7", "counter gate time"),
+        (":COUN:HF?", "MAYBE", "high-frequency rejection"),
+        (":COUN:LEVE?", "nan", "counter trigger level"),
+        (":COUN:LEVE?", "2.51", "counter trigger level"),
+        (":COUN:SENS?", "inf", "counter sensitivity"),
+        (":COUN:SENS?", "101", "counter sensitivity"),
+        (":COUN:STATI:STAT?", "MAYBE", "counter statistics state"),
+        (":COUN:STATI:DISP?", "GRAPH", "counter statistics display"),
+    ],
+)
+def test_counter_profile_rejects_untrusted_configuration_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = FakeTransport()
+    transport.query_overrides[command] = response
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).get_counter_profile()
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        ("", "must contain"),
+        ("1,2,3,4", "must contain"),
+        ("1,2,3,4,5,6", "must contain"),
+        ("1,2,,4,5", "must contain"),
+        ("nan,0.001,40,0.0004,0.0006", "frequency"),
+        ("1000,0.002,40,0.0004,0.0016", "frequency and period"),
+        ("1000,0.001,40,0.0005,0.0006", "pulse widths"),
+        ("1000,0.001,50,0.0004,0.0006", "duty cycle"),
+    ],
+)
+def test_counter_profile_rejects_invalid_measurement_without_writes(
+    response: str,
+    message: str,
+) -> None:
+    transport = FakeTransport()
+    transport.state["counter"] = "ON"
+    transport.query_overrides[":COUN:MEAS?"] = response
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).get_counter_profile()
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize("command", COUNTER_PROFILE_OFF_QUERIES)
+def test_counter_profile_off_query_failure_returns_no_partial_profile_and_never_writes(
+    command: str,
+) -> None:
+    transport = FakeTransport()
+    transport.fail_queries.add(command)
+
+    with pytest.raises(InstrumentError, match="injected query failure"):
+        DG4202Source(transport).get_counter_profile()
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_counter_profile_measurement_query_failure_never_writes() -> None:
+    transport = FakeTransport()
+    transport.state["counter"] = "ON"
+    transport.fail_queries.add(":COUN:MEAS?")
+
+    with pytest.raises(InstrumentError, match="injected query failure"):
+        DG4202Source(transport).get_counter_profile()
 
     assert transport.writes == []
     assert transport.byte_writes == []

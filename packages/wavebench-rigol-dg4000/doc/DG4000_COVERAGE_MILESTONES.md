@@ -6,7 +6,7 @@
 
 本文把 DG4000 编程手册的广阔命令面拆成 M0–M12。里程碑编号是风险顺序，不是命令数量或完成率；每一级只有在代码、失败路径、发行包和相应实机证据同时满足退出门后才算完成。
 
-当前版本：`wavebench-rigol-dg4000 0.5.0`。
+当前版本：`wavebench-rigol-dg4000 0.6.0`。
 
 | 里程碑 | 状态 | 范围 |
 |---|---|---|
@@ -16,7 +16,7 @@
 | M3 | **完成** | 完整只读通道 profile 与受限恢复契约 |
 | M4 | **完成** | DAC14 任意波事务与外置插件实机复验 |
 | M5 | **完成** | Sweep 只读 profile |
-| M6 | 未开始 | Counter 非破坏性只读 profile |
+| M6 | **完成** | Counter 非破坏性只读 profile |
 | M7 | 未开始 | Sweep 受控事务与触发 |
 | M8 | 未开始 | Pulse/Burst/Marker 受控 profile |
 | M9 | 未开始 | 双通道 Coupling 原子事务 |
@@ -24,7 +24,8 @@
 | M11 | 未开始 | 高级调制、谐波和高级任意波格式 |
 | M12 | 未开始 | 型号/通道验收矩阵与发布收口 |
 
-M0 完成不表示仪器功能增加。0.5.0 已完成 M1–M5 的 DG4202 CH1/CH2 实机退出门。
+M0 完成不表示仪器功能增加。0.6.0 已完成 M1–M5 的 DG4202 CH1/CH2 实机退出门，
+并完成 M6 的全局 counter-OFF 实机退出门。
 
 ## 2. 所有阶段共同规则
 
@@ -223,13 +224,24 @@ steps 和跨字段关系错误。恢复后，CH1/CH2 完整 channel profile 与 
 
 ## 10. M6 — Counter 非破坏性只读 profile
 
-**状态：未开始；P2。**
+**状态：完成。** 只读取全局 counter；不自动启用、不改输入配置、不清统计。
 
-允许查询：`COUNter:STATe?`、`MEASure?`、`COUPing?`、`IMPedance?`、`ATTenuation?`、`GATEtime?`、`HF?`、`LEVel?`、`SENSitive?` 和统计状态/显示。
+允许查询：`COUNter[:STATe]?`、条件式 `MEASure?`、`COUPing?`、`IMPedance?`、
+`ATTenuation?`、`GATEtime?`、`HF?`、`LEVel?`、`SENSitive?` 和统计状态/显示。
+正式驱动固定使用 DG4202 固件 `00.01.14` 验证过的短路径，包括 `:COUN?`、
+`:COUN:LEVE?` 和 `:COUN:STATI:*`，不把其它缩写或长写形式的存在当作实机证据。
 
 默认拒绝 `COUNter:AUTO`、`STATIstics:CLEAr` 以及自动启用 counter。若 counter 当前为 OFF，返回状态并明确“无测量”，不偷偷打开输入。50 Ω 只作为回读值；未来写入必须有独立接线确认。
 
 退出门：未知/非有限回包 fail closed，重复查询不改变 counter/统计状态，真实 DG4202 记录零写入证据。
+
+2026-07-27 证据：外置插件 `0.6.0` 在 DG4202 固件 `00.01.14` 上完成 counter-OFF
+退出门。连续三轮完整 profile 逐字段一致；整个验收共 39 queries、0 text writes、
+0 binary writes。counter 与 statistics 前后均为 OFF，display 前后均为 DIGITAL；profile
+返回 AC、1 MΩ、1X、USER1、HF OFF、0 V、50% sensitivity 和 `measurement=None`。
+OFF 分支未查询 `MEASure?`，也未发送 enable、`AUTO` 或 statistics clear。离线故障矩阵
+覆盖每个查询位置、未知枚举、非有限/越界配置，以及 counter-ON 五元组的字段数、有限性、
+frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无实机测量结论。
 
 ## 11. M7 — Sweep 受控事务
 
@@ -289,8 +301,9 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 
 ## 17. 当前证据边界
 
-- 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门。
+- 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门，以及 M6
+  全局 counter-OFF 零写入门。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
-- 尚未通过：M6–M12。
+- 尚未通过：M7–M12；M6 的 counter-ON 五元组仍只有离线解析证据。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

@@ -8,13 +8,14 @@ An executable WaveBench instrument plugin for the dual-channel RIGOL DG4202 and 
 
 - Distribution: `wavebench-rigol-dg4000`
 - Canonical driver ID: `rigol.dg4202`
-- WaveBench: `>=0.8.16,<0.9`
+- WaveBench: `>=0.8.17,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa`
 
-This package uses both the public `SourceChannelProfile` contract first available in WaveBench
-`v0.8.15` and the `SourceSweepProfile` contract added in `v0.8.16`. It does not run with a core
-older than `v0.8.16` and does not automatically claim compatibility with a future `0.9` core.
+This package uses the public `SourceChannelProfile` contract first available in WaveBench
+`v0.8.15`, the `SourceSweepProfile` contract added in `v0.8.16`, and the `SourceCounterProfile`
+contract added in `v0.8.17`. It does not run with a core older than `v0.8.17` and does not
+automatically claim compatibility with a future `0.9` core.
 
 The plugin defines no aliases. After installation, the explicit canonical ID `rigol.dg4202` selects the external implementation, while the short `dg4202` alias always selects WaveBench's built-in fallback. Removing the plugin also restores the built-in canonical implementation.
 
@@ -22,23 +23,24 @@ The plugin defines no aliases. After installation, the explicit canonical ID `ri
 
 The driver supports identity/error queries, CH1/CH2 state, strict read-only channel profiles for
 load, polarity, noise, sync, burst, modulation, marker, and pulse hold, strict read-only sweep
-profiles for the frequency window, spacing, timing, trigger, and marker, fixed frequency,
-function, VPP amplitude, square duty cycle, explicit output control, query-only arbitrary-wave
-capability probes, and upload of validated DAC14 blocks through WaveBench's public
-`DG4000DacBlock` contract.
+profiles for the frequency window, spacing, timing, trigger, and marker, a strict read-only global
+counter profile for input configuration, statistics display, and conditional five-field
+measurements, fixed frequency, function, VPP amplitude, square duty cycle, explicit output control,
+query-only arbitrary-wave capability probes, and upload of validated DAC14 blocks through
+WaveBench's public `DG4000DacBlock` contract.
 
 WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
 
-Version `0.5.0` adds the M5 read-only sweep profile on top of the M3 channel profile from `0.4.0`
-while preserving the M1/M2/M4 transaction boundaries from `0.3.0`: all I/O shares one reentrant lock;
+Version `0.6.0` adds the non-destructive M6 counter profile on top of the M3 channel and M5 sweep
+profiles while preserving the M1/M2/M4 transaction boundaries from `0.3.0`: all I/O shares one reentrant lock;
 fixed-wave writes use a pre-write snapshot, per-step readback, off-first recovery, and ambiguous-
 write latching; DAC14 upload is accepted only while the target channel is already OFF, in FIX
 mode, with sweep OFF. Overwriting the volatile USER waveform is reported as an irreversible side
-effect. DG4202 firmware `00.01.14` has passed the M1-M5 hardware exit gates. The M3 and M5
-profiles are read-only contexts: they do not widen core basic restoration or promise restoration
-of load, polarity, noise, sync,
-burst, modulation, marker, pulse hold, a complete sweep profile, or volatile USER contents. No
-result is extrapolated to another model, firmware, or channel wiring.
+effect. DG4202 firmware `00.01.14` has passed the M1-M5 CH1/CH2 hardware exit gates and the M6
+counter-OFF gate. The M3, M5, and M6 profiles are read-only contexts: they do not widen core basic
+restoration or promise restoration of load, polarity, noise, sync, burst, modulation, marker,
+pulse hold, a complete sweep/counter profile, or volatile USER contents. No result is extrapolated
+to another model, firmware, channel wiring, or the counter-ON measurement path.
 
 The [DG4000 coverage matrix](doc/DG4000_COVERAGE_MATRIX_EN.md) maps vendor command domains to
 current public APIs, offline/hardware evidence, and high-risk commands denied by default. The
@@ -94,10 +96,20 @@ zero-write read sessions. After restoration, both complete channel profiles and 
 matched their initial snapshots and the error queue was clear. No immediate trigger or `*TRG` was
 sent, and no sweep-write capability was created.
 
+M6 used external plugin `0.6.0` for non-destructive OFF-state acceptance of the DG4202's global
+counter. The counter was OFF before and after the gate, statistics stayed OFF, the display stayed
+DIGITAL, and three complete profiles matched field by field. The complete gate issued 39 queries,
+zero text writes, and zero binary writes, returning AC coupling, 1 megaohm, 1X attenuation, USER1
+gate time, HF rejection OFF, 0 V trigger level, and 50% sensitivity. The OFF state explicitly
+returned `measurement=None`; the driver sent no `MEASure?`, did not enable the counter, and sent
+neither `AUTO` nor `STATIstics:CLEAr`. Parsing and relationship validation for the counter-ON
+frequency/period/duty/positive-width/negative-width tuple has offline evidence only and is not part
+of this hardware conclusion.
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an
-environment containing WaveBench `v0.8.16` or newer within the declared `<0.9` range.
+environment containing WaveBench `v0.8.17` or newer within the declared `<0.9` range.
 
 Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for daily source work. Formal acceptance still uses a real wheel and a disposable virtual environment.
 
@@ -112,3 +124,7 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
 - `0.5.0` requires WaveBench `>=0.8.16` and adds `source.sweep_profile`. DG4202 `00.01.14`
   passes three strict zero-write M5 rounds on CH1/CH2 in both sweep-OFF and sweep-ON preset states
   without adding a sweep setter, trigger, or automatic-restoration field.
+- `0.6.0` requires WaveBench `>=0.8.17` and adds `source.counter_profile`. DG4202 `00.01.14`
+  passes three strict zero-write M6 rounds with the counter OFF, without automatically enabling
+  the counter, sending `AUTO`/statistics clear, or presenting offline-only counter-ON parsing as a
+  hardware result.
