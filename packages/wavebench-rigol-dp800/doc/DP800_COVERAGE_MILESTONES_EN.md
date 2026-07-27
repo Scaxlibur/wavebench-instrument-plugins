@@ -7,7 +7,7 @@ into an implementable, verifiable, and incremental delivery plan. The objective 
 command-coverage percentage. Every public command surface must have an explicit typed model,
 model/option applicability, failure semantics, and real-instrument restoration evidence.
 
-The external plugin is currently version `0.1.0` and exposes six capabilities: `power.idn`,
+The external plugin is currently version `0.2.0` and exposes six capabilities: `power.idn`,
 `power.status`, `power.measurement`, `power.set_voltage_current_limit`, `power.output`, and
 `power.protection`. Controlled DP832A LAN acceptance on 2026-07-24 showed these paths can work;
 it did not prove that every exceptional path in the current driver already provides transactional
@@ -55,7 +55,7 @@ interfaces, channels, loads, and wiring.
 | Milestone | Main command surface | Target |
 |---|---|---|
 | M0 | Manual's 22 domains, package boundary, current 6 capabilities | **Complete** |
-| M1 | Existing status, measurement, and protection queries | Harden query paths |
+| M1 | Existing status, measurement, and protection queries | **Complete** |
 | M2 | `APPLy`, output switch, OVP/OCP writes | Transactional current writes |
 | M3 | Options, SCPI version, self-test, non-consuming status | Zero-write health snapshot |
 | M4 | Range, Sense, Track, selected-channel state | Model/option-gated channel profile |
@@ -104,7 +104,7 @@ OUTPut:OCP:VALue CH<n>,<current>
 OUTPut:OCP[:STATe] CH<n>,ON|OFF
 ```
 
-## M1: harden the existing read-only capabilities
+## M1: harden the existing read-only capabilities — complete
 
 ### Commands
 
@@ -139,6 +139,14 @@ OUTPut:OCP:QUES? CH<n>
 - Exact offline tests cover unknown enums, non-finite values, missing/extra fields, invalid channels,
   and every mid-sequence failure.
 - Zero-write queries pass on all three DP832A channels. Numeric accuracy is not part of this gate.
+
+### Acceptance evidence
+
+- Core `0.8.12` and external plugin `0.2.0` implement model/channel gating, finite-number and strict-enum validation, and all-or-nothing snapshots.
+- Offline fault injection covers all four status query positions, all six protection query positions, six enums, missing/extra fields, and non-finite values.
+- The manual-defined two-field response to targetless single-channel `:APPL?` is covered offline with rating reported as unavailable; that path remains hardware-unverified.
+- On 2026-07-27, all three DP832A channels passed a 31-query, zero-write gate; all three outputs remained OFF.
+- This evidence covers only the DP832A protocol responses. It is not extrapolated to DP811/821/831 and does not establish measurement accuracy.
 
 ## M2: transactional current write capabilities
 

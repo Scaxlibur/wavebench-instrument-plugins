@@ -2,8 +2,8 @@
 
 [中文](README.md)
 
-An executable WaveBench instrument plugin for RIGOL DP800, DP832, and DP832A programmable DC
-power supplies.
+An executable WaveBench instrument plugin for the RIGOL DP800 family, with DP832/DP832A
+as the current public compatibility scope.
 
 ## Identity and development baseline
 
@@ -54,6 +54,15 @@ The example uses an RFC 5737 documentation address. Offline tests do not scan re
 instruments, or send real SCPI.
 
 ## Acceptance status
+
+Version 0.2.0 completes M1 read-path hardening: the first channel access identifies a supported
+model and channel count through `*IDN?`; `APPLy?`, `MEASure:ALL?`, and OVP/OCP thresholds reject
+non-finite values; output, mode, protection-enable, and trip responses use strict enums; and any
+query failure fails an aggregate snapshot as a whole. On 2026-07-27, all three DP832A channels
+passed a 31-query, zero-write hardware gate with all outputs left OFF. This evidence is not
+extrapolated to other models and does not establish measurement accuracy. The driver recognizes
+channel counts for DP811/821/831/832 and A-models and fails closed, but public compatibility is not
+expanded to DP811/821/831 until the corresponding write paths are accepted per model.
 
 Version 0.1.0 completed controlled DP832A LAN acceptance with a real wheel on 2026-07-24. Managed
 installation, healthy/load checks, canonical-versus-short-alias routing, three-channel read-only

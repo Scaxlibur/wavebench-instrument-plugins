@@ -23,7 +23,7 @@ DP832A，也不把 DP832A 验收外推给整个系列。
 IEEE 488.2 公用命令。set/query 形式、可选关键字、短写和同义命令不作为独立“完成率”
 分母，因此本文不报告伪精确的百分比。
 
-当前外置插件版本为 `0.1.0`，声明六项 capability：`power.idn`、`power.status`、
+当前外置插件版本为 `0.2.0`，声明六项 capability：`power.idn`、`power.status`、
 `power.measurement`、`power.set_voltage_current_limit`、`power.output` 和
 `power.protection`。它是受安全策略约束的窄电源驱动，不是通用 DP800 SCPI shell。
 
@@ -44,11 +44,11 @@ IEEE 488.2 公用命令。set/query 形式、可选关键字、短写和同义�
 |---|---|---|---|---|---|
 | 身份与错误队列 | `*IDN?`、`:SYSTem:ERRor?`、`:SYSTem:VERSion?` | `power.idn`；写操作后可消费错误队列 | **外置实机通过**；精确查询有离线测试 | `errors()` 会读取并消费队列；没有结构化型号/固件或非消费型 health | 保持错误队列语义显式；公开证据继续脱敏 |
 | IEEE 488.2 状态、同步、复位与触发 | `*CLS`、`*ESE/*ESR?`、`*OPC?`、`*RST`、`*SRE/*STB?`、`*TRG`、`*TST?`、`*WAI` | 除 `*IDN?` 外未公开 | **默认拒绝 / 未覆盖** | `*RST` 改变整机；`*TRG` 可触发输出；`*CLS` 和事件查询会清状态；等待/同步语义未建模 | 只考虑窄的只读 condition/health；复位和触发保持独立人工流程 |
-| 基础设定值 | `:APPLy` / `:APPLy?` | `power.status` 读取通道额定值、电压和电流设定；`power.set_voltage_current_limit` 用单条 `:APPL` 写入并回读 | **外置实机通过**：DP832A 三通道读取及 CH1 保守写入/恢复 | 只检查非负/正值；型号、通道和额定范围由核心 safety limit 与仪器共同约束；驱动没有写失败回滚或歧义锁存 | **P1**：增加有限数校验、型号/通道边界和显式事务/锁存语义 |
-| 实时测量 | `:MEASure:ALL?`、`:MEASure:VOLTage?`、`:MEASure:CURRent?`、`:MEASure:POWEr?` | `power.measurement` 使用 `:MEAS:ALL? CH<n>` 返回电压、电流、功率；`power.status` 复用同一快照 | **外置实机通过**：DP832A 三通道 | 未公开三个独立标量 query；解析器尚未明确拒绝 `NaN`/`inf` | **P1**：拒绝非有限值并增加异常回包测试；保持单次 ALL 快照 |
-| 输出状态与 CV/CC 模式 | `:OUTPut[:STATe]?`、`:OUTPut:CVCC?` / `:OUTPut:MODE?` | `power.status` 查询输出开关和 CV/CC 模式 | **外置实机通过**：DP832A 三通道 | 回包目前只转大写，未严格验证允许枚举 | **P1**：严格验证 ON/OFF 与 CV/CC/UR 等型号实际枚举 |
+| 基础设定值 | `:APPLy` / `:APPLy?` | `power.status` 读取通道额定值、电压和电流设定；`power.set_voltage_current_limit` 用单条 `:APPL` 写入并回读 | **外置实机通过**：DP832A 三通道读取及 CH1 保守写入/恢复 | 读取已拒绝非有限数、未知型号和越界通道；手册定义的单通道无参数 `:APPL?` 两字段回包已离线覆盖，但尚未实机验收，且不猜测额定档位；写路径仍没有失败回滚或歧义锁存 | **P1**：M2 增加显式事务/锁存语义；其他型号逐台验收 |
+| 实时测量 | `:MEASure:ALL?`、`:MEASure:VOLTage?`、`:MEASure:CURRent?`、`:MEASure:POWEr?` | `power.measurement` 使用 `:MEAS:ALL? CH<n>` 返回电压、电流、功率；`power.status` 复用同一快照 | **外置实机通过**：DP832A 三通道；有限数与字段数离线门禁通过 | 未公开三个独立标量 query；不宣称测量准确度 | 保持单次 ALL 快照；准确度另行验收 |
+| 输出状态与 CV/CC 模式 | `:OUTPut[:STATe]?`、`:OUTPut:CVCC?` / `:OUTPut:MODE?` | `power.status` 查询输出开关和 CV/CC 模式 | **外置实机通过**：DP832A 三通道；严格 `ON/OFF`、`CV/CC/UR` 离线门禁通过 | 其他型号的实际模式回包尚未验收 | 未知枚举继续 fail closed；按型号补实机证据 |
 | 显式输出开关 | `:OUTPut[:STATe] [CH<n>,]ON|OFF` | `power.output` 单条写入、回读状态并检查错误队列 | **外置实机通过**：CH1 空载 ON/OFF，最终三通道 OFF | 直接影响被测电路；写超时后状态可能不明，驱动没有 lockout；不能隐式重试 | 保持独立显式 capability；增加首写不明与回读不一致的失败语义 |
-| OVP/OCP 状态与阈值 | `:OUTPut:OVP/OCP[:STATe]`、`:VALue`、`:QUES?`/`:ALAR?` | `power.protection` 查询使能、阈值和 trip；可按请求顺序写阈值/使能并回读 | **外置实机通过**：DP832A 三通道读取及 CH1 OVP/OCP 写回/恢复 | 一次调用可发四条写命令，后续失败会留下部分应用；未验证 ALAR 别名；阈值关系主要由核心检查 | **P1**：定义逐字段快照、恢复、首写不明锁存和严格枚举 |
+| OVP/OCP 状态与阈值 | `:OUTPut:OVP/OCP[:STATe]`、`:VALue`、`:QUES?`/`:ALAR?` | `power.protection` 查询使能、阈值和 trip；可按请求顺序写阈值/使能并回读 | **外置实机通过**：DP832A 三通道读取及 CH1 OVP/OCP 写回/恢复；阈值有限数、使能 `ON/OFF`、trip `YES/NO` 已严格验证 | 一次调用可发四条写命令，后续失败会留下部分应用；未验证 ALAR 别名；阈值关系主要由核心检查 | **P1**：M2 定义逐字段快照、恢复和首写不明锁存 |
 | 清除 OVP/OCP | `:OUTPut:OVP:CLEAR`、`:OUTPut:OCP:CLEAR`；`SOURce:*:PROTection:CLEar` 还可能重新打开输出 | 未公开 | **默认拒绝** | 清除 trip 是破坏性动作；`SOURce` clear 的输出副作用尤其危险 | 仅在用户确认故障已排除、输出目标态明确的独立恢复流程中考虑 |
 | `SOURce` 电压/电流与保护别名 | `:SOURce<n>:VOLTage/CURRent`、step、triggered level、protection、range | 未作为独立 API；基础立即值和保护由 `APPLy`/`OUTPut` 路径覆盖 | **部分覆盖** | 不覆盖步进、触发设定、DP811 档位或 clear；同义命令不能重复计作覆盖 | 继续使用当前显式通道命令；只有需要独立 V/I 事务时才扩展 |
 | 档位、Sense 与跟踪 | `:OUTPut:RANGe`、`:OUTPut:SENSe`、`:OUTPut:TRACk` | 未公开 | **未覆盖** | 型号/通道相关；档位改变安全范围，Sense 依赖远端接线，跟踪会联动通道 | **P2**：先做 option/model-gated 只读 profile；写入需多通道快照与接线确认 |

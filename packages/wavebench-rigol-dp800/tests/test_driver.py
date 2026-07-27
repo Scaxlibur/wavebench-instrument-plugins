@@ -11,6 +11,7 @@ from wavebench_rigol_dp800 import descriptor
 from wavebench_rigol_dp800.driver import (
     DP800Power,
     parse_apply_response,
+    parse_idn_model,
     parse_measure_all_response,
     parse_protection_value_response,
 )
@@ -22,13 +23,8 @@ class FakeTransport:
         self.writes: list[str] = []
         self.closed = False
         self.errors = ['0,"No error"']
-
-    def write(self, command: str) -> None:
-        self.writes.append(command)
-
-    def query(self, command: str) -> str:
-        self.queries.append(command)
-        mapping = {
+        self.fail_command: str | None = None
+        self.responses = {
             "*IDN?": "RIGOL TECHNOLOGIES,DP832A,<serial>,<firmware>",
             ":APPL? CH1": "CH1:30V/3A,5.000,0.100",
             ":MEAS:ALL? CH1": "5.0114,0.0000,0.000",
@@ -41,9 +37,17 @@ class FakeTransport:
             ":OUTP:OCP:VAL? CH1": "0.5000",
             ":OUTP:OCP:QUES? CH1": "NO",
         }
+
+    def write(self, command: str) -> None:
+        self.writes.append(command)
+
+    def query(self, command: str) -> str:
+        self.queries.append(command)
+        if command == self.fail_command:
+            raise InstrumentError(f"injected failure for {command}")
         if command == "SYST:ERR?":
             return self.errors.pop(0)
-        return mapping[command]
+        return self.responses[command]
 
     def close(self) -> None:
         self.closed = True
@@ -99,13 +103,35 @@ def test_factory_opens_one_core_transport_and_satisfies_capabilities() -> None:
 
 
 def test_parsers_preserve_current_head_behavior() -> None:
+    assert parse_idn_model("RIGOL TECHNOLOGIES,DP811A,<serial>,<firmware>") == (
+        "DP811A",
+        1,
+    )
+    assert parse_idn_model("RIGOL TECHNOLOGIES,DP821,<serial>,<firmware>") == ("DP821", 2)
+    with pytest.raises(DataError, match="unsupported DP800 model"):
+        parse_idn_model("RIGOL TECHNOLOGIES,DP999,<serial>,<firmware>")
     assert parse_apply_response("CH1:30V/3A,5.000,0.100") == ("30V/3A", 5.0, 0.1)
+    assert parse_apply_response("5.000,0.100", expected_channel=1) == (None, 5.0, 0.1)
     assert parse_measure_all_response("5.0114,0.0000,0.000") == (5.0114, 0.0, 0.0)
     assert parse_protection_value_response("8.800") == 8.8
     with pytest.raises(DataError, match="unexpected DP800 APPL"):
         parse_apply_response("CH1:30V/3A,5.000")
+    with pytest.raises(DataError, match="unexpected DP800 APPL"):
+        parse_apply_response("CH1:30V/3A,5.000,0.100,extra")
     with pytest.raises(DataError, match="unexpected DP800 MEAS:ALL"):
         parse_measure_all_response("5.0,0.1")
+    with pytest.raises(DataError, match="unexpected DP800 MEAS:ALL"):
+        parse_measure_all_response("5.0,0.1,0.5,extra")
+    with pytest.raises(DataError, match="unexpected DP800 APPL.*channel"):
+        parse_apply_response("CH2:30V/3A,5.000,0.100", expected_channel=1)
+    with pytest.raises(DataError, match="without channel target"):
+        parse_apply_response("5.000,0.100", expected_channel=2)
+    with pytest.raises(DataError, match="unexpected DP800 APPL.*target"):
+        parse_apply_response("CH1:bogus,5.000,0.100")
+    with pytest.raises(DataError, match="must be finite"):
+        parse_apply_response("CH1:30V/3A,nan,0.100")
+    with pytest.raises(DataError, match="must be finite"):
+        parse_measure_all_response("5.0,inf,0.1")
 
 
 def test_read_only_operations_return_public_models() -> None:
@@ -180,7 +206,7 @@ def test_error_queue_and_validation_fail_closed() -> None:
 
     with pytest.raises(InstrumentError, match="Command error"):
         driver.assert_no_errors()
-    with pytest.raises(DataError, match="channel must be >= 1"):
+    with pytest.raises(DataError, match="channel must be an integer >= 1"):
         driver.get_status(0)
     with pytest.raises(DataError, match="voltage must be >= 0"):
         driver.set_voltage_current_limit(1, -1.0, 0.1)
@@ -190,6 +216,86 @@ def test_error_queue_and_validation_fail_closed() -> None:
         driver.set_protection(1, ovp_threshold_v=-1.0)
     with pytest.raises(DataError, match="OCP threshold must be > 0"):
         driver.set_protection(1, ocp_threshold_a=0.0)
+
+
+def test_channel_count_fails_closed() -> None:
+    transport = FakeTransport()
+    transport.responses["*IDN?"] = "RIGOL TECHNOLOGIES,DP821A,<serial>,<firmware>"
+    driver = DP800Power(transport)
+    with pytest.raises(DataError, match="CH3 is unavailable"):
+        driver.get_status(3)
+    assert transport.queries == ["*IDN?"]
+
+
+def test_single_channel_status_uses_targetless_apply_query() -> None:
+    transport = FakeTransport()
+    transport.responses["*IDN?"] = "RIGOL TECHNOLOGIES,DP811A,<serial>,<firmware>"
+    transport.responses[":APPL?"] = "5.000,0.100"
+    status = DP800Power(transport).get_status(1)
+    assert status.rating is None
+    assert status.set_voltage_v == 5.0
+    assert status.set_current_a == 0.1
+    assert transport.queries[:2] == ["*IDN?", ":APPL?"]
+
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "operation", "message"),
+    (
+        (":OUTP? CH1", "MAYBE", "status", "output state"),
+        (":OUTP:MODE? CH1", "UNKNOWN", "status", "output mode"),
+        (":OUTP:OVP? CH1", "MAYBE", "protection", "OVP state"),
+        (":OUTP:OVP:QUES? CH1", "UNKNOWN", "protection", "OVP trip state"),
+        (":OUTP:OCP? CH1", "MAYBE", "protection", "OCP state"),
+        (":OUTP:OCP:QUES? CH1", "UNKNOWN", "protection", "OCP trip state"),
+    ),
+)
+def test_all_enums_fail_closed(
+    command: str,
+    response: str,
+    operation: str,
+    message: str,
+) -> None:
+    transport = FakeTransport()
+    transport.responses[command] = response
+    driver = DP800Power(transport)
+    with pytest.raises(DataError, match=f"unexpected DP800 {message}"):
+        if operation == "status":
+            driver.get_status(1)
+        else:
+            driver.get_protection_status(1)
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    (":APPL? CH1", ":MEAS:ALL? CH1", ":OUTP? CH1", ":OUTP:MODE? CH1"),
+)
+def test_status_snapshot_fails_at_every_query_without_writes(command: str) -> None:
+    transport = FakeTransport()
+    transport.fail_command = command
+    with pytest.raises(InstrumentError, match="injected failure"):
+        DP800Power(transport).get_status(1)
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        ":OUTP:OVP? CH1",
+        ":OUTP:OVP:VAL? CH1",
+        ":OUTP:OVP:QUES? CH1",
+        ":OUTP:OCP? CH1",
+        ":OUTP:OCP:VAL? CH1",
+        ":OUTP:OCP:QUES? CH1",
+    ),
+)
+def test_protection_snapshot_fails_at_every_query_without_writes(command: str) -> None:
+    transport = FakeTransport()
+    transport.fail_command = command
+    with pytest.raises(InstrumentError, match="injected failure"):
+        DP800Power(transport).get_protection_status(1)
+    assert transport.writes == []
 
 
 def test_close_delegates_to_transport() -> None:

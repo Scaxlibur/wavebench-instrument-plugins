@@ -33,7 +33,7 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
         capture_output=True,
         check=True,
     )
-    wheel = next(wheelhouse.glob("wavebench_rigol_dp800-0.1.0-*.whl"))
+    wheel = next(wheelhouse.glob("wavebench_rigol_dp800-0.2.0-*.whl"))
 
     with ZipFile(wheel) as archive:
         names = archive.namelist()
@@ -70,7 +70,7 @@ def test_sdist_excludes_vendor_manuals(tmp_path: Path) -> None:
         capture_output=True,
         check=True,
     )
-    sdist = next(dist_dir.glob("wavebench_rigol_dp800-0.1.0.tar.gz"))
+    sdist = next(dist_dir.glob("wavebench_rigol_dp800-0.2.0.tar.gz"))
 
     with tarfile.open(sdist) as archive:
         names = archive.getnames()
