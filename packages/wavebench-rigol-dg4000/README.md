@@ -39,8 +39,8 @@ descriptor 导入不连接仪器。factory 只通过 `DriverContext` 打开当�
 `0.4.0` 完成 M3 只读通道 profile，并保留 `0.3.0` 的 M1/M2/M4 事务边界：所有 I/O 使用同一可重入锁，固定波写入采用
 写前快照、逐步回读、off-first 恢复和歧义写锁存；DAC14 上传仅允许目标通道已 OFF、
 FIX 且 sweep OFF，并明确把被覆盖的 volatile USER 波表视为不可恢复副作用。DG4202
-固件 `00.01.14` 已通过 M1/M2/M3 实机退出门；M4 的 CH1 完整退出门及 CH2 协议/恢复门已
-通过，CH2 模拟形状验收仍待接入高阻示波器。M3 profile 是只读上下文，不扩大 core 的
+固件 `00.01.14` 已通过 M1/M2/M3 实机退出门；M4 的 CH1/CH2 完整实机退出门也均已通过。
+M3 profile 是只读上下文，不扩大 core 的
 basic restore，也不承诺恢复 load、polarity、noise、sync、burst、modulation、marker、
 pulse hold 或 volatile USER 内容。结论不外推到其它型号、固件或通道接线。
 
@@ -81,10 +81,12 @@ M4 对 CH1/CH2 分别在输出 OFF 时上传 64 点 little-endian DAC14 三角�
 USER/1 kHz/1 Vpp/0 V、确认错误队列为空，并在新会话确认原态恢复。CH1 随后以 2 Vpp
 显式输出到高阻 RTM2032：10,000 点采集测得 997.26 Hz、2.16 Vpp，三角模板 RMSE
 0.0390 V，约为正弦模板 RMSE 的 49.2%；恢复后复测原正弦为 998.25 Hz、5.12 Vpp。
-CH2 当前接 DMM，因此只验收协议、回读和恢复，不宣称模拟波形形状通过。RTM2032
-抓波会发送受控的传输格式/点数设置，不计作示波器零写入会话。两路 volatile USER
-内容均被本次上传覆盖，这是已知且不可恢复的副作用；未保存真实地址、序列号、原始波形
-或命令日志。
+CH2 随后接入 RTM2032 CH2 高阻输入，以 1 kHz、1 Vpp 三角波完成独立模拟闭环：测得
+999.75 Hz、1.12 Vpp，归一化三角模板 RMSE 为 0.09285，正弦模板 RMSE 为 0.2196，
+比值为 0.4229。DG4202 CH2 原始状态随后恢复，错误队列为空；示波器时基、量程和触发
+设置在本轮验收前后保持不变。RTM2032 抓波会发送受控的传输格式/点数设置，不计作
+示波器零写入会话。两路 volatile USER 内容均被本次上传覆盖，这是已知且不可恢复的
+副作用；未保存真实地址、序列号、原始波形或命令日志。
 
 ## 开发验证
 
@@ -104,4 +106,4 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
 - `0.1.0`：从 WaveBench 内建 DG4202 协议实现迁移；核心继续持有 Service 和安全策略。
 - `0.2.0`：增加 M0–M12 双语覆盖里程碑与发行包防泄漏回归；不扩大 capability。
 - `0.3.0`：交付现有 API 的严格收口、固定波事务化和 DAC14 fail-closed 实现；DG4202 `00.01.14` 的 M1/M2 与 M4 CH1 实机退出门通过，M4 CH2 仅协议/恢复通过，未扩大 capability。
-- `0.4.0`：要求 WaveBench `>=0.8.15`，新增 `source.channel_profile`；DG4202 `00.01.14` 的 CH1/CH2 严格零写 M3 实机门通过，不扩大自动恢复范围。
+- `0.4.0`：要求 WaveBench `>=0.8.15`，新增 `source.channel_profile`；DG4202 `00.01.14` 的 CH1/CH2 严格零写 M3 实机门及 M4 完整实机门通过，不扩大自动恢复范围或 capability。

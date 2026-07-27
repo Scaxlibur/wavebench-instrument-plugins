@@ -32,12 +32,11 @@ transaction boundaries from `0.3.0`: all I/O shares one reentrant lock;
 fixed-wave writes use a pre-write snapshot, per-step readback, off-first recovery, and ambiguous-
 write latching; DAC14 upload is accepted only while the target channel is already OFF, in FIX
 mode, with sweep OFF. Overwriting the volatile USER waveform is reported as an irreversible side
-effect. DG4202 firmware `00.01.14` has passed the M1/M2/M3 hardware exit gates. M4 is fully accepted
-on CH1 and has protocol/readback/restoration acceptance on CH2; CH2 analog-shape acceptance still
-requires a high-impedance scope connection. The M3 profile is read-only context: it does not widen
-core basic restoration or promise restoration of load, polarity, noise, sync, burst, modulation,
-marker, pulse hold, or volatile USER contents. No result is extrapolated to another model,
-firmware, or channel wiring.
+effect. DG4202 firmware `00.01.14` has passed the M1/M2/M3 hardware exit gates. The complete M4
+hardware exit gate has also passed on both CH1 and CH2. The M3 profile is read-only context: it
+does not widen core basic restoration or promise restoration of load, polarity, noise, sync,
+burst, modulation, marker, pulse hold, or volatile USER contents. No result is extrapolated to
+another model, firmware, or channel wiring.
 
 The [DG4000 coverage matrix](doc/DG4000_COVERAGE_MATRIX_EN.md) maps vendor command domains to
 current public APIs, offline/hardware evidence, and high-risk commands denied by default. The
@@ -72,10 +71,13 @@ M4 separately uploaded a 64-point little-endian DAC14 triangle to CH1 and CH2 wh
 OFF, read back USER/1 kHz/1 Vpp/0 V, verified clear error queues, and confirmed restoration in new
 sessions. CH1 then explicitly drove a 2 Vpp triangle into a high-impedance RTM2032. A 10,000-point
 capture measured 997.26 Hz and 2.16 Vpp; triangle-template RMSE was 0.0390 V, 49.2% of the
-sine-template RMSE. After restoration, the original sine measured 998.25 Hz and 5.12 Vpp. CH2 is
-wired to a DMM, so its acceptance stops at protocol, readback, and restoration and does not claim
-analog waveform shape. RTM2032 waveform fetch uses controlled transfer-format/point writes and is
-not a zero-write scope session. Both uploads overwrite volatile USER data, an acknowledged
+sine-template RMSE. After restoration, the original sine measured 998.25 Hz and 5.12 Vpp. CH2 was
+then connected to the high-impedance RTM2032 CH2 input and completed an independent 1 kHz, 1 Vpp
+triangle loop: measured frequency was 999.75 Hz, Vpp was 1.12 V, normalized triangle-template RMSE
+was 0.09285, sine-template RMSE was 0.2196, and their ratio was 0.4229. The original DG4202 CH2
+state was restored and the error queue was clear; scope timebase, range, and trigger settings were
+unchanged across the gate. RTM2032 waveform fetch uses controlled transfer-format/point writes and
+is not a zero-write scope session. Both uploads overwrite volatile USER data, an acknowledged
 irreversible side effect. No real resource, serial number, raw waveform, or command log is stored.
 
 ## Development checks
@@ -91,4 +93,5 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
 - `0.2.0` adds the bilingual M0-M12 coverage plan and release-artifact leak prevention without expanding capabilities.
 - `0.3.0` delivers strict current-API validation, transactional fixed-wave writes, and fail-closed DAC14 handling. DG4202 `00.01.14` passes M1/M2 and the M4 CH1 hardware gate; M4 CH2 passes protocol/restoration only. No capability is added.
 - `0.4.0` requires WaveBench `>=0.8.15` and adds `source.channel_profile`. DG4202 `00.01.14`
-  passes the strict zero-write M3 gate on CH1/CH2 without widening automatic restoration.
+  passes the strict zero-write M3 gate and complete M4 hardware gate on CH1/CH2 without widening
+  automatic restoration or the capability surface.

@@ -14,7 +14,7 @@ Current version: `wavebench-rigol-dg4000 0.4.0`.
 | M1 | **Complete** | Strict input, response, model, and read-only snapshot handling for current APIs |
 | M2 | **Complete** | Transactional fixed-wave and output writes |
 | M3 | **Complete** | Complete read-only channel profile and bounded restore contract |
-| M4 | **Partially hardware accepted; CH2 analog gate pending** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
+| M4 | **Complete** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
 | M5 | Not started | Query-only sweep profile |
 | M6 | Not started | Non-destructive counter profile |
 | M7 | Not started | Controlled sweep transaction and trigger |
@@ -24,8 +24,8 @@ Current version: `wavebench-rigol-dg4000 0.4.0`.
 | M11 | Not started | Advanced modulation, harmonics, and arbitrary-wave formats |
 | M12 | Not started | Model/channel acceptance matrix and release convergence |
 
-M0 completion adds no instrument function. Version 0.4.0 completes M1/M2/M3 and the M4 CH1
-hardware gate plus CH2 protocol/restoration acceptance. CH2 analog-shape acceptance remains pending.
+M0 completion adds no instrument function. Version 0.4.0 completes M1/M2/M3 and the complete M4
+hardware exit gate on both CH1 and CH2.
 
 ## 2. Rules shared by all milestones
 
@@ -176,8 +176,7 @@ context and volatile USER contents remain outside automatic restoration.
 
 ## 8. M4 — DAC14 arbitrary-wave transaction and hardware reacceptance
 
-**Status: partially hardware accepted. CH1 passes the complete gate and CH2 passes the protocol/
-restoration gate; the CH2 analog-shape gate remains pending.**
+**Status: complete. CH1 and CH2 both pass the complete hardware exit gate.**
 
 Target commands: `TRACe:DATA:DAC VOLATILE,<IEEE-488.2 binary block>`, fixed playback frequency, `VOLTage:UNIT VPP`, Vpp, offset, `FUNCtion USER`, and explicit output.
 
@@ -203,9 +202,12 @@ Hardware exit gate:
 OFF/FIX/sweep OFF, read back USER/1 kHz/1 Vpp/0 V, observed a clear error queue, and confirmed the
 original state in a fresh session. CH1 separately drove a 2 Vpp triangle into a high-impedance
 RTM2032. A 10,000-point capture measured 997.26 Hz and 2.16 Vpp; triangle-template RMSE was
-0.0390 V, 49.2% of sine-template RMSE. The restored sine measured 998.25 Hz and 5.12 Vpp. CH2 is
-wired to a DMM, so its analog shape is not accepted. M4 stays partial until CH2 is connected to a
-high-impedance scope and repeats step 3. Both uploads overwrote volatile USER data.
+0.0390 V, 49.2% of sine-template RMSE. The restored sine measured 998.25 Hz and 5.12 Vpp. CH2 was
+then connected to the high-impedance RTM2032 CH2 input and repeated step 3 with a 1 kHz, 1 Vpp
+triangle. It measured 999.75 Hz and 1.12 Vpp; normalized triangle-template RMSE was 0.09285,
+sine-template RMSE was 0.2196, and their ratio was 0.4229. The original DG4202 CH2 state was then
+restored and the error queue was clear; scope timebase, range, and trigger settings were unchanged
+across the gate. Both uploads overwrote volatile USER data.
 
 ## 9. M5 — Query-only sweep profile
 
@@ -283,11 +285,9 @@ Final exit requires every public write capability to have normal-path, failure-m
 
 ## 17. Current evidence boundary
 
-- External-plugin hardware accepted: M1/M2/M3 dual-channel gates on DG4202 firmware `00.01.14`;
-  the complete M4 CH1 gate; and M4 CH2 output-off upload, readback, error-queue, and fresh-session
-  restoration gates.
-- Partial: M4 CH2 has no high-impedance-scope frequency/Vpp/shape evidence.
+- External-plugin hardware accepted: M1/M2/M3 dual-channel gates and complete M4 CH1/CH2 gates
+  on DG4202 firmware `00.01.14`.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: the M4 CH2 analog gate and M5-M12.
+- Not passed: M5-M12.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.
