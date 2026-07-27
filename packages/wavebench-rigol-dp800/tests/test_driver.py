@@ -111,7 +111,9 @@ def test_parsers_preserve_current_head_behavior() -> None:
     with pytest.raises(DataError, match="unsupported DP800 model"):
         parse_idn_model("RIGOL TECHNOLOGIES,DP999,<serial>,<firmware>")
     assert parse_apply_response("CH1:30V/3A,5.000,0.100") == ("30V/3A", 5.0, 0.1)
-    assert parse_apply_response("5.000,0.100", expected_channel=1) == (None, 5.0, 0.1)
+    assert parse_apply_response(
+        "5.000,0.100", expected_channel=1, allow_targetless=True
+    ) == (None, 5.0, 0.1)
     assert parse_measure_all_response("5.0114,0.0000,0.000") == (5.0114, 0.0, 0.0)
     assert parse_protection_value_response("8.800") == 8.8
     with pytest.raises(DataError, match="unexpected DP800 APPL"):
@@ -124,8 +126,10 @@ def test_parsers_preserve_current_head_behavior() -> None:
         parse_measure_all_response("5.0,0.1,0.5,extra")
     with pytest.raises(DataError, match="unexpected DP800 APPL.*channel"):
         parse_apply_response("CH2:30V/3A,5.000,0.100", expected_channel=1)
-    with pytest.raises(DataError, match="without channel target"):
+    with pytest.raises(DataError, match="confirmed single-channel target"):
         parse_apply_response("5.000,0.100", expected_channel=2)
+    with pytest.raises(DataError, match="confirmed single-channel target"):
+        parse_apply_response("5.000,0.100", expected_channel=1)
     with pytest.raises(DataError, match="unexpected DP800 APPL.*target"):
         parse_apply_response("CH1:bogus,5.000,0.100")
     with pytest.raises(DataError, match="must be finite"):
@@ -216,6 +220,14 @@ def test_error_queue_and_validation_fail_closed() -> None:
         driver.set_protection(1, ovp_threshold_v=-1.0)
     with pytest.raises(DataError, match="OCP threshold must be > 0"):
         driver.set_protection(1, ocp_threshold_a=0.0)
+    with pytest.raises(DataError, match="must be finite"):
+        driver.set_voltage_current_limit(1, float("nan"), 0.1)
+    with pytest.raises(DataError, match="must be finite"):
+        driver.set_voltage_current_limit(1, 1.0, float("inf"))
+    with pytest.raises(DataError, match="must be finite"):
+        driver.set_protection(1, ovp_threshold_v=float("nan"))
+    with pytest.raises(DataError, match="must be finite"):
+        driver.set_protection(1, ocp_threshold_a=float("inf"))
 
 
 def test_channel_count_fails_closed() -> None:
@@ -225,6 +237,33 @@ def test_channel_count_fails_closed() -> None:
     with pytest.raises(DataError, match="CH3 is unavailable"):
         driver.get_status(3)
     assert transport.queries == ["*IDN?"]
+
+
+def test_unaccepted_models_are_read_only() -> None:
+    transport = FakeTransport()
+    transport.responses["*IDN?"] = "RIGOL TECHNOLOGIES,DP811A,<serial>,<firmware>"
+    transport.responses[":APPL?"] = "5.000,0.100"
+    driver = DP800Power(transport)
+    assert driver.get_status(1).set_voltage_v == 5.0
+    with pytest.raises(DataError, match="writes are supported only"):
+        driver.set_voltage_current_limit(1, 3.3, 0.2)
+    with pytest.raises(DataError, match="writes are supported only"):
+        driver.set_output(1, False)
+    with pytest.raises(DataError, match="writes are supported only"):
+        driver.set_protection(1, ovp_enabled=False)
+    assert transport.writes == []
+
+
+def test_instance_error_check_default_is_honored() -> None:
+    transport = FakeTransport()
+    DP800Power(transport, check_errors_after_ops=False).set_output(1, False)
+    assert "SYST:ERR?" not in transport.queries
+
+    transport = FakeTransport()
+    DP800Power(transport, check_errors_after_ops=False).set_output(
+        1, False, check_errors=True
+    )
+    assert "SYST:ERR?" in transport.queries
 
 
 def test_single_channel_status_uses_targetless_apply_query() -> None:
