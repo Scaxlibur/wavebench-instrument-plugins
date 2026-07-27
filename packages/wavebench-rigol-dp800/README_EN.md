@@ -55,6 +55,18 @@ instruments, or send real SCPI.
 
 ## Acceptance status
 
+Version 0.3.0 completes M2 transactional hardening for the existing write paths. All transport I/O
+on one driver instance shares a reentrant lock. `APPLy`, output, and OVP/OCP writes snapshot prior
+state, verify each step, and attempt conservative recovery on failure. An ambiguous write, unverifiable
+recovery, or new trip latches later configuration writes off for that instance. Output failures converge
+to OFF, protection recovery never sends `CLEAR`, and readback comparisons use half-LSB tolerances from
+the DP832/DP832A manual resolutions.
+On 2026-07-27, DP832A CH1 passed a distinct-target normal readback/restore cycle, an unloaded ON-to-OFF
+cycle, and controlled fault injection for an ambiguous first output write, failures on the second and
+third protection writes, an `APPLy` readback mismatch, and an ambiguous `APPLy` restoration. A separate
+session verified final state after every case. This evidence covers DP832A protocol and recovery semantics
+only; it does not establish other-model compatibility, loaded transient behavior, or measurement accuracy.
+
 Version 0.2.0 completes M1 read-path hardening: the first channel access identifies a supported
 model and channel count through `*IDN?`; `APPLy?`, `MEASure:ALL?`, and OVP/OCP thresholds reject
 non-finite values; output, mode, protection-enable, and trip responses use strict enums; and any

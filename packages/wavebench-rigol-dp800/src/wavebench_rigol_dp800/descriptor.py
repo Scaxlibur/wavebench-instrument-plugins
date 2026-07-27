@@ -40,7 +40,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-dp800",
-        version="0.2.0",
+        version="0.3.0",
         source="entry_point:rigol.dp800",
         config_fields=(
             "power.resource",

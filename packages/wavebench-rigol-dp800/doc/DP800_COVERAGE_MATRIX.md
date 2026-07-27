@@ -23,7 +23,7 @@ DP832A，也不把 DP832A 验收外推给整个系列。
 IEEE 488.2 公用命令。set/query 形式、可选关键字、短写和同义命令不作为独立“完成率”
 分母，因此本文不报告伪精确的百分比。
 
-当前外置插件版本为 `0.2.0`，声明六项 capability：`power.idn`、`power.status`、
+当前外置插件版本为 `0.3.0`，声明六项 capability：`power.idn`、`power.status`、
 `power.measurement`、`power.set_voltage_current_limit`、`power.output` 和
 `power.protection`。它是受安全策略约束的窄电源驱动，不是通用 DP800 SCPI shell。
 
@@ -44,11 +44,11 @@ IEEE 488.2 公用命令。set/query 形式、可选关键字、短写和同义�
 |---|---|---|---|---|---|
 | 身份与错误队列 | `*IDN?`、`:SYSTem:ERRor?`、`:SYSTem:VERSion?` | `power.idn`；写操作后可消费错误队列 | **外置实机通过**；精确查询有离线测试 | `errors()` 会读取并消费队列；没有结构化型号/固件或非消费型 health | 保持错误队列语义显式；公开证据继续脱敏 |
 | IEEE 488.2 状态、同步、复位与触发 | `*CLS`、`*ESE/*ESR?`、`*OPC?`、`*RST`、`*SRE/*STB?`、`*TRG`、`*TST?`、`*WAI` | 除 `*IDN?` 外未公开 | **默认拒绝 / 未覆盖** | `*RST` 改变整机；`*TRG` 可触发输出；`*CLS` 和事件查询会清状态；等待/同步语义未建模 | 只考虑窄的只读 condition/health；复位和触发保持独立人工流程 |
-| 基础设定值 | `:APPLy` / `:APPLy?` | `power.status` 读取通道额定值、电压和电流设定；`power.set_voltage_current_limit` 用单条 `:APPL` 写入并回读 | **外置实机通过**：DP832A 三通道读取及 CH1 保守写入/恢复 | 读取已拒绝非有限数、未知型号和越界通道；手册定义的单通道无参数 `:APPL?` 两字段回包已离线覆盖，但尚未实机验收，且不猜测额定档位；写路径仍没有失败回滚或歧义锁存 | **P1**：M2 增加显式事务/锁存语义；其他型号逐台验收 |
+| 基础设定值 | `:APPLy` / `:APPLy?` | `power.status` 读取通道额定值、电压和电流设定；`power.set_voltage_current_limit` 保存快照、写一条 `:APPL`、回读验证，并在失败时恢复 | **外置实机通过**：DP832A 三通道读取、CH1 不同目标值写入/恢复，以及 `APPLy` 回读不一致和恢复结果不明的故障注入 | 读取已拒绝非有限数、未知型号和越界通道；手册定义的单通道无参数 `:APPL?` 两字段回包已离线覆盖，但尚未实机验收，且不猜测额定档位；写结果不明或恢复无法确认会锁停当前驱动实例的配置写 | 其他型号逐台验收 |
 | 实时测量 | `:MEASure:ALL?`、`:MEASure:VOLTage?`、`:MEASure:CURRent?`、`:MEASure:POWEr?` | `power.measurement` 使用 `:MEAS:ALL? CH<n>` 返回电压、电流、功率；`power.status` 复用同一快照 | **外置实机通过**：DP832A 三通道；有限数与字段数离线门禁通过 | 未公开三个独立标量 query；不宣称测量准确度 | 保持单次 ALL 快照；准确度另行验收 |
 | 输出状态与 CV/CC 模式 | `:OUTPut[:STATe]?`、`:OUTPut:CVCC?` / `:OUTPut:MODE?` | `power.status` 查询输出开关和 CV/CC 模式 | **外置实机通过**：DP832A 三通道；严格 `ON/OFF`、`CV/CC/UR` 离线门禁通过 | 其他型号的实际模式回包尚未验收 | 未知枚举继续 fail closed；按型号补实机证据 |
-| 显式输出开关 | `:OUTPut[:STATe] [CH<n>,]ON|OFF` | `power.output` 单条写入、回读状态并检查错误队列 | **外置实机通过**：CH1 空载 ON/OFF，最终三通道 OFF | 直接影响被测电路；写超时后状态可能不明，驱动没有 lockout；不能隐式重试 | 保持独立显式 capability；增加首写不明与回读不一致的失败语义 |
-| OVP/OCP 状态与阈值 | `:OUTPut:OVP/OCP[:STATe]`、`:VALue`、`:QUES?`/`:ALAR?` | `power.protection` 查询使能、阈值和 trip；可按请求顺序写阈值/使能并回读 | **外置实机通过**：DP832A 三通道读取及 CH1 OVP/OCP 写回/恢复；阈值有限数、使能 `ON/OFF`、trip `YES/NO` 已严格验证 | 一次调用可发四条写命令，后续失败会留下部分应用；未验证 ALAR 别名；阈值关系主要由核心检查 | **P1**：M2 定义逐字段快照、恢复和首写不明锁存 |
+| 显式输出开关 | `:OUTPut[:STATe] [CH<n>,]ON|OFF` | `power.output` 保存状态、单条写入、回读验证，并在失败时强制 OFF | **外置实机通过**：CH1 空载 ON/OFF、最终三通道 OFF，以及首次输出写结果不明的故障注入 | 直接影响被测电路；写结果不明或 OFF 恢复无法确认会锁停配置写，且驱动不会盲目重试 ON | 保持独立显式 capability；其他型号逐台验收 |
+| OVP/OCP 状态与阈值 | `:OUTPut:OVP/OCP[:STATe]`、`:VALue`、`:QUES?`/`:ALAR?` | `power.protection` 保存使能、阈值和 trip；按安全顺序写入、逐步回读，并在失败时恢复配置 | **外置实机通过**：DP832A 三通道读取、CH1 OVP/OCP 写回/恢复，以及事务第二/第三写失败的故障注入 | 恢复时绝不 CLEAR 新 trip；写结果不明、trip 改变或恢复无法确认会锁停配置写；ALAR 别名尚未验证，阈值关系主要由核心检查 | 其他型号和 ALAR 别名逐项验收 |
 | 清除 OVP/OCP | `:OUTPut:OVP:CLEAR`、`:OUTPut:OCP:CLEAR`；`SOURce:*:PROTection:CLEar` 还可能重新打开输出 | 未公开 | **默认拒绝** | 清除 trip 是破坏性动作；`SOURce` clear 的输出副作用尤其危险 | 仅在用户确认故障已排除、输出目标态明确的独立恢复流程中考虑 |
 | `SOURce` 电压/电流与保护别名 | `:SOURce<n>:VOLTage/CURRent`、step、triggered level、protection、range | 未作为独立 API；基础立即值和保护由 `APPLy`/`OUTPut` 路径覆盖 | **部分覆盖** | 不覆盖步进、触发设定、DP811 档位或 clear；同义命令不能重复计作覆盖 | 继续使用当前显式通道命令；只有需要独立 V/I 事务时才扩展 |
 | 档位、Sense 与跟踪 | `:OUTPut:RANGe`、`:OUTPut:SENSe`、`:OUTPut:TRACk` | 未公开 | **未覆盖** | 型号/通道相关；档位改变安全范围，Sense 依赖远端接线，跟踪会联动通道 | **P2**：先做 option/model-gated 只读 profile；写入需多通道快照与接线确认 |
@@ -101,23 +101,23 @@ OUTPut:OCP[:STATe] CH<n>,ON|OFF
 
 - 核心的 `max_power_voltage_v`、`max_power_current_limit_a`、保护阈值关系、输出开启前检查、
   run plan 和实验级恢复属于 WaveBench policy/service，不是 DP800 某条 SCPI 的实现。
-- 2026-07-24 验收在写入前保存三通道快照，并在独立会话逐字段确认恢复、输出 OFF 和错误
-  队列为空；这是受控验收流程的证据，不等于驱动对每次失败都能原子回滚。
+- 2026-07-24 正常路径验收在写入前保存三通道快照，并在独立会话逐字段确认恢复、输出 OFF
+  和错误队列为空；2026-07-27 又以受控故障注入验收 M2 的输出、保护和 `APPLy` 恢复/
+  锁存语义。真实仪器恢复不是数据库式原子回滚，无法确认时仍按失败并锁停处理。
 - descriptor capability 校验只证明声明的方法存在，不证明命令语义、仪器回包、负载接线、
   测量准确度或所有 DP800 型号兼容。
 - settle delay 由核心配置并在写后执行；它不能证明输出已经稳定或达到精度指标。
 
 ## 推荐路线
 
-1. **P1：收紧现有六项能力。** 拒绝非有限数值，严格验证枚举和通道；统一错误检查配置；
-   为多写保护事务和输出/设定值首写不明定义恢复与实例锁存。
-2. **P1：只读通道 profile。** 在型号/选件门控下补充 range、Sense、track、timer/monitor
+1. **P1：设备健康与只读通道 profile。** 在型号/选件门控下补充非消费型 health、range、
+   Sense、track、timer/monitor
    状态；继续显式传通道，不引入隐式 current-channel。
-3. **P2：timer、delay、monitor。** 先 query-only，再以有界步骤、超时、finally 停止、完整
+2. **P2：timer、delay、monitor。** 先 query-only，再以有界步骤、超时、finally 停止、完整
    快照和多通道恢复实现执行能力。
-4. **P3：recorder/analyzer。** 先明确内部/外部文件生命周期、大小上限和 artifact 语义，
+3. **P3：recorder/analyzer。** 先明确内部/外部文件生命周期、大小上限和 artifact 语义，
    再考虑录制与只读分析结果。
-5. **默认不做：网络/接口写入、license、reset/preset、内部状态槽、文件删除/加载和裸触发。**
+4. **默认不做：网络/接口写入、license、reset/preset、内部状态槽、文件删除/加载和裸触发。**
    它们需要与普通实验流程不同的权限模型和人工确认。
 
 ## 证据边界
@@ -126,8 +126,9 @@ OUTPut:OCP[:STATe] CH<n>,ON|OFF
   也不将其打入发行包。
 - **实现侧**：外置插件的 `driver.py`、`descriptor.py`、FakeTransport、lifecycle 和 wheel
   测试，以及 WaveBench 公共 PowerService 契约。
-- **实机侧**：2026-07-24 的受管 DP832A LAN 验收，覆盖真实 wheel 安装/路由、三通道只读
-  状态和保护、CH1 保守设定值、OVP/OCP、空载输出 ON/OFF、完整恢复与错误队列检查。
+- **实机侧**：2026-07-24 的受管 DP832A LAN 正常路径验收覆盖真实 wheel 安装/路由、
+  三通道只读状态和保护、CH1 保守设定值、OVP/OCP、空载输出 ON/OFF、完整恢复与错误队列
+  检查；2026-07-27 的 M2 验收增加不同目标值回读/恢复、五类受控故障注入及每轮独立会话复核。
 - **未验收侧**：其他 DP800 型号、带载瞬态、测量准确度、档位/Sense/跟踪、timer/delay、
   monitor、trigger、recorder/analyzer、存储和系统配置均不得宣称通过。
 

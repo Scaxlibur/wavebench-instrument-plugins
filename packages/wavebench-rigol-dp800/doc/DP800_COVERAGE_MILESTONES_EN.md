@@ -7,11 +7,11 @@ into an implementable, verifiable, and incremental delivery plan. The objective 
 command-coverage percentage. Every public command surface must have an explicit typed model,
 model/option applicability, failure semantics, and real-instrument restoration evidence.
 
-The external plugin is currently version `0.2.0` and exposes six capabilities: `power.idn`,
+The external plugin is currently version `0.3.0` and exposes six capabilities: `power.idn`,
 `power.status`, `power.measurement`, `power.set_voltage_current_limit`, `power.output`, and
-`power.protection`. Controlled DP832A LAN acceptance on 2026-07-24 showed these paths can work;
-it did not prove that every exceptional path in the current driver already provides transactional
-rollback and ambiguous-write latching.
+`power.protection`. Controlled DP832A LAN acceptance on 2026-07-24 showed these paths can work,
+and M2 normal-path plus controlled fault/recovery hardware acceptance completed on 2026-07-27.
+Transaction, recovery, and ambiguous-state-latching paths also retain offline fault-injection coverage.
 
 The manual covers multiple DP800 models, A/non-A variants, and option combinations. Model gating
 below is part of the contract: DP832A evidence must not be extrapolated to DP811, DP821, DP831,
@@ -56,7 +56,7 @@ interfaces, channels, loads, and wiring.
 |---|---|---|
 | M0 | Manual's 22 domains, package boundary, current 6 capabilities | **Complete** |
 | M1 | Existing status, measurement, and protection queries | **Complete** |
-| M2 | `APPLy`, output switch, OVP/OCP writes | Transactional current writes |
+| M2 | `APPLy`, output switch, OVP/OCP writes | **Complete** |
 | M3 | Options, SCPI version, self-test, non-consuming status | Zero-write health snapshot |
 | M4 | Range, Sense, Track, selected-channel state | Model/option-gated channel profile |
 | M5 | `TIMEr` / `OUTPut:TIMEr` queries | Zero-write timer profile |
@@ -148,7 +148,7 @@ OUTPut:OCP:QUES? CH<n>
 - On 2026-07-27, all three DP832A channels passed a 31-query, zero-write gate; all three outputs remained OFF.
 - This evidence covers only the DP832A protocol responses. It is not extrapolated to DP811/821/831 and does not establish measurement accuracy.
 
-## M2: transactional current write capabilities
+## M2: transactional current write capabilities — complete
 
 ### Commands
 
@@ -175,12 +175,21 @@ explicit `SYSTem:ERRor?` operation.
   that never temporarily weakens protection, and verifies each step. Trip state is not “restored” by CLEAR.
 - Align configured and method-level `check_errors_after_ops` semantics so descriptor values are not ignored.
 
-### Hardware acceptance
+### Acceptance evidence
 
-- Output is OFF and unloaded, or attached to a documented safe electronic load; use distinct conservative targets.
-- CH1 passes setpoint, OVP/OCP, and unloaded ON/OFF target/readback/restore cycles, followed by an
-  independent all-channel state check.
-- Fault injection covers first-write ambiguity, later-write failure, readback mismatch, and restoration failure.
+- Core `0.8.13` and external plugin `0.3.0` implement one reentrant I/O lock, per-step readback,
+  conservative restoration, half-LSB matching, and configuration-write latching. The Service rechecks
+  safety limits, protection thresholds, and trips before output ON.
+- Offline tests cover ambiguous first writes, later-write failure, readback mismatch, restoration failure,
+  never clearing a new trip, and non-interleaving concurrent I/O.
+- On 2026-07-27, DP832A CH1 passed distinct-target setpoint/protection readback and restoration plus an
+  unloaded ON-to-OFF cycle, followed by separate-session final-state verification.
+- Controlled injection covered an ambiguous first output write, failures on the second and third
+  protection transaction writes, an `APPLy` readback mismatch, and an ambiguous `APPLy` restoration.
+  All five cases produced the expected error propagation, conservative restore/forced OFF, and required
+  latching, with separate-session final-state verification after every case.
+- This evidence covers DP832A protocol and recovery semantics only. It is not extrapolated to other
+  models and does not establish loaded transient behavior or measurement accuracy.
 
 ## M3: option and non-consuming health snapshot
 
