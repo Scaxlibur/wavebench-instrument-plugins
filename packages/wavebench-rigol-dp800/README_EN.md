@@ -63,6 +63,11 @@ were snapshotted before mutation; a separate session then confirmed exact restor
 OFF, and an empty error queue. The acceptance did not modify the real `wavebench.toml` or commit real
 addresses, serial numbers, snapshots, measurements, or command logs.
 
+See the [DP800 programming-manual coverage matrix](doc/DP800_COVERAGE_MATRIX_EN.md) for the manual
+command domains, public API mapping, evidence levels, uncovered areas, and commands denied by
+default. The [DP800 command coverage development milestones](doc/DP800_COVERAGE_MILESTONES_EN.md)
+define each stage's exact commands, safety boundary, and acceptance gate.
+
 ## Development checks
 
 ```bash
