@@ -3,10 +3,9 @@
 [中文](DG4000_COVERAGE_MATRIX.md)
 
 See the [DG4000 coverage milestones](DG4000_COVERAGE_MILESTONES_EN.md) for implementation order,
-transaction rules, and hardware exit gates. Version `0.3.0` completes M0 and the offline M1/M2/M4
-implementation. M1/M2 are complete; M4 passes the full CH1 gate and CH2 protocol/restoration gate,
-while the CH2 analog-shape gate remains pending. M3/M5-M12 remain pending. Listing a command in
-this matrix does not make it implemented.
+transaction rules, and hardware exit gates. Version `0.4.0` completes M0-M3. M4 passes the full
+CH1 gate and CH2 protocol/restoration gate, while the CH2 analog-shape gate remains pending.
+M5-M12 remain pending. Listing a command in this matrix does not make it implemented.
 
 ## Purpose, scope, and counting method
 
@@ -31,9 +30,10 @@ optional keywords, short forms, and transcription defects such as missing bracke
 headings make a percentage misleading. The matrix therefore reports auditable functional domains
 and public-capability evidence rather than a falsely precise percentage.
 
-The external plugin declares ten WaveBench capabilities. It is a controlled implementation for
-basic DG4202 dual-channel output and a narrow arbitrary-wave upload path, not a general DG4000
-SCPI shell and not a claim to every DG4000 model, firmware, or accessory feature.
+The external plugin declares eleven WaveBench capabilities. It is a controlled implementation for
+basic DG4202 dual-channel output, read-only channel context, and a narrow arbitrary-wave upload
+path, not a general DG4000 SCPI shell and not a claim to every DG4000 model, firmware, or accessory
+feature.
 
 Coverage labels:
 
@@ -55,11 +55,11 @@ Coverage labels:
 | Basic functions and square duty | `FUNCtion[:SHAPe]`, `FUNCtion:SQUare:DCYCle`, plus `APPLy:SINusoid/SQUare/RAMP/PULSe/NOISe` | `source.set_function` for SIN/SQU/RAMP/PULS/NOIS/DC; `source.set_square_duty_cycle` | **External hardware accepted** for temporary SQU/37% duty, ON-to-OFF, and fresh-session SIN restore on CH1/CH2; other functions remain offline-only | No ramp symmetry, pulse width/edges, noise parameters, composite apply writes, or complete function-profile restoration | Define complete, readable, restorable profiles per function before further setters |
 | Amplitude, units, offset, phase | `VOLTage`, `UNIT`, `OFFSet`, `HIGH`, `LOW`, `PHASe` | `source.set_amplitude_vpp` writes `UNIT VPP` plus amplitude; status reads offset/phase; arbitrary upload writes offset internally | **External hardware accepted** for the M2 CH1/CH2 0.8 Vpp transaction/restore and M4 CH1 2 Vpp analog loop; no public offset setter | No public offset/phase/high/low setter; core VPP limits do not replace model/load/frequency limits; DBM/VRMS are not public | Keep a VPP-first API; couple any additional units or level controls to load, limits, and restoration |
 | Output enable | `OUTPut[<n>][:STATe] ON|OFF` | `source.output`; arbitrary upload does not enable output unless explicitly requested | **External hardware accepted** for explicit M2 ON-to-OFF and restore on CH1/CH2; M4 CH1 adds a triangle loop | It directly affects the DUT; no implicit enable or retry | Keep it separate and require higher-level workflows to record the requested output state |
-| Output load, polarity, noise, sync | `OUTPut:IMPedance/LOAD`, `POLarity`, `NOISe:*`, `SYNC:*` | Not public | **Not covered** | Load changes amplitude meaning and available range; polarity/sync alter timing and DUT observations | **P1:** add read-only load/impedance first, then consider controlled writes tied to VPP safety |
+| Output load, polarity, noise, sync | `OUTPut:IMPedance/LOAD`, `POLarity`, `NOISe:*`, `SYNC:*` | `source.channel_profile` returns load, polarity, noise state/scale, and sync state/polarity read-only | **External hardware accepted**: M3 completed 45 queries and zero text/binary writes on DG4202 `00.01.14` CH1/CH2 with strict complete profiles | These fields are context for diagnostics and safety only; basic restore does not restore them and no setters are public | Keep read-only; any future writes require VPP coupling, complete snapshots, and restoration |
 | Dual-channel coupling | `COUPling:AMPL/FREQuency/PHASe`, base channel, state | Not public | **Not covered** | One-channel changes can affect the other channel; the current single-channel snapshot cannot restore this safely | **P2:** design atomic dual-channel snapshot, restoration, and lockout first |
 | Sweep and manual/external trigger | `SWEep:*`, frequency start/stop/center/span, `*TRG` | `source.status` reads sweep state; fixed-frequency control exits sweep; basic restore restores frequency mode and verifies sweep enabled, but there is no sweep setter | **Partial**: state read, fixed-frequency exit, and frequency-mode restoration have offline coverage; no profile acceptance | Existing restore excludes sweep duration, spacing, trigger source, trigger-out, and all other sweep-profile fields, so it is not a complete sweep restore | **P1:** define a complete read-only sweep profile before a controlled write transaction |
-| Burst, pulse, marker, harmonic | `BURSt:*`, `PULSe:*`, `MARKer:*`, `HARMonic:*` | Not public | **Not covered** | These alter waveform shape, external trigger, or sync behavior and often depend on the selected function | **P2/P3:** split by profile, output risk, and test fixture |
-| Modulation | `MOD:AM/FM/PM/ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK/PWM:*` | Not public | **Not covered** | Many mode-specific parameters modify output; external sources, rates, polarity, and phase interact | **P3:** do not bypass capabilities and restoration with raw SCPI |
+| Burst, pulse, marker, harmonic | `BURSt:*`, `PULSe:*`, `MARKer:*`, `HARMonic:*` | `source.channel_profile` returns only burst state, marker state, and pulse hold; there is no complete profile, setter, or harmonic API | **Partial read-only context hardware accepted**: the three M3 context fields returned strictly with zero writes on CH1/CH2; everything else is uncovered | State/hold queries are not configuration capability; these features alter waveform, trigger, or sync and depend on function | **P2/P3:** split by profile, output risk, and fixture; model harmonic separately |
+| Modulation | `MOD:AM/FM/PM/ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK/PWM:*` | `source.channel_profile` returns only modulation state/type; there are no mode-specific profiles or setters | **Partial read-only context hardware accepted**: M3 returned OFF/AM on CH1/CH2; parameter and write surfaces remain uncovered | State/type queries are not modulation capability; external sources, rates, polarity, and phase interact | **P3:** split capabilities by mode and do not bypass restoration with raw SCPI |
 | Arbitrary upload: DAC14 | `TRACe:DATA:DAC VOLATILE,<binary-block>` or decimal DAC values | `source.arbitrary_upload` accepts only structurally and sample-validated little-endian `DG4000DacBlock`; the target must already be OFF, FIX, and sweep OFF; post-binary fields are read back, and failure latches while reporting volatile USER data as irreversible | **M4 partially hardware accepted**: full CH1 loop; CH2 output-off upload, USER/1 kHz/1 Vpp/0 V readback, error queue, and fresh-session restore pass, while analog shape is pending | No public decimal/float upload, DAC16, or arbitrary editing/readback; upload overwrites volatile waveform memory and selects USER | Connect CH2 to a high-impedance scope and complete frequency/Vpp/shape evidence without widening the protocol |
 | Arbitrary diagnostic queries | Plugin candidates include `FUNC?`, `FUNC:USER?`, and several `SOURce:*ARB*` / `SOURce:*DATA*` queries | `source.arbitrary_probe` permits only question-mark candidates and records errors after each | **Diagnostic probe**; FakeTransport-covered | The manual places waveform data under `TRACe:DATA`, not `SOURce:DATA`; several candidates may properly return `-113`. Since `errors()` consumes the queue, this is not non-invasive health readout | Keep it an explicit troubleshooting tool; do not promote candidate acceptance/rejection to feature coverage |
 | Arbitrary editing, float, DAC16 | `TRACe:DATA`, `DAC16`, `POINts`, `VALue`, `LOAD?`, interpolate | Not public | **Not covered** | Formats, memory lengths, automatic USER selection, and local-edit rules differ; DAC16 has fixed chunking conditions | **P2:** establish RAM/DDR lifecycle, byte order, and readback semantics first |
@@ -86,6 +86,11 @@ SOURce<n>:FREQuency[:FIXed]?
 SOURce<n>:VOLTage?  SOURce<n>:VOLTage:UNIT?  SOURce<n>:VOLTage:OFFSet?
 SOURce<n>:PHASe?  SOURce<n>:SWEep:STATe?  SOURce<n>:APPLy?
 SOURce<n>:FUNCtion:SQUare:DCYCle?
+OUTPut<n>:LOAD?  OUTPut<n>:POLarity?
+OUTPut<n>:NOISe:STATe?  OUTPut<n>:NOISe:SCALe?
+OUTPut<n>:SYNC:STATe?  OUTPut<n>:SYNC:POLarity?
+SOURce<n>:BURSt:STATe?  SOURce<n>:MOD:STATe?  SOURce<n>:MOD:TYPe?
+SOURce<n>:MARKer:STATe?  SOURce<n>:PULSe:HOLD?
 
 OUTPut<n> ON|OFF
 SOURce<n>:FREQuency[:FIXed] <frequency>
@@ -115,20 +120,24 @@ Two deliberate exceptions need separate treatment:
   amplitude unit/value, offset, and square duty. Core run restore remains the narrower
   output/function/frequency/amplitude/duty contract and starts with output OFF. Neither restores
   phase, load, modulation, the complete sweep profile, or overwritten volatile USER data.
+- `source.channel_profile` is an independent, all-or-nothing read-only context. It does not change
+  the basic-restore field set or add load, polarity, noise, sync, burst, modulation, marker, or
+  pulse hold to automatic restoration.
 - Descriptor capability validation proves that declared methods exist and are callable. It does not
   prove SCPI semantics, response parsing, or hardware compatibility.
 
 ## Recommended roadmap
 
-1. **P1: output load plus complete read-only profiles.** Add `OUTPut:LOAD/IMPedance?`, then define
-   a read-only profile including offset, phase, sweep state, and load. Do not broaden automatic
-   restore before complete snapshots exist.
-2. **P1: finish the M4 CH2 analog gate.** CH2 output-off upload, readback, error queue, and restore
+1. **P1: finish the M4 CH2 analog gate.** CH2 output-off upload, readback, error queue, and restore
    already pass. Connect a high-impedance scope and add frequency, Vpp, and shape evidence.
-3. **P2: sweep profiles and read-only counter.** Sweep needs a joint start/stop/spacing/time/trigger
-   snapshot and restoration model; the counter can begin with non-clearing results.
-4. **P3: modulation, burst, pulse, and dual-channel coupling.** Split them into capabilities and
-   transactions; raw SCPI must not bypass output safety.
+2. **P2: M5 sweep profile and M6 read-only counter.** Sweep needs a joint
+   start/stop/spacing/time/trigger profile; counter begins without clearing statistics or enabling
+   the input automatically.
+3. **P2/P3: M7-M10 controlled write transactions.** Implement sweep, pulse/burst/marker,
+   dual-channel coupling, and basic modulation with independent models, snapshots, restoration,
+   and latching.
+4. **P3: M11 advanced features.** Model advanced modulation, harmonic, and DAC16 separately; keep
+   DAC16 fail-closed until byte order, capacity, and resource lifetime have evidence.
 5. **Out of default scope: filesystem, network, internal state slots, PA, restart/shutdown.** They
    need a permission model and human confirmation distinct from ordinary experiments.
 
@@ -137,7 +146,8 @@ Two deliberate exceptions need separate treatment:
 - **Manual**: the local vendor manual is used only for internal audit and is excluded from releases.
 - **Implementation**: external `driver.py`/`descriptor.py` and FakeTransport tests; bundled-driver
   history only distinguishes provenance and does not automatically accept the external plugin.
-- **External hardware**: DG4202 firmware `00.01.14` passes the M1/M2 dual-channel gates. M4 CH1
+- **External hardware**: DG4202 firmware `00.01.14` passes the M1/M2/M3 dual-channel gates; M3
+  completed 45 queries and zero text/binary writes under guards that rejected every write. M4 CH1
   passes protocol, a 64-point DAC14 triangle loop into a high-impedance RTM2032, and restoration;
   10,000 points measured 997.26 Hz and 2.16 Vpp with 0.0390 V triangle-template RMSE. M4 CH2
   passes protocol/restoration but is DMM-connected, so analog shape is not accepted.

@@ -8,17 +8,19 @@
 
 - distribution：`wavebench-rigol-dg4000`
 - canonical driver ID：`rigol.dg4202`
-- WaveBench：`>=0.8,<0.9`
+- WaveBench：`>=0.8.15,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
 
-当前包面向 WaveBench `v0.8.0` release，不能与 `v0.7.0` 配套运行，也不自动声明兼容未来 `0.9`。
+当前包使用 WaveBench `v0.8.15` 首次提供的 `SourceChannelProfile` 公共契约，不能与更早
+的 core 配套运行，也不自动声明兼容未来 `0.9`。
 
 该插件不声明 alias。安装后，显式 canonical ID `rigol.dg4202` 选择外置实现；短 alias `dg4202` 始终选择 WaveBench 内建 fallback。卸载插件后，canonical ID 也回退到内建实现。
 
 ## 能力
 
 - `*IDN?`、错误队列与 CH1/CH2 状态读取；
+- CH1/CH2 负载、极性、noise、sync、burst、modulation、marker 和 pulse-hold 的严格只读 profile；
 - 固定频率、函数、VPP 幅度、方波占空比和显式输出控制；
 - 只读任意波形 SCPI 能力探测；
 - 使用 WaveBench 公共 `DG4000DacBlock` 契约上传已校验的 DAC14 binary block。
@@ -34,11 +36,13 @@ WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅�
 
 descriptor 导入不连接仪器。factory 只通过 `DriverContext` 打开当前配置的 transport。默认离线测试不扫描资源、不连接仪器，也不发送真实 SCPI。输出控制、任意波形上传和其他写操作不会盲目重试。
 
-`0.3.0` 的 M1/M2/M4 离线实现已收口：所有 I/O 使用同一可重入锁，固定波写入采用
+`0.4.0` 完成 M3 只读通道 profile，并保留 `0.3.0` 的 M1/M2/M4 事务边界：所有 I/O 使用同一可重入锁，固定波写入采用
 写前快照、逐步回读、off-first 恢复和歧义写锁存；DAC14 上传仅允许目标通道已 OFF、
 FIX 且 sweep OFF，并明确把被覆盖的 volatile USER 波表视为不可恢复副作用。DG4202
-固件 `00.01.14` 已通过 M1/M2 实机退出门；M4 的 CH1 完整退出门及 CH2 协议/恢复门已
-通过，CH2 模拟形状验收仍待接入高阻示波器。结论不外推到其它型号、固件或通道接线。
+固件 `00.01.14` 已通过 M1/M2/M3 实机退出门；M4 的 CH1 完整退出门及 CH2 协议/恢复门已
+通过，CH2 模拟形状验收仍待接入高阻示波器。M3 profile 是只读上下文，不扩大 core 的
+basic restore，也不承诺恢复 load、polarity、noise、sync、burst、modulation、marker、
+pulse hold 或 volatile USER 内容。结论不外推到其它型号、固件或通道接线。
 
 示例使用文档保留地址：
 
@@ -62,10 +66,16 @@ check_errors = true
 
 早期验收曾使用外置 `wavebench-rigol-dg4000` 驱动 DG4202 CH1 输出 1 kHz、1 Vpp 正弦，并由外置 `wavebench-rigol-ds1000z` 驱动 DS1104Z Plus CH1 闭环采集。示波器 CH1 为 AC 耦合、固定高阻输入；DEF 波形返回 1200 点，WaveBench 测得 1000.000 Hz、1.008 Vpp。两台仪器前后错误队列均为空，发生器 CH1 原状态在 `finally` 路径恢复并回读确认。
 
-2026-07-27 在 DG4202 固件 `00.01.14` 上重新执行当前 `0.3.0` 工作树验收：M1 对
+2026-07-27 在 DG4202 固件 `00.01.14` 上重新执行当前工作树验收：M1 对
 CH1/CH2 完成合计 24 查询、0 写入的严格状态 profile；M2 对两路分别完成 OFF、临时
 SQU/不同固定频率/0.8 Vpp/37% duty、显式 ON→OFF、off-first 恢复及新会话逐字段复核。
 两路最终均恢复为原始 SIN、1 kHz、5 Vpp、0 V offset、FIX、sweep OFF、输出 ON。
+
+M3 使用外置插件 `0.4.0` 在同一受控会话读取 CH1/CH2 完整 channel profile。transport
+守卫把任何 text/binary write 立即变为失败；验收最终完成 45 次 query、0 次 text write、
+0 次 binary write。两路均回读为 high-impedance load、NORMAL polarity、noise OFF/10%、
+sync ON/POSITIVE、burst OFF、modulation OFF/AM、marker OFF、pulse hold DUTY；所有基础状态
+与上下文字段全量返回。该验收没有读取错误队列，以免把消费型错误读取误称为无副作用。
 
 M4 对 CH1/CH2 分别在输出 OFF 时上传 64 点 little-endian DAC14 三角波，回读
 USER/1 kHz/1 Vpp/0 V、确认错误队列为空，并在新会话确认原态恢复。CH1 随后以 2 Vpp
@@ -94,3 +104,4 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
 - `0.1.0`：从 WaveBench 内建 DG4202 协议实现迁移；核心继续持有 Service 和安全策略。
 - `0.2.0`：增加 M0–M12 双语覆盖里程碑与发行包防泄漏回归；不扩大 capability。
 - `0.3.0`：交付现有 API 的严格收口、固定波事务化和 DAC14 fail-closed 实现；DG4202 `00.01.14` 的 M1/M2 与 M4 CH1 实机退出门通过，M4 CH2 仅协议/恢复通过，未扩大 capability。
+- `0.4.0`：要求 WaveBench `>=0.8.15`，新增 `source.channel_profile`；DG4202 `00.01.14` 的 CH1/CH2 严格零写 M3 实机门通过，不扩大自动恢复范围。

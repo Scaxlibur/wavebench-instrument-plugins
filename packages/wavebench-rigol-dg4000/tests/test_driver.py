@@ -40,6 +40,17 @@ class FakeTransport:
             "swe": "ON",
             "apply": '"SIN,5.000000E+03,1.000000E+00,0.000000E+00,0.000000E+00"',
             "duty": 50.0,
+            "load": "INFINITY",
+            "polarity": "NORMAL",
+            "noise": "OFF",
+            "noise_scale": 10.0,
+            "sync": "ON",
+            "sync_polarity": "POS",
+            "burst": "OFF",
+            "modulation": "OFF",
+            "modulation_type": "AM",
+            "marker": "OFF",
+            "pulse_hold": "DUTY",
         }
 
     def write(self, command: str) -> None:
@@ -103,6 +114,17 @@ class FakeTransport:
             f":SOUR{channel}:SWE:STAT?": self.state["swe"],
             f":SOUR{channel}:APPL?": self.state["apply"],
             f":SOUR{channel}:FUNC:SQU:DCYC?": str(self.state["duty"]),
+            f":OUTP{channel}:LOAD?": self.state["load"],
+            f":OUTP{channel}:POL?": self.state["polarity"],
+            f":OUTP{channel}:NOIS?": self.state["noise"],
+            f":OUTP{channel}:NOIS:SCAL?": str(self.state["noise_scale"]),
+            f":OUTP{channel}:SYNC?": self.state["sync"],
+            f":OUTP{channel}:SYNC:POL?": self.state["sync_polarity"],
+            f":SOUR{channel}:BURS:STAT?": self.state["burst"],
+            f":SOUR{channel}:MOD:STAT?": self.state["modulation"],
+            f":SOUR{channel}:MOD:TYPE?": self.state["modulation_type"],
+            f":SOUR{channel}:MARK:STAT?": self.state["marker"],
+            f":SOUR{channel}:PULS:HOLD?": self.state["pulse_hold"],
             f":SOUR{channel}:FUNC:USER?": '"USER1"',
             f":SOUR{channel}:ARB:SRAT?": "1000000",
         }
@@ -122,7 +144,128 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert item.distribution == "wavebench-rigol-dg4000"
     assert item.aliases == ()
     assert item.kind == "source"
+    assert item.version == "0.4.0"
+    assert item.wavebench_min_version == "0.8.15"
+    assert "source.channel_profile" in item.capabilities
     assert "source.arbitrary_upload" in item.capabilities
+
+
+def test_channel_profile_is_strict_all_or_nothing_and_query_only() -> None:
+    transport = FakeTransport()
+
+    profile = DG4202Source(transport).get_channel_profile(1)
+
+    assert profile.status.channel == 1
+    assert profile.load_ohm is None
+    assert profile.polarity == "NORMAL"
+    assert profile.noise_enabled is False
+    assert profile.noise_scale_percent == 10.0
+    assert profile.sync_enabled is True
+    assert profile.sync_polarity == "POSITIVE"
+    assert profile.burst_enabled is False
+    assert profile.modulation_enabled is False
+    assert profile.modulation_type == "AM"
+    assert profile.marker_enabled is False
+    assert profile.pulse_hold == "DUTY"
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_channel_profile_normalizes_finite_load_and_documented_short_enums() -> None:
+    transport = FakeTransport(channel=2)
+    transport.state.update(
+        {
+            "load": "5.000000E+01",
+            "polarity": "INV",
+            "noise": "1",
+            "noise_scale": 25.0,
+            "sync": "0",
+            "sync_polarity": "NEG",
+            "burst": "1",
+            "modulation": "1",
+            "modulation_type": "4FSK",
+            "marker": "1",
+            "pulse_hold": "WIDT",
+        }
+    )
+
+    profile = DG4202Source(transport).get_channel_profile(2)
+
+    assert profile.load_ohm == 50.0
+    assert profile.polarity == "INVERTED"
+    assert profile.noise_enabled is True
+    assert profile.noise_scale_percent == 25.0
+    assert profile.sync_enabled is False
+    assert profile.sync_polarity == "NEGATIVE"
+    assert profile.burst_enabled is True
+    assert profile.modulation_enabled is True
+    assert profile.modulation_type == "4FSK"
+    assert profile.marker_enabled is True
+    assert profile.pulse_hold == "WIDTH"
+    assert all("1" not in command for command in transport.queries if command != "*IDN?")
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        (":OUTP1:LOAD?", "nan", "output load"),
+        (":OUTP1:LOAD?", "10001", "output load"),
+        (":OUTP1:POL?", "SIDEWAYS", "output polarity"),
+        (":OUTP1:NOIS?", "MAYBE", "noise state"),
+        (":OUTP1:NOIS:SCAL?", "nan", "noise scale"),
+        (":OUTP1:NOIS:SCAL?", "51", "noise scale"),
+        (":OUTP1:SYNC?", "MAYBE", "sync state"),
+        (":OUTP1:SYNC:POL?", "BOTH", "sync polarity"),
+        (":SOUR1:BURS:STAT?", "MAYBE", "burst state"),
+        (":SOUR1:MOD:STAT?", "MAYBE", "modulation state"),
+        (":SOUR1:MOD:TYPE?", "UNKNOWN", "modulation type"),
+        (":SOUR1:MARK:STAT?", "MAYBE", "marker state"),
+        (":SOUR1:PULS:HOLD?", "BOTH", "pulse hold"),
+    ],
+)
+def test_channel_profile_rejects_untrusted_context_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = FakeTransport()
+    transport.query_overrides[command] = response
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).get_channel_profile(1)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ":OUTP1:LOAD?",
+        ":OUTP1:POL?",
+        ":OUTP1:NOIS?",
+        ":OUTP1:NOIS:SCAL?",
+        ":OUTP1:SYNC?",
+        ":OUTP1:SYNC:POL?",
+        ":SOUR1:BURS:STAT?",
+        ":SOUR1:MOD:STAT?",
+        ":SOUR1:MOD:TYPE?",
+        ":SOUR1:MARK:STAT?",
+        ":SOUR1:PULS:HOLD?",
+    ],
+)
+def test_channel_profile_query_failure_returns_no_partial_profile_and_never_writes(
+    command: str,
+) -> None:
+    transport = FakeTransport()
+    transport.fail_queries.add(command)
+
+    with pytest.raises(InstrumentError, match="injected query failure"):
+        DG4202Source(transport).get_channel_profile(1)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
 
 
 def test_factory_opens_exactly_one_core_transport_and_satisfies_capabilities() -> None:

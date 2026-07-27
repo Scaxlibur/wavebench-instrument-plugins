@@ -13,6 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+PACKAGE_VERSION = "0.4.0"
 
 
 def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
@@ -34,7 +35,7 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
         ],
         cwd=tmp_path,
     )
-    wheel = next(wheelhouse.glob("wavebench_rigol_dg4000-0.3.0-*.whl"))
+    wheel = next(wheelhouse.glob(f"wavebench_rigol_dg4000-{PACKAGE_VERSION}-*.whl"))
 
     with ZipFile(wheel) as archive:
         names = archive.namelist()
@@ -48,6 +49,12 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
     ]
 
     assert distribution.metadata["License-Expression"] == "MIT"
+    assert distribution.version == PACKAGE_VERSION
+    requires_dist = distribution.metadata.get_all("Requires-Dist") or []
+    assert any(
+        requirement.replace(" ", "") == "wavebench<0.9,>=0.8.15"
+        for requirement in requires_dist
+    )
     assert [(item.name, item.value) for item in entry_points] == [
         ("rigol.dg4202", "wavebench_rigol_dg4000:descriptor")
     ]
@@ -68,7 +75,7 @@ def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) 
         ],
         cwd=PACKAGE_ROOT,
     )
-    sdist = next(dist_dir.glob("wavebench_rigol_dg4000-0.3.0.tar.gz"))
+    sdist = next(dist_dir.glob(f"wavebench_rigol_dg4000-{PACKAGE_VERSION}.tar.gz"))
 
     with tarfile.open(sdist) as archive:
         names = archive.getnames()
@@ -129,7 +136,9 @@ def test_wheel_install_migration_routing_and_uninstall_fallback(tmp_path: Path) 
         ],
         cwd=tmp_path,
     )
-    plugin_wheel = next(wheelhouse.glob("wavebench_rigol_dg4000-0.3.0-*.whl"))
+    plugin_wheel = next(
+        wheelhouse.glob(f"wavebench_rigol_dg4000-{PACKAGE_VERSION}-*.whl")
+    )
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"

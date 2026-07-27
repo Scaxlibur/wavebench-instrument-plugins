@@ -6,7 +6,11 @@ from threading import RLock
 
 from wavebench.errors import DataError, InstrumentError
 from wavebench.instruments import DG4000DacBlock
-from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
+from wavebench.instruments.models import (
+    ArbitraryQueryProbeResult,
+    SourceChannelProfile,
+    SourceStatus,
+)
 from wavebench.transport.base import InstrumentTransport
 
 
@@ -41,6 +45,11 @@ _FUNCTION_ALIASES = {
     "USER": "USER",
     "ARB": "USER",
     "HARM": "HARM",
+}
+_STATE_ALIASES = {"0": "OFF", "OFF": "OFF", "1": "ON", "ON": "ON"}
+_MODULATION_TYPE_ALIASES = {
+    name: name
+    for name in ("AM", "FM", "PM", "ASK", "FSK", "PSK", "PWM", "BPSK", "QPSK", "3FSK", "4FSK", "OSK")
 }
 
 
@@ -195,8 +204,27 @@ class DG4202Source:
         return _normalize_enum(
             self.transport.query(f":OUTP{channel}?"),
             field_name="output state",
-            aliases={"0": "OFF", "OFF": "OFF", "1": "ON", "ON": "ON"},
+            aliases=_STATE_ALIASES,
         )
+
+    def _query_state(self, command: str, *, field_name: str) -> bool:
+        return (
+            _normalize_enum(
+                self.transport.query(command),
+                field_name=field_name,
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+
+    def _query_load(self, channel: int) -> float | None:
+        response = self.transport.query(f":OUTP{channel}:LOAD?").strip().strip('"')
+        if response.upper() == "INFINITY":
+            return None
+        load_ohm = _finite_float(response, field_name="output load")
+        if not 1 <= load_ohm <= 10_000:
+            raise DataError("output load response must be from 1 to 10000 ohm or INFINITY")
+        return load_ohm
 
     def _query_function(self, channel: int) -> str:
         return _normalize_enum(
@@ -429,7 +457,7 @@ class DG4202Source:
             sweep_enabled = _normalize_enum(
                 self.transport.query(f":SOUR{channel}:SWE:STAT?"),
                 field_name="sweep state",
-                aliases={"0": "OFF", "OFF": "OFF", "1": "ON", "ON": "ON"},
+                aliases=_STATE_ALIASES,
             )
             apply_raw = self.transport.query(f":SOUR{channel}:APPL?").strip()
             _validate_apply_response(apply_raw)
@@ -451,6 +479,76 @@ class DG4202Source:
                 sweep_enabled=sweep_enabled,
                 apply_raw=apply_raw,
                 square_duty_cycle_percent=duty,
+            )
+
+    def get_channel_profile(self, channel: int) -> SourceChannelProfile:
+        _validate_channel(channel)
+        with self._io_lock:
+            status = self.get_status(channel)
+            load_ohm = self._query_load(channel)
+            polarity = _normalize_enum(
+                self.transport.query(f":OUTP{channel}:POL?"),
+                field_name="output polarity",
+                aliases={
+                    "NORM": "NORMAL",
+                    "NORMAL": "NORMAL",
+                    "INV": "INVERTED",
+                    "INVERTED": "INVERTED",
+                },
+            )
+            noise_enabled = self._query_state(
+                f":OUTP{channel}:NOIS?", field_name="noise state"
+            )
+            noise_scale_percent = self._query_finite_float(
+                f":OUTP{channel}:NOIS:SCAL?", field_name="noise scale"
+            )
+            if not 0 <= noise_scale_percent <= 50:
+                raise DataError("noise scale response must be from 0 to 50 percent")
+            sync_enabled = self._query_state(
+                f":OUTP{channel}:SYNC?", field_name="sync state"
+            )
+            sync_polarity = _normalize_enum(
+                self.transport.query(f":OUTP{channel}:SYNC:POL?"),
+                field_name="sync polarity",
+                aliases={
+                    "POS": "POSITIVE",
+                    "POSITIVE": "POSITIVE",
+                    "NEG": "NEGATIVE",
+                    "NEGATIVE": "NEGATIVE",
+                },
+            )
+            burst_enabled = self._query_state(
+                f":SOUR{channel}:BURS:STAT?", field_name="burst state"
+            )
+            modulation_enabled = self._query_state(
+                f":SOUR{channel}:MOD:STAT?", field_name="modulation state"
+            )
+            modulation_type = _normalize_enum(
+                self.transport.query(f":SOUR{channel}:MOD:TYPE?"),
+                field_name="modulation type",
+                aliases=_MODULATION_TYPE_ALIASES,
+            )
+            marker_enabled = self._query_state(
+                f":SOUR{channel}:MARK:STAT?", field_name="marker state"
+            )
+            pulse_hold = _normalize_enum(
+                self.transport.query(f":SOUR{channel}:PULS:HOLD?"),
+                field_name="pulse hold mode",
+                aliases={"DUTY": "DUTY", "WIDT": "WIDTH", "WIDTH": "WIDTH"},
+            )
+            return SourceChannelProfile(
+                status=status,
+                load_ohm=load_ohm,
+                polarity=polarity,
+                noise_enabled=noise_enabled,
+                noise_scale_percent=noise_scale_percent,
+                sync_enabled=sync_enabled,
+                sync_polarity=sync_polarity,
+                burst_enabled=burst_enabled,
+                modulation_enabled=modulation_enabled,
+                modulation_type=modulation_type,
+                marker_enabled=marker_enabled,
+                pulse_hold=pulse_hold,
             )
 
     def set_frequency(

@@ -6,14 +6,14 @@
 
 This document divides the broad DG4000 programming surface into M0-M12. Milestone numbers express risk order, not command counts or completion percentages. A milestone is complete only when code, failure paths, release artifacts, and the required hardware evidence all pass its exit gate.
 
-Current version: `wavebench-rigol-dg4000 0.3.0`.
+Current version: `wavebench-rigol-dg4000 0.4.0`.
 
 | Milestone | Status | Scope |
 |---|---|---|
 | M0 | **Complete** | Command audit, public boundary, evidence levels, artifact isolation |
 | M1 | **Complete** | Strict input, response, model, and read-only snapshot handling for current APIs |
 | M2 | **Complete** | Transactional fixed-wave and output writes |
-| M3 | Incomplete | Complete read-only channel profile and bounded restore contract |
+| M3 | **Complete** | Complete read-only channel profile and bounded restore contract |
 | M4 | **Partially hardware accepted; CH2 analog gate pending** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
 | M5 | Not started | Query-only sweep profile |
 | M6 | Not started | Non-destructive counter profile |
@@ -24,8 +24,8 @@ Current version: `wavebench-rigol-dg4000 0.3.0`.
 | M11 | Not started | Advanced modulation, harmonics, and arbitrary-wave formats |
 | M12 | Not started | Model/channel acceptance matrix and release convergence |
 
-M0 completion adds no instrument function. Version 0.3.0 completes M1/M2 and the M4 CH1 hardware
-gate plus CH2 protocol/restoration acceptance. CH2 analog-shape acceptance remains pending.
+M0 completion adds no instrument function. Version 0.4.0 completes M1/M2/M3 and the M4 CH1
+hardware gate plus CH2 protocol/restoration acceptance. CH2 analog-shape acceptance remains pending.
 
 ## 2. Rules shared by all milestones
 
@@ -144,7 +144,7 @@ as state evidence.
 
 ## 7. M3 — Complete read-only channel profile and restore claims
 
-**Status: incomplete; P1.**
+**Status: complete.**
 
 Add query-only context:
 
@@ -167,6 +167,13 @@ The profile distinguishes:
 
 Exit gate: CH1/CH2 profiles are all-or-nothing, finite/enum strict, and zero-write. README, artifacts, and run restore no longer describe current basic restoration as a full instrument-state restore.
 
+2026-07-27 evidence: external plugin `0.4.0` read CH1 and CH2 on DG4202 firmware `00.01.14`
+in one controlled session. Transport guards prohibited every text/binary write. The gate completed
+45 queries, zero text writes, and zero binary writes, returning all basic state and
+load/polarity/noise/sync/burst/modulation/marker/pulse-hold context for both channels. The error
+queue is consuming, so this gate did not read it. M3 does not widen basic restoration; read-only
+context and volatile USER contents remain outside automatic restoration.
+
 ## 8. M4 — DAC14 arbitrary-wave transaction and hardware reacceptance
 
 **Status: partially hardware accepted. CH1 passes the complete gate and CH2 passes the protocol/
@@ -178,7 +185,7 @@ Frozen boundary: accept only a core-generated and validated `DG4000DacBlock`; DA
 
 Preflight and transaction:
 
-- the target channel must already be OFF, FIX, with sweep OFF; until M3 can read burst/modulation reliably, current M4 does not claim to validate those two contexts; do not silently make it safe;
+- the target channel must already be OFF, FIX, with sweep OFF; M3 can now read burst/modulation state reliably, but the current M4 upload transaction does not yet include those fields in preflight and therefore does not claim to validate them; do not silently make it safe;
 - `output_on=false` means the channel remains OFF after upload, not that a pre-existing ON state is preserved;
 - do not retry the binary block blindly. An ambiguous first binary write latches the driver and records unknown volatile-waveform state;
 - read back USER/frequency/Vpp/offset after upload; enable output only after an explicit request and a repeated safety check;
@@ -276,11 +283,11 @@ Final exit requires every public write capability to have normal-path, failure-m
 
 ## 17. Current evidence boundary
 
-- External-plugin hardware accepted: M1/M2 dual-channel gates on DG4202 firmware `00.01.14`;
+- External-plugin hardware accepted: M1/M2/M3 dual-channel gates on DG4202 firmware `00.01.14`;
   the complete M4 CH1 gate; and M4 CH2 output-off upload, readback, error-queue, and fresh-session
   restoration gates.
 - Partial: M4 CH2 has no high-impedance-scope frequency/Vpp/shape evidence.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: M3, the M4 CH2 analog gate, and M5-M12.
+- Not passed: the M4 CH2 analog gate and M5-M12.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.
