@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-rigol-dg4000"
-version = "0.1.0"
+version = "0.2.0"
 description = "RIGOL DG4000 function and arbitrary waveform generator plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,6 +20,9 @@ dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wavebench_rigol_dg4000"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/doc/vendor-local"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

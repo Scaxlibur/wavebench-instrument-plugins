@@ -2,6 +2,10 @@
 
 [English](DG4000_COVERAGE_MATRIX_EN.md)
 
+分阶段实现顺序、事务规则和实机退出门见
+[DG4000 功能覆盖里程碑](DG4000_COVERAGE_MILESTONES.md)。当前 `0.2.0` 仅完成 M0；
+M1–M12 不因本矩阵列出命令而视为已实现。
+
 ## 目的、范围与统计口径
 
 本矩阵将本地保存的 DG4000 中文编程手册与 WaveBench 的外置

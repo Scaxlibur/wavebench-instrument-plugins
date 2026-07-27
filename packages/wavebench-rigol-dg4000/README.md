@@ -26,7 +26,8 @@
 WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅度安全限制、Service、run plan、状态恢复和 artifact。插件不复制这些策略。
 
 完整的厂商手册命令域、当前公开 API、离线/实机证据和默认拒绝的高风险命令见
-[DG4000 功能覆盖矩阵](doc/DG4000_COVERAGE_MATRIX.md)。本地厂商手册保存在被忽略的
+[DG4000 功能覆盖矩阵](doc/DG4000_COVERAGE_MATRIX.md)。分阶段退出门和硬件验收边界见
+[DG4000 覆盖里程碑](doc/DG4000_COVERAGE_MILESTONES.md)。本地厂商手册保存在被忽略的
 `doc/vendor-local/`，不进入发行包。
 
 ## 安全边界
@@ -72,4 +73,5 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
 
 ## 来源
 
-0.1.0 初始驱动从 WaveBench 内建 DG4202 协议实现迁移而来。迁移保留核心 Service 和安全策略，只把厂商协议、descriptor、entry point 与 FakeTransport 测试外置。
+- `0.1.0`：从 WaveBench 内建 DG4202 协议实现迁移；核心继续持有 Service 和安全策略。
+- `0.2.0`：增加 M0–M12 双语覆盖里程碑，并用真实 sdist 构建回归确保本地厂商资料不进入发行包；不扩大仪器 capability。

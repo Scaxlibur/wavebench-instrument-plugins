@@ -44,7 +44,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-dg4000",
-        version="0.1.0",
+        version="0.2.0",
         source="entry_point:rigol.dg4202",
         config_fields=(
             "source.resource",

@@ -24,7 +24,9 @@ WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amp
 
 The [DG4000 coverage matrix](doc/DG4000_COVERAGE_MATRIX_EN.md) maps vendor command domains to
 current public APIs, offline/hardware evidence, and high-risk commands denied by default. The
-local vendor manual remains under ignored `doc/vendor-local/` and is excluded from releases.
+[DG4000 coverage milestones](doc/DG4000_COVERAGE_MILESTONES_EN.md) define staged exit gates and
+hardware-acceptance boundaries. The local vendor manual remains under ignored `doc/vendor-local/`
+and is excluded from releases.
 
 The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs.
 
@@ -46,4 +48,5 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
 
 ## Provenance
 
-Version 0.1.0 migrates the vendor-protocol portion of WaveBench's built-in DG4202 driver while leaving services and safety policy in core.
+- `0.1.0` migrated the vendor-protocol portion of WaveBench's built-in DG4202 driver while leaving services and safety policy in core.
+- `0.2.0` adds the bilingual M0-M12 coverage plan and a real-sdist regression gate that excludes local vendor material; it adds no instrument capability.

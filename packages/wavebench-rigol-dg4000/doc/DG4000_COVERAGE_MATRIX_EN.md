@@ -2,6 +2,10 @@
 
 [中文](DG4000_COVERAGE_MATRIX.md)
 
+See the [DG4000 coverage milestones](DG4000_COVERAGE_MILESTONES_EN.md) for implementation order,
+transaction rules, and hardware exit gates. Version `0.2.0` completes M0 only; listing a command
+in this matrix does not make M1-M12 implemented.
+
 ## Purpose, scope, and counting method
 
 This matrix compares the locally stored DG4000 Chinese programming manual with the external
