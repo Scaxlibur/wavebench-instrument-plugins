@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wavebench-rigol-dg1000"
+version = "0.1.0"
+description = "RIGOL DG1000 function generator plugin for WaveBench"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["wavebench>=0.8,<0.9"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[project.entry-points."wavebench.instruments"]
+"rigol.dg1000" = "wavebench_rigol_dg1000:descriptor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wavebench_rigol_dg1000"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
