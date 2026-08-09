@@ -73,6 +73,7 @@ python -m wavebench plugin install packages/wavebench-rigol-dg1000 --dry-run
 
 日常源码开发可使用仓库级 [editable 开发环境](../../doc/DEVELOPMENT.md)；正式验收仍使用真实
 wheel 和一次性虚拟环境。
+型号覆盖和能力边界见 [DG1000 覆盖矩阵](doc/DG1000_COVERAGE_MATRIX.md)。
 
 ## 实机验收边界
 

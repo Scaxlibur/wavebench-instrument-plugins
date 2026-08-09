@@ -226,10 +226,15 @@ class DG1000Tests(unittest.TestCase):
         self.assertEqual(plugin.driver_id, "rigol.dg1000")
         self.assertEqual(plugin.kind, "source")
         self.assertEqual(plugin.distribution, "wavebench-rigol-dg1000")
+        self.assertEqual(plugin.aliases, ())
+        self.assertEqual(plugin.wavebench_min_version, "0.8.0")
+        self.assertEqual(plugin.wavebench_max_version, "0.9.0")
         self.assertIn("DG1022", plugin.models)
         self.assertIn("DG1032Z", plugin.models)
         self.assertIn("source.status", plugin.capabilities)
         self.assertIn("source.set_frequency", plugin.capabilities)
+        self.assertNotIn("source.harmonic_profile", plugin.capabilities)
+        self.assertNotIn("source.harmonic_configure", plugin.capabilities)
         self.assertNotIn("source.arbitrary_upload", plugin.capabilities)
 
     def test_get_status_reads_channel_two_with_dg1000_command_layout(self):

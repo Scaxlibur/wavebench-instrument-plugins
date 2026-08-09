@@ -80,6 +80,8 @@ python -m wavebench plugin install packages/wavebench-rigol-dg1000 --dry-run
 
 Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for daily
 source work. Formal acceptance still uses a real wheel and a disposable virtual environment.
+See the [DG1000 coverage matrix](doc/DG1000_COVERAGE_MATRIX_EN.md) for model coverage and
+capability boundaries.
 
 ## Hardware acceptance boundary
 
