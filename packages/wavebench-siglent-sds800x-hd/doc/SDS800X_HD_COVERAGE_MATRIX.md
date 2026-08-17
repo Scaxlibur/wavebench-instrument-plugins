@@ -28,7 +28,7 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 | 模拟通道耦合 | `:CHANnel<n>:COUPling?`，返回 `AC`、`DC` 或 `GND` | `scope.channel_coupling` | **已实现 / 离线验证** | 按二通道或四通道型号限制 `<n>`，未知响应直接拒绝；实机验收待补 |
 | 输入阻抗 | 通用手册列出 `ONEMeg`、`FIFTy` | 无独立 capability | **默认拒绝** | SDS800X HD 专属产品资料说明固定 `1 MΩ`；不得把通用 `FIFTy` setter 外推到本系列 |
 | 错误队列 | CN11G 未记录错误队列命令 | `scope.errors` | **未覆盖** | 不猜测 `SYSTem:ERRor?`；消费型查询也不适合核心普通 query 的自动重试 |
-| 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **纯解析器已实现 / capability 未公开** | 346-byte preamble、8/16-bit 换算和时间轴已有离线测试；I/O、设置恢复与分片记录一致性仍未成立 |
+| 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **已实现 / 离线验证** | 仅支持 Stop、sequence OFF、模拟通道和 `DMAX`；分块、精确长度、失败恢复和核心服务已有离线测试，实机一致性待验 |
 | 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`*OPC?` | `scope.capture_waveform`、`scope.capture_waveforms` | **实机阻塞** | 手册未保证 `RUN` 后 `*OPC?` 等待真实触发完成；多通道必须一次 acquisition 后逐通道读取 |
 | 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | 无独立 capability | **手册已审计** | 不能误映射为公共 `ScopeAcquisitionStatus`；后者描述平均和分段采集状态 |
 | 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot` | **核心接口阻塞 / 实机阻塞** | 手册示例按原始图片字节读取，核心仅提供 definite-block query；命令也没有可靠的菜单开关 |
@@ -63,14 +63,26 @@ x[i] = horizontal_delay - timebase * 10 / 2 + i * sample_interval
 16-bit 解码。手册说明高分辨率数据左对齐、低位补零；首版不自行右移。单片上限必须查询
 `MAXPoint?`，不能硬编码手册示例值。
 
+公开的读取事务只接受 WaveBench `DMAX`。CN11G 第 385 页将 `WAVeform:POINt` 参数定义为
+整数 NR1，没有 `DEF/MAX/DMAX` 仪器关键字；driver 使用厂商波形重构示例中的 `POINT 0`
+选择完整记录。`DEF` 和 `MAX` 在任何 I/O 前拒绝，不能为了表面兼容发送无文档依据的命令。
+
+事务先确认 `TRIGger:STATus? = Stop` 和 `ACQuire:SEQuence? = OFF`，再完整保存
+`SOURCE/START/INTERVAL/POINT/WIDTH/BYTEorder`。读取期间固定 `WORD`、LSB、`START 0` 和
+`INTERVAL 1`，由 preamble 给出总点数，由 `MAXPoint?` 给出单片点数。成功、协议错误或
+transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖已有主异常。该流程不发送
+`RUN`、`SINGLE` 或 `STOP`，只读取已经停止的记录。
+
 ## 与 WaveBench 核心的接口约束
 
 - driver 只通过 `DriverContext.open_transport()` 获取核心 transport，并负责幂等关闭。
 - capability 只在对应公共方法完整实现后声明；运行时的「方法可调用」校验不替代签名和语义测试。
 - `fetch_waveform(channel, points="dmax", check_errors=True)` 必须返回核心
   `WaveformData` 和 `WaveformHeader`，不得在插件内复制同名模型。
-- CN11G 没有错误队列，使用 waveform 时不能假装完成 `check_errors=True` 的语义；公开前必须
-  明确配置门禁和失败方式。
+- CN11G 没有错误队列，使用 waveform 时必须显式配置 `scope.check_errors=false`；直接调用
+  driver 且 `check_errors=True` 时在任何 I/O 前失败。
+- 当前 `points` 只支持 `DMAX`；公共签名仍保持
+  `fetch_waveform(channel, points="dmax", check_errors=True)`，不伪造 `DEF/MAX` 映射。
 - 多通道 capture 必须先配置全部通道，只触发一次 acquisition，再逐通道读取；不得逐通道重新触发。
 - 当前核心 PyVISA 没有把独立 `opc_timeout_ms` 应用于 `query_opc()`，因此 acquisition 暂不声明
   独立 OPC 超时保证。
@@ -78,8 +90,8 @@ x[i] = horizontal_delay - timebase * 10 / 2 + i * sample_interval
 ## 开发顺序
 
 1. M1：严格身份解析和只读 `scope.channel_coupling`，完成离线测试。
-2. M2：346-byte preamble 纯解析器及数据换算测试已完成；下一步才接入仅模拟通道的
-   `scope.fetch_waveform`。
+2. M2：346-byte preamble、数据换算和已停止模拟记录的 `scope.fetch_waveform` 已完成离线
+   事务测试；真实硬件证据仍为空。
 3. M3：取得 TCPIP 与 USB 的脱敏二进制响应样本，确认分片、WORD 对齐、时基和 transfer
    设置恢复。
 4. M4：单独验证触发状态迁移、OPC 等待和一次多通道 acquisition，再评估 capture capability。
@@ -90,6 +102,17 @@ x[i] = horizontal_delay - timebase * 10 / 2 + i * sample_interval
 ```text
 *IDN?
 :CHANnel<n>:COUPling?
+:TRIGger:STATus?
+:ACQuire:SEQuence?
+:WAVeform:SOURce[?]
+:WAVeform:START[?]
+:WAVeform:INTerval[?]
+:WAVeform:POINt[?]
+:WAVeform:MAXPoint?
+:WAVeform:WIDTH[?]
+:WAVeform:BYTeorder[?]
+:WAVeform:PREamble?
+:WAVeform:DATA?
 ```
 
 命令出现在矩阵中不等于已经由 descriptor 声明或由真实仪器验证。

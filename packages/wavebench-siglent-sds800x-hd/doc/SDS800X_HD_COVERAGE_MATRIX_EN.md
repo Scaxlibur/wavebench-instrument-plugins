@@ -31,7 +31,7 @@ Evidence labels used here:
 | Analog-channel coupling | `:CHANnel<n>:COUPling?`, returning `AC`, `DC`, or `GND` | `scope.channel_coupling` | **Implemented / offline verified** | Limit `<n>` by two- or four-channel model and reject unknown responses; hardware acceptance remains pending |
 | Input termination | Shared manual lists `ONEMeg` and `FIFTy` | No standalone capability | **Rejected by default** | SDS800X HD product material specifies fixed `1 MΩ`; do not project the shared `FIFTy` setter onto this family |
 | Error queue | CN11G documents no error-queue query | `scope.errors` | **Not covered** | Do not guess `SYSTem:ERRor?`; consuming queries also conflict with automatic retries on ordinary core queries |
-| Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **Pure parser implemented / capability unexposed** | Offline tests cover the 346-byte preamble, 8/16-bit conversion, and time axis; I/O, restoration, and record stability across chunks remain unresolved |
+| Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **Implemented / offline verified** | Limited to Stop, sequence OFF, analog channels, and `DMAX`; chunking, exact lengths, failure restoration, and core-service integration have offline coverage, while hardware consistency remains pending |
 | Single and multichannel capture | `TRIGger:MODE`, `RUN`, `STOP`, `STATus?`, and `*OPC?` | `scope.capture_waveform`, `scope.capture_waveforms` | **Hardware blocked** | The manual does not guarantee that `*OPC?` after `RUN` waits for a physical trigger; multichannel capture must read all channels after one acquisition |
 | Trigger run state | `:TRIGger:STATus?` returns `Arm`, `Ready`, `Auto`, `Trig'd`, `Stop`, or `Roll` | No standalone capability | **Manual reviewed** | It cannot be mapped to public `ScopeAcquisitionStatus`, which describes averaging and segmented acquisition |
 | Screenshot | `:PRINt? PNG,NORMal` or inverted form | `scope.screenshot` | **Core interface blocked / hardware blocked** | The example reads raw image bytes while the core exposes only definite-block queries; the command also has no reliable menu control |
@@ -68,19 +68,32 @@ and signed 16-bit decoding. The manual describes higher-resolution samples as le
 zero-filled low bits; the first version does not shift them. The driver must query `MAXPoint?`
 instead of hard-coding the example limit.
 
+The exposed transaction accepts only WaveBench `DMAX`. Page 385 of CN11G defines the
+`WAVeform:POINt` argument as an integer NR1 and provides no `DEF/MAX/DMAX` instrument keywords;
+the driver uses `POINT 0` from the vendor waveform-reconstruction example to select the full
+record. `DEF` and `MAX` fail before any I/O rather than sending undocumented commands.
+
+The transaction first requires `TRIGger:STATus? = Stop` and `ACQuire:SEQuence? = OFF`, then saves
+`SOURCE/START/INTERVAL/POINT/WIDTH/BYTEorder`. It fixes `WORD`, LSB, `START 0`, and `INTERVAL 1`,
+uses the preamble for total points, and uses `MAXPoint?` for the per-query limit. It attempts to
+restore all transfer state after success, protocol failure, or transport failure; restoration
+failure does not hide an existing primary exception. The path sends no `RUN`, `SINGLE`, or `STOP`
+and reads only an already-stopped record.
+
 ## WaveBench core constraints
 
 - The driver obtains a core transport only through `DriverContext.open_transport()` and owns idempotent cleanup.
 - A capability is declared only after its public method is complete; runtime callability checks do not replace signature and semantic tests.
 - `fetch_waveform(channel, points="dmax", check_errors=True)` returns the core `WaveformData` and `WaveformHeader` models rather than plugin-local copies.
-- CN11G provides no error queue, so waveform support cannot pretend to fulfill `check_errors=True`; its configuration gate and failure behavior must be explicit before exposure.
+- CN11G provides no error queue, so waveform use must explicitly set `scope.check_errors=false`; a direct driver call with `check_errors=True` fails before any I/O.
+- The current `points` implementation supports only `DMAX`. The public signature remains `fetch_waveform(channel, points="dmax", check_errors=True)` without inventing `DEF/MAX` mappings.
 - Multichannel capture configures every channel, performs one acquisition, and then reads each channel. It must not retrigger per channel.
 - The current core PyVISA path does not apply the separate `opc_timeout_ms` to `query_opc()`, so acquisition cannot yet claim a separate OPC timeout guarantee.
 
 ## Development order
 
 1. M1: strict identity parsing and read-only `scope.channel_coupling`, with offline tests.
-2. M2: the pure 346-byte preamble parser and data-conversion tests are complete; analog-only `scope.fetch_waveform` comes next.
+2. M2: the 346-byte preamble, data conversion, and stopped analog-record `scope.fetch_waveform` transaction have offline coverage; hardware evidence remains absent.
 3. M3: redacted TCPIP and USB binary samples to confirm chunking, WORD alignment, timebase values, and transfer-setting restoration.
 4. M4: independently validate trigger transitions, OPC waiting, and one multichannel acquisition before considering capture capabilities.
 5. Track screenshot, digital channels, FFT, sequence/history, Autoset, and writes as separate work items; do not bypass gates with raw SCPI.
@@ -90,6 +103,17 @@ instead of hard-coding the example limit.
 ```text
 *IDN?
 :CHANnel<n>:COUPling?
+:TRIGger:STATus?
+:ACQuire:SEQuence?
+:WAVeform:SOURce[?]
+:WAVeform:START[?]
+:WAVeform:INTerval[?]
+:WAVeform:POINt[?]
+:WAVeform:MAXPoint?
+:WAVeform:WIDTH[?]
+:WAVeform:BYTeorder[?]
+:WAVeform:PREamble?
+:WAVeform:DATA?
 ```
 
 A command appearing in this matrix is not necessarily declared by the descriptor or verified on hardware.

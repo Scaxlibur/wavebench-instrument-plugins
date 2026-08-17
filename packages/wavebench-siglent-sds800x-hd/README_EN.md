@@ -2,19 +2,19 @@
 
 [中文](README.md)
 
-An external WaveBench driver package for the SIGLENT SDS800X HD oscilloscope family. Version 0.2.0 completes M1 with strict identity and analog-channel coupling queries. It does not expose waveform acquisition or state-changing operations.
+An external WaveBench driver package for the SIGLENT SDS800X HD oscilloscope family. Version 0.3.0 adds conservative stopped-record `DMAX` reads to strict identity and analog-channel coupling queries. The waveform path has offline transaction coverage but no hardware acceptance yet.
 
 ## Current status
 
-- Distribution: `wavebench-siglent-sds800x-hd` `0.2.0`
+- Distribution: `wavebench-siglent-sds800x-hd` `0.3.0`
 - Canonical driver ID: `siglent.sds800x-hd`
 - Instrument kind: `scope`
 - Backend: WaveBench core `pyvisa` transport
 - Resource schemes: `tcpip`, `usb`
-- Declared capabilities: `scope.idn`, `scope.channel_coupling`
+- Declared capabilities: `scope.idn`, `scope.channel_coupling`, `scope.fetch_waveform`
 - WaveBench: `>=0.8,<0.9`
 
-Descriptor import performs no instrument I/O. The factory obtains exactly one core transport through `DriverContext.open_transport()`. The driver validates the four `*IDN?` fields, manufacturer, supported model, and 14-character ASCII serial, then caches the stable identity. Before reading coupling, it applies the model-specific two- or four-channel limit and sends `:CHANnel<n>:COUPling?`; only `AC`, `DC`, and `GND` are accepted. `close()` releases the transport idempotently.
+Descriptor import performs no instrument I/O. The factory obtains exactly one core transport through `DriverContext.open_transport()`. The driver validates the four `*IDN?` fields, manufacturer, supported model, and 14-character ASCII serial, then caches the stable identity. Before reading coupling, it applies the model-specific two- or four-channel limit and sends `:CHANnel<n>:COUPling?`; only `AC`, `DC`, and `GND` are accepted. Waveforms use the core `query_bin_block()` transport and return the core `WaveformData` / `WaveformHeader` models. `close()` releases the transport idempotently.
 
 ## Product scope
 
@@ -25,27 +25,44 @@ The official data sheet lists these models:
 
 The model range, LAN/USB interfaces, and SCPI remote-control support come from the [official SIGLENT SDS800X HD product material](https://www.siglent.com/int/products-overview/sds800x-hd/). The `idn_patterns` use public model strings, and the strict parser follows the CN11G four-field format. Model whitespace, casing, and firmware formatting remain outside hardware acceptance until a redacted `*IDN?` sample is available.
 
-The official data sheet specifies fixed `1 MΩ` analog inputs with no internal `50 Ω` termination, so the descriptor initially declares `fixed-high-impedance`. Coupling queries, probe attenuation, and external termination conditions still require target-hardware confirmation before waveform acquisition is enabled.
+The official data sheet specifies fixed `1 MΩ` analog inputs with no internal `50 Ω` termination, so the descriptor initially declares `fixed-high-impedance`. Coupling queries, probe attenuation, and external termination conditions still require target-hardware confirmation before waveform reads are treated as hardware-accepted.
 
-## Current read-only capabilities
+## Current capabilities
 
 - `scope.idn` returns the validated original `*IDN?` text and caches it for the current driver session.
 - `scope.channel_coupling` returns uppercase `AC`, `DC`, or `GND`; invalid types, channels missing from a model, and unknown responses fail at the driver boundary.
+- `scope.fetch_waveform` reads an already-stopped, non-sequence analog record and currently supports only `points="dmax"`.
 
 A direct coupling query reads identity first, preventing a CH3 or CH4 command on a two-channel model. The WaveBench status fallback already calls `idn()` first in the same session, so that path does not duplicate the identity query.
 
+Waveform fetch does not start a new acquisition and sends no `RUN`, `SINGLE`, or `STOP`. The driver requires `:TRIGger:STATus?` to return `Stop` and `:ACQuire:SEQuence?` to return `OFF`, then saves `SOURCE`, `START`, `INTERVAL`, `POINT`, `WIDTH`, and `BYTEorder`. The transaction temporarily selects `WORD`, `LSB`, `START 0`, `INTERVAL 1`, and `POINT 0`, reads chunks according to `MAXPoint?`, and restores the original transfer state in dependency order on both success and failure.
+
+CN11G documents no error-queue query, so the plugin does not declare `scope.errors`. WaveBench requires that capability when `scope.check_errors=true`; waveform use therefore requires explicit configuration:
+
+```toml
+[scope]
+driver = "siglent.sds800x-hd"
+check_errors = false
+
+[waveform]
+format = "real"
+byte_order = "lsbf"
+points = "dmax"
+```
+
+Direct driver calls with `check_errors=True`, `points="def"`, or `points="max"` fail before any instrument I/O. CN11G specifies only an integer NR1 parameter for `WAVeform:POINt`; this version does not invent unverified instrument keywords for WaveBench `DEF/MAX` modes.
+
 ## Capabilities not exposed
 
-Version 0.2.0 does not declare:
+Version 0.3.0 does not declare:
 
 - `scope.errors`
 - `scope.autoscale`
-- `scope.fetch_waveform`
 - `scope.capture_waveform` / `scope.capture_waveforms`
 - `scope.screenshot`
 - any status, measurement, math, digital-channel, or history capability
 
-Other commands from the programming guide enter the driver and descriptor only after format review, FakeTransport tests, and controlled hardware acceptance where required. The plugin has no raw-SCPI surface and does not assume that another SIGLENT family uses an identical protocol.
+Other commands from the programming guide enter the driver and descriptor only after format review, FakeTransport tests, and controlled hardware acceptance where required. The plugin has no raw-SCPI surface and does not assume that another SIGLENT family uses an identical protocol. `scope.fetch_waveform` reads an existing record; it is not equivalent to `capture_waveform`.
 
 ## Programming-guide drop location
 
@@ -61,15 +78,10 @@ The repository-level `.gitignore` excludes every file under `doc/vendor-local/` 
 
 ## Next-stage gates
 
-M2 now contains an unexposed pure parsing layer for the 346-byte preamble, descriptor byte order,
-signed 8/16-bit samples, WORD sample byte order, probe scaling, voltage conversion, and the
-ten-division time axis. The descriptor still does not declare `scope.fetch_waveform`; pure-function
-tests do not establish an instrument read transaction.
-
 1. Obtain a redacted `*IDN?` sample and verify identity plus two- and four-channel coupling responses.
-2. Define the `check_errors` failure boundary and transfer-setting restoration for `scope.fetch_waveform` without an error queue.
-3. Use TCPIP and USB samples to verify binary blocks, chunking, WORD alignment, and timebase values.
-4. Verify `*OPC?` waiting and one multichannel acquisition before considering capture or write capabilities.
+2. Use redacted TCPIP and USB samples to verify binary blocks, chunking, WORD alignment, timebase values, and transfer-state restoration.
+3. Consider `DEF/MAX` point modes only after explicit protocol or hardware evidence; do not guess keywords.
+4. Verify `*OPC?` waiting and one multichannel acquisition before considering capture or other write capabilities.
 
 ## License
 

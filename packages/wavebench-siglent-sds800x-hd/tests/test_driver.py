@@ -33,7 +33,7 @@ class FakeTransport:
         self.close_count += 1
 
 
-def test_descriptor_is_query_only_executable_metadata_without_io() -> None:
+def test_descriptor_is_executable_metadata_without_import_io() -> None:
     item = descriptor()
 
     assert item.driver_id == "siglent.sds800x-hd"
@@ -50,9 +50,19 @@ def test_descriptor_is_query_only_executable_metadata_without_io() -> None:
     assert item.aliases == ()
     assert item.backends == ("pyvisa",)
     assert item.resource_schemes == ("tcpip", "usb")
-    assert item.capabilities == ("scope.idn", "scope.channel_coupling")
+    assert item.capabilities == (
+        "scope.idn",
+        "scope.channel_coupling",
+        "scope.fetch_waveform",
+    )
     assert item.scope_coupling_policy == "fixed-high-impedance"
     assert item.distribution == "wavebench-siglent-sds800x-hd"
+    assert item.version == "0.3.0"
+    assert item.config_fields == (
+        "connection.resource",
+        "scope.driver",
+        "waveform.*",
+    )
 
 
 def test_factory_opens_exactly_one_core_transport_without_querying() -> None:

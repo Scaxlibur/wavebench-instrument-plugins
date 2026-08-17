@@ -3,13 +3,16 @@ from __future__ import annotations
 from collections import deque
 import inspect
 import struct
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from wavebench.errors import DataError
+from wavebench.errors import ConfigError, DataError
 from wavebench.instruments.models import WaveformData
+from wavebench.services.scope_service import ScopeService
 
+from wavebench_siglent_sds800x_hd import descriptor
 from wavebench_siglent_sds800x_hd.driver import SDS800XHDScope
 
 
@@ -132,6 +135,51 @@ def test_fetch_waveform_signature_matches_core_contract() -> None:
     assert signature.parameters["points"].default == "dmax"
     assert signature.parameters["check_errors"].default is True
     assert signature.return_annotation == "WaveformData"
+
+
+def _scope_service(
+    transport: FakeTransport,
+    *,
+    check_errors: bool,
+) -> ScopeService:
+    item = descriptor()
+    config = SimpleNamespace(
+        scope=SimpleNamespace(
+            driver=item.driver_id,
+            check_errors=check_errors,
+            access="read_write",
+        ),
+        waveform=SimpleNamespace(
+            format="real",
+            byte_order="lsbf",
+            points="DMAX",
+        ),
+    )
+    return ScopeService(
+        config=config,
+        logger=SimpleNamespace(),
+        session=SDS800XHDScope(transport),
+        descriptor=item,
+    )
+
+
+def test_core_scope_service_fetches_with_error_checking_explicitly_disabled() -> None:
+    transport = FakeTransport()
+
+    waveform = _scope_service(transport, check_errors=False).fetch_waveform(channel=2)
+
+    assert isinstance(waveform, WaveformData)
+    assert waveform.channel == 2
+    assert transport.binary_queries.count(":WAVeform:DATA?") == 3
+
+
+def test_core_scope_service_requires_missing_error_capability_before_io() -> None:
+    transport = FakeTransport()
+
+    with pytest.raises(ConfigError, match=r"missing capabilities: scope\.errors"):
+        _scope_service(transport, check_errors=True).fetch_waveform(channel=2)
+
+    assert transport.operations == []
 
 
 def test_fetch_waveform_reads_stopped_record_in_chunks_and_restores_state() -> None:
