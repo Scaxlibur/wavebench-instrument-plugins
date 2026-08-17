@@ -6,7 +6,7 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, `wavebench-rigol-dp800`, and `wavebench-rohde-schwarz-rtm2000` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-shengpu-sp3000a` is at SP30120 M3.5 with a minimal query-only descriptor and five certified vendor-specific RF-OFF controls. The first five are optional external editions of drivers that remain bundled with WaveBench for first-use operation; they provide an independent upgrade, transport, and extension path rather than replacing or deprecating the bundled baseline. WaveBench v0.8.0 provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently: `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, `wavebench-rigol-dp800`, and `wavebench-rohde-schwarz-rtm2000` have completed offline, managed-lifecycle, and controlled hardware acceptance; `wavebench-shengpu-sp3000a` is at SP30120 M3.5 with a minimal query-only descriptor and five certified vendor-specific RF-OFF controls; `wavebench-siglent-sds800x-hd` is an identity-only M0 development scaffold. The first five are optional external editions of drivers that remain bundled with WaveBench for first-use operation; they provide an independent upgrade, transport, and extension path rather than replacing or deprecating the bundled baseline. WaveBench v0.8.0 provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 > [!IMPORTANT]
 > The WaveBench `v0.7.0` release does not contain Instrument API V2, the managed plugin lifecycle, or canonical override slots. These packages target the WaveBench `v0.8.0` release and uniformly require `wavebench>=0.8,<0.9`; they do not run with `v0.7.0` and do not assume compatibility with a future `0.9` core.
@@ -21,6 +21,7 @@ packages/
 ├── wavebench-rigol-ds1000z/
 ├── wavebench-rohde-schwarz-rtm2000/
 ├── wavebench-shengpu-sp3000a/
+├── wavebench-siglent-sds800x-hd/
 └── wavebench-<vendor>-<instrument>/
     ├── pyproject.toml
     ├── README.md
@@ -45,6 +46,7 @@ WaveBench permanently bundles the RTM2000, DS1000Z, DG4000, DP800, and DM3000 fa
 ## Incubating plugin
 
 - [`wavebench-shengpu-sp3000a`](../packages/wavebench-shengpu-sp3000a/README_EN.md): Shengpu SP30120 sweep-analyzer driver, canonical ID `shengpu.sp30120`; its descriptor declares identity only, while five certified typed vendor-specific RF-OFF controls are available and trace plus generic configuration remain disabled.
+- [`wavebench-siglent-sds800x-hd`](../packages/wavebench-siglent-sds800x-hd/README_EN.md): SIGLENT SDS800X HD oscilloscope-family M0 scaffold, canonical ID `siglent.sds800x-hd`; it currently declares `scope.idn` only, with waveform and write capabilities disabled.
 
 ## Security boundary
 
