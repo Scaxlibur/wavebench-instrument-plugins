@@ -2,8 +2,8 @@
 
 [English](README_EN.md)
 
-面向双通道 RIGOL DG1022、DG1022A、DG1022Z、DG1032Z、DG1062Z 与兼容 DG1000/DG1000Z
-系列函数/任意波形发生器的 WaveBench 可执行仪器插件。
+面向双通道 RIGOL DG1022、DG1022A、DG1022Z、DG1032Z 和 DG1062Z
+函数/任意波形发生器的 WaveBench 可执行仪器插件。
 
 ## 身份与兼容范围
 
@@ -37,17 +37,17 @@ DG1022Z/DG1032Z/DG1062Z 的 `:SOUR<n>:` 前缀布局。未识别型号会 fail c
 
 descriptor 导入不连接仪器。factory 只通过 WaveBench `DriverContext` 打开当前配置的 transport。
 默认离线测试使用 FakeTransport，不扫描资源、不连接仪器，也不发送真实 SCPI。写命令失败后，
-当前 driver 实例会锁停后续配置写入，要求调用方重新打开会话并独立验证设备状态。
+当前 driver 实例会锁停后续配置写入，要求调用方重新打开会话并独立验证设备状态。输出启用
+后的回读或错误队列检查失败时，driver 会强制关闭对应输出并回读确认；若 OFF 无法确认，配置
+写入同样锁停。legacy DG1022/DG1022A 的 sweep 只属于 CH1，CH2 状态固定规范化为 FIX/OFF，
+设置 CH2 频率不会查询或关闭 CH1 sweep。
 
 配置示例使用 RFC 5737 文档保留地址：
 
 ```toml
-[connection]
-backend = "lan"
-resource = "TCPIP::192.0.2.30::INSTR"
-
 [source]
 driver = "rigol.dg1000"
+resource = "TCPIP::192.0.2.30::INSTR"
 default_channel = 1
 check_errors = true
 ensure_fix_mode_on_set_frequency = true
@@ -79,7 +79,7 @@ wheel 和一次性虚拟环境。
 
 `0.1.0` 的公开门禁目前覆盖离线 FakeTransport、受管安装生命周期和 wheel 检查。DG1032Z
 直连示波器的闭环实验台可用于后续实机门禁；在形成可复现、已脱敏的实机记录前，本包不把
-DG1032Z 行为外推到其他 DG1000/DG1000Z 型号或 legacy DG1022/DG1022A 命令布局。
+DG1032Z 行为外推到 DG1022Z/DG1062Z 或 legacy DG1022/DG1022A 命令布局。
 
 实机验收记录不得提交真实资源、序列号、原始波形、截图或命令日志。当前 capability 仍只代表
 basic source 控制面，不覆盖任意波上传、offset/symmetry setter、modulation、burst、counter 或

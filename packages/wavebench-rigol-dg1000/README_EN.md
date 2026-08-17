@@ -3,7 +3,7 @@
 [中文](README.md)
 
 An executable WaveBench instrument plugin for dual-channel RIGOL DG1022, DG1022A, DG1022Z,
-DG1032Z, DG1062Z, and compatible DG1000/DG1000Z function/arbitrary waveform generators.
+DG1032Z, and DG1062Z function/arbitrary waveform generators.
 
 ## Identity and compatibility
 
@@ -43,17 +43,17 @@ Descriptor import performs no instrument I/O. The factory opens only the configu
 through WaveBench `DriverContext`. Default offline tests use FakeTransport only; they do not scan
 resources, connect to instruments, or send real SCPI. After an ambiguous write, the driver instance
 latches later configuration writes off and requires the caller to reopen the session and verify
-instrument state independently.
+instrument state independently. If readback or error-queue checks fail after output enable, the
+driver forces that output OFF and verifies the readback; an unverified OFF recovery also latches
+configuration writes. Sweep is CH1-only on legacy DG1022/DG1022A models, so CH2 status is normalized
+to FIX/OFF and CH2 frequency writes never query or disable the CH1 sweep.
 
 The example uses an RFC 5737 documentation address:
 
 ```toml
-[connection]
-backend = "lan"
-resource = "TCPIP::192.0.2.30::INSTR"
-
 [source]
 driver = "rigol.dg1000"
+resource = "TCPIP::192.0.2.30::INSTR"
 default_channel = 1
 check_errors = true
 ensure_fix_mode_on_set_frequency = true
@@ -88,8 +88,7 @@ capability boundaries.
 The public `0.1.0` gate currently covers offline FakeTransport tests, managed-install lifecycle
 checks, and wheel checks. A DG1032Z-to-oscilloscope closed-loop bench can serve as a future
 hardware gate. Until a reproducible, sanitized hardware record exists, this package does not
-extrapolate DG1032Z behavior to other DG1000/DG1000Z models or to the legacy DG1022/DG1022A
-command layout.
+extrapolate DG1032Z behavior to DG1022Z/DG1062Z or to the legacy DG1022/DG1022A command layout.
 
 Hardware records must not commit real resources, serial numbers, raw waveforms, screenshots, or
 command logs. The current capability surface still means basic source control only; it does not

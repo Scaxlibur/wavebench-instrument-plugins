@@ -1,8 +1,9 @@
 import unittest
+from inspect import signature
 
 from wavebench_rigol_dg1000 import descriptor
 from wavebench_rigol_dg1000.driver import DG1000Source
-from wavebench.errors import DataError
+from wavebench.errors import DataError, InstrumentError
 
 
 class FakeDG1000Transport:
@@ -219,7 +220,90 @@ class FakeDG1000ZTransport:
         pass
 
 
+class ErrorQueryFailsAfterOutputOn(FakeDG1000ZTransport):
+    def __init__(self):
+        super().__init__()
+        self._fail_next_error_query = False
+
+    def write(self, command: str) -> None:
+        super().write(command)
+        if command == ":OUTP1 ON":
+            self._fail_next_error_query = True
+
+    def query(self, command: str) -> str:
+        if command == "SYST:ERR?" and self._fail_next_error_query:
+            self._fail_next_error_query = False
+            raise RuntimeError("injected error queue failure")
+        return super().query(command)
+
+
+class OutputReadbackFailsAfterOutputOn(FakeDG1000ZTransport):
+    def __init__(self):
+        super().__init__()
+        self._fail_next_output_query = False
+
+    def write(self, command: str) -> None:
+        super().write(command)
+        if command == ":OUTP1 ON":
+            self._fail_next_output_query = True
+
+    def query(self, command: str) -> str:
+        if command == ":OUTP1?" and self._fail_next_output_query:
+            self._fail_next_output_query = False
+            raise RuntimeError("injected output readback failure")
+        return super().query(command)
+
+
+class AmbiguousFrequencyWrite(FakeDG1000ZTransport):
+    def write(self, command: str) -> None:
+        super().write(command)
+        if command == ":SOUR1:FREQ 2000":
+            raise OSError("injected ambiguous frequency write")
+
+
+class AmbiguousOutputOnWrite(FakeDG1000ZTransport):
+    def write(self, command: str) -> None:
+        super().write(command)
+        if command == ":OUTP1 ON":
+            raise OSError("injected ambiguous output write")
+
+
+class OutputOffRecoveryCannotBeVerified(ErrorQueryFailsAfterOutputOn):
+    def __init__(self):
+        super().__init__()
+        self._fail_off_readback = False
+
+    def write(self, command: str) -> None:
+        super().write(command)
+        if command == ":OUTP1 OFF":
+            self._fail_off_readback = True
+
+    def query(self, command: str) -> str:
+        if command == ":OUTP1?" and self._fail_off_readback:
+            raise OSError("injected OFF readback failure")
+        return super().query(command)
+
+
+class UserReadbackAfterDcWrite(FakeDG1000ZTransport):
+    def write(self, command: str) -> None:
+        super().write(command)
+        if command == ":SOUR1:FUNC DC":
+            self.state[1]["func"] = "USER"
+            self.state[1]["apply"] = '"USER,1.000000E+03,1.000000E+00,0.000000E+00"'
+
+
 class DG1000Tests(unittest.TestCase):
+    def test_source_setters_default_to_error_queue_checks(self):
+        for method_name in (
+            "set_frequency",
+            "set_output",
+            "set_function",
+            "set_amplitude_vpp",
+            "set_square_duty_cycle",
+        ):
+            parameter = signature(getattr(DG1000Source, method_name)).parameters["check_errors"]
+            self.assertIs(parameter.default, True)
+
     def test_descriptor_exposes_basic_dg1000_source_capabilities(self):
         plugin = descriptor()
 
@@ -229,8 +313,10 @@ class DG1000Tests(unittest.TestCase):
         self.assertEqual(plugin.aliases, ())
         self.assertEqual(plugin.wavebench_min_version, "0.8.0")
         self.assertEqual(plugin.wavebench_max_version, "0.9.0")
-        self.assertIn("DG1022", plugin.models)
-        self.assertIn("DG1032Z", plugin.models)
+        self.assertEqual(
+            plugin.models,
+            ("DG1022", "DG1022A", "DG1022Z", "DG1032Z", "DG1062Z"),
+        )
         self.assertIn("source.status", plugin.capabilities)
         self.assertIn("source.set_frequency", plugin.capabilities)
         self.assertNotIn("source.harmonic_profile", plugin.capabilities)
@@ -283,12 +369,17 @@ class DG1000Tests(unittest.TestCase):
 
     def test_set_channel_two_frequency_uses_dg1000_ch2_suffix(self):
         transport = FakeDG1000Transport()
+        transport.sweep = "ON"
         driver = DG1000Source(transport=transport, check_errors_after_ops=True)
 
         status = driver.set_frequency(2, 2000.0, check_errors=True)
 
         self.assertEqual(transport.writes[0], "FREQ:CH2 2000")
+        self.assertNotIn("SWE:STAT OFF", transport.writes)
+        self.assertNotIn("SWE:STAT?", transport.queries)
         self.assertEqual(status.frequency_hz, 2000.0)
+        self.assertEqual(status.frequency_mode, "FIX")
+        self.assertEqual(status.sweep_enabled, "OFF")
 
     def test_set_channel_one_frequency_disables_sweep_when_requested(self):
         transport = FakeDG1000Transport()
@@ -319,6 +410,13 @@ class DG1000Tests(unittest.TestCase):
 
         self.assertEqual(transport.writes[0], "FUNC:CH2 RAMP")
         self.assertEqual(status.function, "RAMP")
+
+    def test_set_dc_rejects_ambiguous_user_readback(self):
+        transport = UserReadbackAfterDcWrite()
+        driver = DG1000Source(transport=transport, check_errors_after_ops=True)
+
+        with self.assertRaisesRegex(InstrumentError, "function write readback mismatch"):
+            driver.set_function(1, "dc", check_errors=True)
 
     def test_set_amplitude_vpp_sets_channel_specific_unit_and_amplitude(self):
         transport = FakeDG1000Transport()
@@ -375,6 +473,80 @@ class DG1000Tests(unittest.TestCase):
 
         self.assertEqual(transport.writes[0], ":OUTP2 OFF")
         self.assertEqual(status.output, "OFF")
+
+    def test_output_enable_failure_forces_and_verifies_output_off(self):
+        transport = ErrorQueryFailsAfterOutputOn()
+        driver = DG1000Source(transport=transport, check_errors_after_ops=True)
+
+        with self.assertRaisesRegex(RuntimeError, "injected error queue failure"):
+            driver.set_output(1, True, check_errors=True)
+
+        self.assertEqual(transport.writes[-1], ":OUTP1 OFF")
+        self.assertEqual(transport.state[1]["out"], "OFF")
+        self.assertEqual(transport.queries[-1], ":OUTP1?")
+
+    def test_output_enable_readback_failure_forces_and_verifies_output_off(self):
+        transport = OutputReadbackFailsAfterOutputOn()
+        driver = DG1000Source(transport=transport, check_errors_after_ops=True)
+
+        with self.assertRaisesRegex(RuntimeError, "injected output readback failure"):
+            driver.set_output(1, True, check_errors=True)
+
+        self.assertEqual(transport.writes[-1], ":OUTP1 OFF")
+        self.assertEqual(transport.state[1]["out"], "OFF")
+        self.assertEqual(transport.queries[-1], ":OUTP1?")
+
+    def test_ambiguous_configuration_write_latches_and_blocks_later_writes(self):
+        transport = AmbiguousFrequencyWrite()
+        driver = DG1000Source(transport=transport, check_errors_after_ops=True)
+
+        with self.assertRaisesRegex(InstrumentError, "write result is unknown"):
+            driver.set_frequency(1, 2000.0, check_errors=True)
+
+        writes_after_failure = list(transport.writes)
+        queries_after_failure = list(transport.queries)
+        with self.assertRaisesRegex(InstrumentError, "configuration writes are blocked"):
+            driver.set_function(1, "square", check_errors=True)
+
+        self.assertEqual(transport.writes, writes_after_failure)
+        self.assertEqual(transport.queries, queries_after_failure)
+
+    def test_ambiguous_output_enable_stays_latched_after_verified_off_recovery(self):
+        transport = AmbiguousOutputOnWrite()
+        driver = DG1000Source(transport=transport, check_errors_after_ops=True)
+
+        with self.assertRaisesRegex(InstrumentError, "write result is unknown"):
+            driver.set_output(1, True, check_errors=True)
+
+        self.assertEqual(transport.writes[-1], ":OUTP1 OFF")
+        self.assertEqual(transport.state[1]["out"], "OFF")
+        with self.assertRaisesRegex(InstrumentError, "configuration writes are blocked"):
+            driver.set_frequency(1, 2000.0, check_errors=True)
+
+    def test_latched_driver_still_allows_output_off(self):
+        transport = AmbiguousFrequencyWrite()
+        driver = DG1000Source(transport=transport, check_errors_after_ops=True)
+
+        with self.assertRaisesRegex(InstrumentError, "write result is unknown"):
+            driver.set_frequency(1, 2000.0, check_errors=True)
+
+        status = driver.set_output(1, False, check_errors=True)
+
+        self.assertEqual(status.output, "OFF")
+        self.assertEqual(transport.writes[-1], ":OUTP1 OFF")
+
+    def test_unverified_output_off_recovery_latches_configuration_writes(self):
+        transport = OutputOffRecoveryCannotBeVerified()
+        driver = DG1000Source(transport=transport, check_errors_after_ops=True)
+
+        with self.assertRaisesRegex(InstrumentError, "OFF recovery could not be verified"):
+            driver.set_output(1, True, check_errors=True)
+
+        writes_after_failure = list(transport.writes)
+        with self.assertRaisesRegex(InstrumentError, "configuration writes are blocked"):
+            driver.set_frequency(1, 2000.0, check_errors=True)
+
+        self.assertEqual(transport.writes, writes_after_failure)
 
 
 if __name__ == "__main__":

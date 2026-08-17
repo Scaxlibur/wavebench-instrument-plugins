@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from math import isclose, isfinite
 from threading import RLock
 
 from wavebench.errors import DataError, InstrumentError
-from wavebench.instruments.models import SourceStatus
+from wavebench.instruments import SourceStatus
 
 
+_LOG = logging.getLogger(__name__)
 _LEGACY_MODELS = frozenset({"DG1022", "DG1022A"})
 _SOURCE_LAYOUT_MODELS = frozenset({"DG1022Z", "DG1032Z", "DG1062Z"})
 _KNOWN_MODELS = _LEGACY_MODELS | _SOURCE_LAYOUT_MODELS
@@ -149,8 +151,9 @@ class DG1000Source:
             return f":SOUR{channel}:SWE:STAT"
         return "SWE:STAT"
 
-    def _check_errors_enabled(self, requested: bool | None) -> bool:
-        return self.check_errors_after_ops if requested is None else requested
+    @staticmethod
+    def _check_errors_enabled(requested: bool) -> bool:
+        return requested
 
     def _ensure_configuration_write_allowed(self) -> None:
         if self._configuration_writes_blocked:
@@ -163,6 +166,8 @@ class DG1000Source:
         try:
             self.transport.write(command)
         except Exception as exc:
+            self._configuration_writes_blocked = True
+            _LOG.error("DG1000 write outcome is ambiguous; configuration writes are blocked")
             raise _AmbiguousWriteError(
                 f"DG1000 write result is unknown for {command!r}: {exc}"
             ) from exc
@@ -182,6 +187,11 @@ class DG1000Source:
             field_name="output state",
             aliases={"0": "OFF", "OFF": "OFF", "1": "ON", "ON": "ON"},
         )
+
+    def _force_output_off(self, channel: int) -> None:
+        self._write(f"{self._output_command(channel)} OFF")
+        if self._query_output(channel) != "OFF":
+            raise InstrumentError("DG1000 output OFF recovery could not be verified")
 
     def _query_function(self, channel: int) -> str:
         raw = self.transport.query(f"{self._function_command(channel)}?")
@@ -203,13 +213,16 @@ class DG1000Source:
         )
 
     def _query_sweep_enabled(self, channel: int) -> str:
+        # Legacy DG1000 sweep is CH1-only; querying it for CH2 would read CH1 state.
+        if not self._uses_source_layout() and channel == 2:
+            return "OFF"
         return _normalize_enum(
             self.transport.query(f"{self._sweep_state_command(channel)}?"),
             field_name="sweep state",
             aliases={"0": "OFF", "OFF": "OFF", "1": "ON", "ON": "ON"},
         )
 
-    def _finish_transaction(self, *, channel: int, check_errors: bool | None) -> SourceStatus:
+    def _finish_transaction(self, *, channel: int, check_errors: bool) -> SourceStatus:
         status = self.get_status(channel)
         if self._check_errors_enabled(check_errors):
             self.assert_no_errors()
@@ -296,7 +309,7 @@ class DG1000Source:
         value_hz: float,
         *,
         ensure_fix_mode: bool = True,
-        check_errors: bool | None = None,
+        check_errors: bool = True,
     ) -> SourceStatus:
         _validate_channel(channel)
         value_hz = _finite_float(value_hz, field_name="frequency")
@@ -323,7 +336,7 @@ class DG1000Source:
         channel: int,
         enabled: bool,
         *,
-        check_errors: bool | None = None,
+        check_errors: bool = True,
     ) -> SourceStatus:
         _validate_channel(channel)
         if not isinstance(enabled, bool):
@@ -333,17 +346,38 @@ class DG1000Source:
             if enabled:
                 self._ensure_configuration_write_allowed()
             target = "ON" if enabled else "OFF"
-            self._write(f"{self._output_command(channel)} {target}")
-            if self._query_output(channel) != target:
-                raise InstrumentError("DG1000 output write readback mismatch")
-            return self._finish_transaction(channel=channel, check_errors=check_errors)
+            try:
+                self._write(f"{self._output_command(channel)} {target}")
+                if self._query_output(channel) != target:
+                    raise InstrumentError("DG1000 output write readback mismatch")
+                return self._finish_transaction(channel=channel, check_errors=check_errors)
+            except Exception:
+                if enabled:
+                    _LOG.warning(
+                        "DG1000 output enable failed; forcing channel %s OFF",
+                        channel,
+                    )
+                    try:
+                        self._force_output_off(channel)
+                    except Exception as recovery_error:
+                        self._configuration_writes_blocked = True
+                        _LOG.error(
+                            "DG1000 channel %s OFF recovery could not be verified; "
+                            "configuration writes are blocked",
+                            channel,
+                        )
+                        raise InstrumentError(
+                            "DG1000 output transaction failed and OFF recovery could not be "
+                            "verified; configuration writes are blocked"
+                        ) from recovery_error
+                raise
 
     def set_function(
         self,
         channel: int,
         function: str,
         *,
-        check_errors: bool | None = None,
+        check_errors: bool = True,
     ) -> SourceStatus:
         _validate_channel(channel)
         normalized = str(function).strip().upper()
@@ -357,7 +391,7 @@ class DG1000Source:
             self._ensure_configuration_write_allowed()
             self._write(f"{self._function_command(channel)} {expected}")
             actual = self._query_function(channel)
-            if actual != expected and not (expected in {"DC", "USER"} and actual == "USER"):
+            if actual != expected:
                 raise InstrumentError("DG1000 function write readback mismatch")
             return self._finish_transaction(channel=channel, check_errors=check_errors)
 
@@ -366,7 +400,7 @@ class DG1000Source:
         channel: int,
         value_vpp: float,
         *,
-        check_errors: bool | None = None,
+        check_errors: bool = True,
     ) -> SourceStatus:
         _validate_channel(channel)
         value_vpp = _finite_float(value_vpp, field_name="amplitude")
@@ -392,7 +426,7 @@ class DG1000Source:
         channel: int,
         duty_percent: float,
         *,
-        check_errors: bool | None = None,
+        check_errors: bool = True,
     ) -> SourceStatus:
         _validate_channel(channel)
         duty_percent = _finite_float(duty_percent, field_name="duty cycle percent")

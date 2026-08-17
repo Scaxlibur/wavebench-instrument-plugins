@@ -18,7 +18,7 @@ def descriptor() -> InstrumentDescriptor:
         kind="source",
         display_name="RIGOL DG1000/DG1000Z Function/Arbitrary Waveform Generator",
         manufacturer="RIGOL Technologies",
-        models=("DG1022", "DG1022A", "DG1022Z", "DG1032Z", "DG1062Z", "DG1000", "DG1000Z"),
+        models=("DG1022", "DG1022A", "DG1022Z", "DG1032Z", "DG1062Z"),
         aliases=(),
         capabilities=(
             "source.idn",
