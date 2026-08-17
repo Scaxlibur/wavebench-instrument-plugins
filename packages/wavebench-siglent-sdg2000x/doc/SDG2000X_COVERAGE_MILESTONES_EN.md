@@ -20,9 +20,9 @@
 
 ## M2: Strict read-only status
 
-- [ ] Implement CH1/CH2 `SourceStatus` before any write capability.
-- [ ] Parse units, enums, channel targets, and relationships fail-closed.
-- [ ] Prove the complete profile performs zero writes under a transport guard.
+- [x] Implement CH1/CH2 `SourceStatus` before any write capability.
+- [x] Parse units, enums, channel targets, and relationships fail-closed.
+- [x] Prove complete status reads perform zero writes under a fake-transport guard.
 - [ ] Repeat controlled hardware reads without extrapolating to an unaccepted model or firmware.
 
 ## M3: Basic write transactions

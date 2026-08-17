@@ -6,9 +6,9 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 
 ## Current development baseline
 
-Version `0.1.0` is an M0 identity-query baseline that declares only `source.idn`. The driver accepts both `*IDN?` response formats documented by the programming guide and rejects models outside the SDG2000X family. Status reads, the error queue, output control, fixed waveforms, modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
+Version `0.2.0` is the strict query-only M2 baseline. It declares `source.idn` and `source.status`. The driver accepts both documented `*IDN?` formats and maps CH1/CH2 `OUTP?`, `BSWV?`, and `SWWV?` responses to the core `SourceStatus` model. Error-queue, output-control, fixed-wave, modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
 
-This boundary is intentionally conservative. A command is not added to the descriptor until it has passed programming-guide review, fake-transport tests, and controlled hardware acceptance.
+Status reads have completed programming-guide review and fake-transport testing but not hardware acceptance. No other command is added to the descriptor before its documentation and offline gates pass.
 
 ## Identity and compatibility
 
@@ -23,7 +23,7 @@ The plugin declares no aliases and does not override a bundled WaveBench driver.
 
 ## Local programming manual
 
-Place the vendor programming guide under ignored [`doc/vendor-local/`](doc/vendor-local/README.md). The recommended filename is:
+The vendor programming guide is stored under ignored [`doc/vendor-local/`](doc/vendor-local/README.md):
 
 ```text
 SDG_Series_Programming_Guide_E05C.pdf
@@ -36,7 +36,7 @@ The original manual is excluded from Git and release artifacts. See the [SDG2000
 - Descriptor import creates no transport and performs no instrument I/O.
 - The factory opens only the core-provided transport from `DriverContext`.
 - Default tests use a fake transport and neither scan resources nor connect to instruments.
-- The current driver has no write methods and cannot send reset, output, or waveform-configuration commands.
+- The driver has no write methods. Status reads issue only identity, output-state, basic-wave, and sweep-state queries.
 - Hardware tests require separate authorization and prior confirmation of the resource, firmware, termination, output state, and restoration procedure.
 
 ## Development checks

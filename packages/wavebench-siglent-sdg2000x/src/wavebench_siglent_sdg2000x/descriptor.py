@@ -17,20 +17,20 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="SIGLENT Technologies",
         models=("SDG2042X", "SDG2082X", "SDG2122X"),
         aliases=(),
-        capabilities=("source.idn",),
+        capabilities=("source.idn", "source.status"),
         idn_patterns=("Siglent Technologies,SDG2", "*IDN,SDG,SDG2"),
         backends=("pyvisa",),
         option_specs=(),
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary=(
-            "Identity-only development baseline for SIGLENT SDG2000X-series sources; "
-            "state queries and writes remain disabled until manual audit and hardware acceptance."
+            "Strict query-only identity and channel status for SIGLENT SDG2000X-series "
+            "sources; all writes remain disabled pending controlled hardware acceptance."
         ),
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sdg2000x",
-        version="0.1.0",
+        version="0.2.0",
         source="entry_point:siglent.sdg2000x",
         config_fields=("source.resource", "source.driver"),
     )

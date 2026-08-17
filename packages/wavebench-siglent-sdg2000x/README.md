@@ -6,9 +6,9 @@
 
 ## 当前开发基线
 
-版本 `0.1.0` 是 M0 身份查询基线，只声明 `source.idn`。驱动支持编程手册记录的两种 `*IDN?` 返回格式，并拒绝非 SDG2000X 系列型号。状态读取、错误队列、输出控制、固定波、调制、扫描、Burst、任意波上传和计数器能力尚未开放。
+版本 `0.2.0` 是 M2 严格只读基线，声明 `source.idn` 与 `source.status`。驱动支持编程手册记录的两种 `*IDN?` 返回格式，并通过 `OUTP?`、`BSWV?`、`SWWV?` 将 CH1/CH2 状态映射为 WaveBench `SourceStatus`。错误队列、输出控制、固定波、调制、Sweep、Burst、任意波上传和 Counter capability 尚未开放。
 
-这个边界是刻意保守的：未经过编程手册审计、fake transport 测试和受控实机验收的命令，不写进 descriptor，也不伪装成可用 capability。
+当前状态读取已经通过编程手册审计和 fake transport 测试，尚未进行实机验收。未完成审计与离线验证的命令不写入 descriptor，也不伪装成可用 capability。
 
 ## 身份与兼容范围
 
@@ -23,7 +23,7 @@
 
 ## 本地编程手册
 
-厂商编程手册放在被忽略的 [`doc/vendor-local/`](doc/vendor-local/README.md) 目录。推荐文件名为：
+厂商编程手册保存在被忽略的 [`doc/vendor-local/`](doc/vendor-local/README.md) 目录：
 
 ```text
 SDG_Series_Programming_Guide_E05C.pdf
@@ -47,14 +47,14 @@ check_errors = false
 access = "read_only"
 ```
 
-M0 只支持身份查询。`check_errors = false` 表示错误队列尚未形成已认证 capability，不代表忽略已经发生的仪器错误。
+M2 支持身份和通道状态查询。`check_errors = false` 表示错误队列尚未形成已认证 capability，不代表忽略已经发生的仪器错误。
 
 ## 安全边界
 
 - descriptor 导入不创建 transport，也不访问仪器。
 - factory 只通过 `DriverContext` 打开当前配置的 transport。
 - 默认测试只使用 fake transport，不扫描资源、不连接仪器。
-- 当前驱动没有写方法，不会发送 reset、输出切换或波形配置命令。
+- 当前驱动没有写方法；状态读取只发送身份、输出状态、基本波和 Sweep 状态查询。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、输出状态和恢复方式。
 
 ## 开发验证

@@ -4,7 +4,7 @@
 
 ## Current conclusion
 
-The runtime remains at the M0 identity-query baseline, while the offline M1 protocol audit is complete. `source.status` now has an explicit core-model mapping and can enter M2 implementation; every other command domain remains disabled.
+The current release completes the strict query-only M2 implementation. `source.idn` and `source.status` have offline protocol evidence, strict parsing, and zero-write tests. Hardware acceptance remains closed, and every other command domain remains disabled.
 
 ## Coverage status
 
@@ -12,7 +12,7 @@ The runtime remains at the M0 identity-query baseline, while the offline M1 prot
 | --- | --- | --- | --- |
 | Instrument identity | `source.idn` | Implemented for both documented response formats | Controlled hardware confirmation of model, firmware, and termination |
 | System error queue | None | Disabled | Confirm the query, empty-queue semantics, and whether reads consume state |
-| Basic channel status | `source.status` | Audited, pending implementation | Pass strict CH1/CH2 fake-transport parsing and zero-write tests |
+| Basic channel status | `source.status` | Implemented with the core `SourceStatus` model | Confirm CH1/CH2 responses and firmware differences on controlled hardware |
 | Output control | None | Denied by default | Test pre-state, explicit OFF, readback, and failure recovery |
 | Fixed-wave configuration | None | Denied by default | Establish range, load, safety-limit, and transaction-restoration evidence |
 | Modulation, sweep, and burst | None | Disabled | Build a separate read-only profile for each domain before evaluating writes |

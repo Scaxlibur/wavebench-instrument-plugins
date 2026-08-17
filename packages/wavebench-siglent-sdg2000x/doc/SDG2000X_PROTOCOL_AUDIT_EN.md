@@ -42,7 +42,7 @@ M2 declares only `source.status` and returns the public core model `wavebench.in
 | --- | --- |
 | `channel` | Validated requested channel |
 | `output` | `ON` or `OFF` from `OUTP?` |
-| `function` | `WVTP` from `BSWV?` |
+| `function` | `WVTP` from `BSWV?`, normalized to the core short enum |
 | `frequency_hz` | `FRQ`, converted to Hz when applicable |
 | `amplitude` | `AMP` when applicable |
 | `amplitude_unit` | `VPP`, following the guide's `AMP` semantics |

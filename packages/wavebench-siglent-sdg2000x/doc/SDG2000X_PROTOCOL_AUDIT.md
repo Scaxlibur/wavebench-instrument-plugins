@@ -42,7 +42,7 @@ M2 只声明 `source.status`，并返回主仓库公开的 `wavebench.instrument
 | --- | --- |
 | `channel` | 已验证的请求通道 |
 | `output` | `OUTP?` 的 `ON` 或 `OFF` |
-| `function` | `BSWV?` 的 `WVTP` |
+| `function` | `BSWV?` 的 `WVTP`，归一化为核心短枚举 |
 | `frequency_hz` | 适用时读取 `FRQ`，统一换算为 Hz |
 | `amplitude` | 适用时读取 `AMP` |
 | `amplitude_unit` | `AMP` 按手册语义归一化为 `VPP` |

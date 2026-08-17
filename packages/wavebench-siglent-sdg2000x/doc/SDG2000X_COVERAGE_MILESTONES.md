@@ -20,9 +20,9 @@
 
 ## M2：严格只读状态
 
-- [ ] 先实现 CH1/CH2 `SourceStatus`，不发送写命令。
-- [ ] 对数值单位、枚举、通道目标和关系约束进行 fail-closed 解析。
-- [ ] 在 transport 守卫下证明完整 profile 为零写入。
+- [x] 实现 CH1/CH2 `SourceStatus`，不发送写命令。
+- [x] 对数值单位、枚举、通道目标和关系约束进行 fail-closed 解析。
+- [x] 在 fake transport 守卫下证明完整状态读取为零写入。
 - [ ] 受控实机连续读取并确认结果稳定，不外推到未验收型号或固件。
 
 ## M3：基础写事务
