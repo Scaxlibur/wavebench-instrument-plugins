@@ -28,7 +28,7 @@ Evidence labels used here:
 | Domain | Manual surface | WaveBench mapping | Status | Boundary and next step |
 |---|---|---|---|---|
 | Identity | `*IDN?` | `scope.idn` | **Implemented / offline verified** | Strict four-field, manufacturer, and model checks still need a redacted hardware sample |
-| Analog-channel coupling | `:CHANnel<n>:COUPling?`, returning `AC`, `DC`, or `GND` | `scope.channel_coupling` | **Manual reviewed** | First added slice; limit `<n>` by two- or four-channel model and fail closed on unknown responses |
+| Analog-channel coupling | `:CHANnel<n>:COUPling?`, returning `AC`, `DC`, or `GND` | `scope.channel_coupling` | **Implemented / offline verified** | Limit `<n>` by two- or four-channel model and reject unknown responses; hardware acceptance remains pending |
 | Input termination | Shared manual lists `ONEMeg` and `FIFTy` | No standalone capability | **Rejected by default** | SDS800X HD product material specifies fixed `1 MΩ`; do not project the shared `FIFTy` setter onto this family |
 | Error queue | CN11G documents no error-queue query | `scope.errors` | **Not covered** | Do not guess `SYSTem:ERRor?`; consuming queries also conflict with automatic retries on ordinary core queries |
 | Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **Manual reviewed** | First version is limited to non-sequence analog channels, `INTerval 1`, explicit LSB, and strict definite blocks; record stability across chunks needs hardware confirmation |
@@ -87,6 +87,7 @@ instead of hard-coding the example limit.
 
 ```text
 *IDN?
+:CHANnel<n>:COUPling?
 ```
 
 A command appearing in this matrix is not necessarily declared by the descriptor or verified on hardware.

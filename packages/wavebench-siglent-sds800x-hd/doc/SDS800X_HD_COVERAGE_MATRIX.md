@@ -25,7 +25,7 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 | 功能域 | 手册命令面 | WaveBench 映射 | 当前状态 | 边界与下一步 |
 |---|---|---|---|---|
 | 身份 | `*IDN?` | `scope.idn` | **已实现 / 离线验证** | 严格四字段、厂商和型号校验仍需脱敏实机样本确认 |
-| 模拟通道耦合 | `:CHANnel<n>:COUPling?`，返回 `AC`、`DC` 或 `GND` | `scope.channel_coupling` | **手册已审计** | 首个新增切片；按二通道或四通道型号限制 `<n>`，异常响应 fail closed |
+| 模拟通道耦合 | `:CHANnel<n>:COUPling?`，返回 `AC`、`DC` 或 `GND` | `scope.channel_coupling` | **已实现 / 离线验证** | 按二通道或四通道型号限制 `<n>`，未知响应直接拒绝；实机验收待补 |
 | 输入阻抗 | 通用手册列出 `ONEMeg`、`FIFTy` | 无独立 capability | **默认拒绝** | SDS800X HD 专属产品资料说明固定 `1 MΩ`；不得把通用 `FIFTy` setter 外推到本系列 |
 | 错误队列 | CN11G 未记录错误队列命令 | `scope.errors` | **未覆盖** | 不猜测 `SYSTem:ERRor?`；消费型查询也不适合核心普通 query 的自动重试 |
 | 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **手册已审计** | 首版只考虑非 sequence 模拟通道、`INTerval 1`、明确 LSB 和严格 definite block；分片期间记录一致性仍待实机确认 |
@@ -88,6 +88,7 @@ x[i] = horizontal_delay - timebase * 10 / 2 + i * sample_interval
 
 ```text
 *IDN?
+:CHANnel<n>:COUPling?
 ```
 
 命令出现在矩阵中不等于已经由 descriptor 声明或由真实仪器验证。

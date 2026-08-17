@@ -1,28 +1,36 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from wavebench.errors import DataError
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.logging import CommandLogger
+from wavebench.services.scope_service import ScopeService
 
 from wavebench_siglent_sds800x_hd import descriptor
 from wavebench_siglent_sds800x_hd.driver import SDS800XHDScope
 
 
+DEFAULT_IDN = "SIGLENT TECHNOLOGIES,SDS824X HD,SDS8FAKE000001,1.1.3.1"
+
+
 class FakeTransport:
-    def __init__(self, response: str = "SIGLENT TECHNOLOGIES,SDS824X HD,SERIAL,FIRMWARE"):
-        self.response = response
+    def __init__(self, responses: dict[str, str] | None = None):
+        self.responses = {"*IDN?": DEFAULT_IDN}
+        if responses is not None:
+            self.responses.update(responses)
         self.queries: list[str] = []
-        self.closed = False
+        self.close_count = 0
 
     def query(self, command: str) -> str:
         self.queries.append(command)
-        return self.response
+        return self.responses[command]
 
     def close(self) -> None:
-        self.closed = True
+        self.close_count += 1
 
 
 def test_descriptor_is_query_only_executable_metadata_without_io() -> None:
@@ -42,7 +50,7 @@ def test_descriptor_is_query_only_executable_metadata_without_io() -> None:
     assert item.aliases == ()
     assert item.backends == ("pyvisa",)
     assert item.resource_schemes == ("tcpip", "usb")
-    assert item.capabilities == ("scope.idn",)
+    assert item.capabilities == ("scope.idn", "scope.channel_coupling")
     assert item.scope_coupling_policy == "fixed-high-impedance"
     assert item.distribution == "wavebench-siglent-sds800x-hd"
 
@@ -77,19 +85,128 @@ def test_factory_opens_exactly_one_core_transport_without_querying() -> None:
     assert transport.queries == []
 
 
-def test_idn_is_the_only_instrument_query_and_close_releases_transport() -> None:
+def test_idn_is_validated_cached_and_close_is_idempotent() -> None:
     transport = FakeTransport()
     driver = SDS800XHDScope(transport)
 
-    assert driver.idn() == "SIGLENT TECHNOLOGIES,SDS824X HD,SERIAL,FIRMWARE"
+    assert driver.idn() == DEFAULT_IDN
+    assert driver.idn() == DEFAULT_IDN
     assert transport.queries == ["*IDN?"]
 
     driver.close()
-    assert transport.closed is True
+    driver.close()
+    assert transport.close_count == 1
 
 
 def test_idn_rejects_an_empty_response() -> None:
-    driver = SDS800XHDScope(FakeTransport("  \r\n"))
+    driver = SDS800XHDScope(FakeTransport({"*IDN?": "  \r\n"}))
 
     with pytest.raises(DataError, match=r"empty response for \*IDN\?"):
         driver.idn()
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        ("SIGLENT TECHNOLOGIES,SDS824X HD,SDS8FAKE000001", "four non-empty"),
+        ("OTHER,SDS824X HD,SDS8FAKE000001,1.1.3.1", "unsupported manufacturer"),
+        (
+            "SIGLENT TECHNOLOGIES,SDS999X HD,SDS8FAKE000001,1.1.3.1",
+            "unsupported model",
+        ),
+        ("SIGLENT TECHNOLOGIES,SDS824X HD,SHORT,1.1.3.1", "14 ASCII"),
+        ("SIGLENT TECHNOLOGIES,SDS824X HD,SDS8FAKE000001,", "four non-empty"),
+    ],
+)
+def test_idn_rejects_malformed_or_unsupported_identity(response: str, message: str) -> None:
+    driver = SDS800XHDScope(FakeTransport({"*IDN?": response}))
+
+    with pytest.raises(DataError, match=message):
+        driver.idn()
+
+
+def test_channel_coupling_uses_identity_channel_count_and_normalizes_response() -> None:
+    transport = FakeTransport({":CHANnel4:COUPling?": " ac\r\n"})
+    driver = SDS800XHDScope(transport)
+
+    assert driver.channel_coupling(4) == "AC"
+    assert transport.queries == ["*IDN?", ":CHANnel4:COUPling?"]
+
+
+def test_channel_coupling_reuses_identity_cache() -> None:
+    transport = FakeTransport(
+        {
+            ":CHANnel1:COUPling?": "DC",
+            ":CHANnel2:COUPling?": "GND",
+        }
+    )
+    driver = SDS800XHDScope(transport)
+
+    assert driver.channel_coupling(1) == "DC"
+    assert driver.channel_coupling(2) == "GND"
+    assert transport.queries == [
+        "*IDN?",
+        ":CHANnel1:COUPling?",
+        ":CHANnel2:COUPling?",
+    ]
+
+
+def test_core_status_summary_uses_identity_and_coupling_in_one_session() -> None:
+    transport = FakeTransport({":CHANnel2:COUPling?": "DC"})
+    driver = SDS800XHDScope(transport)
+    item = descriptor()
+    service = ScopeService(
+        config=SimpleNamespace(scope=SimpleNamespace(driver=item.driver_id)),
+        logger=SimpleNamespace(),
+        session=driver,
+        descriptor=item,
+    )
+
+    result = service.status_summary(channel=2)
+
+    assert result.status == "partial"
+    assert result.idn == DEFAULT_IDN
+    assert result.coupling == "DC"
+    assert result.missing_capabilities == ("scope.snapshot",)
+    assert transport.queries == ["*IDN?", ":CHANnel2:COUPling?"]
+
+
+@pytest.mark.parametrize("channel", [True, 1.0, "1", None])
+def test_channel_coupling_rejects_non_integer_channel_without_io(channel: object) -> None:
+    transport = FakeTransport()
+    driver = SDS800XHDScope(transport)
+
+    with pytest.raises(DataError, match="must be an integer"):
+        driver.channel_coupling(channel)  # type: ignore[arg-type]
+
+    assert transport.queries == []
+
+
+def test_channel_coupling_rejects_non_positive_channel_without_io() -> None:
+    transport = FakeTransport()
+    driver = SDS800XHDScope(transport)
+
+    with pytest.raises(DataError, match="must be >= 1"):
+        driver.channel_coupling(0)
+
+    assert transport.queries == []
+
+
+def test_channel_coupling_rejects_channel_missing_from_two_channel_model() -> None:
+    transport = FakeTransport(
+        {"*IDN?": "SIGLENT TECHNOLOGIES,SDS802X HD,SDS8FAKE000001,1.1.3.1"}
+    )
+    driver = SDS800XHDScope(transport)
+
+    with pytest.raises(DataError, match="SDS802X HD channel must be between 1 and 2"):
+        driver.channel_coupling(3)
+
+    assert transport.queries == ["*IDN?"]
+
+
+def test_channel_coupling_rejects_unknown_response() -> None:
+    transport = FakeTransport({":CHANnel1:COUPling?": "DCL"})
+    driver = SDS800XHDScope(transport)
+
+    with pytest.raises(DataError, match="must be one of AC, DC, or GND"):
+        driver.channel_coupling(1)
