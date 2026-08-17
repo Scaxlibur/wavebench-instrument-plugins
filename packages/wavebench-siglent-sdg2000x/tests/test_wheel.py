@@ -111,6 +111,8 @@ def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) 
         "SDG2000X_COVERAGE_MATRIX_EN.md",
         "SDG2000X_COVERAGE_MILESTONES.md",
         "SDG2000X_COVERAGE_MILESTONES_EN.md",
+        "SDG2000X_PROTOCOL_AUDIT.md",
+        "SDG2000X_PROTOCOL_AUDIT_EN.md",
     ):
         assert any(name.endswith(f"/doc/{public_doc}") for name in names)
 

@@ -12,14 +12,15 @@
 
 ## M1：编程手册审计
 
-- [ ] 将指定版本的 SDG Series Programming Guide 放入 `doc/vendor-local/`。
-- [ ] 记录通信接口、命令终止符、响应终止符、timeout 和错误队列语义。
-- [ ] 冻结支持型号与实机 `*IDN?` 样本；公开材料只保留脱敏形式。
-- [ ] 将通道、输出、固定波、调制、Sweep、Burst、任意波和 Counter 命令分域登记。
+- [x] 将 `PG02_E05C` 版 SDG Series Programming Guide 放入 `doc/vendor-local/`。
+- [x] 记录通信接口、命令终止符和 transport 归属；确认手册未定义错误队列查询。
+- [x] 按数据手册冻结三个支持型号，并记录两种 `*IDN?` 响应格式。
+- [ ] 实机 `*IDN?` 样本延后到受控实机阶段，公开材料只保留脱敏形式。
+- [x] 将通道、输出、固定波、调制、Sweep、Burst、任意波和 Counter 命令分域登记。
 
 ## M2：严格只读状态
 
-- [ ] 先实现 CH1/CH2 基础状态 profile，不发送写命令。
+- [ ] 先实现 CH1/CH2 `SourceStatus`，不发送写命令。
 - [ ] 对数值单位、枚举、通道目标和关系约束进行 fail-closed 解析。
 - [ ] 在 transport 守卫下证明完整 profile 为零写入。
 - [ ] 受控实机连续读取并确认结果稳定，不外推到未验收型号或固件。

@@ -4,7 +4,7 @@
 
 ## Current conclusion
 
-The current version is an M0 identity-query baseline. Only `*IDN?` has a public capability, offline parser tests, and wrong-model rejection tests. Every other command domain remains disabled until the local programming guide has been audited.
+The runtime remains at the M0 identity-query baseline, while the offline M1 protocol audit is complete. `source.status` now has an explicit core-model mapping and can enter M2 implementation; every other command domain remains disabled.
 
 ## Coverage status
 
@@ -12,7 +12,7 @@ The current version is an M0 identity-query baseline. Only `*IDN?` has a public 
 | --- | --- | --- | --- |
 | Instrument identity | `source.idn` | Implemented for both documented response formats | Controlled hardware confirmation of model, firmware, and termination |
 | System error queue | None | Disabled | Confirm the query, empty-queue semantics, and whether reads consume state |
-| Basic channel status | None | Disabled | Audit CH1/CH2 read commands, units, and enums |
+| Basic channel status | `source.status` | Audited, pending implementation | Pass strict CH1/CH2 fake-transport parsing and zero-write tests |
 | Output control | None | Denied by default | Test pre-state, explicit OFF, readback, and failure recovery |
 | Fixed-wave configuration | None | Denied by default | Establish range, load, safety-limit, and transaction-restoration evidence |
 | Modulation, sweep, and burst | None | Disabled | Build a separate read-only profile for each domain before evaluating writes |
@@ -29,6 +29,7 @@ The current version is an M0 identity-query baseline. Only `*IDN?` has a public 
 ## Sources of truth
 
 - [SIGLENT SDG2000X product page](https://www.siglent.com/in/products-overview/sdg2000x/)
-- [SIGLENT SDG Series Programming Guide](https://int.siglent.com/u_file/download/24_06_07/SDG_Programming%20Guide_PG02-E05C.pdf)
-- Local guide: `doc/vendor-local/SDG_Series_Programming_Guide_E05C.pdf`
+- [SIGLENT waveform-generator document downloads](https://siglentna.com/resources/documents/waveform-generators/)
+- Local guide: `doc/vendor-local/SDG_Series_Programming_Guide_E05C.pdf`, revision `PG02_E05C`
+- [Protocol audit](SDG2000X_PROTOCOL_AUDIT_EN.md)
 - Current descriptor, driver, and fake-transport tests

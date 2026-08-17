@@ -74,4 +74,5 @@ python -m wavebench plugin package check packages/wavebench-siglent-sdg2000x
 ## 公开资料
 
 - [SIGLENT SDG2000X 产品页](https://www.siglent.com/in/products-overview/sdg2000x/)
-- [SIGLENT SDG Series Programming Guide](https://int.siglent.com/u_file/download/24_06_07/SDG_Programming%20Guide_PG02-E05C.pdf)
+- [SIGLENT Waveform Generator 文档下载页](https://siglentna.com/resources/documents/waveform-generators/)
+- [SDG2000X 协议审计](doc/SDG2000X_PROTOCOL_AUDIT.md)

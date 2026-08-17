@@ -56,4 +56,5 @@ This plugin is licensed under the [MIT License](LICENSE).
 ## Public references
 
 - [SIGLENT SDG2000X product page](https://www.siglent.com/in/products-overview/sdg2000x/)
-- [SIGLENT SDG Series Programming Guide](https://int.siglent.com/u_file/download/24_06_07/SDG_Programming%20Guide_PG02-E05C.pdf)
+- [SIGLENT waveform-generator document downloads](https://siglentna.com/resources/documents/waveform-generators/)
+- [SDG2000X protocol audit](doc/SDG2000X_PROTOCOL_AUDIT_EN.md)

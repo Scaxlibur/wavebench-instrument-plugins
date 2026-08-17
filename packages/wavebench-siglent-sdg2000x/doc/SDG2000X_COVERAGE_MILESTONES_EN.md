@@ -12,14 +12,15 @@
 
 ## M1: Programming-guide audit
 
-- [ ] Place the selected SDG Series Programming Guide revision under `doc/vendor-local/`.
-- [ ] Record interfaces, command and response termination, timeouts, and error-queue semantics.
-- [ ] Freeze supported models and redacted hardware `*IDN?` samples.
-- [ ] Classify channel, output, fixed-wave, modulation, sweep, burst, arbitrary-wave, and counter commands.
+- [x] Place the `PG02_E05C` SDG Series Programming Guide under `doc/vendor-local/`.
+- [x] Record interfaces, command termination, and transport ownership; confirm that the guide defines no error-queue query.
+- [x] Freeze the three supported models from the datasheet and record both `*IDN?` response formats.
+- [ ] Defer real `*IDN?` samples to controlled hardware acceptance; publish redacted forms only.
+- [x] Classify channel, output, fixed-wave, modulation, sweep, burst, arbitrary-wave, and counter commands.
 
 ## M2: Strict read-only status
 
-- [ ] Implement a CH1/CH2 basic status profile before any write capability.
+- [ ] Implement CH1/CH2 `SourceStatus` before any write capability.
 - [ ] Parse units, enums, channel targets, and relationships fail-closed.
 - [ ] Prove the complete profile performs zero writes under a transport guard.
 - [ ] Repeat controlled hardware reads without extrapolating to an unaccepted model or firmware.
