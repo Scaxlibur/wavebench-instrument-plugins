@@ -19,6 +19,7 @@ def test_discovers_only_installable_plugin_packages():
     projects = DEV_ENV.discover_installable_plugins(ROOT)
 
     assert [project.distribution for project in projects] == [
+        "wavebench-rigol-dg1000",
         "wavebench-rigol-dg4000",
         "wavebench-rigol-dm3000",
         "wavebench-rigol-dp800",
@@ -27,6 +28,7 @@ def test_discovers_only_installable_plugin_packages():
         "wavebench-shengpu-sp3000a",
     ]
     assert [project.driver_ids for project in projects] == [
+        ("rigol.dg1000",),
         ("rigol.dg4202",),
         ("rigol.dm3000",),
         ("rigol.dp800",),
@@ -42,9 +44,9 @@ def test_expected_state_tracks_core_and_plugin_metadata():
     assert state["schema_version"] == 1
     assert state["build_requirements"] == ["hatchling>=1.25"]
     assert state["wavebench"]["distribution"] == "wavebench"
-    assert state["wavebench"]["version"] == "0.8.14"
+    assert state["wavebench"]["version"] == "0.8.22"
     assert len(state["wavebench"]["pyproject_sha256"]) == 64
-    assert len(state["plugins"]) == 6
+    assert len(state["plugins"]) == 7
     assert all(len(plugin["pyproject_sha256"]) == 64 for plugin in state["plugins"])
 
 
@@ -59,6 +61,7 @@ def test_sync_command_uses_standard_editable_installs():
     ]
     assert editable_targets[0].endswith("/wavebench[dev]")
     assert editable_targets[1:] == [
+        f"{ROOT / 'packages/wavebench-rigol-dg1000'}[dev]",
         f"{ROOT / 'packages/wavebench-rigol-dg4000'}[dev]",
         f"{ROOT / 'packages/wavebench-rigol-dm3000'}[dev]",
         f"{ROOT / 'packages/wavebench-rigol-dp800'}[dev]",
