@@ -61,11 +61,14 @@ doc/vendor-local/
 
 ## 下一阶段门禁
 
+M2 已加入未公开的纯解析层，覆盖 346-byte preamble、descriptor 字节序、8/16-bit 有符号
+样本、WORD 样本字节序、探头系数、电压换算和十格时间轴。descriptor 仍不声明
+`scope.fetch_waveform`；纯函数测试不等于仪器读取事务已经成立。
+
 1. 获取脱敏 `*IDN?` 样本，复核身份格式和二通道、四通道 coupling 返回。
-2. 先实现 346-byte preamble 纯解析器和模拟波形换算测试。
-3. 明确无错误队列时 `scope.fetch_waveform` 的 `check_errors` 失败边界和 transfer 设置恢复。
-4. 使用 TCPIP 与 USB 样本核对 binary block、分片、WORD 对齐和时基。
-5. `*OPC?` 等待和一次多通道 acquisition 经实机确认后，再评估 capture 与写能力。
+2. 明确无错误队列时 `scope.fetch_waveform` 的 `check_errors` 失败边界和 transfer 设置恢复。
+3. 使用 TCPIP 与 USB 样本核对 binary block、分片、WORD 对齐和时基。
+4. `*OPC?` 等待和一次多通道 acquisition 经实机确认后，再评估 capture 与写能力。
 
 ## 许可证
 

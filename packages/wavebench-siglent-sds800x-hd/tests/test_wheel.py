@@ -86,6 +86,7 @@ def test_wheel_install_discovery_reinstall_and_uninstall_without_instrument_io(
     discovery_script = """
 from importlib.metadata import entry_points
 from wavebench.transport.pyvisa_transport import PyVisaTransport
+from wavebench_siglent_sds800x_hd.waveform import parse_waveform_preamble
 
 def forbidden(*args, **kwargs):
     raise AssertionError("plugin descriptor import attempted instrument I/O")
@@ -97,6 +98,7 @@ descriptor = points[0].load()()
 assert descriptor.driver_id == "siglent.sds800x-hd"
 assert descriptor.distribution == "wavebench-siglent-sds800x-hd"
 assert descriptor.capabilities == ("scope.idn", "scope.channel_coupling")
+assert callable(parse_waveform_preamble)
 """
     _run([str(python), "-c", discovery_script], cwd=tmp_path)
     _run(

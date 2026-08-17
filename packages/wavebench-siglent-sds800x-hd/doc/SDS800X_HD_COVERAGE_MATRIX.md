@@ -28,7 +28,7 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 | 模拟通道耦合 | `:CHANnel<n>:COUPling?`，返回 `AC`、`DC` 或 `GND` | `scope.channel_coupling` | **已实现 / 离线验证** | 按二通道或四通道型号限制 `<n>`，未知响应直接拒绝；实机验收待补 |
 | 输入阻抗 | 通用手册列出 `ONEMeg`、`FIFTy` | 无独立 capability | **默认拒绝** | SDS800X HD 专属产品资料说明固定 `1 MΩ`；不得把通用 `FIFTy` setter 外推到本系列 |
 | 错误队列 | CN11G 未记录错误队列命令 | `scope.errors` | **未覆盖** | 不猜测 `SYSTem:ERRor?`；消费型查询也不适合核心普通 query 的自动重试 |
-| 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **手册已审计** | 首版只考虑非 sequence 模拟通道、`INTerval 1`、明确 LSB 和严格 definite block；分片期间记录一致性仍待实机确认 |
+| 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **纯解析器已实现 / capability 未公开** | 346-byte preamble、8/16-bit 换算和时间轴已有离线测试；I/O、设置恢复与分片记录一致性仍未成立 |
 | 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`*OPC?` | `scope.capture_waveform`、`scope.capture_waveforms` | **实机阻塞** | 手册未保证 `RUN` 后 `*OPC?` 等待真实触发完成；多通道必须一次 acquisition 后逐通道读取 |
 | 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | 无独立 capability | **手册已审计** | 不能误映射为公共 `ScopeAcquisitionStatus`；后者描述平均和分段采集状态 |
 | 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot` | **核心接口阻塞 / 实机阻塞** | 手册示例按原始图片字节读取，核心仅提供 definite-block query；命令也没有可靠的菜单开关 |
@@ -40,9 +40,10 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 ## 已确认的波形协议边界
 
 `PREamble?` 返回 definite-length binary block，其 descriptor 固定部分为 346 bytes；sequence
-数据可能在其后附加时间戳，解析器不能把整个 payload 固定为 346 bytes。`DATA?` 同样使用
-带声明长度的 binary block。解析必须按声明长度取 payload，不能对二进制数据使用
-`rstrip()`。
+数据可能在其后附加时间戳。当前纯解析器只支持非 sequence 模拟通道，因此要求核心去除
+IEEE block envelope 后的 payload 恰好为 346 bytes，并显式拒绝附加时间戳，而不是静默
+丢弃。`DATA?` 同样使用带声明长度的 binary block；核心 transport 按声明长度取 payload，
+插件不能对二进制数据使用 `rstrip()`。
 
 首版模拟波形换算使用手册字段：
 
@@ -77,7 +78,7 @@ x[i] = horizontal_delay - timebase * 10 / 2 + i * sample_interval
 ## 开发顺序
 
 1. M1：严格身份解析和只读 `scope.channel_coupling`，完成离线测试。
-2. M2：先实现 346-byte preamble 纯解析器及数据换算测试，再接入仅模拟通道的
+2. M2：346-byte preamble 纯解析器及数据换算测试已完成；下一步才接入仅模拟通道的
    `scope.fetch_waveform`。
 3. M3：取得 TCPIP 与 USB 的脱敏二进制响应样本，确认分片、WORD 对齐、时基和 transfer
    设置恢复。

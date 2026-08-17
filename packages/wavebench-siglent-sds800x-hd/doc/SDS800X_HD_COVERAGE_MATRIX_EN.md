@@ -31,7 +31,7 @@ Evidence labels used here:
 | Analog-channel coupling | `:CHANnel<n>:COUPling?`, returning `AC`, `DC`, or `GND` | `scope.channel_coupling` | **Implemented / offline verified** | Limit `<n>` by two- or four-channel model and reject unknown responses; hardware acceptance remains pending |
 | Input termination | Shared manual lists `ONEMeg` and `FIFTy` | No standalone capability | **Rejected by default** | SDS800X HD product material specifies fixed `1 MΩ`; do not project the shared `FIFTy` setter onto this family |
 | Error queue | CN11G documents no error-queue query | `scope.errors` | **Not covered** | Do not guess `SYSTem:ERRor?`; consuming queries also conflict with automatic retries on ordinary core queries |
-| Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **Manual reviewed** | First version is limited to non-sequence analog channels, `INTerval 1`, explicit LSB, and strict definite blocks; record stability across chunks needs hardware confirmation |
+| Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **Pure parser implemented / capability unexposed** | Offline tests cover the 346-byte preamble, 8/16-bit conversion, and time axis; I/O, restoration, and record stability across chunks remain unresolved |
 | Single and multichannel capture | `TRIGger:MODE`, `RUN`, `STOP`, `STATus?`, and `*OPC?` | `scope.capture_waveform`, `scope.capture_waveforms` | **Hardware blocked** | The manual does not guarantee that `*OPC?` after `RUN` waits for a physical trigger; multichannel capture must read all channels after one acquisition |
 | Trigger run state | `:TRIGger:STATus?` returns `Arm`, `Ready`, `Auto`, `Trig'd`, `Stop`, or `Roll` | No standalone capability | **Manual reviewed** | It cannot be mapped to public `ScopeAcquisitionStatus`, which describes averaging and segmented acquisition |
 | Screenshot | `:PRINt? PNG,NORMal` or inverted form | `scope.screenshot` | **Core interface blocked / hardware blocked** | The example reads raw image bytes while the core exposes only definite-block queries; the command also has no reliable menu control |
@@ -42,10 +42,12 @@ Evidence labels used here:
 
 ## Confirmed waveform-protocol boundary
 
-`PREamble?` returns a definite-length binary block. Its fixed descriptor portion is 346 bytes;
-sequence data may append timestamps, so a parser must not require the entire payload to be exactly
-346 bytes. `DATA?` also uses a declared-length binary block. Parsers must honor that length and
-must never apply `rstrip()` to binary data.
+`PREamble?` returns a definite-length binary block. Its fixed descriptor portion is 346 bytes, and
+sequence data may append timestamps. The current pure parser supports only non-sequence analog
+channels, so it requires exactly 346 bytes after the core removes the IEEE block envelope and
+explicitly rejects timestamp appendices instead of discarding them. `DATA?` also uses a declared-
+length block; the core transport extracts its payload, and the plugin must never apply `rstrip()`
+to binary data.
 
 The first analog conversion uses these documented fields:
 
@@ -78,7 +80,7 @@ instead of hard-coding the example limit.
 ## Development order
 
 1. M1: strict identity parsing and read-only `scope.channel_coupling`, with offline tests.
-2. M2: a pure 346-byte preamble parser and data-conversion tests, followed by analog-only `scope.fetch_waveform`.
+2. M2: the pure 346-byte preamble parser and data-conversion tests are complete; analog-only `scope.fetch_waveform` comes next.
 3. M3: redacted TCPIP and USB binary samples to confirm chunking, WORD alignment, timebase values, and transfer-setting restoration.
 4. M4: independently validate trigger transitions, OPC waiting, and one multichannel acquisition before considering capture capabilities.
 5. Track screenshot, digital channels, FFT, sequence/history, Autoset, and writes as separate work items; do not bypass gates with raw SCPI.

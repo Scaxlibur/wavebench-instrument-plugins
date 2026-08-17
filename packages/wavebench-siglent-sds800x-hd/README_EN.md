@@ -61,11 +61,15 @@ The repository-level `.gitignore` excludes every file under `doc/vendor-local/` 
 
 ## Next-stage gates
 
+M2 now contains an unexposed pure parsing layer for the 346-byte preamble, descriptor byte order,
+signed 8/16-bit samples, WORD sample byte order, probe scaling, voltage conversion, and the
+ten-division time axis. The descriptor still does not declare `scope.fetch_waveform`; pure-function
+tests do not establish an instrument read transaction.
+
 1. Obtain a redacted `*IDN?` sample and verify identity plus two- and four-channel coupling responses.
-2. Implement a pure 346-byte preamble parser and analog conversion tests.
-3. Define the `check_errors` failure boundary and transfer-setting restoration for `scope.fetch_waveform` without an error queue.
-4. Use TCPIP and USB samples to verify binary blocks, chunking, WORD alignment, and timebase values.
-5. Verify `*OPC?` waiting and one multichannel acquisition before considering capture or write capabilities.
+2. Define the `check_errors` failure boundary and transfer-setting restoration for `scope.fetch_waveform` without an error queue.
+3. Use TCPIP and USB samples to verify binary blocks, chunking, WORD alignment, and timebase values.
+4. Verify `*OPC?` waiting and one multichannel acquisition before considering capture or write capabilities.
 
 ## License
 
