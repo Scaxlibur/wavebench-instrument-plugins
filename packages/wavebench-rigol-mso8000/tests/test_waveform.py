@@ -31,6 +31,10 @@ def _normal_payload(*, points: int = 1000) -> bytes:
     return bytes(128 + index % 4 for index in range(points))
 
 
+def _long_preamble(*, type_code: int, points: int, x_increment: float = 0.5) -> str:
+    return f"0,{type_code},{points},1,{x_increment},-1,1,0.25,10,128"
+
+
 class WaveformTransport:
     def __init__(
         self,
@@ -50,6 +54,7 @@ class WaveformTransport:
         self.events: list[tuple[str, str]] = []
         self.fail_writes: set[str] = set()
         self.binary_error: Exception | None = None
+        self.binary_payload_overrides: dict[int, bytes] = {}
         self.binary_entered: Event | None = None
         self.binary_release: Event | None = None
         self.binary_calls = 0
@@ -118,7 +123,12 @@ class WaveformTransport:
                 raise AssertionError("binary release was not signaled")
         if self.binary_error is not None:
             raise self.binary_error
-        return self.payloads.get(str(self.state["source"]), self.payload)
+        if self.binary_calls in self.binary_payload_overrides:
+            return self.binary_payload_overrides[self.binary_calls]
+        payload = self.payloads.get(str(self.state["source"]), self.payload)
+        start = int(self.state["start"])
+        stop = int(self.state["stop"])
+        return payload[start - 1 : stop]
 
     def close(self) -> None:
         self.close_calls += 1
@@ -159,7 +169,7 @@ def test_fetch_normal_byte_waveform_restores_complete_transfer_state() -> None:
     "kwargs",
     [
         {"channel": 0, "points": "DEF", "check_errors": False},
-        {"channel": 1, "points": "DMAX", "check_errors": False},
+        {"channel": 1, "points": "ALL", "check_errors": False},
         {"channel": 1, "points": 1000, "check_errors": False},
         {"channel": 1, "points": "DEF", "check_errors": 0},
         {"channel": 1, "points": "DEF", "check_errors": True},
@@ -196,7 +206,7 @@ def test_fetch_refuses_hidden_channel_without_mutation() -> None:
         ("0,0,1000,1,1,2,3,4,5", "preamble"),
         ("0.0,0,1000,1,1,2,3,4,5,6", "format code"),
         ("1,0,1000,1,1,2,3,4,5,6", "BYTE"),
-        ("0,1,1000,1,1,2,3,4,5,6", "NORMal"),
+        ("0,1,1000,1,1,2,3,4,5,6", "type code 0"),
         ("0,0,1e3,1,1,2,3,4,5,6", "points"),
         ("0,0,1001,1,1,2,3,4,5,6", "points"),
         ("0,0,1000,0,1,2,3,4,5,6", "count"),
@@ -424,7 +434,7 @@ def test_single_channel_capture_delegates_to_one_multi_capture() -> None:
         {"channels": (1,), "points": "DEF", "check_errors": False},
         {"channels": [1, 1], "points": "DEF", "check_errors": False},
         {"channels": [5], "points": "DEF", "check_errors": False},
-        {"channels": [1], "points": "MAX", "check_errors": False},
+        {"channels": [1], "points": "ALL", "check_errors": False},
         {"channels": [1], "points": "DEF", "check_errors": True},
         {
             "channels": [1],
@@ -580,3 +590,166 @@ def test_callback_failure_stops_later_channels_after_restoration() -> None:
 
     assert transport.binary_calls == 1
     assert transport.state == asdict(_initial_state())
+
+
+def test_dmax_fetch_requires_stop_and_reads_bounded_chunks() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(
+        state=previous,
+        preamble=_long_preamble(type_code=2, points=5),
+        payload=bytes([128, 129, 130, 131, 132]),
+    )
+    transport.trigger_statuses = ["STOP"]
+    scope = MSO8104Scope(
+        transport=transport,
+        max_total_waveform_points=10,
+        max_byte_points_per_read=2,
+    )
+
+    waveform = scope.fetch_waveform(
+        channel=1,
+        points="dmax",
+        check_errors=False,
+    )
+
+    assert waveform.header.points == 5
+    np.testing.assert_allclose(
+        waveform.voltages_v,
+        [-2.5, -2.25, -2.0, -1.75, -1.5],
+    )
+    assert transport.binary_calls == 3
+    assert transport.events.count(("query", ":TRIGger:STATus?")) == 1
+    assert ("write", ":WAVeform:MODE RAW") in transport.events
+    assert transport.state == asdict(previous)
+
+
+@pytest.mark.parametrize("status", ["WAIT", "RUN", "AUTO", "TD"])
+def test_dmax_fetch_refuses_non_stopped_acquisition_without_waveform_writes(
+    status: str,
+) -> None:
+    transport = WaveformTransport(
+        preamble=_long_preamble(type_code=2, points=5),
+        payload=bytes(range(5)),
+    )
+    transport.trigger_statuses = [status]
+
+    with pytest.raises(ConfigError, match="already stopped"):
+        MSO8104Scope(transport=transport).fetch_waveform(
+            channel=1,
+            points="DMAX",
+            check_errors=False,
+        )
+
+    assert all(direction != "write" for direction, _ in transport.events)
+    assert transport.binary_calls == 0
+
+
+def test_max_fetch_keeps_state_dependent_mode_without_forcing_stop() -> None:
+    transport = WaveformTransport(
+        preamble=_long_preamble(type_code=1, points=3),
+        payload=bytes([128, 129, 130]),
+    )
+    transport.trigger_statuses = ["RUN"]
+    scope = MSO8104Scope(
+        transport=transport,
+        max_total_waveform_points=3,
+        max_byte_points_per_read=2,
+    )
+
+    waveform = scope.fetch_waveform(channel=2, points="MAX", check_errors=False)
+
+    assert waveform.sample_count == 3
+    assert ("write", ":WAVeform:MODE MAX") in transport.events
+    assert ("query", ":TRIGger:STATus?") not in transport.events
+    assert all(event != ("write", ":STOP") for event in transport.events)
+    assert transport.binary_calls == 2
+
+
+def test_long_preamble_over_total_budget_fails_before_binary_and_restores() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(
+        state=previous,
+        preamble=_long_preamble(type_code=2, points=5),
+        payload=bytes(range(5)),
+    )
+    scope = MSO8104Scope(
+        transport=transport,
+        max_total_waveform_points=4,
+        max_byte_points_per_read=2,
+    )
+
+    with pytest.raises(DataError, match="preamble points"):
+        scope.fetch_waveform(channel=1, points="DMAX", check_errors=False)
+
+    assert transport.binary_calls == 0
+    assert transport.state == asdict(previous)
+
+
+def test_multi_dmax_total_budget_preserves_completed_callback() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous)
+    transport.preambles = {
+        "CHAN1": _long_preamble(type_code=2, points=3),
+        "CHAN2": _long_preamble(type_code=2, points=3),
+    }
+    transport.payloads = {
+        "CHAN1": bytes([128, 129, 130]),
+        "CHAN2": bytes([128, 129, 130]),
+    }
+    completed: list[int] = []
+    scope = MSO8104Scope(
+        transport=transport,
+        max_total_waveform_points=5,
+        max_byte_points_per_read=2,
+    )
+
+    with pytest.raises(DataError, match="preamble points"):
+        scope.capture_waveforms(
+            channels=[1, 2],
+            points="DMAX",
+            check_errors=False,
+            on_waveform=lambda channel, _: completed.append(channel),
+        )
+
+    assert completed == [1]
+    assert transport.events.count(("write", ":SINGle")) == 1
+    assert transport.binary_calls == 2
+    assert transport.state == asdict(previous)
+
+
+def test_long_chunk_mismatch_is_not_replayed_and_restores_state() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(
+        state=previous,
+        preamble=_long_preamble(type_code=2, points=5),
+        payload=bytes([128, 129, 130, 131, 132]),
+    )
+    transport.binary_payload_overrides[2] = b"x"
+    scope = MSO8104Scope(
+        transport=transport,
+        max_total_waveform_points=5,
+        max_byte_points_per_read=2,
+    )
+
+    with pytest.raises(DataError, match="chunk length mismatch"):
+        scope.fetch_waveform(channel=1, points="DMAX", check_errors=False)
+
+    assert transport.binary_calls == 2
+    assert transport.state == asdict(previous)
+    assert scope.waveform_writes_blocked is False
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_total_waveform_points": 0},
+        {"max_total_waveform_points": 4_000_001},
+        {"max_total_waveform_points": True},
+        {"max_byte_points_per_read": 0},
+        {"max_byte_points_per_read": 250_001},
+        {"max_byte_points_per_read": 1.0},
+    ],
+)
+def test_waveform_memory_limits_are_hard_bounded(kwargs: dict[str, Any]) -> None:
+    with pytest.raises(DataError):
+        MSO8104Scope(transport=WaveformTransport(), **kwargs)

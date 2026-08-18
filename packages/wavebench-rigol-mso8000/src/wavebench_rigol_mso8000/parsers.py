@@ -136,7 +136,12 @@ def parse_positive_integer(response: str, *, field: str, maximum: int) -> int:
     )
 
 
-def parse_rigol_waveform_preamble(response: str) -> RigolWaveformPreamble:
+def parse_rigol_waveform_preamble(
+    response: str,
+    *,
+    expected_type_code: int = 0,
+    maximum_points: int = 1000,
+) -> RigolWaveformPreamble:
     parts = tuple(item.strip() for item in response.split(","))
     if len(parts) != 10:
         raise DataError(f"invalid MSO8104 waveform preamble: {response!r}")
@@ -152,7 +157,11 @@ def parse_rigol_waveform_preamble(response: str) -> RigolWaveformPreamble:
         minimum=0,
         maximum=2,
     )
-    points = parse_positive_integer(parts[2], field="preamble points", maximum=1000)
+    points = parse_positive_integer(
+        parts[2],
+        field="preamble points",
+        maximum=maximum_points,
+    )
     count = parse_positive_integer(parts[3], field="preamble count", maximum=1_000_000_000)
     try:
         numeric = tuple(float(item) for item in parts[4:])
@@ -163,8 +172,10 @@ def parse_rigol_waveform_preamble(response: str) -> RigolWaveformPreamble:
     x_increment, x_origin, x_reference, y_increment, y_origin, y_reference = numeric
     if format_code != 0:
         raise DataError(f"expected BYTE waveform format code 0, got {format_code}")
-    if type_code != 0:
-        raise DataError(f"expected NORMal waveform type code 0, got {type_code}")
+    if type_code != expected_type_code:
+        raise DataError(
+            f"expected waveform type code {expected_type_code}, got {type_code}"
+        )
     if x_increment <= 0:
         raise DataError(f"MSO8104 waveform X increment must be positive, got {x_increment}")
     if y_increment <= 0:

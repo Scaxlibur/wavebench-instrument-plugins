@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.3.1"
+PACKAGE_VERSION = "0.4.0"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:

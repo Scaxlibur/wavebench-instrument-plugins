@@ -44,8 +44,11 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.wavebench_min_version == "0.8.22"
     assert descriptor.wavebench_max_version == "0.9.0"
-    assert descriptor.version == "0.3.1"
-    assert descriptor.validate_options({}) == {}
+    assert descriptor.version == "0.4.0"
+    assert descriptor.validate_options({}) == {
+        "max_total_points": 4_000_000,
+        "max_chunk_points": 250_000,
+    }
 
 
 def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> None:
@@ -74,7 +77,47 @@ def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> Non
     assert open_calls == 1
     assert driver.transport is transport
     assert driver.acquisition_timeout_s == 2.0
+    assert driver.max_total_waveform_points == 4_000_000
+    assert driver.max_byte_points_per_read == 250_000
     assert transport.queries == []
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"max_total_points": True},
+        {"max_total_points": 4_000_001},
+        {"max_chunk_points": 0},
+        {"max_chunk_points": 1.0},
+    ],
+)
+def test_factory_rejects_invalid_integer_options_before_open(
+    options: dict[str, object],
+) -> None:
+    descriptor = plugin_descriptor()
+    open_calls = 0
+
+    def open_transport() -> FakeTransport:
+        nonlocal open_calls
+        open_calls += 1
+        return FakeTransport()
+
+    context = DriverContext(
+        driver_id=descriptor.driver_id,
+        kind="scope",
+        resource="TCPIP0::192.0.2.10::INSTR",
+        backend="pyvisa",
+        timeout_ms=1000,
+        opc_timeout_ms=2000,
+        logger=CommandLogger(),
+        _transport_factory=open_transport,
+        options=options,
+    )
+
+    with pytest.raises(DataError, match="option"):
+        descriptor.factory(context)
+
+    assert open_calls == 0
 
 
 def test_idn_validates_target_and_preserves_trimmed_response() -> None:

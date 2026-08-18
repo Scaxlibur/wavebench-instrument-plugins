@@ -29,6 +29,13 @@ from .parsers import (
 _ANALOG_CHANNELS = frozenset({1, 2, 3, 4})
 _NORMAL_WAVEFORM_POINTS = 1000
 _MAX_WAVEFORM_STATE_POINTS = 500_000_000
+_HARD_MAX_TOTAL_WAVEFORM_POINTS = 4_000_000
+_HARD_MAX_BYTE_POINTS_PER_READ = 250_000
+_POINT_MODE_TO_TRANSFER = {
+    "DEF": ("NORM", 0),
+    "MAX": ("MAX", 1),
+    "DMAX": ("RAW", 2),
+}
 
 
 @dataclass(frozen=True)
@@ -46,6 +53,8 @@ class MSO8104Scope:
     transport: InstrumentTransport
     acquisition_timeout_s: float = 30.0
     trigger_poll_interval_s: float = 0.05
+    max_total_waveform_points: int = _HARD_MAX_TOTAL_WAVEFORM_POINTS
+    max_byte_points_per_read: int = _HARD_MAX_BYTE_POINTS_PER_READ
     _clock: Callable[[], float] = field(default=time.monotonic, repr=False)
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
     _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
@@ -61,6 +70,24 @@ class MSO8104Scope:
             or self.trigger_poll_interval_s < 0
         ):
             raise DataError("MSO8104 trigger poll interval must be finite and non-negative")
+        if (
+            type(self.max_total_waveform_points) is not int
+            or not 1
+            <= self.max_total_waveform_points
+            <= _HARD_MAX_TOTAL_WAVEFORM_POINTS
+        ):
+            raise DataError(
+                "MSO8104 max_total_waveform_points must be an integer from 1 through 4000000"
+            )
+        if (
+            type(self.max_byte_points_per_read) is not int
+            or not 1
+            <= self.max_byte_points_per_read
+            <= _HARD_MAX_BYTE_POINTS_PER_READ
+        ):
+            raise DataError(
+                "MSO8104 max_byte_points_per_read must be an integer from 1 through 250000"
+            )
 
     def _require_open(self) -> None:
         if self._closed:
@@ -260,31 +287,154 @@ class MSO8104Scope:
                 "waveform transfer writes are blocked"
             ) from exc
 
-    def _read_normal_waveform(self, channel: int) -> WaveformData:
-        preamble = parse_rigol_waveform_preamble(
-            self.transport.query(":WAVeform:PREamble?")
+    def _apply_waveform_prefix(self, *, channel: int, mode: str) -> None:
+        fields = (
+            (
+                f":WAVeform:SOURce CHAN{channel}",
+                ":WAVeform:SOURce?",
+                f"CHAN{channel}",
+                parse_waveform_source,
+            ),
+            (
+                f":WAVeform:MODE {mode}",
+                ":WAVeform:MODE?",
+                mode,
+                parse_waveform_mode,
+            ),
+            (
+                ":WAVeform:FORMat BYTE",
+                ":WAVeform:FORMat?",
+                "BYTE",
+                parse_waveform_format,
+            ),
         )
-        if preamble.points != _NORMAL_WAVEFORM_POINTS:
+        for command, query, expected, parser in fields:
+            self._write_and_verify(
+                command=command,
+                query=query,
+                expected=expected,
+                parser=parser,
+                phase="setup",
+            )
+        try:
+            source = parse_waveform_source(self.transport.query(":WAVeform:SOURce?"))
+            actual_mode = parse_waveform_mode(self.transport.query(":WAVeform:MODE?"))
+            data_format = parse_waveform_format(self.transport.query(":WAVeform:FORMat?"))
+            if (source, actual_mode, data_format) != (f"CHAN{channel}", mode, "BYTE"):
+                raise DataError("MSO8104 waveform setup prefix drifted after readback")
+        except Exception as exc:
+            self._waveform_writes_blocked = True
+            raise InstrumentError(
+                "MSO8104 waveform setup prefix verification failed; "
+                "waveform transfer writes are blocked"
+            ) from exc
+
+    @staticmethod
+    def _convert_byte_chunk(
+        payload: bytes,
+        *,
+        y_origin: float,
+        y_reference: float,
+        y_increment: float,
+    ) -> np.ndarray:
+        voltages = np.frombuffer(payload, dtype=np.uint8).astype(np.float64)
+        with np.errstate(over="ignore", invalid="ignore"):
+            voltages -= y_origin + y_reference
+            voltages *= y_increment
+        if not np.all(np.isfinite(voltages)):
+            raise DataError("MSO8104 waveform voltage conversion produced non-finite values")
+        return voltages
+
+    def _read_byte_waveform(
+        self,
+        channel: int,
+        *,
+        point_mode: str,
+        remaining_points: int,
+    ) -> WaveformData:
+        _, expected_type_code = _POINT_MODE_TO_TRANSFER[point_mode]
+        maximum_points = min(remaining_points, self.max_total_waveform_points)
+        preamble = parse_rigol_waveform_preamble(
+            self.transport.query(":WAVeform:PREamble?"),
+            expected_type_code=expected_type_code,
+            maximum_points=maximum_points,
+        )
+        if point_mode == "DEF" and preamble.points != _NORMAL_WAVEFORM_POINTS:
             raise DataError(
                 "MSO8104 NORMal waveform preamble point count does not match "
                 f"the requested {_NORMAL_WAVEFORM_POINTS} points: {preamble.points}"
             )
-        payload = self.transport.query_bin_block(":WAVeform:DATA?")
-        if len(payload) != preamble.points:
-            raise DataError(
-                "MSO8104 waveform payload length mismatch: "
-                f"expected {preamble.points}, got {len(payload)}"
+        if point_mode == "DEF":
+            payload = self.transport.query_bin_block(":WAVeform:DATA?")
+            if len(payload) != preamble.points:
+                raise DataError(
+                    "MSO8104 waveform payload length mismatch: "
+                    f"expected {preamble.points}, got {len(payload)}"
+                )
+            voltages = self._convert_byte_chunk(
+                payload,
+                y_origin=preamble.y_origin,
+                y_reference=preamble.y_reference,
+                y_increment=preamble.y_increment,
             )
-        voltages = np.frombuffer(payload, dtype=np.uint8).astype(np.float64)
-        with np.errstate(over="ignore", invalid="ignore"):
-            voltages -= preamble.y_origin + preamble.y_reference
-            voltages *= preamble.y_increment
+        else:
+            voltages = np.empty(preamble.points, dtype=np.float64)
+            self._write_and_verify(
+                command=":WAVeform:STARt 1",
+                query=":WAVeform:STARt?",
+                expected=1,
+                parser=lambda value: parse_positive_integer(
+                    value,
+                    field="waveform start",
+                    maximum=_MAX_WAVEFORM_STATE_POINTS,
+                ),
+                phase="setup",
+            )
+            for start in range(1, preamble.points + 1, self.max_byte_points_per_read):
+                stop = min(
+                    preamble.points,
+                    start + self.max_byte_points_per_read - 1,
+                )
+                self._write_and_verify(
+                    command=f":WAVeform:STOP {stop}",
+                    query=":WAVeform:STOP?",
+                    expected=stop,
+                    parser=lambda value: parse_positive_integer(
+                        value,
+                        field="waveform stop",
+                        maximum=_MAX_WAVEFORM_STATE_POINTS,
+                    ),
+                    phase="setup",
+                )
+                if start != 1:
+                    self._write_and_verify(
+                        command=f":WAVeform:STARt {start}",
+                        query=":WAVeform:STARt?",
+                        expected=start,
+                        parser=lambda value: parse_positive_integer(
+                            value,
+                            field="waveform start",
+                            maximum=_MAX_WAVEFORM_STATE_POINTS,
+                        ),
+                        phase="setup",
+                    )
+                payload = self.transport.query_bin_block(":WAVeform:DATA?")
+                expected_length = stop - start + 1
+                if len(payload) != expected_length:
+                    raise DataError(
+                        "MSO8104 waveform chunk length mismatch for "
+                        f"points {start}-{stop}: expected {expected_length}, got {len(payload)}"
+                    )
+                voltages[start - 1 : stop] = self._convert_byte_chunk(
+                    payload,
+                    y_origin=preamble.y_origin,
+                    y_reference=preamble.y_reference,
+                    y_increment=preamble.y_increment,
+                )
         x_start = preamble.x_origin - preamble.x_reference * preamble.x_increment
         x_stop = x_start + (preamble.points - 1) * preamble.x_increment
         if not math.isfinite(x_start) or not math.isfinite(x_stop):
             raise DataError("MSO8104 waveform X axis is non-finite")
-        if not np.all(np.isfinite(voltages)):
-            raise DataError("MSO8104 waveform voltage conversion produced non-finite values")
         voltages.setflags(write=False)
         return WaveformData(
             channel=channel,
@@ -296,19 +446,39 @@ class MSO8104Scope:
             voltages_v=voltages,
         )
 
-    def _read_waveform_transaction(self, channel: int) -> WaveformData:
+    def _read_waveform_transaction(
+        self,
+        channel: int,
+        *,
+        point_mode: str,
+        remaining_points: int,
+    ) -> WaveformData:
+        if remaining_points < 1:
+            raise DataError("MSO8104 waveform total point budget is exhausted")
+        if point_mode == "DEF" and remaining_points < _NORMAL_WAVEFORM_POINTS:
+            raise DataError(
+                "MSO8104 waveform total point budget is below the 1000-point DEF transfer"
+            )
         previous = self._snapshot_waveform_state()
-        transfer = WaveformTransferState(
-            source=f"CHAN{channel}",
-            mode="NORM",
-            data_format="BYTE",
-            points=_NORMAL_WAVEFORM_POINTS,
-            start=1,
-            stop=_NORMAL_WAVEFORM_POINTS,
-        )
+        mode, _ = _POINT_MODE_TO_TRANSFER[point_mode]
         try:
-            self._apply_waveform_state(transfer, phase="setup")
-            return self._read_normal_waveform(channel)
+            if point_mode == "DEF":
+                transfer = WaveformTransferState(
+                    source=f"CHAN{channel}",
+                    mode=mode,
+                    data_format="BYTE",
+                    points=_NORMAL_WAVEFORM_POINTS,
+                    start=1,
+                    stop=_NORMAL_WAVEFORM_POINTS,
+                )
+                self._apply_waveform_state(transfer, phase="setup")
+            else:
+                self._apply_waveform_prefix(channel=channel, mode=mode)
+            return self._read_byte_waveform(
+                channel,
+                point_mode=point_mode,
+                remaining_points=remaining_points,
+            )
         finally:
             self._restore_waveform_state(previous)
 
@@ -323,9 +493,13 @@ class MSO8104Scope:
             )
 
     @staticmethod
-    def _validate_def_points(points: str) -> None:
-        if not isinstance(points, str) or points.strip().upper() != "DEF":
-            raise DataError("MSO8104 offline-validated waveform path supports only points='DEF'")
+    def _normalize_point_mode(points: str) -> str:
+        if not isinstance(points, str):
+            raise DataError("MSO8104 waveform points must be DEF, MAX, or DMAX")
+        normalized = points.strip().upper()
+        if normalized not in _POINT_MODE_TO_TRANSFER:
+            raise DataError("MSO8104 waveform points must be DEF, MAX, or DMAX")
+        return normalized
 
     @staticmethod
     def _validate_capture_adjustments(
@@ -420,14 +594,25 @@ class MSO8104Scope:
         check_errors: bool = True,
     ) -> WaveformData:
         self._validate_analog_channel(channel)
-        self._validate_def_points(points)
+        point_mode = self._normalize_point_mode(points)
         self._validate_check_errors(check_errors)
         with self._io_lock:
             self._require_open()
             self._require_waveform_writes_allowed()
             self._require_displayed_channels([channel])
             self._require_main_timebase()
-            return self._read_waveform_transaction(channel)
+            if point_mode == "DMAX":
+                status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+                if status != "STOP":
+                    raise ConfigError(
+                        "MSO8104 DMAX fetch requires an already stopped acquisition; "
+                        f"current trigger status is {status}"
+                    )
+            return self._read_waveform_transaction(
+                channel,
+                point_mode=point_mode,
+                remaining_points=self.max_total_waveform_points,
+            )
 
     def capture_waveform(
         self,
@@ -462,7 +647,7 @@ class MSO8104Scope:
             self._validate_analog_channel(channel)
         if len(set(channels)) != len(channels):
             raise DataError("MSO8104 capture channels must be unique")
-        self._validate_def_points(points)
+        point_mode = self._normalize_point_mode(points)
         self._validate_check_errors(check_errors)
         self._validate_capture_adjustments(
             time_range_s=time_range_s,
@@ -481,15 +666,21 @@ class MSO8104Scope:
             self._single_and_wait_for_stop()
             waveforms: dict[int, WaveformData] = {}
             reference: WaveformData | None = None
+            remaining_points = self.max_total_waveform_points
             for channel in channels:
                 if on_channel_start is not None:
                     on_channel_start(channel)
-                waveform = self._read_waveform_transaction(channel)
+                waveform = self._read_waveform_transaction(
+                    channel,
+                    point_mode=point_mode,
+                    remaining_points=remaining_points,
+                )
                 if reference is None:
                     reference = waveform
                 else:
                     self._assert_matching_x_axis(reference, waveform)
                 waveforms[channel] = waveform
+                remaining_points -= waveform.sample_count
                 if on_waveform is not None:
                     on_waveform(channel, waveform)
             return waveforms

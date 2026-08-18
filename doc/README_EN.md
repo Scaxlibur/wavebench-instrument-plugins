@@ -6,7 +6,7 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The source packages are maintained independently. In addition to DS1000Z, DG4000, DM3000, DP800, RTM2000, and Shengpu SP3000A, `wavebench-rigol-mso8000 0.3.1` now targets MSO8104 with offline identity, input safety, current-screen waveform, and `DEF` single/multi-channel capture contracts and no hardware connection. External editions of bundled drivers provide independent upgrades, transports, and extensions without replacing the bundled baseline. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently. In addition to DS1000Z, DG4000, DM3000, DP800, RTM2000, and Shengpu SP3000A, `wavebench-rigol-mso8000 0.4.0` now targets MSO8104 with offline identity, input safety, bounded waveform, and single/multi-channel capture contracts and no hardware connection. External editions of bundled drivers provide independent upgrades, transports, and extensions without replacing the bundled baseline. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 > [!IMPORTANT]
 > The WaveBench `v0.7.0` release does not contain Instrument API V2, the managed plugin lifecycle, or canonical override slots. Packages target WaveBench `0.8.x`, declare the minimum version required by their public API usage, and exclude a future `0.9` core. MSO8000 currently requires `wavebench>=0.8.22,<0.9`.
@@ -38,7 +38,7 @@ WaveBench permanently bundles the RTM2000, DS1000Z, DG4000, DP800, and DM3000 fa
 ## Current plugin
 
 - [`wavebench-rigol-ds1000z`](../packages/wavebench-rigol-ds1000z/README_EN.md): four-channel RIGOL DS1104Z / DS1000Z series, canonical ID `rigol.ds1000z`.
-- [`wavebench-rigol-mso8000`](../packages/wavebench-rigol-mso8000/README_EN.md): RIGOL MSO8104 mixed-signal oscilloscope, canonical ID `rigol.mso8104`; identity, input safety, current-screen waveform, and `DEF` capture are offline-tested and hardware remains unverified.
+- [`wavebench-rigol-mso8000`](../packages/wavebench-rigol-mso8000/README_EN.md): RIGOL MSO8104 mixed-signal oscilloscope, canonical ID `rigol.mso8104`; identity, input safety, bounded waveform, and single/multi-channel capture are offline-tested and hardware remains unverified.
 - [`wavebench-rigol-dg4000`](../packages/wavebench-rigol-dg4000/README_EN.md): dual-channel RIGOL DG4202 / DG4000 series, canonical ID `rigol.dg4202`.
 - [`wavebench-rigol-dm3000`](../packages/wavebench-rigol-dm3000/README_EN.md): LAN-only RIGOL DM3000 / DM3058 multimeter, canonical ID `rigol.dm3000`; short aliases retain the built-in dual-backend fallback.
 - [`wavebench-rigol-dp800`](../packages/wavebench-rigol-dp800/README_EN.md): RIGOL DP800 / DP832 / DP832A programmable DC power supply, canonical ID `rigol.dp800`; its short alias remains on the built-in fallback.

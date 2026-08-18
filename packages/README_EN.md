@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-This directory contains independently packaged WaveBench instrument plugins. It now also contains `wavebench-rigol-mso8000`: its first target is MSO8104, and version `0.3.1` has offline identity, input-safety, current-screen waveform, and `DEF` capture contracts with no hardware connection. DG4000, DM3000, DP800, DS1000Z, and RTM2000 are optional external editions of bundled drivers; MSO8000 and Shengpu SP3000A use independent canonical IDs. Future packages keep the one-instrument-or-family layout and do not define a second manifest, installer, or catalog protocol here.
+This directory contains independently packaged WaveBench instrument plugins. It now also contains `wavebench-rigol-mso8000`: its first target is MSO8104, and version `0.4.0` has offline identity, input-safety, bounded-waveform, and single/multi-channel capture contracts with no hardware connection. DG4000, DM3000, DP800, DS1000Z, and RTM2000 are optional external editions of bundled drivers; MSO8000 and Shengpu SP3000A use independent canonical IDs. Future packages keep the one-instrument-or-family layout and do not define a second manifest, installer, or catalog protocol here.
 
 These packages target WaveBench `0.8.x`, declare the minimum version required by their public API usage, and exclude a future `0.9` core. MSO8000 currently requires `wavebench>=0.8.22,<0.9`.
 

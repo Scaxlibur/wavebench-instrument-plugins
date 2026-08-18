@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-M0～M3 已离线完成，M4 的 `DEF` 采集切片已经进入 `0.3.1`。当前声明 `scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform` 与 `scope.capture_waveforms`；MAX/DMAX、截图、数字通道和消费型错误队列尚未完成。
+M0～M4 已离线完成。当前 `0.4.0` 声明 `scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform` 与 `scope.capture_waveforms`；截图、数字通道和消费型错误队列尚未完成。
 
 本轮开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期验证，不连接真实仪器。所有型号、固件、transport、吞吐、恢复和测量结论均保持「未实机验证」。
 
@@ -32,7 +32,7 @@ M0～M3 已离线完成，M4 的 `DEF` 采集切片已经进入 `0.3.1`。当前
 
 ## 推荐开发顺序
 
-1. M4 补齐有界 MAX/DMAX 长记录。
+1. M5 评审 PNG 截图的核心 framing 与状态恢复可表达性。
 2. 后续 capability 按里程碑分别补齐离线测试、写入副作用和恢复边界。
 
 ## 安全边界
@@ -43,9 +43,11 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 
-当前波形能力只接受 `points="def"`，要求目标通道已经显示，并暂时把传输状态设为 `NORMal + BYTE + 1000` 点。driver 保存、逐字段回读并恢复 SOURCE、MODE、FORMAT、POINTS、START 与 STOP；不发送 STOP、SINGLE 或 AUTOSCALE。恢复失败或写入结果不明会锁存波形写域，后续调用必须关闭并重新打开会话。该能力会写波形传输状态，因此配置需使用 `scope.access="read_write"`。
+波形能力接受 `DEF`、`MAX` 与 `DMAX`。`DEF` 使用 `NORMal + BYTE + 1000` 点；`MAX` 保留手册定义的运行/停止状态相关语义；`DMAX` 使用 RAW，`fetch_waveform()` 仅在 acquisition 已经 STOP 时放行。driver 保存、逐字段回读并恢复 SOURCE、MODE、FORMAT、POINTS、START 与 STOP；不发送 STOP 或 AUTOSCALE。恢复失败或写入结果不明会锁存波形写域，后续调用必须关闭并重新打开会话。
 
-`capture_waveform(s)` 同样只接受 `points="def"`，要求全部目标通道已经显示且时基为 MAIN。多通道调用只发送一次 `:SINGle`，随后轮询 `:TRIGger:STATus?` 直到 STOP，再逐通道读取并校验 X 轴一致；不使用 `*OPC?` 代替采集完成，不自动强制 STOP、RUN 或重新触发。超时或状态不明会锁存 acquisition 写域。该切片不接受 `time_range_s` 或 `vertical_scale_v_per_div`，相关状态须预先配置；完成后仪器保持 SINGLE 自然结束的 STOP 状态。
+长记录按不超过 250,000 点的 BYTE block 读取，每次调用的全部通道总计最多 4,000,000 点。`scope.options.max_chunk_points` 与 `scope.options.max_total_points` 可以向下收紧，不能突破上述硬上限。超出总点数预算会在分配数组和发送 binary query 前拒绝；每个 block 只调用一次核心 `query_bin_block()`，插件不解析或重放 TMC framing。
+
+`capture_waveform(s)` 要求全部目标通道已经显示且时基为 MAIN。多通道调用只发送一次 `:SINGle`，随后轮询 `:TRIGger:STATus?` 直到 STOP，再逐通道读取并校验 X 轴一致；不使用 `*OPC?` 代替采集完成，不自动强制 STOP、RUN 或重新触发。超时或状态不明会锁存 acquisition 写域。当前不接受 `time_range_s` 或 `vertical_scale_v_per_div`，相关状态须预先配置；完成后仪器保持 SINGLE 自然结束的 STOP 状态。
 
 ```toml
 [connection]
@@ -57,6 +59,10 @@ driver = "rigol.mso8104"
 default_channel = 1
 check_errors = false
 access = "read_write"
+
+[scope.options]
+max_total_points = 4000000
+max_chunk_points = 250000
 
 [waveform]
 format = "real"
