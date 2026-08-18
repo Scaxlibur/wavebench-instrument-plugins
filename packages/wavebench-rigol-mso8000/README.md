@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-M0～M4 已离线完成。当前 `0.4.0` 声明 `scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform` 与 `scope.capture_waveforms`；截图、数字通道和消费型错误队列尚未完成。
+M0～M4 已离线完成，M5 截图经 RFC 评审后跳过。当前 `0.4.0` 声明 `scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform` 与 `scope.capture_waveforms`；截图、数字通道和消费型错误队列均未声明。
 
 本轮开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期验证，不连接真实仪器。所有型号、固件、transport、吞吐、恢复和测量结论均保持「未实机验证」。
 
@@ -32,7 +32,7 @@ M0～M4 已离线完成。当前 `0.4.0` 声明 `scope.idn`、`scope.channel_cou
 
 ## 推荐开发顺序
 
-1. M5 评审 PNG 截图的核心 framing 与状态恢复可表达性。
+1. M6 评审 D0～D15 状态与数字波形的公共模型和手册证据。
 2. 后续 capability 按里程碑分别补齐离线测试、写入副作用和恢复边界。
 
 ## 安全边界
@@ -40,6 +40,8 @@ M0～M4 已离线完成。当前 `0.4.0` 声明 `scope.idn`、`scope.channel_cou
 descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建文件。真实资源、序列号、凭据、波形、截图和命令日志不得提交。仪器写入和 acquisition trigger 不做盲目重试。核心缺少必要安全接口时，先写 RFC 并跳过对应 capability，不在插件中增加 raw SCPI 入口。
 
 当前 descriptor 允许 `tcpip`、`usb`、`gpib` 资源前缀，这是手册声明和离线路由合同，不是连接实机通过的证据。
+
+当前不声明 `scope.screenshot`。`:DISPlay:DATA?` 的手册段落没有声明 TMC block framing，`:SAVE:IMAGe:DATA?` 虽为 TMC block，却不能证明返回图片满足核心 `include_menu=False` 合同。具体缺口见 [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md)；插件不猜测 framing、不忽略参数，也不创建仪器文件。
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 

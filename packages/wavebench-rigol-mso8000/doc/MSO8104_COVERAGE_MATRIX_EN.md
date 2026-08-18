@@ -16,7 +16,7 @@ The audited source is RIGOL MSO8000 Programming Guide `PGA26006-1110`, which cov
 | Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | Offline complete; fixed 1000 displayed-channel points, six-field transfer-state restoration, and no implicit stop |
 | Deep waveform | MAX/RAW and chunk ranges | fetch/capture | Offline complete; at most 250,000 points per block and four million total points per call; streaming needs a core RFC |
 | Single and multi-channel capture | SINGLE, trigger status, and per-source waveform | capture protocols | Offline complete for DEF/MAX/DMAX; one SINGLE, STOP polling, consistent X axes, and no OPC completion claim |
-| Screenshot | display data or save-image data | `scope.screenshot` | M5; use core-supported block framing and no instrument files |
+| Screenshot | display data or save-image data | `scope.screenshot` | RFC and skip; DISPLAY framing is undocumented and SAVE DATA cannot prove `include_menu=False`; see RFC-0003 |
 | Digital/MSO | LA state and D0-D15 waveform | digital status/waveform | M6; module gate, stopped acquisition, axis consistency, uint16 packing |
 | Measurement, math, FFT, reference, cursor | corresponding query families | typed scope capabilities | M7 review; read existing configuration only and skip model mismatches |
 | DVM and counter | DVM/counter families | no suitable scope capability | RFC and skip |

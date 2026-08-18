@@ -48,7 +48,7 @@
 | M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
 | M3 | 离线完成 | 当前屏幕 `NORMal + BYTE` 波形 |
 | M4 | 离线完成 | 单次、多通道与有界 MAX/DMAX |
-| M5 | 未开始 | PNG 截图 |
+| M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | 未开始 | D0～D15 状态与数字波形 |
 | M7 | 未开始 | 核心已有的受控写与高级只读能力；缺口 RFC |
 | M8 | 未开始 | 覆盖文档、全量离线验证和发行包审计 |
@@ -101,7 +101,11 @@
 
 ## M5：截图
 
-公开 `scope.screenshot` 前，选择核心 `query_bin_block()` 能表达的 TMC block 路径。PNG 类型及相关显示设置必须快照、回读与恢复，不调用仪器文件路径保存命令。
+M5 评审结果为「RFC 后跳过」，descriptor 不声明 `scope.screenshot`。
+
+手册称 `:DISPlay:DATA?` 返回 PNG 二进制数据，却没有声明 IEEE/TMC block framing，不能交给核心现有的 `query_bin_block()`。`:SAVE:IMAGe:DATA?` 虽明确返回 TMC block，但依赖 TYPE、INVERT 与 COLOR 状态，且手册没有菜单 inclusion 控制；插件无法诚实满足核心 `include_menu=False` 合同。仪器文件保存路径仍在永久默认拒绝区。
+
+退出证据：[RFC-0003](rfcs/0003-scope-screenshot-framing-and-menu-contract.md) 记录原始二进制单次查询与菜单可见性模型缺口。核心补齐合同前，不猜测 framing、不忽略参数，也不创建仪器文件。没有读取真实截图。
 
 ## M6：数字通道
 

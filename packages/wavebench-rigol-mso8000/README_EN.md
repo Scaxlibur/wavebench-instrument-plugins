@@ -4,7 +4,7 @@ This directory is the starting point for a WaveBench plugin for the RIGOL MSO800
 
 ## Current status
 
-M0 through M4 are offline complete. Version `0.4.0` declares identity, coupling, fetch, single-capture, and multi-capture capabilities. Screenshot, digital, and consuming error-queue capabilities remain incomplete.
+M0 through M4 are offline complete, and M5 screenshot support was reviewed then skipped under an RFC. Version `0.4.0` declares identity, coupling, fetch, single-capture, and multi-capture capabilities. Screenshot, digital, and consuming error-queue capabilities are not declared.
 
 This development pass is offline-only. It uses the manual, FakeTransport tests, fault injection, builds, and installation lifecycle checks, and does not connect to hardware. Model, firmware, transport, throughput, restoration, and measurement claims remain unverified.
 
@@ -35,6 +35,8 @@ Current identity:
 Descriptor import must not open a transport, scan ports, send SCPI, or create files. Never commit real resources, serial numbers, credentials, captures, screenshots, or command logs. Do not blindly retry instrument writes or acquisition triggers. When the core lacks a required safety interface, add an RFC and skip the capability instead of adding a raw SCPI escape hatch.
 
 The descriptor accepts `tcpip`, `usb`, and `gpib` resource prefixes as a manual-backed, offline routing contract. This is not hardware connection evidence.
+
+The descriptor does not declare `scope.screenshot`. The manual does not specify TMC block framing for `:DISPlay:DATA?`, while `:SAVE:IMAGe:DATA?` cannot prove the core's `include_menu=False` contract. [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md) records both gaps. The plugin does not guess framing, ignore request parameters, or create instrument files.
 
 `channel_coupling()` combines channel coupling and input impedance. `AC/DC + OMEG` maps to the core high-impedance tokens `ACL/DCL`, while `AC/DC + FIFT` maps to the low-impedance tokens `AC/DC`; the core rejects 50 ohms, `GND`, and unknown states by default. The plugin does not declare `scope.errors` because `:SYSTem:ERRor?` consumes an entry while ordinary core text queries may replay. Future waveform service calls must explicitly set `scope.check_errors=false` until [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) is implemented.
 

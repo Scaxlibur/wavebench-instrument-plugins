@@ -32,7 +32,7 @@ The base plugin does not expose raw SCPI, reset or setup slots, option installat
 | M2 | Offline complete | Input-termination safety; consuming-query RFC |
 | M3 | Offline complete | Current-screen NORM/BYTE waveform |
 | M4 | Offline complete | Single, multi-channel, and bounded MAX/DMAX acquisition |
-| M5 | Not started | PNG screenshot |
+| M5 | RFC and skip | PNG framing and menu visibility lack a provable core contract |
 | M6 | Not started | D0-D15 status and waveform |
 | M7 | Not started | Core-supported controlled writes and advanced reads; RFCs for gaps |
 | M8 | Not started | Documentation, full offline verification, and package audit |
@@ -44,7 +44,7 @@ The base plugin does not expose raw SCPI, reset or setup slots, option installat
 - **M2:** Provide `scope.channel_coupling` through combined coupling and impedance reads. Keep `scope.errors` disabled and document `scope.check_errors=false` until the RFC is resolved.
 - **M3:** Provide `scope.fetch_waveform` for `DEF → NORMal + BYTE`, with visible-channel preflight, transfer-state restoration, strict preamble/payload validation, and no implicit STOP/SINGLE/AUTOSCALE.
 - **M4:** Provide single and multi-channel capture plus bounded MAX/DMAX. One multi-channel call performs one acquisition, uses hard memory/point limits, never replays acquisition or binary queries, and preserves partial results through callbacks.
-- **M5:** Provide PNG screenshot only through a framing path supported by the core transport; restore image settings and never save to an instrument path.
+- **M5:** RFC and skip. `:DISPlay:DATA?` has no documented IEEE/TMC block framing, while `:SAVE:IMAGe:DATA?` is a documented block but cannot prove the core's `include_menu=False` contract. [RFC-0003](rfcs/0003-scope-screenshot-framing-and-menu-contract.md) proposes a non-replayed raw-byte query and an explicit unknown-menu result. Do not declare `scope.screenshot`, guess framing, ignore parameters, or create instrument files.
 - **M6:** Provide option-gated digital status and stopped digital waveform with consistent axes, 0/1 validation, and uint16 bit packing.
 - **M7:** Evaluate each existing typed scope capability independently. Missing fields, consuming reads, unsafe restoration, or absent core APIs result in an RFC and a skipped capability, not fabricated defaults.
 - **M8:** Make descriptors, tests, READMEs, and matrices agree; pass Ruff, package tests, package check, real wheel/sdist, and disposable-environment install/remove checks; retain every hardware claim as unverified.
