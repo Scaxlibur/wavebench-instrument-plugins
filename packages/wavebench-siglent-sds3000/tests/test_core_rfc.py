@@ -46,14 +46,40 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
     }
     assert "PyVISA" in replay["minimum_behavior"]["backends"]
     assert "GuardedAuditedTransport" in replay["minimum_behavior"]["backends"]
+    assert "not frozen" in replay["minimum_behavior"]["legacy_query_default"]
+    assert "fail closed" in replay["minimum_behavior"]["unsupported_continuation"]
     assert any("at most one" in item for item in replay["acceptance"])
 
     session = foundations["shared-session-health-and-poison"]
     assert set(session["states"]) == {"healthy", "uncertain", "poisoned", "closed"}
+    assert set(session["configuration_states"]) == {"verified", "unverified"}
+    assert "unverified" in session["transitions"]["new_or_reconnected_session"]
+    assert "unrecoverable" in session["transitions"]["restore_failure"]
+    assert "all later instrument operations" in " ".join(session["acceptance"])
+    assert "restored" in " ".join(session["acceptance"])
     assert "on_failure=continue" in " ".join(session["acceptance"])
     assert session["responsibility"]["core"]
     assert session["responsibility"]["plugin"]
     assert session["responsibility"]["transport"]
+
+
+def test_separate_transport_and_typed_scope_specs_are_required_before_coding() -> None:
+    assessment = _assessment()
+    gates = {item["id"]: item for item in assessment["specification_freeze_gates"]}
+
+    assert set(gates) == {
+        "transport-replay-session-rfc",
+        "typed-scope-state-rfc",
+    }
+    transport = " ".join(gates["transport-replay-session-rfc"]["must_define"])
+    assert "default replay policy" in transport
+    assert "legacy call-site migration" in transport
+    assert "read_continuation_only" in transport
+
+    typed_scope = " ".join(gates["typed-scope-state-rfc"]["must_define"])
+    assert "Protocol signatures" in typed_scope
+    assert "Service/CLI/run-plan" in typed_scope
+    assert "SDS3000, DS1000Z, and RTM2000" in typed_scope
 
 
 def test_active_proposals_are_typed_read_only_first_and_cross_vendor() -> None:
@@ -68,12 +94,34 @@ def test_active_proposals_are_typed_read_only_first_and_cross_vendor() -> None:
     }
     assert proposals["scope-read-only-state"]["priority"] == "P1"
     assert proposals["scope-read-only-state"]["status"] == "blocked-on-p0"
-    assert proposals["scope-read-only-state"]["public_contract"]["field_metadata"]
-    assert proposals["scope-read-only-state"]["public_contract"]["termination"] == "read-only in the first version"
+    state_contract = proposals["scope-read-only-state"]["public_contract"]
+    assert state_contract["field_metadata"]
+    assert state_contract["termination"] == "read-only in the first version"
+    assert set(state_contract["availability"]) == {
+        "unsupported",
+        "supported_but_not_readable",
+        "stale_or_unknown",
+        "valid_value",
+    }
+    assert "query_failed" not in state_contract["availability"]
+    assert "operation-error envelope" in state_contract["query_failure"]
 
     run_state = proposals["scope-acquisition-run-state"]
-    assert run_state["capabilities"] == ["scope.acquisition_run_state"]
-    assert len(run_state["vendors"]) >= 2
+    assert run_state["status"] == "design-required"
+    assert run_state["compatibility"] == "not-frozen"
+    assert run_state["capabilities"] == []
+    assert run_state["candidate_capability"] == "scope.acquisition_run_state"
+    assert set(run_state["public_contract"]["candidate_axes"]) == {
+        "execution_state",
+        "trigger_phase",
+        "trigger_mode",
+    }
+    assert len(run_state["vendors"]) == 3
+    vendor_text = json.dumps(run_state["vendors"])
+    assert "SEQ is firmware-unverified" in vendor_text
+    assert "no read-only acquisition or trigger-status query" in vendor_text
+    assert "STATUS:OPERation:CONDITION? bit 3" in vendor_text
+    assert "all three vendors" in run_state["freeze_gate"]
 
     patch = proposals["scope-configuration-patch"]
     assert patch["priority"] == "P2"
@@ -113,9 +161,37 @@ def test_rfc_keeps_safety_rejections_and_test_layers_explicit() -> None:
     assert {
         "transport-contract",
         "session-transaction",
-        "typed-state-and-patch",
+        "typed-read-only-state",
         "service-cli-run-plan",
         "hardware-acceptance",
     } <= set(layers)
     assert layers["hardware-acceptance"]["hardware_required"] is True
     assert layers["transport-contract"]["hardware_required"] is False
+
+    typed_cases = layers["typed-read-only-state"]["required_cases"]
+    assert "termination patch is rejected before I/O" in typed_cases
+    assert "existing v1 behavior remains unchanged" in typed_cases
+    assert all("v1 and v2" not in item for item in typed_cases)
+
+    hardware_cases = layers["hardware-acceptance"]["required_cases"]
+    assert "read-only state mappings on approved instruments" in hardware_cases
+    assert all("termination" not in item for item in hardware_cases)
+
+    future_scopes = {item["id"] for item in assessment["future_rfc_test_scopes"]}
+    assert future_scopes == {
+        "termination-write",
+        "scope-partial-status-v2",
+        "scope-configuration-patch",
+    }
+
+
+def test_compatibility_contract_records_observable_behavior_changes() -> None:
+    assessment = _assessment()
+    compatibility = assessment["compatibility_contract"]
+
+    assert "source-additive" in compatibility["source_api"]
+    changes = " ".join(compatibility["observable_changes"])
+    assert "no_replay" in changes
+    assert "structured transport errors" in changes
+    assert "on_failure=continue" in changes
+    assert "legacy call-site migration inventory" in compatibility["required_controls"]

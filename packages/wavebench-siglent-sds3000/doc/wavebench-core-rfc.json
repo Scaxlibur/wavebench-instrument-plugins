@@ -23,6 +23,32 @@
     "current_plugin_blocked_by_core": false,
     "public_api_frozen": false
   },
+  "specification_freeze_gates": [
+    {
+      "id": "transport-replay-session-rfc",
+      "status": "required-before-p0-implementation",
+      "must_define": [
+        "default replay policy for existing query()",
+        "legacy call-site migration inventory",
+        "structured transport errors and command transmission count",
+        "partial response and communication desynchronization semantics",
+        "fail-closed behavior when read_continuation_only is unsupported",
+        "observable compatibility changes including on_failure=continue"
+      ]
+    },
+    {
+      "id": "typed-scope-state-rfc",
+      "status": "required-before-p1-freeze",
+      "must_define": [
+        "exact fields and Protocol signatures",
+        "static and runtime field support",
+        "OperationSpec and Service/CLI/run-plan consumption matrix",
+        "v1 coexistence and precedence",
+        "structured operation-error envelope",
+        "per-value mappings across SDS3000, DS1000Z, and RTM2000"
+      ]
+    }
+  ],
   "existing_interface_findings": [
     {
       "interface": "InstrumentTransport.query_bin_block",
@@ -62,14 +88,18 @@
       "minimum_behavior": {
         "query_once": "one command transmission at most; a timeout or ambiguous result is not retried",
         "read_continuation_only": "may continue reading an already transmitted response, but must never resend the command",
+        "unsupported_continuation": "fail closed with a structured non-replayable transport error; never resend the command",
         "safe_to_replay": "the caller explicitly opts in; the transport never infers safety from command text",
         "consuming_reads": "read-to-clear registers and acquisition-bound *OPC? use no_replay",
         "partial_response": "record partial-response telemetry and return a non-replayable failure",
+        "legacy_query_default": "not frozen by R1; the transport RFC must define the default and migrate every affected call site",
+        "structured_errors": "record whether the command was transmitted, whether bytes arrived, and whether the channel may be desynchronized",
         "backends": "PyVISA, RsInstrument, Serial, GuardedAuditedTransport, and FakeTransport share the same contract"
       },
       "acceptance": [
         "a failed no_replay query sends at most one command",
         "an allowed continuation read never sends a second command",
+        "a backend without continuation support fails without resending",
         "*OPC? can be marked no_replay for acquisition synchronization",
         "read-to-clear errors cannot be silently replayed",
         "transport telemetry records replay policy and uncertain response state"
@@ -85,13 +115,18 @@
         "poisoned",
         "closed"
       ],
+      "configuration_states": [
+        "verified",
+        "unverified"
+      ],
       "transitions": {
+        "new_or_reconnected_session": "healthy communication channel with unverified instrument configuration; explicit read-only baseline validation is required",
         "preflight_rejection": "no I/O and session remains healthy",
-        "write_result_unknown": "poisoned until close and reconnect",
-        "readback_failure": "uncertain, then poisoned if restoration cannot prove state",
-        "restore_failure": "poisoned until close and reconnect",
-        "restore_success": "healthy with actual quantized values recorded",
-        "close": "closed; only a new session can become healthy"
+        "write_result_unknown": "uncertain when communication synchronization remains proven; otherwise poisoned",
+        "readback_failure": "uncertain with only bounded restoration and verification I/O allowed",
+        "restore_failure": "poisoned and unrecoverable in the original session",
+        "restore_success": "uncertain returns to healthy only when communication is synchronized and restoration readback passes; configuration becomes verified",
+        "close": "closed; reconnect creates a new healthy communication session whose configuration remains unverified"
       },
       "responsibility": {
         "core": "shared health state, error taxonomy, operation gate, and on_failure=continue stop behavior",
@@ -100,10 +135,11 @@
       },
       "acceptance": [
         "the latch lives on the shared driver/session rather than a temporary Service",
-        "all later writes and acquisitions reject a poisoned session before I/O",
+        "all later instrument operations reject a poisoned session before transport I/O",
         "rebuilding a Service does not clear the latch",
-        "explicit close and reconnect clear the latch",
-        "run plans with on_failure=continue cannot continue instrument work on a poisoned session"
+        "explicit close and reconnect create a new session but do not claim that instrument configuration was restored",
+        "uncertain returns to healthy only after synchronized restoration and independent readback",
+        "run plans with on_failure=continue cannot continue any instrument I/O on a poisoned session"
       ]
     }
   ],
@@ -134,10 +170,10 @@
         "availability": [
           "unsupported",
           "supported_but_not_readable",
-          "query_failed",
           "stale_or_unknown",
           "valid_value"
         ],
+        "query_failure": "returned through a structured operation-error envelope and never represented as availability",
         "termination": "read-only in the first version",
         "vendor_text": "never exposed as executable SCPI, VBS, or opaque command text"
       },
@@ -197,16 +233,35 @@
     {
       "id": "scope-acquisition-run-state",
       "priority": "P1",
-      "status": "blocked-on-p0",
-      "compatibility": "additive",
-      "capabilities": [
-        "scope.acquisition_run_state"
-      ],
+      "status": "design-required",
+      "compatibility": "not-frozen",
+      "capabilities": [],
+      "candidate_capability": "scope.acquisition_run_state",
       "public_contract": {
-        "model": "closed run-state enum with explicit unknown value",
-        "scope": "run/stop/wait/armed state only; average, segmented, and option inventory stay separate",
+        "model": "not frozen; a single run/stop/wait/armed enum is rejected as the current model",
+        "candidate_axes": {
+          "execution_state": [
+            "running",
+            "stopped",
+            "unknown"
+          ],
+          "trigger_phase": [
+            "idle",
+            "waiting",
+            "armed",
+            "triggered",
+            "unknown"
+          ],
+          "trigger_mode": [
+            "auto",
+            "normal",
+            "single",
+            "unknown"
+          ]
+        },
+        "scope": "execution, trigger phase, and trigger mode must be assessed separately; average, segmented, and option inventory stay separate",
         "failure": "query failure is an operation error, not an unavailable device state",
-        "service": "ScopeService method and JSON representation are required"
+        "service": "no ScopeService method or JSON representation is frozen by R1"
       },
       "vendors": [
         {
@@ -215,8 +270,12 @@
             "siglent.sds3000"
           ],
           "evidence": [
-            "TRMD",
-            "SEQ"
+            "TRMD? returns AUTO/NORM/SINGLE/STOP",
+            "STOP proves only execution_state=stopped"
+          ],
+          "gaps": [
+            "running, waiting, and armed cannot be distinguished",
+            "SEQ is firmware-unverified and excluded from mapping evidence"
           ]
         },
         {
@@ -225,7 +284,12 @@
             "rigol.ds1000z"
           ],
           "evidence": [
-            "acquisition and trigger status paths"
+            ":STOP and :SINGle actions",
+            "*OPC? completion synchronization"
+          ],
+          "gaps": [
+            "the current driver exposes no read-only acquisition or trigger-status query",
+            "current state cannot be inferred from the last write"
           ]
         },
         {
@@ -234,10 +298,15 @@
             "rohde-schwarz.rtm2032"
           ],
           "evidence": [
-            "run and trigger state in existing scope status paths"
+            "STATUS:OPERation:CONDITION? bit 3 maps waiting_for_trigger",
+            "TRIGger:A:MODE? maps the supported trigger-mode subset"
+          ],
+          "gaps": [
+            "the current driver exposes no common running/stopped readback"
           ]
         }
-      ]
+      ],
+      "freeze_gate": "the typed-scope RFC must provide per-value mappings and verifiable readback for at least one axis on all three vendors before any public capability is frozen"
     },
     {
       "id": "scope-configuration-patch",
@@ -288,7 +357,8 @@
       "constraints": [
         "do not use arbitrary Mapping[str, typed_component] as the stable public model",
         "keep v1 models unchanged",
-        "separate unsupported, query_failed, stale_or_unknown, and valid value",
+        "separate unsupported, stale_or_unknown, and valid value within successful availability results",
+        "return query failures through the structured operation-error envelope",
         "never turn a runtime query failure into a successful partial result silently"
       ]
     }
@@ -297,7 +367,7 @@
     {
       "id": "scope-acquisition-status-v2",
       "decision": "deferred-and-split",
-      "reason": "start with scope.acquisition_run_state; average and segmented status need separate typed contracts"
+      "reason": "first resolve separate execution, trigger-phase, and trigger-mode axes in the typed-scope RFC; average and segmented status need separate typed contracts"
     },
     {
       "id": "termination-write",
@@ -330,6 +400,20 @@
       "reason": "descriptor loading must remain zero-I/O; option checks stay inside typed operations"
     }
   ],
+  "compatibility_contract": {
+    "source_api": "source-additive: new symbols may be added, while existing scope.channel_coupling, capture arguments, and v1 status models do not change in place",
+    "observable_changes": [
+      "consuming reads migrate from retrying query behavior to no_replay",
+      "structured transport errors replace some implicit retry outcomes",
+      "on_failure=continue stops later instrument I/O when the shared session is poisoned"
+    ],
+    "required_controls": [
+      "legacy call-site migration inventory",
+      "release notes",
+      "behavioral regression tests",
+      "plugin minimum-version increase only after a core release"
+    ]
+  },
   "test_matrix": [
     {
       "layer": "transport-contract",
@@ -350,18 +434,18 @@
         "unknown write outcome poisons the shared session",
         "readback and restore failures latch",
         "reverse restoration records quantized values",
-        "on_failure=continue cannot use a poisoned session"
+        "on_failure=continue cannot perform any instrument I/O on a poisoned session"
       ],
       "hardware_required": false
     },
     {
-      "layer": "typed-state-and-patch",
+      "layer": "typed-read-only-state",
       "location": "WaveBench core plus three vendor fake drivers",
       "required_cases": [
-        "empty, unsupported, read-only, invalid, and conflicting fields fail before I/O",
-        "UNSET serialization means unchanged",
-        "termination safety gate rejects unsafe writes",
-        "v1 and v2 behavior remains compatible"
+        "unsupported and read-only fields have explicit availability",
+        "query failure uses the structured operation-error envelope",
+        "termination patch is rejected before I/O",
+        "existing v1 behavior remains unchanged"
       ],
       "hardware_required": false
     },
@@ -380,20 +464,34 @@
       "layer": "hardware-acceptance",
       "location": "opt-in vendor test suites",
       "required_cases": [
-        "SDS3000, DS1000Z, and RTM2000 real transport evidence",
-        "termination and patch safety under approved wiring",
-        "failure recovery and fresh-session verification"
+        "released P0/P1 operations on real transports",
+        "read-only state mappings on approved instruments",
+        "instrument configuration is revalidated after reconnect"
       ],
       "hardware_required": true
     }
   ],
+  "future_rfc_test_scopes": [
+    {
+      "id": "termination-write",
+      "tests": "safety confirmation, electrical preflight, readback, failure latch, and approved-wiring hardware acceptance"
+    },
+    {
+      "id": "scope-partial-status-v2",
+      "tests": "v1/v2 coexistence, precedence, field-level availability, strict behavior, and hardware acceptance"
+    },
+    {
+      "id": "scope-configuration-patch",
+      "tests": "empty and invalid patches, field conflicts, quantized readback, reverse restoration, and session latch"
+    }
+  ],
   "implementation_order": [
-    "revise this RFC and align plugin M8 and RFC revision labels",
-    "implement transport replay policy and query-once contract",
-    "implement shared session health and poison semantics",
-    "implement typed read-only channel, timebase, edge-trigger state",
-    "implement scope.acquisition_run_state",
-    "consider narrow scale/offset/timebase patches after the safety gate",
-    "revisit termination, generic trigger writes, and snapshot v2 only after evidence"
+    "merge R1 as an impact assessment and implementation roadmap while keeping plugin M8 and core-not-started labels distinct",
+    "freeze a separate transport replay/session RFC",
+    "implement and test transport replay policy, structured errors, and shared session gates",
+    "freeze a separate typed-scope state RFC with exact fields, consumers, v1 precedence, and three-vendor mappings",
+    "implement only frozen typed read-only state and continue collecting acquisition-state evidence",
+    "consider narrow scale/offset/timebase patches in a separate RFC after the safety gate",
+    "revisit termination, generic trigger writes, and snapshot v2 only in separate future RFCs"
   ]
 }

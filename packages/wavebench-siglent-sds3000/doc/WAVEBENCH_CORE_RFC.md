@@ -12,7 +12,7 @@
 
 SDS3054 插件的 M0–M8 已完成。当前声明的身份、错误寄存器、通道耦合、波形读取、单通道采集和同次 acquisition 多通道采集，不以本 RFC 的新接口为前提。VICP 文本与二进制波形已通过现有 `PyVisaTransport`、`PyVICP` 和 `query_bin_block()` 实机验证。
 
-本文件仍是核心影响评估和实施前规范，不是已接受的公共 API。首稿把只读状态、通用 patch 和部分状态 v2 放得过近，没有完整定义重放策略、共享 session 锁存、字段权限、核心消费入口和电气安全门。R1 将这些基础问题升为 P0，并把通用写入与 `ScopeSnapshotV2` 延后。
+本文件可作为核心影响评估和实施路线图保留，但不是可直接编码或已接受的公共 API 规范。首稿把只读状态、通用 patch 和部分状态 v2 放得过近，没有完整定义重放策略、共享 session 锁存、字段权限、核心消费入口和电气安全门。R1 将这些基础问题升为 P0，并把通用写入与 `ScopeSnapshotV2` 延后。进入核心实现前，还必须分别冻结 transport 与 typed scope 两份独立 RFC。
 
 机器可读版本见 [`wavebench-core-rfc.json`](wavebench-core-rfc.json)。本分支不修改 WaveBench 核心，也不提前依赖未发布接口。
 
@@ -25,6 +25,17 @@ SDS3054 插件的 M0–M8 已完成。当前声明的身份、错误寄存器、
 | SDS3000 插件 | `M8-complete` | 当前 6 项 capability 已通过既定离线与实机门禁 |
 | 本 RFC | `R1-draft-needs-revision` | 契约仍可修订，公共 API 尚未冻结 |
 | WaveBench 核心实现 | `not-started` | 尚未创建实现提交或提高插件最低版本 |
+
+## 进入核心实现前的规范拆分
+
+R1 只确定问题边界、优先级和实施顺序。以下两份独立规范是编码前置条件：
+
+| 独立规范 | 必须冻结的内容 | 进入条件 |
+| --- | --- | --- |
+| transport replay/session RFC | 现有 `query()` 的默认策略、旧调用迁移清单、结构化传输错误、命令发送次数、部分响应、通信失步，以及 backend 不支持 `read_continuation_only` 时的失败行为 | 任何 P0 核心实现前 |
+| typed scope state RFC | 精确字段、`Protocol` 签名、静态与运行时字段支持、`OperationSpec`、Service/CLI/run plan 消费矩阵、v1 共存优先级、错误包络和三厂商映射 | 任何 P1 capability 冻结前 |
+
+transport RFC 必须明确区分源码兼容与可观察行为兼容。把消费型读取从自动重试迁移到 `no_replay`，以及让 poisoned session 在 `on_failure=continue` 下停止后续仪器 I/O，都会改变可观察行为，不能笼统表述为「全部增量兼容」。
 
 ## 已确认的核心事实
 
@@ -85,15 +96,18 @@ read_continuation_only
 healthy -> uncertain -> poisoned -> closed
 ```
 
-允许跳过中间状态，例如写入结果未知时直接从 `healthy` 进入 `poisoned`。只有关闭旧 session 并重新连接，才能建立新的 `healthy` session。
+该状态轴表示通信 session 是否可信；仪器配置是否已经验证使用独立的 `verified/unverified` 标记。新建或重连成功后，通信 session 可以是 `healthy`，但配置必须从 `unverified` 开始，只有显式只读基线复核通过后才能成为 `verified`。
+
+允许跳过中间状态。写入结果未知但 transport 仍能证明通信同步时，session 进入 `uncertain`，仅允许有界恢复与验证；通信可能失步时直接进入 `poisoned`。`uncertain` 只有在通信仍同步且原配置恢复并回读验证通过后才能回到 `healthy`。`poisoned` 在原 session 内不可恢复。
 
 | 阶段 | 结果 | session 行为 |
 | --- | --- | --- |
 | 预检拒绝 | 尚未发生 I/O | 保持 `healthy` |
-| 写入结果未知 | 设备可能已经改变 | 立即 `poisoned` |
-| 写后回读失败 | 当前值无法证明 | 进入 `uncertain`；无法证明恢复成功时转为 `poisoned` |
+| 新建或重连 | 通信通道重新建立 | `healthy + unverified`；只允许执行显式基线复核，不能假定仪器配置已恢复 |
+| 写入结果未知 | 设备可能已经改变 | 通信同步可证明时进入 `uncertain`；否则立即 `poisoned` |
+| 写后回读失败 | 当前值无法证明 | 进入 `uncertain`；只允许恢复与验证 I/O |
 | 恢复失败 | 原状态未知 | `poisoned` |
-| 恢复成功 | 原状态经容差验证 | 回到 `healthy`，记录实际量化值 |
+| 恢复成功 | 通信同步且原状态经容差验证 | 从 `uncertain` 回到 `healthy + verified`，记录实际量化值 |
 | close | session 不再可用 | `closed` |
 
 ### 责任边界
@@ -102,13 +116,14 @@ healthy -> uncertain -> poisoned -> closed
 - 插件负责：受影响字段闭包、快照内容、恢复顺序、厂商合法组合和量化容差。
 - transport 负责：命令是否发送、响应是否部分到达、通信通道是否可能失步。
 
-锁存必须属于共享 driver/session，不能只存在于临时 `ScopeService` 对象。run plan 会复用同一 scope session；当某一步标记 `on_failure=continue` 时，后续仪器操作仍必须在 I/O 前拒绝 poisoned session。重新创建 Service 不能清除锁存。
+锁存必须属于共享 driver/session，不能只存在于临时 `ScopeService` 对象。run plan 会复用同一 scope session；当某一步标记 `on_failure=continue` 时，poisoned session 上的全部后续仪器操作都必须在 transport I/O 前拒绝。只允许本地审计、关闭旧 session 和建立新 session 等生命周期动作；重新创建 Service 不能清除锁存。
 
 ### 需要区分的错误
 
 - 预检或参数错误：零 I/O，session 健康；
 - 写入失败且确认未发送：操作失败，session 可继续；
-- 写入结果未知：session poisoned；
+- 写入结果未知且通信仍同步：session uncertain，只允许恢复与验证；
+- 通信失步或无法证明同步：session poisoned；
 - 回读不一致：事务失败，尝试恢复；
 - 恢复失败：`StateDriftError` 加 session poisoned；
 - poisoned session 上的后续操作：稳定的 session-health 错误，零 I/O。
@@ -150,33 +165,38 @@ quantization
 
 patch 使用 `UNSET` 表示「保持不变」。`None` 只有在具体字段定义了「自动」「清除」或其他显式语义时才允许使用，不能兼任「未知」或「未提供」。序列化时省略 `UNSET`，不得把它写成 JSON `null`。
 
-字段状态需要区分：
+字段 availability 只区分成功返回中的设备状态：
 
 ```text
 unsupported
 supported_but_not_readable
-query_failed
 stale_or_unknown
 valid_value
 ```
 
-`query_failed` 是一次操作失败，不能伪装成设备不支持，也不能静默返回成功的部分状态。
+`query_failed` 不是 availability 成员。查询失败必须通过结构化 operation error 包络返回，不能伪装成设备不支持，也不能静默返回成功的部分状态。
 
 ### 模拟输入复合语义
 
 SDS3000 的 `A1M/D1M/D50/GND` 同时编码 coupling 和 termination，不能视为两个完全独立的可写字段。首版状态模型可以返回归一化的 coupling、termination 和原始组合的类型化结果，但 termination 保持只读，并定义合法组合与不可表示状态。
 
-## P1-2：最小采集运行状态
+## P1-2：采集状态轴候选
 
-先新增窄能力：
+`scope.acquisition_run_state` 目前只是候选名称，不进入实施队列，也不冻结 `run/stop/wait/armed` 单枚举。连续运行状态与触发阶段不是同一语义轴，至少需要分别评估：
 
-```text
-scope.acquisition_run_state
-```
+- execution state：running、stopped 和 unknown；
+- trigger phase：idle、waiting、armed、triggered 和 unknown；
+- trigger mode：auto、normal、single 和 unknown。
 
-该能力只表达 run、stop、wait、armed 和显式 unknown 等封闭状态。average、segmented、option inventory 和历史帧数量使用独立能力，不进入一个全能状态袋。
+这些名称和取值仍是设计输入，不是公共 API。average、segmented、option inventory 和历史帧数量继续使用独立能力，不进入同一个状态袋。
 
-查询失败仍是 operation error，不是 `unknown`。`unknown` 只表示设备成功返回但无法映射到更具体的公共状态。
+| 厂商 | 当前证据 | 可映射内容 | 未解决问题 |
+| --- | --- | --- | --- |
+| SDS3000 | `TRMD?` 返回 `AUTO/NORM/SINGLE/STOP` | `STOP` 只能证明 stopped；其余 token 更接近 trigger mode | 无法区分 running、waiting 与 armed；`SEQ` 仍是 `firmware-unverified`，不得作为证据 |
+| DS1000Z | 当前驱动只有 `:STOP`、`:SINGle` 和 `*OPC?` 同步 | 只有动作与完成同步，没有只读状态映射 | 需要核对手册并增加受控只读证据，不能从最近一次写命令推断当前状态 |
+| RTM2000 | `STATUS:OPERation:CONDITION?` bit 3 和 `TRIGger:A:MODE?` | 可证明 waiting-for-trigger 与已支持的 trigger mode 子集 | 当前驱动没有通用 running/stopped 读回 |
+
+typed scope RFC 必须给出三厂商逐值映射、不可映射值、静态支持与运行时不可用规则。查询失败仍是 operation error；`unknown` 只表示设备成功返回但无法映射。至少一个状态轴在三家均有可验证读回前，不冻结公共 capability。
 
 ## P2：窄范围配置 patch
 
@@ -236,7 +256,7 @@ session_poisoned
 
 ### `ScopeAcquisitionStatusV2`
 
-当前方案拆分并延期。先实现 `scope.acquisition_run_state`；average、segmented 和 option status 后续按独立 typed capability 设计。现有 v1 模型保持不变。
+当前方案拆分并延期。`scope.acquisition_run_state` 也不在 R1 中冻结；先由 typed scope RFC 解决 execution、trigger phase 与 trigger mode 的三厂商映射。average、segmented 和 option status 后续按独立 typed capability 设计。现有 v1 模型保持不变。
 
 ## 核心消费与兼容契约
 
@@ -249,7 +269,7 @@ session_poisoned
 - strict 行为和 v1/v2 优先级；
 - CLI/run plan 是否首版支持的明确说明。
 
-所有变化保持增量兼容。现有 `scope.channel_coupling`、capture 参数、v1 snapshot 和 acquisition status 不原地改型。只有核心发布新版本后，插件才提高最低 WaveBench 版本。
+新增符号应保持源码层面的增量兼容：现有 `scope.channel_coupling`、capture 参数、v1 snapshot 和 acquisition status 不原地改型。现有 `query()` 的默认重试策略尚未在 R1 冻结；消费型读取迁移到 `no_replay`、结构化错误取代隐式重试，以及 poisoned session 阻断 `on_failure=continue` 后续 I/O，都是有意的可观察行为变化。transport RFC 必须给出迁移清单、版本说明和回归测试。只有核心发布新版本后，插件才提高最低 WaveBench 版本。
 
 ## 验收测试矩阵
 
@@ -259,10 +279,12 @@ session_poisoned
 | --- | --- | --- |
 | transport contract | 三种 replay policy、部分响应、单次发送、各 backend 与 Guarded 一致性 | 否 |
 | session transaction | 预检零 I/O、写入结果未知、回读失败、逆序恢复、共享锁存、`on_failure=continue` | 否 |
-| typed state / patch | 空 patch、read-only、unsupported、非法值、字段冲突、`UNSET`、量化规则 | 否 |
-| Service / CLI / run plan | capability 消费、OperationSpec、JSON、strict、v1 回归和 session-health 诊断 | 否 |
-| 三厂商 fake driver | SDS3000、DS1000Z、RTM2000 的相同公共语义 | 否 |
-| opt-in hardware | 真实 transport、批准接线下的写入、安全恢复和新 session 复核 | 是 |
+| typed read-only state | read-only/unsupported、availability、结构化查询错误、termination patch 在 I/O 前拒绝 | 否 |
+| Service / CLI / run plan | capability 消费、OperationSpec、JSON、strict、仅现有 v1 回归和 session-health 诊断 | 否 |
+| 三厂商 fake driver | 只测试 typed scope RFC 已冻结且有证据的逐值映射，不补造公共语义 | 否 |
+| opt-in hardware | 已发布 P0/P1 操作的真实 transport、批准仪器上的只读状态映射和重连后的配置复核 | 是 |
+
+termination 写入和 `ScopeSnapshotV2` 的安全门、v1/v2 共存及实机验收移入各自未来独立 RFC，不作为 R1 当前验收项。P2 patch 的空 patch、非法值、字段冲突、量化回读与恢复矩阵也在 P2 重新进入实施范围时单独冻结。
 
 ## 跨厂商适用性
 
@@ -271,6 +293,7 @@ session_poisoned
 | 不可重放状态/同步查询 | 读后清除寄存器与 acquisition-bound `*OPC?` | 错误与采集同步查询需明确策略 | RsInstrument 后端同样需要公共契约 |
 | 共享 session 锁存 | capture 会临时修改多类状态 | capture 内部 setter 可能失败 | 已有较完整恢复逻辑，但不是核心契约 |
 | 只读通道/时基/触发状态 | 手册和实机已有部分证据 | 驱动已有耦合与设置路径 | 已有完整 snapshot，可作为合同基线 |
+| 采集与触发状态轴 | `TRMD?` 混合 mode 与 stopped | 当前驱动没有只读状态 query | 可读 waiting 位与 trigger mode，但没有通用 run/stop 读回 |
 | 窄范围 patch | VDIV/TDIV/OFST | vertical scale/time range | 现有 setter 和回读可作为参考 |
 
 P0 基础设施适用于所有仪器类型，不是 SDS3000 专用接口；P1/P2 的 scope 能力至少有三个示波器系列的共同语义。
@@ -286,12 +309,12 @@ P0 基础设施适用于所有仪器类型，不是 SDS3000 专用接口；P1/P2
 
 ## 建议实施顺序
 
-1. 修订并评审本 R1，统一插件 M8、RFC R1 和核心未开始三类状态。
-2. 在 WaveBench 独立分支实现 replay policy、不可重放 query 和 transport contract tests。
-3. 实现共享 session health、poison、错误分类和 run plan 门禁。
-4. 实现类型化只读 channel/timebase/edge-trigger state。
-5. 实现 `scope.acquisition_run_state`。
-6. 在安全证据充分后评审窄范围 scale/offset/timebase patch。
-7. 最后重新评审 termination、通用触发写入和 snapshot v2。
+1. 合并 R1 作为影响评估与实施路线图，保持插件 M8、RFC R1 和核心未开始三类状态。
+2. 单独冻结 transport replay/session RFC，再在 WaveBench 独立分支实现 replay policy、不可重放 query、结构化错误和 session 门禁。
+3. 完成 P0 transport 与共享 session 合同测试。
+4. 单独冻结 typed scope state RFC，明确 channel/timebase/edge-trigger 字段、核心消费矩阵、v1 优先级和三厂商映射。
+5. 实现已冻结的类型化只读状态；采集状态轴继续收集三厂商证据，不预先承诺 `scope.acquisition_run_state`。
+6. 在安全证据充分后另立 RFC 评审窄范围 scale/offset/timebase patch。
+7. 最后分别重新评审 termination 写入、通用触发写入和 snapshot v2。
 
 前两项 P0 退出门全部通过前，不冻结任何通用 scope 写入 API。

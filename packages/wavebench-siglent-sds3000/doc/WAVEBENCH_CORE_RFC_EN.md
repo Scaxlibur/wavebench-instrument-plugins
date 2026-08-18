@@ -12,7 +12,7 @@
 
 The SDS3054 plugin has completed M0–M8. Its six declared capabilities—identity, error registers, channel coupling, waveform fetch, single-channel capture, and same-acquisition multi-channel capture—do not depend on new interfaces from this RFC. VICP text and binary waveform operations passed hardware acceptance through the existing `PyVisaTransport`, `PyVICP`, and `query_bin_block()` path.
 
-This document remains a core impact assessment and pre-implementation specification, not an accepted public API. The first draft placed read-only state, generic patches, and partial status v2 too close together without fully defining replay policy, shared-session latching, field permissions, core consumers, or electrical safety gates. R1 promotes those foundations to P0 and defers generic writes and `ScopeSnapshotV2`.
+This document is suitable as a core impact assessment and implementation roadmap, but it is not a directly implementable or accepted public API specification. The first draft placed read-only state, generic patches, and partial status v2 too close together without fully defining replay policy, shared-session latching, field permissions, core consumers, or electrical safety gates. R1 promotes those foundations to P0 and defers generic writes and `ScopeSnapshotV2`. Separate transport and typed-scope RFCs must be frozen before core implementation begins.
 
 The machine-readable form is [`wavebench-core-rfc.json`](wavebench-core-rfc.json). This branch does not modify WaveBench core or depend on unpublished interfaces.
 
@@ -25,6 +25,17 @@ Plugin milestones and RFC revisions use separate labels so that a completed plug
 | SDS3000 plugin | `M8-complete` | The current six capabilities passed their offline and hardware gates |
 | This RFC | `R1-draft-needs-revision` | Contracts remain open to revision; the public API is not frozen |
 | WaveBench core implementation | `not-started` | No implementation commit or plugin minimum-version increase exists |
+
+## Specifications required before core implementation
+
+R1 defines problem boundaries, priorities, and implementation order only. Two separate specifications are prerequisites for coding:
+
+| Separate specification | Required frozen content | Gate |
+| --- | --- | --- |
+| Transport replay/session RFC | The default policy of existing `query()`, migration of old call sites, structured transport errors, command transmission count, partial responses, desynchronization, and fail-closed behavior when a backend cannot support `read_continuation_only` | Before any P0 core implementation |
+| Typed scope state RFC | Exact fields, `Protocol` signatures, static and runtime field support, `OperationSpec`, Service/CLI/run-plan consumption, v1 precedence, error envelopes, and three-vendor mappings | Before any P1 capability is frozen |
+
+The transport RFC must distinguish source compatibility from observable behavior compatibility. Migrating consuming reads from automatic retries to `no_replay`, and stopping later instrument I/O on a poisoned session under `on_failure=continue`, are observable changes and cannot be described as entirely additive.
 
 ## Confirmed core facts
 
@@ -85,15 +96,18 @@ Independent status polling may opt into replay only through an explicit operatio
 healthy -> uncertain -> poisoned -> closed
 ```
 
-Transitions may skip states; an unknown write outcome can move directly from `healthy` to `poisoned`. Only closing the old session and reconnecting can create a new `healthy` session.
+This axis describes whether the communication session is trustworthy. Instrument configuration verification is a separate `verified/unverified` marker. A newly connected or reconnected communication session may be `healthy`, but its configuration starts `unverified` and becomes `verified` only after an explicit read-only baseline check.
+
+Transitions may skip states. An unknown write result enters `uncertain` when the transport can still prove synchronization; only bounded restoration and verification are then permitted. A possibly desynchronized channel enters `poisoned` immediately. `uncertain` returns to `healthy` only when the channel remains synchronized and restoration is independently read back. `poisoned` cannot recover within the original session.
 
 | Phase | Result | Session behavior |
 | --- | --- | --- |
 | Preflight rejection | No I/O occurred | Remains `healthy` |
-| Unknown write result | The instrument may have changed | Immediately `poisoned` |
-| Post-write readback failure | Current value cannot be proved | Becomes `uncertain`; moves to `poisoned` unless restoration is proven |
+| New connection or reconnect | Communication channel is re-established | `healthy + unverified`; only explicit baseline verification is allowed before configuration is trusted |
+| Unknown write result | The instrument may have changed | Becomes `uncertain` if synchronization is proven; otherwise immediately `poisoned` |
+| Post-write readback failure | Current value cannot be proved | Becomes `uncertain`; only restoration and verification I/O are allowed |
 | Restoration failure | Original state is unknown | `poisoned` |
-| Restoration success | Original state passes tolerance checks | Returns to `healthy` and records actual quantized values |
+| Restoration success | The channel is synchronized and original state passes tolerance checks | Returns from `uncertain` to `healthy + verified` and records actual quantized values |
 | Close | Session is no longer usable | `closed` |
 
 ### Responsibility split
@@ -102,13 +116,14 @@ Transitions may skip states; an unknown write outcome can move directly from `he
 - Plugin: affected-field closure, snapshots, restoration order, vendor-valid combinations, and quantization tolerance.
 - Transport: whether a command was transmitted, whether a response was partial, and whether the communication channel may be desynchronized.
 
-The latch belongs to the shared driver/session, not a temporary `ScopeService`. Run plans reuse one scope session. When a failed step specifies `on_failure=continue`, later instrument work still rejects a poisoned session before I/O. Reconstructing a Service does not clear the latch.
+The latch belongs to the shared driver/session, not a temporary `ScopeService`. Run plans reuse one scope session. When a failed step specifies `on_failure=continue`, every later instrument operation on a poisoned session must fail before transport I/O. Only local audit, closing the old session, and establishing a new session remain available as lifecycle actions. Reconstructing a Service does not clear the latch.
 
 ### Distinct error classes
 
 - Preflight or validation error: zero I/O, healthy session.
 - Write failure proven before transmission: failed operation, reusable session.
-- Unknown write result: poisoned session.
+- Unknown write result with a synchronized channel: uncertain session, limited to restoration and verification.
+- Desynchronized or unprovably synchronized channel: poisoned session.
 - Readback mismatch: failed transaction followed by restoration.
 - Restoration failure: `StateDriftError` plus poisoned session.
 - Later operation on a poisoned session: stable session-health error before I/O.
@@ -150,33 +165,38 @@ quantization
 
 `UNSET` means unchanged. `None` is valid only when a field defines an explicit automatic, clear, or other nullable meaning; it never implicitly means unknown or omitted. Serialization omits `UNSET` instead of emitting JSON `null`.
 
-Field state distinguishes:
+Field availability describes only device states returned by a successful operation:
 
 ```text
 unsupported
 supported_but_not_readable
-query_failed
 stale_or_unknown
 valid_value
 ```
 
-`query_failed` is an operation failure, not an unsupported feature, and must not silently become a successful partial result.
+`query_failed` is not an availability member. A failed query uses the structured operation-error envelope; it is not an unsupported feature and must not silently become a successful partial result.
 
 ### Composite analog-input semantics
 
 SDS3000 `A1M/D1M/D50/GND` encodes coupling and termination together. They cannot be treated as two independent writable fields. The first state model may expose normalized coupling, termination, and a typed composite input state, but termination remains read-only and all legal or unrepresentable combinations must be defined.
 
-## P1-2: Minimal acquisition run state
+## P1-2: Candidate acquisition-state axes
 
-Start with one narrow capability:
+`scope.acquisition_run_state` is currently only a candidate name. It is not in the implementation queue, and R1 does not freeze a single `run/stop/wait/armed` enum. Continuous acquisition state and trigger phase are different semantic axes. At minimum, the typed-scope RFC must evaluate:
 
-```text
-scope.acquisition_run_state
-```
+- execution state: running, stopped, and unknown;
+- trigger phase: idle, waiting, armed, triggered, and unknown;
+- trigger mode: auto, normal, single, and unknown.
 
-It represents a closed set such as run, stop, wait, armed, and an explicit unknown value. Average, segmented acquisition, option inventory, and history frame counts remain separate capabilities.
+These names and values are design inputs, not public API. Average, segmented acquisition, option inventory, and history frame counts remain separate capabilities.
 
-A query failure remains an operation error, not `unknown`. `unknown` means that the instrument returned successfully but cannot be mapped to a more specific public state.
+| Vendor | Current evidence | Mappable content | Unresolved issue |
+| --- | --- | --- | --- |
+| SDS3000 | `TRMD?` returns `AUTO/NORM/SINGLE/STOP` | `STOP` proves only stopped; the other tokens are closer to trigger mode | Running, waiting, and armed cannot be distinguished; `SEQ` remains `firmware-unverified` and is excluded as evidence |
+| DS1000Z | The current driver has only `:STOP`, `:SINGle`, and `*OPC?` synchronization | Actions and completion synchronization only; no read-only state mapping | Manual review and controlled read-only evidence are required; current state cannot be inferred from the last command |
+| RTM2000 | `STATUS:OPERation:CONDITION?` bit 3 and `TRIGger:A:MODE?` | Waiting-for-trigger and the supported trigger-mode subset | The current driver has no common running/stopped readback |
+
+The typed-scope RFC must define per-value mappings for all three vendors, unmappable values, static support, and runtime unavailability. A query failure remains an operation error; `unknown` means that the instrument returned successfully but could not be mapped. No public capability is frozen until at least one axis has verifiable readback on all three vendors.
 
 ## P2: Narrow configuration patches
 
@@ -236,7 +256,7 @@ If a v2 model is revisited, it must use closed, versioned component types and fi
 
 ### `ScopeAcquisitionStatusV2`
 
-The broad proposal is split and deferred. Implement `scope.acquisition_run_state` first. Average, segmented, and option status later receive separate typed capabilities. Existing v1 models remain unchanged.
+The broad proposal is split and deferred. R1 does not freeze `scope.acquisition_run_state`; the typed-scope RFC must first resolve three-vendor mappings for execution, trigger phase, and trigger mode. Average, segmented, and option status later receive separate typed capabilities. Existing v1 models remain unchanged.
 
 ## Core consumption and compatibility contract
 
@@ -249,7 +269,7 @@ Every new capability requires:
 - strict behavior and v1/v2 precedence;
 - an explicit statement of whether CLI and run plans are included in the first release.
 
-All changes remain additive. Existing `scope.channel_coupling`, capture arguments, v1 snapshot, and acquisition status types do not change in place. The plugin raises its minimum WaveBench version only after a core release.
+New symbols should remain source-additive: existing `scope.channel_coupling`, capture arguments, v1 snapshot, and acquisition status types do not change in place. R1 does not freeze the default replay policy of existing `query()`. Moving consuming reads to `no_replay`, replacing implicit retries with structured errors, and blocking later I/O under `on_failure=continue` on a poisoned session are intentional observable behavior changes. The transport RFC must include a call-site migration inventory, release notes, and regression tests. The plugin raises its minimum WaveBench version only after a core release.
 
 ## Acceptance test matrix
 
@@ -259,10 +279,12 @@ The plugin's `test_core_rfc.py` verifies only this document's JSON structure. It
 | --- | --- | --- |
 | Transport contract | Three replay policies, partial response, single transmission, backend and Guarded consistency | No |
 | Session transaction | Zero-I/O preflight, unknown write result, readback failure, reverse restoration, shared latch, `on_failure=continue` | No |
-| Typed state / patch | Empty patch, read-only, unsupported, invalid values, conflicts, `UNSET`, quantization | No |
-| Service / CLI / run plan | Capability consumer, OperationSpec, JSON, strict mode, v1 regression, session-health diagnostics | No |
-| Three-vendor fake driver | Common semantics for SDS3000, DS1000Z, and RTM2000 | No |
-| Opt-in hardware | Real transport, approved wiring, safe writes, failure recovery, and fresh-session verification | Yes |
+| Typed read-only state | Read-only and unsupported fields, availability, structured query errors, termination patch rejection before I/O | No |
+| Service / CLI / run plan | Capability consumer, OperationSpec, JSON, strict mode, existing v1 regression only, session-health diagnostics | No |
+| Three-vendor fake driver | Only per-value mappings frozen with evidence by the typed-scope RFC; no invented common semantics | No |
+| Opt-in hardware | Real transport for released P0/P1 operations, read-only state mappings on approved instruments, and configuration revalidation after reconnect | Yes |
+
+Termination-write safety gates and hardware tests, plus `ScopeSnapshotV2` v1/v2 coexistence tests, move to their own future RFCs and are not R1 acceptance criteria. Empty-patch, invalid-value, conflict, quantized-readback, and restoration matrices for P2 are frozen only when P2 re-enters implementation scope.
 
 ## Cross-vendor applicability
 
@@ -271,6 +293,7 @@ The plugin's `test_core_rfc.py` verifies only this document's JSON structure. It
 | Non-replayable status or synchronization query | Read-to-clear registers and acquisition-bound `*OPC?` | Error and acquisition synchronization queries need explicit policy | The RsInstrument backend still needs a public contract |
 | Shared session latch | Capture temporarily changes several state families | Internal capture setters may fail | Stronger restoration exists but is not a core contract |
 | Read-only channel, timebase, trigger state | Manual and hardware evidence cover a subset | Coupling and configuration paths exist | Complete snapshots provide a contract baseline |
+| Acquisition and trigger state axes | `TRMD?` combines mode with stopped state | The current driver has no read-only status query | A waiting bit and trigger mode are readable, but common run/stop readback is absent |
 | Narrow patch | VDIV/TDIV/OFST | Vertical scale and time range | Existing setters and readback provide reference behavior |
 
 P0 foundations apply to every instrument kind and are not SDS3000-specific. P1 and P2 scope capabilities have common semantics across at least three scope families.
@@ -286,12 +309,12 @@ P0 foundations apply to every instrument kind and are not SDS3000-specific. P1 a
 
 ## Recommended implementation order
 
-1. Review R1 and keep plugin M8, RFC R1, and core-not-started status distinct.
-2. Implement replay policy, non-replayable query primitives, and transport contract tests on a separate WaveBench branch.
-3. Implement shared session health, poison semantics, error taxonomy, and run-plan gates.
-4. Implement typed read-only channel, timebase, and edge-trigger state.
-5. Implement `scope.acquisition_run_state`.
-6. Review narrow scale, offset, and timebase patches after safety evidence exists.
-7. Revisit termination, generic trigger writes, and snapshot v2 last.
+1. Merge R1 as an impact assessment and implementation roadmap while keeping plugin M8, RFC R1, and core-not-started status distinct.
+2. Freeze a separate transport replay/session RFC, then implement replay policy, non-replayable queries, structured errors, and session gates on a separate WaveBench branch.
+3. Complete P0 transport and shared-session contract tests.
+4. Freeze a separate typed-scope state RFC covering channel/timebase/edge-trigger fields, core consumers, v1 precedence, and three-vendor mappings.
+5. Implement only frozen typed read-only state. Continue collecting three-vendor acquisition-state evidence without promising `scope.acquisition_run_state`.
+6. Review narrow scale, offset, and timebase patches in a separate RFC after safety evidence exists.
+7. Revisit termination writes, generic trigger writes, and snapshot v2 separately and last.
 
 No generic scope write API is frozen until both P0 exit gates pass.
