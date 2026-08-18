@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from typing import Iterator
 
-from wavebench.errors import DataError, InstrumentError
+from wavebench.errors import DataError, InstrumentError, StateDriftError
+from wavebench.instruments.models import WaveformData
 from wavebench.transport.base import InstrumentTransport
+
+from .waveform import decode_waveform_data, parse_waveform_descriptor
 
 
 _SUPPORTED_REMOTE_MANUFACTURER = "LECROY"
@@ -24,6 +29,14 @@ class SDS3000Identity:
     model: str
     serial: str
     firmware: str
+
+
+@dataclass(frozen=True)
+class _WaveformTransferState:
+    header: str
+    data_format: str
+    byte_order: str
+    setup: str
 
 
 def parse_sds3000_identity(response: str) -> SDS3000Identity:
@@ -141,6 +154,152 @@ class SDS3000Scope:
         active = self.errors()
         if active:
             raise InstrumentError("SDS3054 error registers are not clear: " + "; ".join(active))
+
+    @staticmethod
+    def _response_value(response: str, *headers: str) -> str:
+        normalized = response.strip().upper()
+        if (
+            not normalized
+            or not normalized.isascii()
+            or any(ord(character) < 0x20 for character in normalized)
+        ):
+            raise DataError("invalid SDS3000 communication state response")
+        fields = normalized.split(maxsplit=1)
+        if fields[0].removesuffix("?") in headers:
+            if len(fields) != 2:
+                raise DataError("invalid SDS3000 communication state response")
+            return fields[1].strip()
+        return normalized
+
+    @classmethod
+    def _parse_header_state(cls, response: str) -> str:
+        value = cls._response_value(response, "CHDR", "COMM_HEADER")
+        if value not in {"SHORT", "LONG", "OFF"}:
+            raise DataError("invalid SDS3000 CHDR? response")
+        return value
+
+    @classmethod
+    def _parse_format_state(cls, response: str) -> str:
+        value = cls._response_value(response, "CFMT", "COMM_FORMAT")
+        fields = tuple(field.strip() for field in value.split(","))
+        if (
+            len(fields) != 3
+            or fields[0] != "DEF9"
+            or fields[1] not in {"BYTE", "WORD"}
+            or fields[2] != "BIN"
+        ):
+            raise DataError("invalid SDS3000 CFMT? response")
+        return ",".join(fields)
+
+    @classmethod
+    def _parse_order_state(cls, response: str) -> str:
+        value = cls._response_value(response, "CORD", "COMM_ORDER")
+        if value not in {"HI", "LO"}:
+            raise DataError("invalid SDS3000 CORD? response")
+        return value
+
+    @classmethod
+    def _parse_setup_state(cls, response: str) -> str:
+        value = cls._response_value(response, "WFSU", "WAVEFORM_SETUP")
+        fields = tuple(field.strip() for field in value.split(","))
+        if len(fields) != 8:
+            raise DataError("invalid SDS3000 WFSU? response")
+        values: dict[str, int] = {}
+        for key, raw_value in zip(fields[0::2], fields[1::2]):
+            if key not in {"SP", "NP", "FP", "SN"} or key in values:
+                raise DataError("invalid SDS3000 WFSU? response")
+            try:
+                parsed = int(raw_value, 10)
+            except ValueError as exc:
+                raise DataError("invalid SDS3000 WFSU? response") from exc
+            if parsed < 0:
+                raise DataError("invalid SDS3000 WFSU? response")
+            values[key] = parsed
+        if values.keys() != {"SP", "NP", "FP", "SN"}:
+            raise DataError("invalid SDS3000 WFSU? response")
+        return ",".join(f"{key},{values[key]}" for key in ("SP", "NP", "FP", "SN"))
+
+    def _query_waveform_transfer_state(self) -> _WaveformTransferState:
+        return _WaveformTransferState(
+            header=self._parse_header_state(self.transport.query("CHDR?")),
+            data_format=self._parse_format_state(self.transport.query("CFMT?")),
+            byte_order=self._parse_order_state(self.transport.query("CORD?")),
+            setup=self._parse_setup_state(self.transport.query("WFSU?")),
+        )
+
+    @contextmanager
+    def _temporary_waveform_transfer_state(
+        self,
+        state: _WaveformTransferState,
+    ) -> Iterator[None]:
+        settings = (
+            ("CHDR", state.header, "OFF"),
+            ("CFMT", state.data_format, "DEF9,WORD,BIN"),
+            ("CORD", state.byte_order, "LO"),
+            ("WFSU", state.setup, "SP,0,NP,0,FP,0,SN,1"),
+        )
+        restore: list[tuple[str, str]] = []
+        try:
+            for command, previous, desired in settings:
+                if previous == desired:
+                    continue
+                restore.append((command, previous))
+                self.transport.write(f"{command} {desired}")
+            yield
+        finally:
+            failures: list[tuple[str, str, Exception]] = []
+            for command, previous in reversed(restore):
+                try:
+                    self.transport.write(f"{command} {previous}")
+                except Exception as exc:  # pragma: no branch - all failures are retained
+                    failures.append((command, previous, exc))
+            if failures:
+                expected = {command: previous for command, previous, _ in failures}
+                diff = {
+                    command: {"expected": previous, "actual": "unknown"}
+                    for command, previous, _ in failures
+                }
+                names = ", ".join(command for command, _, _ in failures)
+                raise StateDriftError(
+                    f"failed to restore SDS3000 waveform transfer state: {names}",
+                    expected=expected,
+                    actual={command: "unknown" for command in expected},
+                    diff=diff,
+                ) from failures[0][2]
+
+    @staticmethod
+    def _validate_waveform_points(points: str) -> str:
+        if not isinstance(points, str):
+            raise DataError("SDS3054 waveform points must be DEF, MAX, or DMAX")
+        normalized = points.strip().upper()
+        if normalized not in {"DEF", "MAX", "DMAX"}:
+            raise DataError("SDS3054 waveform points must be DEF, MAX, or DMAX")
+        return normalized
+
+    def fetch_waveform(
+        self,
+        channel: int,
+        points: str = "dmax",
+        check_errors: bool = True,
+    ) -> WaveformData:
+        self._validate_channel(channel)
+        self._validate_waveform_points(points)
+        self._require_identity()
+        state = self._query_waveform_transfer_state()
+        with self._temporary_waveform_transfer_state(state):
+            descriptor = parse_waveform_descriptor(
+                self.transport.query_bin_block(f"C{channel}:WF? DESC")
+            )
+            if descriptor.byte_order != "little" or descriptor.sample_width_bytes != 2:
+                raise DataError("SDS3000 waveform transfer settings did not take effect")
+            waveform = decode_waveform_data(
+                descriptor,
+                self.transport.query_bin_block(f"C{channel}:WF? DAT1"),
+                channel=channel,
+            )
+        if check_errors:
+            self.assert_no_errors()
+        return waveform
 
     def close(self) -> None:
         if self._closed:

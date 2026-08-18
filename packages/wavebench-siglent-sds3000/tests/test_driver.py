@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import struct
+
+import numpy as np
 import pytest
 
-from wavebench.errors import DataError, InstrumentError
+from wavebench.errors import DataError, InstrumentError, StateDriftError
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.logging import CommandLogger
@@ -20,19 +23,32 @@ class FakeTransport:
         response: str = "LECROY,SDS3054,redacted,8.4.1",
         *,
         responses: dict[str, str] | None = None,
+        binary_responses: dict[str, bytes | Exception] | None = None,
+        failing_write: str | None = None,
     ) -> None:
         self.response = response
         self.responses = responses or {}
+        self.binary_responses = binary_responses or {}
+        self.failing_write = failing_write
         self.writes: list[str] = []
         self.queries: list[str] = []
         self.close_count = 0
 
     def write(self, command: str) -> None:
         self.writes.append(command)
+        if command == self.failing_write:
+            raise OSError("simulated write failure")
 
     def query(self, command: str) -> str:
         self.queries.append(command)
         return self.responses.get(command, self.response)
+
+    def query_bin_block(self, command: str) -> bytes:
+        self.queries.append(command)
+        response = self.binary_responses[command]
+        if isinstance(response, Exception):
+            raise response
+        return response
 
     def close(self) -> None:
         self.close_count += 1
@@ -203,3 +219,124 @@ def test_assert_no_errors_uses_the_stateful_register_snapshot() -> None:
     active = FakeTransport(responses={"CMR?": "1", "EXR?": "0", "DDR?": "0"})
     with pytest.raises(InstrumentError, match="CMR 1"):
         SDS3000Scope(active).assert_no_errors()
+
+
+def _word_descriptor(*, points: int = 4) -> bytes:
+    block = bytearray(346)
+    block[0:8] = b"WAVEDESC"
+    block[16:26] = b"LECROY_2_4"
+    struct.pack_into("<h", block, 32, 1)
+    struct.pack_into("<h", block, 34, 1)
+    struct.pack_into("<i", block, 36, len(block))
+    struct.pack_into("<i", block, 60, points * 2)
+    struct.pack_into("<i", block, 116, points)
+    struct.pack_into("<i", block, 124, 0)
+    struct.pack_into("<i", block, 128, points - 1)
+    struct.pack_into("<i", block, 132, 0)
+    struct.pack_into("<i", block, 136, 0)
+    struct.pack_into("<i", block, 140, 1)
+    struct.pack_into("<i", block, 144, 1)
+    struct.pack_into("<f", block, 156, 0.5)
+    struct.pack_into("<f", block, 160, 0.0)
+    struct.pack_into("<f", block, 176, 0.25)
+    struct.pack_into("<d", block, 180, -0.5)
+    block[196] = ord("V")
+    block[244] = ord("S")
+    return bytes(block)
+
+
+def _waveform_transport(
+    *,
+    data_response: bytes | Exception = struct.pack("<4h", -2, 0, 2, 4),
+    failing_write: str | None = None,
+) -> FakeTransport:
+    return FakeTransport(
+        responses={
+            "CHDR?": "CHDR SHORT",
+            "CFMT?": "COMM_FORMAT DEF9,BYTE,BIN",
+            "CORD?": "HI",
+            "WFSU?": "WFSU SN,0,FP,2,NP,10,SP,4",
+        },
+        binary_responses={
+            "C1:WF? DESC": _word_descriptor(),
+            "C1:WF? DAT1": data_response,
+        },
+        failing_write=failing_write,
+    )
+
+
+def test_fetch_waveform_uses_existing_capability_and_restores_transfer_state() -> None:
+    transport = _waveform_transport()
+    waveform = SDS3000Scope(transport).fetch_waveform(
+        channel=1,
+        points="DMAX",
+        check_errors=False,
+    )
+
+    np.testing.assert_allclose(waveform.voltages_v, [-1.0, 0.0, 1.0, 2.0])
+    np.testing.assert_allclose(waveform.times_s, [-0.5, -0.25, 0.0, 0.25])
+    assert transport.queries == [
+        "*IDN?",
+        "CHDR?",
+        "CFMT?",
+        "CORD?",
+        "WFSU?",
+        "C1:WF? DESC",
+        "C1:WF? DAT1",
+    ]
+    assert transport.writes == [
+        "CHDR OFF",
+        "CFMT DEF9,WORD,BIN",
+        "CORD LO",
+        "WFSU SP,0,NP,0,FP,0,SN,1",
+        "WFSU SP,4,NP,10,FP,2,SN,0",
+        "CORD HI",
+        "CFMT DEF9,BYTE,BIN",
+        "CHDR SHORT",
+    ]
+
+
+@pytest.mark.parametrize("points", ["", "all", 1, None])
+def test_fetch_waveform_rejects_invalid_points_before_io(points) -> None:
+    transport = _waveform_transport()
+
+    with pytest.raises(DataError, match="DEF, MAX, or DMAX"):
+        SDS3000Scope(transport).fetch_waveform(1, points=points, check_errors=False)
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+def test_fetch_waveform_restores_state_when_binary_read_fails() -> None:
+    transport = _waveform_transport(data_response=TimeoutError("interrupted"))
+
+    with pytest.raises(TimeoutError, match="interrupted"):
+        SDS3000Scope(transport).fetch_waveform(1, check_errors=False)
+
+    assert transport.writes[-4:] == [
+        "WFSU SP,4,NP,10,FP,2,SN,0",
+        "CORD HI",
+        "CFMT DEF9,BYTE,BIN",
+        "CHDR SHORT",
+    ]
+
+
+def test_fetch_waveform_reports_state_drift_when_restore_fails() -> None:
+    transport = _waveform_transport(failing_write="CHDR SHORT")
+
+    with pytest.raises(StateDriftError, match="CHDR") as captured:
+        SDS3000Scope(transport).fetch_waveform(1, check_errors=False)
+
+    assert captured.value.expected == {"CHDR": "SHORT"}
+    assert captured.value.diff["CHDR"]["actual"] == "unknown"
+
+
+def test_fetch_waveform_rejects_malformed_saved_state_without_writes() -> None:
+    transport = _waveform_transport()
+    transport.responses["CFMT?"] = "DEF9,FLOAT,BIN"
+
+    with pytest.raises(DataError, match=r"CFMT\?"):
+        SDS3000Scope(transport).fetch_waveform(1, check_errors=False)
+
+    assert transport.queries == ["*IDN?", "CHDR?", "CFMT?"]
+    assert transport.writes == []
