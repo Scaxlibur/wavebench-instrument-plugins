@@ -34,7 +34,7 @@ The base plugin does not expose raw SCPI, reset or setup slots, option installat
 | M4 | Offline complete | Single, multi-channel, and bounded MAX/DMAX acquisition |
 | M5 | RFC and skip | PNG framing and menu visibility lack a provable core contract |
 | M6 | RFC/evidence gap and skip | Incomplete status model and undefined digital payload encoding |
-| M7 | Not started | Core-supported controlled writes and advanced reads; RFCs for gaps |
+| M7 | In progress | Autoscale is offline complete; advanced reads remain under review |
 | M8 | Not started | Documentation, full offline verification, and package audit |
 
 ## Milestone exits
@@ -46,7 +46,7 @@ The base plugin does not expose raw SCPI, reset or setup slots, option installat
 - **M4:** Provide single and multi-channel capture plus bounded MAX/DMAX. One multi-channel call performs one acquisition, uses hard memory/point limits, never replays acquisition or binary queries, and preserves partial results through callbacks.
 - **M5:** RFC and skip. `:DISPlay:DATA?` has no documented IEEE/TMC block framing, while `:SAVE:IMAGe:DATA?` is a documented block but cannot prove the core's `include_menu=False` contract. [RFC-0003](rfcs/0003-scope-screenshot-framing-and-menu-contract.md) proposes a non-replayed raw-byte query and an explicit unknown-menu result. Do not declare `scope.screenshot`, guess framing, ignore parameters, or create instrument files.
 - **M6:** Skip both digital capabilities. The mandatory core status model includes activity, technology, hysteresis, and label visibility that MSO8000 cannot query; [RFC-0004](rfcs/0004-portable-scope-digital-status.md) proposes a portable optional-state model. The existing uint16 waveform model is suitable, but the manual does not define D0-D15 BYTE/WORD logic codes and leaves WORD byte order unclear. Do not infer them from analog conversion or FakeTransport fixtures.
-- **M7:** Evaluate each existing typed scope capability independently. Missing fields, consuming reads, unsafe restoration, or absent core APIs result in an RFC and a skipped capability, not fabricated defaults.
+- **M7:** Evaluate each existing typed scope capability independently. Version `0.5.0` adds `scope.autoscale` with a system-enable preflight, explicit `check_errors=false`, optional OPC wait, and an autoscale-only ambiguity latch. Autoscale intentionally changes vertical, timebase, and trigger state and does not claim restoration. Missing fields, consuming reads, unsafe restoration, or absent core APIs result in an RFC and a skipped capability, not fabricated defaults.
 - **M8:** Make descriptors, tests, READMEs, and matrices agree; pass Ruff, package tests, package check, real wheel/sdist, and disposable-environment install/remove checks; retain every hardware claim as unverified.
 
 M1 offline evidence: version `0.1.0` passed package tests, Ruff, source package check, wheel/sdist content checks, and disposable-environment install/discovery/removal. No real `*IDN?` query was sent.

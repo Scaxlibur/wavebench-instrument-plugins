@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.4.0"
+PACKAGE_VERSION = "0.5.0"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -162,6 +162,7 @@ assert descriptor.distribution == "wavebench-rigol-mso8000"
 assert descriptor.capabilities == (
     "scope.idn",
     "scope.channel_coupling",
+    "scope.autoscale",
     "scope.fetch_waveform",
     "scope.capture_waveform",
     "scope.capture_waveforms",

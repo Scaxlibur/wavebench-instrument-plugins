@@ -14,6 +14,7 @@ from wavebench.transport.base import InstrumentTransport
 
 from .parsers import (
     normalize_channel_input,
+    parse_boolean_state,
     parse_display_state,
     parse_mso8104_identity,
     parse_positive_integer,
@@ -61,6 +62,7 @@ class MSO8104Scope:
     _closed: bool = field(default=False, init=False, repr=False)
     _waveform_writes_blocked: bool = field(default=False, init=False, repr=False)
     _acquisition_writes_blocked: bool = field(default=False, init=False, repr=False)
+    _autoscale_writes_blocked: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.acquisition_timeout_s) or self.acquisition_timeout_s <= 0:
@@ -113,6 +115,43 @@ class MSO8104Scope:
             impedance = self.transport.query(f":CHANnel{channel}:IMPedance?")
             return normalize_channel_input(coupling=coupling, impedance=impedance)
 
+    def autoscale(self, wait_opc: bool = True, check_errors: bool = True) -> None:
+        if type(wait_opc) is not bool:
+            raise DataError("MSO8104 wait_opc must be a boolean")
+        self._validate_check_errors(check_errors)
+        with self._io_lock:
+            self._require_open()
+            self._require_autoscale_writes_allowed()
+            enabled = parse_boolean_state(
+                self.transport.query(":SYSTem:AUToscale?"),
+                field="system autoscale enable",
+            )
+            if not enabled:
+                raise ConfigError(
+                    "MSO8104 system autoscale is disabled; refusing an ineffective "
+                    ":AUToscale write"
+                )
+            try:
+                self.transport.write(":AUToscale")
+            except Exception as exc:
+                self._autoscale_writes_blocked = True
+                raise InstrumentError(
+                    "MSO8104 autoscale write outcome is uncertain; autoscale writes are blocked"
+                ) from exc
+            if not wait_opc:
+                return
+            try:
+                response = self.transport.query_opc().strip()
+                if response != "1":
+                    raise DataError(
+                        f"invalid MSO8104 *OPC? response after autoscale: {response!r}"
+                    )
+            except Exception as exc:
+                self._autoscale_writes_blocked = True
+                raise InstrumentError(
+                    "MSO8104 autoscale completion is uncertain; autoscale writes are blocked"
+                ) from exc
+
     @property
     def waveform_writes_blocked(self) -> bool:
         with self._io_lock:
@@ -122,6 +161,11 @@ class MSO8104Scope:
     def acquisition_writes_blocked(self) -> bool:
         with self._io_lock:
             return self._acquisition_writes_blocked
+
+    @property
+    def autoscale_writes_blocked(self) -> bool:
+        with self._io_lock:
+            return self._autoscale_writes_blocked
 
     def _require_waveform_writes_allowed(self) -> None:
         if self._waveform_writes_blocked:
@@ -134,6 +178,13 @@ class MSO8104Scope:
         if self._acquisition_writes_blocked:
             raise InstrumentError(
                 "MSO8104 acquisition writes are blocked after an uncertain single acquisition; "
+                "close and reopen the instrument session before retrying"
+            )
+
+    def _require_autoscale_writes_allowed(self) -> None:
+        if self._autoscale_writes_blocked:
+            raise InstrumentError(
+                "MSO8104 autoscale writes are blocked after an ambiguous operation; "
                 "close and reopen the instrument session before retrying"
             )
 

@@ -35,6 +35,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.capabilities == (
         "scope.idn",
         "scope.channel_coupling",
+        "scope.autoscale",
         "scope.fetch_waveform",
         "scope.capture_waveform",
         "scope.capture_waveforms",
@@ -44,7 +45,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.wavebench_min_version == "0.8.22"
     assert descriptor.wavebench_max_version == "0.9.0"
-    assert descriptor.version == "0.4.0"
+    assert descriptor.version == "0.5.0"
     assert descriptor.validate_options({}) == {
         "max_total_points": 4_000_000,
         "max_chunk_points": 250_000,
@@ -259,6 +260,133 @@ def test_core_guard_accepts_only_high_impedance_mapping_by_default() -> None:
             channel=1,
             coupling_policy="switchable-termination",
         )
+
+
+class AutoscaleTransport(FakeTransport):
+    def __init__(self, enabled_response: str = "1") -> None:
+        super().__init__({":SYSTem:AUToscale?": enabled_response})
+        self.writes: list[str] = []
+        self.opc_calls = 0
+        self.opc_response = "1"
+        self.write_error: Exception | None = None
+        self.opc_error: Exception | None = None
+
+    def write(self, command: str) -> None:
+        self.writes.append(command)
+        if self.write_error is not None:
+            raise self.write_error
+
+    def query_opc(self) -> str:
+        self.opc_calls += 1
+        if self.opc_error is not None:
+            raise self.opc_error
+        return self.opc_response
+
+
+def test_autoscale_preflights_enable_and_waits_once() -> None:
+    transport = AutoscaleTransport()
+    scope = MSO8104Scope(transport=transport)
+
+    scope.autoscale(wait_opc=True, check_errors=False)
+
+    assert transport.queries == [":SYSTem:AUToscale?"]
+    assert transport.writes == [":AUToscale"]
+    assert transport.opc_calls == 1
+    assert scope.autoscale_writes_blocked is False
+
+
+def test_autoscale_can_explicitly_skip_opc_wait() -> None:
+    transport = AutoscaleTransport()
+
+    MSO8104Scope(transport=transport).autoscale(
+        wait_opc=False,
+        check_errors=False,
+    )
+
+    assert transport.writes == [":AUToscale"]
+    assert transport.opc_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("wait_opc", "check_errors"),
+    [(1, False), (True, 0), (True, True)],
+)
+def test_autoscale_rejects_unsupported_arguments_before_io(
+    wait_opc: object,
+    check_errors: object,
+) -> None:
+    transport = AutoscaleTransport()
+
+    with pytest.raises((ConfigError, DataError)):
+        MSO8104Scope(transport=transport).autoscale(
+            wait_opc=wait_opc,  # type: ignore[arg-type]
+            check_errors=check_errors,  # type: ignore[arg-type]
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+    assert transport.opc_calls == 0
+
+
+@pytest.mark.parametrize("enabled_response", ["0", "OFF", "", "2"])
+def test_autoscale_refuses_disabled_or_invalid_preflight_without_write(
+    enabled_response: str,
+) -> None:
+    transport = AutoscaleTransport(enabled_response)
+
+    with pytest.raises((ConfigError, DataError)):
+        MSO8104Scope(transport=transport).autoscale(
+            wait_opc=True,
+            check_errors=False,
+        )
+
+    assert transport.writes == []
+    assert transport.opc_calls == 0
+
+
+def test_autoscale_ambiguous_write_latches_only_autoscale_domain() -> None:
+    transport = AutoscaleTransport()
+    transport.write_error = InstrumentError("injected write failure")
+    scope = MSO8104Scope(transport=transport)
+
+    with pytest.raises(InstrumentError, match="write outcome is uncertain"):
+        scope.autoscale(wait_opc=True, check_errors=False)
+
+    assert scope.autoscale_writes_blocked is True
+    assert scope.waveform_writes_blocked is False
+    assert scope.acquisition_writes_blocked is False
+    first_queries = list(transport.queries)
+    with pytest.raises(InstrumentError, match="autoscale writes are blocked"):
+        scope.autoscale(wait_opc=True, check_errors=False)
+    assert transport.queries == first_queries
+    assert transport.writes == [":AUToscale"]
+
+
+@pytest.mark.parametrize("bad_opc", ["0", "", " 2 "])
+def test_autoscale_invalid_completion_latches_without_replay(bad_opc: str) -> None:
+    transport = AutoscaleTransport()
+    transport.opc_response = bad_opc
+    scope = MSO8104Scope(transport=transport)
+
+    with pytest.raises(InstrumentError, match="completion is uncertain"):
+        scope.autoscale(wait_opc=True, check_errors=False)
+
+    assert scope.autoscale_writes_blocked is True
+    assert transport.writes == [":AUToscale"]
+    assert transport.opc_calls == 1
+
+
+def test_autoscale_opc_failure_latches_without_reissuing_write() -> None:
+    transport = AutoscaleTransport()
+    transport.opc_error = InstrumentError("injected OPC failure")
+    scope = MSO8104Scope(transport=transport)
+
+    with pytest.raises(InstrumentError, match="completion is uncertain"):
+        scope.autoscale(wait_opc=True, check_errors=False)
+
+    assert scope.autoscale_writes_blocked is True
+    assert transport.writes == [":AUToscale"]
+    assert transport.opc_calls == 1
 
 
 def test_close_is_idempotent_and_blocks_later_queries() -> None:

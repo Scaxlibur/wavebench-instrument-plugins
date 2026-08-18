@@ -87,9 +87,13 @@ def parse_waveform_format(response: str) -> str:
 
 
 def parse_display_state(response: str) -> bool:
+    return parse_boolean_state(response, field="channel display")
+
+
+def parse_boolean_state(response: str, *, field: str) -> bool:
     normalized = response.strip()
     if normalized not in {"0", "1"}:
-        raise DataError(f"invalid MSO8104 channel display response: {response!r}")
+        raise DataError(f"invalid MSO8104 {field} response: {response!r}")
     return normalized == "1"
 
 

@@ -50,7 +50,7 @@
 | M4 | 离线完成 | 单次、多通道与有界 MAX/DMAX |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | RFC/证据缺口后跳过 | 数字状态模型不完整；数字 payload 编码未定义 |
-| M7 | 未开始 | 核心已有的受控写与高级只读能力；缺口 RFC |
+| M7 | 实施中 | autoscale 已离线完成；高级只读能力逐项评审中 |
 | M8 | 未开始 | 覆盖文档、全量离线验证和发行包审计 |
 
 ## M0：合同与发行边界
@@ -122,6 +122,8 @@ M6 评审结果为两项 capability 均跳过。
 逐项评审 WaveBench 已有的 `scope.autoscale`、`scope.snapshot`、`scope.acquisition_status`、平均采集、测量统计、Math/FFT、Reference、Cursor 与 History capability。
 
 公共模型缺少字段、设备查询具有消费性、命令语义无法恢复或核心没有 capability 时，结果为「RFC 后跳过」，不得以默认值补齐模型。DVM、counter、AWG/source、协议解码、mask、search 与 record/playback 不通过基础 scope driver 的私有 API 暴露。
+
+`0.5.0` 已公开 `scope.autoscale`。调用前查询 `:SYSTem:AUToscale?`，系统禁用 AUTO 时不发送写命令；当前必须设置 `check_errors=false`。该操作按核心合同明确改变垂直、时基和触发，不承诺恢复。`:AUToscale` 写入或后续 `*OPC?` 结果不确定时，仅锁存 autoscale 写域，禁止盲目重试。120 项包测试覆盖严格布尔参数、禁用预检、可选 OPC、异常响应和锁存；自动设置效果与完成时序未实机验证。
 
 ## M8：离线发行审计
 

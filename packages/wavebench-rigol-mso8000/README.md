@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-M0～M4 已离线完成，M5 截图与 M6 数字通道经 RFC/证据评审后跳过。当前 `0.4.0` 声明 `scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform` 与 `scope.capture_waveforms`；截图、数字通道和消费型错误队列均未声明。
+M0～M4 已离线完成，M5 截图与 M6 数字通道经 RFC/证据评审后跳过，M7 正在实施。当前 `0.5.0` 额外声明 `scope.autoscale`；截图、数字通道和消费型错误队列均未声明。
 
 本轮开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期验证，不连接真实仪器。所有型号、固件、transport、吞吐、恢复和测量结论均保持「未实机验证」。
 
@@ -44,6 +44,8 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 当前不声明 `scope.screenshot`。`:DISPlay:DATA?` 的手册段落没有声明 TMC block framing，`:SAVE:IMAGe:DATA?` 虽为 TMC block，却不能证明返回图片满足核心 `include_menu=False` 合同。具体缺口见 [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md)；插件不猜测 framing、不忽略参数，也不创建仪器文件。
 
 当前也不声明 `scope.digital_status` 或 `scope.digital_waveform`。数字状态的核心模型要求 MSO8000 无法查询的必填字段，见 [RFC-0004](doc/rfcs/0004-portable-scope-digital-status.md)；数字 waveform 的厂商手册未定义 BYTE/WORD 逻辑 code，WORD 字节序也不明确。插件不以默认值或模拟量换算制造数字状态。
+
+`scope.autoscale` 会按核心操作合同改变垂直、时基和触发设置。driver 先查询 `:SYSTem:AUToscale?`，禁用时不发送写命令；调用必须设置 `check_errors=false`。写入或 OPC 完成状态不确定时会锁存 autoscale 写域，关闭并重新打开会话前不再重试。该能力只有离线序列与故障注入证据，自动设置效果未实机验证。
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 

@@ -23,6 +23,7 @@
 | 身份 | `*IDN?` | `scope.idn` | 离线通过 | 严格接受 RIGOL/MSO8104；FakeTransport 使用虚构序列号，未实机验证 |
 | 错误队列 | `:SYSTem:ERRor[:NEXT]?` | `scope.errors` | RFC 后跳过 | 查询会消费队首；核心普通文本 query 允许重放 |
 | 输入安全 | `:CHANnel<n>:COUPling?`、`:CHANnel<n>:IMPedance?` | `scope.channel_coupling` | 离线通过 | 联合映射 ACL/DCL/AC/DC；核心默认拒绝 50 Ω、GND 与未知组合 |
+| 自动设置 | `:SYSTem:AUToscale?`、`:AUToscale` | `scope.autoscale` | 离线通过 | 预检系统使能；明确改变垂直、时基和触发；写入或 OPC 不确定时锁存，效果未实机验证 |
 | 模拟通道状态 | display、scale、offset、bandwidth、probe | `scope.snapshot` 的一部分 | M7 评审 | 公共快照要求完整 health/timebase/probe/waveform/trigger；不填虚假默认值 |
 | acquisition | type、averages、memory depth、sample rate、run/stop/single | capture 与 acquisition status | M4/M7 计划 | 深度最高 500 Mpts；设置深度会改变采样率 |
 | 时基 | main offset/scale、MAIN/XY/ROLL | capture 参数、snapshot | M4/M7 计划 | 慢时基可能进入 ROLL 并禁用多项功能 |
