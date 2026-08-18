@@ -10,5 +10,6 @@
 | [RFC-0004：可移植的示波器数字通道状态模型](0004-portable-scope-digital-status.md) | 提议 | `scope.digital_status` 暂不声明 |
 | [RFC-0005：可组合的示波器状态快照](0005-portable-scope-snapshot.md) | 提议 | `scope.snapshot` 暂不声明，继续使用 partial summary |
 | [RFC-0006：可移植的示波器采集状态与平均采集合同](0006-portable-scope-acquisition-contracts.md) | 提议 | `scope.acquisition_status` 与 `scope.capture_average` 暂不声明 |
+| [RFC-0007：可移植的示波器统计、FFT 与光标读取合同](0007-portable-scope-analysis-reads.md) | 提议 | 统计与 FFT 暂不声明；cursor 仅开放无损子集 |
 
 RFC 被核心实现并发布后，插件必须提高最低 WaveBench 版本、补充核心集成测试，再启用相应 capability。不能只根据 RFC 文本调用不存在的方法。
