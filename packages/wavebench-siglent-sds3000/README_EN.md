@@ -57,7 +57,7 @@ See [`doc/MANUAL_BASELINE_EN.md`](doc/MANUAL_BASELINE_EN.md) for source hashes, 
 
 See [`doc/COMMAND_COVERAGE_EN.md`](doc/COMMAND_COVERAGE_EN.md) for the complete denominator and dispositions. The current catalog freezes 578 explicit entities, including 478 callable entities, with zero unclassified entries.
 
-See [`doc/WAVEBENCH_CAPABILITY_MATRIX_EN.md`](doc/WAVEBENCH_CAPABILITY_MATRIX_EN.md) for all 19 WaveBench `0.8.22` scope capabilities. Six are declared; every other item has an explicit firmware, option, core-model, or safety disposition. [`doc/WAVEBENCH_CORE_RFC_EN.md`](doc/WAVEBENCH_CORE_RFC_EN.md) contains the cross-vendor core assessment. This plugin branch does not modify WaveBench core.
+See [`doc/WAVEBENCH_CAPABILITY_MATRIX_EN.md`](doc/WAVEBENCH_CAPABILITY_MATRIX_EN.md) for all 19 WaveBench `0.8.22` scope capabilities. Six are declared; every other item has an explicit firmware, option, core-model, or safety disposition. The cross-vendor core RFC is currently `Draft / Needs revision`; see [`doc/WAVEBENCH_CORE_RFC_EN.md`](doc/WAVEBENCH_CORE_RFC_EN.md). This plugin branch does not modify WaveBench core.
 
 Redacted hardware results are in [`doc/HARDWARE_ACCEPTANCE_EN.md`](doc/HARDWARE_ACCEPTANCE_EN.md). They contain no resource address, serial number, raw waveform, screenshot, or command log.
 

@@ -1,115 +1,297 @@
-# SDS3000 对 WaveBench 核心的影响评估
+# WaveBench 核心 RFC：SDS3000 影响评估
 
 [English](WAVEBENCH_CORE_RFC_EN.md)
 
+> 状态：`Draft / Needs revision`
+> 修订：`R1`
+> 核心基线：WaveBench `0.8.22`
+> API 状态：未冻结
+> 核心实现：尚未开始
+
 ## 结论
 
-当前 SDS3054 插件不需要修改 WaveBench 核心即可完成 M0–M6。VICP 文本与二进制波形已通过现有 `PyVisaTransport` 和 `query_bin_block()` 实机验证；`scope.fetch_waveform` 与 `scope.capture_waveform(s)` 使用现有 `acquire` effect，已经要求 `read_write` 权限。
+SDS3054 插件的 M0–M8 已完成。当前声明的身份、错误寄存器、通道耦合、波形读取、单通道采集和同次 acquisition 多通道采集，不以本 RFC 的新接口为前提。VICP 文本与二进制波形已通过现有 `PyVisaTransport`、`PyVICP` 和 `query_bin_block()` 实机验证。
 
-本评估只形成两个增量 RFC，不改上一目录的 WaveBench 仓库。两项建议都同时适用于 SIGLENT/LeCroy SDS3000、RIGOL DS1000Z 和 Rohde & Schwarz RTM2000，机器可读影响矩阵见 [`wavebench-core-rfc.json`](wavebench-core-rfc.json)。
+本文件仍是核心影响评估和实施前规范，不是已接受的公共 API。首稿把只读状态、通用 patch 和部分状态 v2 放得过近，没有完整定义重放策略、共享 session 锁存、字段权限、核心消费入口和电气安全门。R1 将这些基础问题升为 P0，并把通用写入与 `ScopeSnapshotV2` 延后。
 
-## RFC 1：示波器配置状态与受控 patch
+机器可读版本见 [`wavebench-core-rfc.json`](wavebench-core-rfc.json)。本分支不修改 WaveBench 核心，也不提前依赖未发布接口。
 
-### 现有缺口
+## 阶段标记
 
-WaveBench 目前只有窄的 `scope.channel_coupling` 只读能力。三类驱动都在 capture 内部直接写垂直比例和时基，却没有通用配置 capability：
+插件里程碑和 RFC 修订使用不同编号，避免把插件完成状态误写成核心 API 已冻结：
 
-| 驱动 | 已有事实 | 当前缺口 |
+| 对象 | 当前状态 | 含义 |
 | --- | --- | --- |
-| `siglent.sds3000` | `CPL/TRA/VDIV/TDIV/TRMD` 已用于受控采集；手册另有 `OFST/TRSE/TRSL/TRCP/TRLV` | 无阻抗或耦合 setter；本次 CH1 从 50 Ω 改到 1 MΩ 只能人工操作 |
-| `rigol.ds1000z` | 驱动内部已有 `set_vertical_scale()`、`set_time_range()`，capture 使用当前触发 | setter 不属于 capability，没有统一快照、回读和失败恢复契约 |
-| `rohde-schwarz.rtm2032` | 已有完整 analog/timebase/edge-trigger 快照和内部 setter；另有 CH2 专用 trigger 方法 | CH2 专用方法无法成为通用公共接口，写失败锁存也未抽成跨驱动契约 |
+| SDS3000 插件 | `M8-complete` | 当前 6 项 capability 已通过既定离线与实机门禁 |
+| 本 RFC | `R1-draft-needs-revision` | 契约仍可修订，公共 API 尚未冻结 |
+| WaveBench 核心实现 | `not-started` | 尚未创建实现提交或提高插件最低版本 |
 
-### 建议接口
+## 已确认的核心事实
 
-读取与写入必须拆开声明，避免只有读能力的驱动被迫提供 setter：
+| 接口或模型 | 当前结论 | 后续处理 |
+| --- | --- | --- |
+| `InstrumentTransport.query_bin_block()` | 当前 SDS3054 二进制路径足够，失败时不在同一 session 重放 | 保留不可重放语义并纳入统一 transport contract |
+| `PyVisaTransport.query()` / `query_opc()` | VICP 可用，但文本 query 和 `*OPC?` 会进入通用读取重试 | P0 增加明确 replay policy；读后清除和 acquisition-bound `*OPC?` 禁止重发 |
+| `OperationSpec.effect=acquire` | 已能要求 `read_write`，无需为访问控制立刻新增 effect | `changed_fields` 和恢复审计不完整，不能据此宣称核心无状态影响缺口 |
+| `ScopeStatusSummary` | 已能返回 IDN、coupling 和缺失能力 | 优先复用现有部分状态路径，不急于增加大而泛的 snapshot v2 |
+| `PyVisaTransport` + `PyVICP` | 已满足当前 VICP 文本和二进制连接 | 不新增 SDS3000 专用核心 transport |
 
-```text
-scope.analog_channel_state       -> get_analog_channel_state(channel)
-scope.analog_channel_configure   -> patch_analog_channel(channel, patch)
-scope.timebase_state             -> get_timebase_state()
-scope.timebase_configure         -> patch_timebase(patch)
-scope.edge_trigger_state         -> get_edge_trigger_state()
-scope.edge_trigger_configure     -> patch_edge_trigger(patch)
-```
+## P0-1：不可重放查询契约
 
-模拟通道公共字段建议包括 `enabled`、`coupling`、`termination_ohm`、`scale_v_per_div`、`offset_v`、`bandwidth_limit_hz` 和 `probe_ratio`。时基公共字段建议包括 `scale_s_per_div`、`range_s`、`position_s` 和 `reference`。边沿触发公共字段建议包括 `source`、`mode`、`slope`、`coupling`、`level_v` 和 `holdoff_s`。
+### 问题
 
-状态对象必须带 `supported_fields`。patch 使用显式 `UNSET` 表示「不修改」，不能让 `None` 同时表示「不修改」「自动」和「未知」。厂商 token、SCPI 字符串和 VBS 路径不得进入公共模型。
+`InstrumentTransport` 当前没有 replay policy 或统一的 `query_once()` 契约。`PyVisaTransport.query()` 和 `query_opc()` 会重发完整 query；SDS3000 的 `CMR?`、`EXR?`、`DDR?` 是读后清除寄存器，第一次请求可能已清除状态，超时后的第二次请求可能返回空值并掩盖原始错误。
 
-### 操作契约
+`RsInstrumentTransport` 和 `SerialTransport` 当前没有相同的显式自动重试，不代表核心已经提供跨后端保证。`GuardedAuditedTransport` 也只是委托给内部 transport。
 
-- 状态读取沿用 `stateful_read`，允许 `read_only` 与 `read_write`。
-- patch 使用 `write`，只允许 `read_write`；unsupported field 必须在 I/O 前拒绝。
-- 写入前读取所有将修改字段；写后精确回读；失败时逆序恢复。
-- write、`*OPC?` 和已经收到部分响应的请求不得自动重试。
-- 恢复失败返回 `StateDriftError`，并将当前 session 锁存为不可继续写；关闭后才能重新建立会话。
-- timeout 使用现有 connection budget；只有厂商操作确实需要时才使用独立 operation-complete budget。
+### 最低行为契约
 
-### 兼容影响
-
-这是纯增量能力。现有 `scope.channel_coupling` 保留，后续可作为 `analog_channel_state` 的兼容视图；现有 capture 参数和返回模型不变。DS1000Z 的固定高阻可把 `termination_ohm` 标为只读，RTM2000 与 SDS3000 可声明可写支持，不要求所有厂商支持同一字段集合。
-
-## RFC 2：可部分表达的状态模型 v2
-
-### 现有缺口
-
-当前 `ScopeSnapshot` 强制返回 identity、health、模拟通道、时基、probe、waveform metadata 和完整 edge trigger。当前 `ScopeAcquisitionStatus` 又强制包含 average 与 segmented 选件字段。
-
-RTM2000 能填满这些模型，不代表所有示波器都应被迫照填。SDS3054 已能安全读取身份、耦合、触发模式和部分波形元数据；DS1000Z 也能读取身份、耦合和波形状态，但两个插件都不能诚实声明全量 v1 snapshot。
-
-### 建议接口
-
-新增版本化 capability，不原地放宽 v1：
+R1 不冻结最终方法名，但核心实现至少需要三类明确策略：
 
 ```text
-scope.snapshot_v2
-scope.acquisition_status_v2
+safe_to_replay
+no_replay
+read_continuation_only
 ```
 
-建议模型：
+- `safe_to_replay`：只有调用方明确声明查询可重发时使用；transport 不解析 SCPI 文本推断安全性。
+- `no_replay`：命令最多发送一次。超时、部分响应或结果不明确后不得再次发送命令。
+- `read_continuation_only`：命令已经发送后，可以继续读取同一响应，但不得重新发送命令。
+
+`query_once()` 可以作为便捷入口，但不能代替底层契约。所有后端都必须能证明命令发送次数、是否只继续读取、是否出现部分响应，以及通信状态是否仍可信。
+
+以下调用默认使用 `no_replay`：
+
+- 读后清除寄存器；
+- 与一次 acquisition 绑定的 `*OPC?`；
+- 已接收任意响应字节的请求；
+- transport 无法证明重发安全的状态读取。
+
+独立状态轮询是否允许重发，由上层 operation contract 明确声明，不能把所有 `*OPC?` 场景混成同一种行为。
+
+### P0 退出门
+
+- PyVISA、RsInstrument、Serial、`GuardedAuditedTransport` 和 FakeTransport 使用同一 replay contract。
+- `no_replay` 故障注入测试证明命令最多发送一次。
+- `read_continuation_only` 测试证明可以继续读当前响应，但不会再次写命令。
+- telemetry 记录 replay policy、部分响应和不确定状态，不记录敏感 payload。
+- SDS3000 的 `CMR?`、`EXR?`、`DDR?` 只有在核心原语发布后才迁移。
+
+## P0-2：共享 session 健康状态与锁存
+
+### 状态模型
 
 ```text
-ScopeSnapshotV2(
-    components: Mapping[component_name, typed_component],
-    unavailable: Mapping[component_name, unavailable_reason],
-    complete: bool,
-)
-
-ScopeAcquisitionStatusV2(
-    run_state,
-    trigger_state?,
-    average_count?,
-    average_complete?,
-    segmented_enabled?,
-    segment_capacity?,
-    segments_available?,
-    supported_fields,
-)
+healthy -> uncertain -> poisoned -> closed
 ```
 
-`unavailable_reason` 必须是封闭枚举，例如 `unsupported`、`option_missing`、`not_configured`、`firmware_unverified` 和 `query_failed`；不得放入可执行厂商文本。调用失败与字段不可用必须区分，不能用默认值冒充真实状态。
+允许跳过中间状态，例如写入结果未知时直接从 `healthy` 进入 `poisoned`。只有关闭旧 session 并重新连接，才能建立新的 `healthy` session。
 
-### 操作契约与兼容影响
+| 阶段 | 结果 | session 行为 |
+| --- | --- | --- |
+| 预检拒绝 | 尚未发生 I/O | 保持 `healthy` |
+| 写入结果未知 | 设备可能已经改变 | 立即 `poisoned` |
+| 写后回读失败 | 当前值无法证明 | 进入 `uncertain`；无法证明恢复成功时转为 `poisoned` |
+| 恢复失败 | 原状态未知 | `poisoned` |
+| 恢复成功 | 原状态经容差验证 | 回到 `healthy`，记录实际量化值 |
+| close | session 不再可用 | `closed` |
 
-- 两项均为 `stateful_read`，允许只读访问。
-- 非消费型查询可按现有 read retry 执行；读后清除寄存器不得自动重放。
-- 每个 component 使用明确 timeout；单个字段不可用不应让其他已验证字段消失。
-- v1 capability 和数据类型保持原样，RTM2000 无需迁移；新驱动可优先声明 v2。
-- v2 成熟后再单独决定 v1 的弃用窗口，不在 `0.8.x` 内破坏客户端。
+### 责任边界
 
-## 不建议修改核心的项目
+- 核心负责：replay policy、统一错误分类、共享 session health、操作前门禁和 `on_failure=continue` 的停止规则。
+- 插件负责：受影响字段闭包、快照内容、恢复顺序、厂商合法组合和量化容差。
+- transport 负责：命令是否发送、响应是否部分到达、通信通道是否可能失步。
 
-- **VICP transport**：现有 PyVISA 路径配合插件依赖 `PyVICP` 已通过文本与二进制实机验收。
-- **波形二进制接口**：现有 `query_bin_block()` 足够读取 SDS3054 `WAVEDESC` 与 `DAT1`。
-- **新的 transactional effect**：当前 `acquire` 已要求 `read_write`。应先把恢复覆盖与失败锁存写入具体 capability 契约，不急着增加一个语义重叠的 effect。
-- **SDS3000 raw screenshot**：手册中的 `SCDP` 把画面发送到当前 hardcopy 设备，`SCDP?` 只返回状态，并非图片 payload；不能据此增加 raw-byte transport。
-- **动态 descriptor 探测**：descriptor 加载必须保持零 I/O。数字通道或历史选件应在类型化操作内查询并失败关闭。
+锁存必须属于共享 driver/session，不能只存在于临时 `ScopeService` 对象。run plan 会复用同一 scope session；当某一步标记 `on_failure=continue` 时，后续仪器操作仍必须在 I/O 前拒绝 poisoned session。重新创建 Service 不能清除锁存。
 
-## 永久拒绝
+### 需要区分的错误
 
-不新增任意 raw SCPI、任意 VBS、MAUI `app` 对象反射、用户自定义恢复命令或绕过 identity/access/audit 的 transport 句柄。手册目录是审计台账，不是命令执行器。
+- 预检或参数错误：零 I/O，session 健康；
+- 写入失败且确认未发送：操作失败，session 可继续；
+- 写入结果未知：session poisoned；
+- 回读不一致：事务失败，尝试恢复；
+- 恢复失败：`StateDriftError` 加 session poisoned；
+- poisoned session 上的后续操作：稳定的 session-health 错误，零 I/O。
 
-## 若进入核心实现
+## P1-1：类型化只读状态
 
-核心修改应在 WaveBench 仓库使用独立规范分支和独立提交，并至少包含：三厂商 FakeTransport 合同测试、unsupported field 零 I/O、write 不重试、精确回读、逆序恢复、恢复失败锁存、v1 回归和 descriptor 零 I/O。核心发布新版本后，插件才提高最低版本；本分支不提前依赖未发布接口。
+P0 完成后，第一批 scope capability 只提供读取：
+
+```text
+scope.analog_channel_state
+scope.timebase_state
+scope.edge_trigger_state
+```
+
+每项能力都必须同时定义：
+
+1. 公共 `Protocol` 和不可变 typed model；
+2. `OperationSpec`、effect、风险、timeout 和 `changed_fields`；
+3. `ScopeService` 消费入口；
+4. 稳定 JSON 表示和 strict 行为；
+5. capability 与 v1 接口共存时的优先级。
+
+仅有 capability 字符串和 driver 方法不构成可用的核心接口。CLI 与 run plan 可以分阶段接入，但 RFC 必须明确首版包含哪些消费入口，不能声明一个核心没有调用路径的能力。
+
+### 字段元数据
+
+`supported_fields` 不能表达「可读但不可写」。首版至少需要以下字段级信息：
+
+```text
+readable
+writable
+type
+unit
+enum
+minimum
+maximum
+quantization
+```
+
+patch 使用 `UNSET` 表示「保持不变」。`None` 只有在具体字段定义了「自动」「清除」或其他显式语义时才允许使用，不能兼任「未知」或「未提供」。序列化时省略 `UNSET`，不得把它写成 JSON `null`。
+
+字段状态需要区分：
+
+```text
+unsupported
+supported_but_not_readable
+query_failed
+stale_or_unknown
+valid_value
+```
+
+`query_failed` 是一次操作失败，不能伪装成设备不支持，也不能静默返回成功的部分状态。
+
+### 模拟输入复合语义
+
+SDS3000 的 `A1M/D1M/D50/GND` 同时编码 coupling 和 termination，不能视为两个完全独立的可写字段。首版状态模型可以返回归一化的 coupling、termination 和原始组合的类型化结果，但 termination 保持只读，并定义合法组合与不可表示状态。
+
+## P1-2：最小采集运行状态
+
+先新增窄能力：
+
+```text
+scope.acquisition_run_state
+```
+
+该能力只表达 run、stop、wait、armed 和显式 unknown 等封闭状态。average、segmented、option inventory 和历史帧数量使用独立能力，不进入一个全能状态袋。
+
+查询失败仍是 operation error，不是 `unknown`。`unknown` 只表示设备成功返回但无法映射到更具体的公共状态。
+
+## P2：窄范围配置 patch
+
+只有 P0、typed read-only state、核心消费入口和合同测试完成后，才评审写入能力：
+
+```text
+scope.analog_channel_configure
+scope.timebase_configure
+```
+
+第一版候选字段仅包括：
+
+- `enabled`；
+- `scale_v_per_div`；
+- `offset_v`；
+- `scale_s_per_div`；
+- `position_s`。
+
+以下字段不进入第一版：
+
+- termination；
+- coupling 与 termination 的复合写入；
+- `scope.edge_trigger_configure`；
+- 任意厂商字段或厂商 token。
+
+空 patch、unsupported/read-only 字段、非法值和字段冲突必须在 I/O 前拒绝。成功事务执行写前快照、写入、量化回读；失败事务按插件声明逆序恢复，并由核心维护 session health。
+
+审计至少区分：
+
+```text
+declared_changed_fields
+observed_changed_fields
+restored_fields
+state_uncertain
+session_poisoned
+```
+
+`changed_fields` 表示「事务期间可能触碰的仪器字段」，不能只表示最终保留的变化。现有 `scope.capture`、`scope.capture_waveforms` 和 `scope.fetch_waveform` 也需要重新审计时基、垂直比例、trace、trigger mode 与波形传输状态。
+
+## 终端阻抗安全边界
+
+`read_write` 只表示访问策略允许写，不证明接线、电源输出、信号幅度和负载适合切换到 50 Ω。WaveBench 项目边界不允许普通自动化流程改变示波器输入阻抗，因此 R1 作出以下裁决：
+
+- 首版公共状态只读 termination；
+- 首版通用 patch 不包含 termination；
+- 50 Ω → 高阻也不作为默认自动行为；
+- 未来若增加独立能力，必须要求显式安全确认、零写入预检、信号源状态证明、写后独立回读、失败锁存和实机证据；
+- 高阻 → 50 Ω 需要单独、更严格的风险评审，不能由普通 `read_write` 授权代替。
+
+## `ScopeSnapshotV2` 与 acquisition status
+
+### `ScopeSnapshotV2`
+
+当前不冻结 `ScopeSnapshotV2`。现有 `ScopeStatusSummary` 已能返回 IDN、coupling 和缺失能力，足够为缺少完整 `scope.snapshot` 的驱动提供安全摘要。
+
+若后续仍需 v2，必须使用封闭、版本化 component 类型和字段级 `Availability[T]`。不接受 `Mapping[str, typed_component]` 作为稳定公共类型，也不允许把运行时 `query_failed` 降级成普通 unavailable reason。
+
+### `ScopeAcquisitionStatusV2`
+
+当前方案拆分并延期。先实现 `scope.acquisition_run_state`；average、segmented 和 option status 后续按独立 typed capability 设计。现有 v1 模型保持不变。
+
+## 核心消费与兼容契约
+
+新增 capability 至少需要：
+
+- `Protocol` 与 typed model；
+- `OperationSpec`、effect、风险、timeout、`changed_fields` 和恢复覆盖；
+- `ScopeService` 方法；
+- JSON 与错误包络；
+- strict 行为和 v1/v2 优先级；
+- CLI/run plan 是否首版支持的明确说明。
+
+所有变化保持增量兼容。现有 `scope.channel_coupling`、capture 参数、v1 snapshot 和 acquisition status 不原地改型。只有核心发布新版本后，插件才提高最低 WaveBench 版本。
+
+## 验收测试矩阵
+
+当前插件中的 `test_core_rfc.py` 只验证本文件与 JSON 的结构，不证明核心契约已经实现。真实行为测试必须进入 WaveBench 核心仓库。
+
+| 层级 | 必测内容 | 默认 CI 是否连接仪器 |
+| --- | --- | --- |
+| transport contract | 三种 replay policy、部分响应、单次发送、各 backend 与 Guarded 一致性 | 否 |
+| session transaction | 预检零 I/O、写入结果未知、回读失败、逆序恢复、共享锁存、`on_failure=continue` | 否 |
+| typed state / patch | 空 patch、read-only、unsupported、非法值、字段冲突、`UNSET`、量化规则 | 否 |
+| Service / CLI / run plan | capability 消费、OperationSpec、JSON、strict、v1 回归和 session-health 诊断 | 否 |
+| 三厂商 fake driver | SDS3000、DS1000Z、RTM2000 的相同公共语义 | 否 |
+| opt-in hardware | 真实 transport、批准接线下的写入、安全恢复和新 session 复核 | 是 |
+
+## 跨厂商适用性
+
+| 公共问题 | SDS3000 | DS1000Z | RTM2000 |
+| --- | --- | --- | --- |
+| 不可重放状态/同步查询 | 读后清除寄存器与 acquisition-bound `*OPC?` | 错误与采集同步查询需明确策略 | RsInstrument 后端同样需要公共契约 |
+| 共享 session 锁存 | capture 会临时修改多类状态 | capture 内部 setter 可能失败 | 已有较完整恢复逻辑，但不是核心契约 |
+| 只读通道/时基/触发状态 | 手册和实机已有部分证据 | 驱动已有耦合与设置路径 | 已有完整 snapshot，可作为合同基线 |
+| 窄范围 patch | VDIV/TDIV/OFST | vertical scale/time range | 现有 setter 和回读可作为参考 |
+
+P0 基础设施适用于所有仪器类型，不是 SDS3000 专用接口；P1/P2 的 scope 能力至少有三个示波器系列的共同语义。
+
+## 不修改或永久拒绝的项目
+
+- 不新增 SDS3000 专用 VICP 核心后端；现有 PyVISA 路径配合插件依赖 `PyVICP` 已足够。
+- 不替换现有 `query_bin_block()`；当前 SDS3054 二进制路径已经通过实机验收。
+- 不因 SDS3000 增加 raw screenshot transport；`SCDP?` 返回状态而非图片 payload。
+- 不允许 descriptor 加载时探测仪器或选件。
+- 不原地放宽 v1 数据模型的必填字段。
+- 永久拒绝任意 raw SCPI、任意 VBS、MAUI `app` 反射、调用方提供的恢复命令和绕过 identity/access/audit 的 transport 句柄。
+
+## 建议实施顺序
+
+1. 修订并评审本 R1，统一插件 M8、RFC R1 和核心未开始三类状态。
+2. 在 WaveBench 独立分支实现 replay policy、不可重放 query 和 transport contract tests。
+3. 实现共享 session health、poison、错误分类和 run plan 门禁。
+4. 实现类型化只读 channel/timebase/edge-trigger state。
+5. 实现 `scope.acquisition_run_state`。
+6. 在安全证据充分后评审窄范围 scale/offset/timebase patch。
+7. 最后重新评审 termination、通用触发写入和 snapshot v2。
+
+前两项 P0 退出门全部通过前，不冻结任何通用 scope 写入 API。

@@ -1,51 +1,155 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "document_kind": "wavebench-core-rfc",
+  "status": "draft-needs-revision",
+  "revision": "R1",
   "wavebench_baseline": "0.8.22",
   "core_changed_by_this_plugin": false,
   "decision": "assessment-only",
+  "milestones": {
+    "plugin": "M8-complete",
+    "rfc": "R1-draft-needs-revision",
+    "core_implementation": "not-started"
+  },
+  "scope": {
+    "current_plugin_capabilities": [
+      "scope.idn",
+      "scope.errors",
+      "scope.channel_coupling",
+      "scope.fetch_waveform",
+      "scope.capture_waveform",
+      "scope.capture_waveforms"
+    ],
+    "current_plugin_blocked_by_core": false,
+    "public_api_frozen": false
+  },
   "existing_interface_findings": [
     {
       "interface": "InstrumentTransport.query_bin_block",
-      "decision": "sufficient",
-      "evidence": "SDS3054 VICP descriptor and waveform payloads passed hardware acceptance"
+      "decision": "sufficient-for-current-path",
+      "evidence": "SDS3054 VICP descriptor and waveform payloads passed hardware acceptance",
+      "follow_up": "retain non-replayable binary behavior in the transport contract"
     },
     {
       "interface": "OperationSpec.effect=acquire",
-      "decision": "sufficient",
-      "evidence": "scope fetch and capture already require read_write access"
+      "decision": "compatible-but-audit-gap",
+      "evidence": "scope fetch and capture already require read_write access",
+      "follow_up": "audit declared_changed_fields, observed_changed_fields, restored_fields, and session health"
     },
     {
-      "interface": "PyVisaTransport",
-      "decision": "sufficient",
-      "evidence": "VICP works through pyvisa-py with the plugin-owned PyVICP dependency"
+      "interface": "PyVisaTransport.query-and-query_opc",
+      "decision": "works-for-current-path-with-contract-gap",
+      "evidence": "VICP works through pyvisa-py with the plugin-owned PyVICP dependency",
+      "follow_up": "add a backend-independent replay policy before consuming reads use this path"
+    },
+    {
+      "interface": "ScopeStatusSummary",
+      "decision": "existing-partial-path",
+      "evidence": "the current service can return IDN, coupling, and missing capabilities without a complete snapshot",
+      "follow_up": "prefer this path and a narrow run-state capability before designing a large snapshot v2 model"
+    }
+  ],
+  "p0_foundations": [
+    {
+      "id": "transport-replay-contract",
+      "priority": "P0",
+      "status": "proposed",
+      "replay_policies": [
+        "safe_to_replay",
+        "no_replay",
+        "read_continuation_only"
+      ],
+      "minimum_behavior": {
+        "query_once": "one command transmission at most; a timeout or ambiguous result is not retried",
+        "read_continuation_only": "may continue reading an already transmitted response, but must never resend the command",
+        "safe_to_replay": "the caller explicitly opts in; the transport never infers safety from command text",
+        "consuming_reads": "read-to-clear registers and acquisition-bound *OPC? use no_replay",
+        "partial_response": "record partial-response telemetry and return a non-replayable failure",
+        "backends": "PyVISA, RsInstrument, Serial, GuardedAuditedTransport, and FakeTransport share the same contract"
+      },
+      "acceptance": [
+        "a failed no_replay query sends at most one command",
+        "an allowed continuation read never sends a second command",
+        "*OPC? can be marked no_replay for acquisition synchronization",
+        "read-to-clear errors cannot be silently replayed",
+        "transport telemetry records replay policy and uncertain response state"
+      ]
+    },
+    {
+      "id": "shared-session-health-and-poison",
+      "priority": "P0",
+      "status": "proposed",
+      "states": [
+        "healthy",
+        "uncertain",
+        "poisoned",
+        "closed"
+      ],
+      "transitions": {
+        "preflight_rejection": "no I/O and session remains healthy",
+        "write_result_unknown": "poisoned until close and reconnect",
+        "readback_failure": "uncertain, then poisoned if restoration cannot prove state",
+        "restore_failure": "poisoned until close and reconnect",
+        "restore_success": "healthy with actual quantized values recorded",
+        "close": "closed; only a new session can become healthy"
+      },
+      "responsibility": {
+        "core": "shared health state, error taxonomy, operation gate, and on_failure=continue stop behavior",
+        "plugin": "affected-field closure, snapshot content, restore order, vendor combinations, and quantization tolerance",
+        "transport": "whether a command was transmitted, whether a response was partial, and whether the channel may be desynchronized"
+      },
+      "acceptance": [
+        "the latch lives on the shared driver/session rather than a temporary Service",
+        "all later writes and acquisitions reject a poisoned session before I/O",
+        "rebuilding a Service does not clear the latch",
+        "explicit close and reconnect clear the latch",
+        "run plans with on_failure=continue cannot continue instrument work on a poisoned session"
+      ]
     }
   ],
   "proposals": [
     {
-      "id": "scope-configuration-state-and-patch",
+      "id": "scope-read-only-state",
       "priority": "P1",
+      "status": "blocked-on-p0",
       "compatibility": "additive",
       "capabilities": [
         "scope.analog_channel_state",
-        "scope.analog_channel_configure",
         "scope.timebase_state",
-        "scope.timebase_configure",
-        "scope.edge_trigger_state",
-        "scope.edge_trigger_configure"
+        "scope.edge_trigger_state"
       ],
-      "operation_contracts": {
-        "read_effect": "stateful_read",
-        "write_effect": "write",
-        "read_access": [
+      "public_contract": {
+        "models": "typed immutable state models plus a closed field metadata model",
+        "field_metadata": [
+          "readable",
+          "writable",
+          "type",
+          "unit",
+          "enum",
+          "minimum",
+          "maximum",
+          "quantization"
+        ],
+        "patch_sentinel": "UNSET means do not modify; None has a field-specific explicit meaning and is never an implicit unknown",
+        "availability": [
+          "unsupported",
+          "supported_but_not_readable",
+          "query_failed",
+          "stale_or_unknown",
+          "valid_value"
+        ],
+        "termination": "read-only in the first version",
+        "vendor_text": "never exposed as executable SCPI, VBS, or opaque command text"
+      },
+      "operation_contract": {
+        "effect": "stateful_read",
+        "access": [
           "read_only",
           "read_write"
         ],
-        "write_access": [
-          "read_write"
-        ],
-        "write_retry": "never",
-        "restore": "snapshot-before-write, exact-readback, reverse-restore, failure-latch",
-        "timeout": "explicit connection and optional operation-complete budgets"
+        "retry": "uses the P0 replay policy",
+        "service": "ScopeService entry point is required before capability declaration",
+        "cli_json": "initially explicit status output; no implicit method generation"
       },
       "vendors": [
         {
@@ -57,7 +161,6 @@
             "CPL",
             "TRA",
             "VDIV",
-            "OFST",
             "TDIV",
             "TRMD",
             "TRSE",
@@ -86,31 +189,24 @@
           "evidence": [
             "analog_channel_snapshot",
             "timebase_snapshot",
-            "edge_trigger_snapshot",
-            "set_vertical_scale",
-            "set_time_range",
-            "configure_ch2_edge_trigger"
+            "edge_trigger_snapshot"
           ]
         }
       ]
     },
     {
-      "id": "scope-partial-status-v2",
+      "id": "scope-acquisition-run-state",
       "priority": "P1",
+      "status": "blocked-on-p0",
       "compatibility": "additive",
       "capabilities": [
-        "scope.snapshot_v2",
-        "scope.acquisition_status_v2"
+        "scope.acquisition_run_state"
       ],
-      "operation_contracts": {
-        "read_effect": "stateful_read",
-        "read_access": [
-          "read_only",
-          "read_write"
-        ],
-        "retry": "only non-consuming queries before any stateful read",
-        "restore": "not applicable to pure status components",
-        "timeout": "per-component query budget with explicit unavailable reasons"
+      "public_contract": {
+        "model": "closed run-state enum with explicit unknown value",
+        "scope": "run/stop/wait/armed state only; average, segmented, and option inventory stay separate",
+        "failure": "query failure is an operation error, not an unavailable device state",
+        "service": "ScopeService method and JSON representation are required"
       },
       "vendors": [
         {
@@ -119,9 +215,8 @@
             "siglent.sds3000"
           ],
           "evidence": [
-            "identity and coupling are available",
-            "TRMD and SEQ expose partial acquisition state",
-            "complete v1 health and option fields are unavailable"
+            "TRMD",
+            "SEQ"
           ]
         },
         {
@@ -130,8 +225,7 @@
             "rigol.ds1000z"
           ],
           "evidence": [
-            "identity and coupling are available",
-            "the external plugin does not declare the all-or-nothing v1 snapshot"
+            "acquisition and trigger status paths"
           ]
         },
         {
@@ -140,14 +234,76 @@
             "rohde-schwarz.rtm2032"
           ],
           "evidence": [
-            "complete v1 snapshot is implemented",
-            "acquisition status changes shape when the K15 option is absent"
+            "run and trigger state in existing scope status paths"
           ]
         }
       ]
+    },
+    {
+      "id": "scope-configuration-patch",
+      "priority": "P2",
+      "status": "deferred-until-safety-contract",
+      "compatibility": "additive",
+      "capabilities": [
+        "scope.analog_channel_configure",
+        "scope.timebase_configure"
+      ],
+      "initial_writable_fields": [
+        "enabled",
+        "scale_v_per_div",
+        "offset_v",
+        "scale_s_per_div",
+        "position_s"
+      ],
+      "excluded_from_first_version": [
+        "termination",
+        "coupling_and_termination_composite",
+        "edge_trigger_configure",
+        "arbitrary_vendor_fields"
+      ],
+      "operation_contract": {
+        "effect": "write",
+        "access": "read_write",
+        "validation": "empty, unsupported, read-only, invalid, and conflicting patches fail before I/O",
+        "transaction": "snapshot, write, readback, quantization comparison, reverse restore, and shared-session latch",
+        "audit_fields": [
+          "declared_changed_fields",
+          "observed_changed_fields",
+          "restored_fields",
+          "state_uncertain",
+          "session_poisoned"
+        ]
+      },
+      "gate": "requires P0 foundations, typed read-only state, OperationSpec, ScopeService, contract tests, and opt-in hardware evidence"
+    },
+    {
+      "id": "scope-partial-status-v2",
+      "priority": "P2",
+      "status": "deferred",
+      "compatibility": "additive",
+      "capabilities": [
+        "scope.snapshot_v2"
+      ],
+      "reason": "ScopeStatusSummary already provides a safe partial path; a stable v2 requires closed component types and field-level Availability before API design can be frozen",
+      "constraints": [
+        "do not use arbitrary Mapping[str, typed_component] as the stable public model",
+        "keep v1 models unchanged",
+        "separate unsupported, query_failed, stale_or_unknown, and valid value",
+        "never turn a runtime query failure into a successful partial result silently"
+      ]
     }
   ],
-  "rejected_or_deferred": [
+  "deferred_or_rejected": [
+    {
+      "id": "scope-acquisition-status-v2",
+      "decision": "deferred-and-split",
+      "reason": "start with scope.acquisition_run_state; average and segmented status need separate typed contracts"
+    },
+    {
+      "id": "termination-write",
+      "decision": "deferred",
+      "reason": "read_write access does not prove electrical safety; the project boundary forbids automatic impedance changes"
+    },
     {
       "id": "arbitrary-raw-scpi-or-vbs",
       "decision": "rejected",
@@ -173,5 +329,71 @@
       "decision": "rejected",
       "reason": "descriptor loading must remain zero-I/O; option checks stay inside typed operations"
     }
+  ],
+  "test_matrix": [
+    {
+      "layer": "transport-contract",
+      "location": "WaveBench core",
+      "required_cases": [
+        "no_replay sends at most once",
+        "read_continuation_only never resends",
+        "safe_to_replay requires explicit opt-in",
+        "PyVISA/RsInstrument/Serial/Guarded/Fake behavior is consistent"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "session-transaction",
+      "location": "WaveBench core",
+      "required_cases": [
+        "preflight rejection has zero I/O",
+        "unknown write outcome poisons the shared session",
+        "readback and restore failures latch",
+        "reverse restoration records quantized values",
+        "on_failure=continue cannot use a poisoned session"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "typed-state-and-patch",
+      "location": "WaveBench core plus three vendor fake drivers",
+      "required_cases": [
+        "empty, unsupported, read-only, invalid, and conflicting fields fail before I/O",
+        "UNSET serialization means unchanged",
+        "termination safety gate rejects unsafe writes",
+        "v1 and v2 behavior remains compatible"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "service-cli-run-plan",
+      "location": "WaveBench core",
+      "required_cases": [
+        "capability declaration has a ScopeService consumer",
+        "OperationSpec exposes effect risk timeout and changed fields",
+        "status JSON and strict behavior are stable",
+        "run-plan failure and session health are observable"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "hardware-acceptance",
+      "location": "opt-in vendor test suites",
+      "required_cases": [
+        "SDS3000, DS1000Z, and RTM2000 real transport evidence",
+        "termination and patch safety under approved wiring",
+        "failure recovery and fresh-session verification"
+      ],
+      "hardware_required": true
+    }
+  ],
+  "implementation_order": [
+    "revise this RFC and align plugin M8 and RFC revision labels",
+    "implement transport replay policy and query-once contract",
+    "implement shared session health and poison semantics",
+    "implement typed read-only channel, timebase, edge-trigger state",
+    "implement scope.acquisition_run_state",
+    "consider narrow scale/offset/timebase patches after the safety gate",
+    "revisit termination, generic trigger writes, and snapshot v2 only after evidence"
   ]
 }

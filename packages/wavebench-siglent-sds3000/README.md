@@ -57,7 +57,7 @@ Oscilloscopes_Remote_Control_and_Automation_Manual_2026-02.pdf
 
 完整指令分母和处置状态见 [`doc/COMMAND_COVERAGE.md`](doc/COMMAND_COVERAGE.md)。当前目录已固定 578 个明确实体，其中 478 个可调用实体，未分类数量为 0。
 
-WaveBench `0.8.22` 的 19 项 `scope` capability 全量处置见 [`doc/WAVEBENCH_CAPABILITY_MATRIX.md`](doc/WAVEBENCH_CAPABILITY_MATRIX.md)；当前声明 6 项，其余均有固件、选件、核心模型或安全边界结论。跨厂商核心影响评估见 [`doc/WAVEBENCH_CORE_RFC.md`](doc/WAVEBENCH_CORE_RFC.md)，本插件分支没有修改 WaveBench 核心。
+WaveBench `0.8.22` 的 19 项 `scope` capability 全量处置见 [`doc/WAVEBENCH_CAPABILITY_MATRIX.md`](doc/WAVEBENCH_CAPABILITY_MATRIX.md)；当前声明 6 项，其余均有固件、选件、核心模型或安全边界结论。跨厂商核心影响 RFC 目前为 `Draft / Needs revision`，见 [`doc/WAVEBENCH_CORE_RFC.md`](doc/WAVEBENCH_CORE_RFC.md)；本插件分支没有修改 WaveBench 核心。
 
 脱敏实机结果见 [`doc/HARDWARE_ACCEPTANCE.md`](doc/HARDWARE_ACCEPTANCE.md)。该记录不含资源地址、序列号、原始波形、截图或命令日志。
 
