@@ -4,7 +4,7 @@ This directory is the starting point for a WaveBench plugin for the RIGOL MSO800
 
 ## Current status
 
-M0 through M4 are offline complete, and M5 screenshot support was reviewed then skipped under an RFC. Version `0.4.0` declares identity, coupling, fetch, single-capture, and multi-capture capabilities. Screenshot, digital, and consuming error-queue capabilities are not declared.
+M0 through M4 are offline complete. M5 screenshot and M6 digital support were reviewed then skipped under RFC/evidence gaps. Version `0.4.0` declares identity, coupling, fetch, single-capture, and multi-capture capabilities. Screenshot, digital, and consuming error-queue capabilities are not declared.
 
 This development pass is offline-only. It uses the manual, FakeTransport tests, fault injection, builds, and installation lifecycle checks, and does not connect to hardware. Model, firmware, transport, throughput, restoration, and measurement claims remain unverified.
 
@@ -37,6 +37,8 @@ Descriptor import must not open a transport, scan ports, send SCPI, or create fi
 The descriptor accepts `tcpip`, `usb`, and `gpib` resource prefixes as a manual-backed, offline routing contract. This is not hardware connection evidence.
 
 The descriptor does not declare `scope.screenshot`. The manual does not specify TMC block framing for `:DISPlay:DATA?`, while `:SAVE:IMAGe:DATA?` cannot prove the core's `include_menu=False` contract. [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md) records both gaps. The plugin does not guess framing, ignore request parameters, or create instrument files.
+
+The descriptor also omits `scope.digital_status` and `scope.digital_waveform`. The mandatory core status model contains fields that MSO8000 cannot query; see [RFC-0004](doc/rfcs/0004-portable-scope-digital-status.md). The vendor manual does not define BYTE/WORD logic codes for D0-D15 waveform sources and leaves WORD byte order unclear. The plugin does not invent digital state from defaults or analog conversion.
 
 `channel_coupling()` combines channel coupling and input impedance. `AC/DC + OMEG` maps to the core high-impedance tokens `ACL/DCL`, while `AC/DC + FIFT` maps to the low-impedance tokens `AC/DC`; the core rejects 50 ohms, `GND`, and unknown states by default. The plugin does not declare `scope.errors` because `:SYSTem:ERRor?` consumes an entry while ordinary core text queries may replay. Future waveform service calls must explicitly set `scope.check_errors=false` until [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) is implemented.
 

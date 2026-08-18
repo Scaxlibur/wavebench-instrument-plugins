@@ -49,7 +49,7 @@
 | M3 | 离线完成 | 当前屏幕 `NORMal + BYTE` 波形 |
 | M4 | 离线完成 | 单次、多通道与有界 MAX/DMAX |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
-| M6 | 未开始 | D0～D15 状态与数字波形 |
+| M6 | RFC/证据缺口后跳过 | 数字状态模型不完整；数字 payload 编码未定义 |
 | M7 | 未开始 | 核心已有的受控写与高级只读能力；缺口 RFC |
 | M8 | 未开始 | 覆盖文档、全量离线验证和发行包审计 |
 
@@ -109,7 +109,13 @@ M5 评审结果为「RFC 后跳过」，descriptor 不声明 `scope.screenshot`�
 
 ## M6：数字通道
 
-在 `:SYSTem:MODules?` 和数字通道状态可证明时，公开 `scope.digital_status` 与 `scope.digital_waveform`。数字波形要求调用方确认 acquisition 已停止；D0～D15 轴必须一致，样本只接受 0/1，并按公共模型打包为 `uint16` bitset。
+M6 评审结果为两项 capability 均跳过。
+
+`scope.digital_status` 的公共模型要求 activity、technology、threshold coupling、hysteresis 与 label enable 等非空字段。MSO8000 只提供模块、显示、POD 共用阈值、全局 size/deskew、位置和标签查询，不能用默认值补齐其余字段。[RFC-0004](rfcs/0004-portable-scope-digital-status.md) 提议可移植的可选状态模型。
+
+`scope.digital_waveform` 已有合适的 `uint16` bitset 模型，也要求调用方明确确认 acquisition 已停止；缺口在厂商合同。手册允许 D0～D15 作为 waveform source，却没有定义 BYTE/WORD payload 到 LOW/HIGH 的确切 code，WORD 字节序也不明确。插件不把模拟波形换算公式套到数字数据，也不让 FakeTransport fixture 反向充当设备协议证据。
+
+退出证据：descriptor 保持不声明 `scope.digital_status` 与 `scope.digital_waveform`。数字状态等待核心模型，数字波形等待 RIGOL 官方编码证据或后续获批的最小实机原始帧验收；本轮不连接实机。
 
 ## M7：受控写与高级能力
 

@@ -31,7 +31,8 @@
 | 深存储波形 | MAX/RAW、start/stop 分块 | fetch/capture | 离线通过 | 每块最多 250,000 点、每次调用总计最多 4,000,000 点；超大流式输出需核心 RFC |
 | 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | 离线通过 | 一次 SINGLE 后轮询 STOP 并读多通道；DEF/MAX/DMAX；X 轴一致；不使用 `*OPC?` 冒充采集完成 |
 | 截图 | `:DISPlay:DATA?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot` | RFC 后跳过 | DISPLAY 路径未声明 block framing；SAVE DATA 路径不能证明 `include_menu=False`；见 RFC-0003 |
-| 数字通道 | `:LA:*`、D0～D15 waveform | digital status/waveform | M6 计划 | 依赖模块与探头；停止状态和轴一致性必需 |
+| 数字通道状态 | `:SYSTem:MODules?`、`:LA:*?` | `scope.digital_status` | RFC 后跳过 | 核心模型必填 activity、technology、hysteresis 等设备无法查询的字段；见 RFC-0004 |
+| 数字波形 | D0～D15 waveform source/data | `scope.digital_waveform` | 手册证据不足后跳过 | 公共 bitset 模型可用，但手册未定义 BYTE/WORD 的 LOW/HIGH code，WORD 字节序也不明确 |
 | 自动测量与统计 | `:MEASure:*` | measurement statistics | M7 评审 | 只读已配置项目；不自动创建或清空统计 |
 | Math/FFT/Reference/Cursor | 对应命令族 | 对应 typed capability | M7 评审 | 只读取既有配置；公共模型不匹配时 RFC 后跳过 |
 | DVM/counter | DVM 与 counter 命令族 | 当前无合适 scope capability | RFC 后跳过 | 需要新的类型化公共模型与 Service |
