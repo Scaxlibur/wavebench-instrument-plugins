@@ -31,3 +31,28 @@ def parse_mso8104_identity(response: str) -> RigolIdentity:
         serial_number=serial_number,
         firmware=firmware,
     )
+
+
+def _parse_enum(response: str, *, field: str, allowed: frozenset[str]) -> str:
+    normalized = response.strip().upper()
+    if normalized not in allowed:
+        raise DataError(f"invalid MSO8104 {field} response: {response!r}")
+    return normalized
+
+
+def normalize_channel_input(*, coupling: str, impedance: str) -> str:
+    normalized_coupling = _parse_enum(
+        coupling,
+        field="channel coupling",
+        allowed=frozenset({"AC", "DC", "GND"}),
+    )
+    normalized_impedance = _parse_enum(
+        impedance,
+        field="channel impedance",
+        allowed=frozenset({"OMEG", "FIFT"}),
+    )
+    if normalized_coupling == "GND":
+        return "GND"
+    if normalized_impedance == "OMEG":
+        return f"{normalized_coupling}L"
+    return normalized_coupling

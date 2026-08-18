@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-rigol-mso8000"
-version = "0.1.0"
+version = "0.2.0"
 description = "RIGOL MSO8104 oscilloscope plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"

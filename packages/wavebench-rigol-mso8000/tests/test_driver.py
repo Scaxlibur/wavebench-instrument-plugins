@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from wavebench.errors import DataError, InstrumentError
+from wavebench.errors import ConfigError, DataError, InstrumentError
 from wavebench.instruments import DriverContext
 from wavebench.logging import CommandLogger
+from wavebench.services.scope_service import assert_scope_high_impedance
 from wavebench_rigol_mso8000 import descriptor as plugin_descriptor
 from wavebench_rigol_mso8000.driver import MSO8104Scope
 from wavebench_rigol_mso8000.parsers import RigolIdentity, parse_mso8104_identity
@@ -31,12 +32,13 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.api_version == "wavebench.instrument.v2"
     assert descriptor.models == ("MSO8104",)
     assert descriptor.aliases == ()
-    assert descriptor.capabilities == ("scope.idn",)
+    assert descriptor.capabilities == ("scope.idn", "scope.channel_coupling")
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb", "gpib")
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.wavebench_min_version == "0.8.22"
     assert descriptor.wavebench_max_version == "0.9.0"
+    assert descriptor.version == "0.2.0"
     assert descriptor.validate_options({}) == {}
 
 
@@ -108,6 +110,107 @@ def test_identity_parser_rejects_malformed_or_wrong_instruments(
         parse_mso8104_identity(response)
 
 
+@pytest.mark.parametrize(
+    ("coupling", "impedance", "expected"),
+    [
+        ("AC", "OMEG", "ACL"),
+        ("DC", "OMEG", "DCL"),
+        ("AC", "FIFT", "AC"),
+        ("DC", "FIFT", "DC"),
+        ("GND", "OMEG", "GND"),
+        ("GND", "FIFT", "GND"),
+    ],
+)
+def test_channel_coupling_combines_coupling_and_termination(
+    coupling: str,
+    impedance: str,
+    expected: str,
+) -> None:
+    transport = FakeTransport(
+        {
+            ":CHANnel2:COUPling?": f" {coupling.lower()}\n",
+            ":CHANnel2:IMPedance?": f" {impedance.lower()}\n",
+        }
+    )
+    scope = MSO8104Scope(transport=transport)
+
+    assert scope.channel_coupling(2) == expected
+    assert transport.queries == [
+        ":CHANnel2:COUPling?",
+        ":CHANnel2:IMPedance?",
+    ]
+
+
+@pytest.mark.parametrize("channel", [0, 5, -1, 1.0, True, "1", None])
+def test_channel_coupling_rejects_invalid_channel_without_io(channel: object) -> None:
+    transport = FakeTransport()
+    scope = MSO8104Scope(transport=transport)
+
+    with pytest.raises(DataError, match="integer from 1 through 4"):
+        scope.channel_coupling(channel)  # type: ignore[arg-type]
+
+    assert transport.queries == []
+
+
+@pytest.mark.parametrize("response", ["", "ACL", "UNKNOWN", "DC,AC"])
+def test_channel_coupling_rejects_unknown_coupling(response: str) -> None:
+    transport = FakeTransport(
+        {
+            ":CHANnel1:COUPling?": response,
+            ":CHANnel1:IMPedance?": "OMEG",
+        }
+    )
+
+    with pytest.raises(DataError, match="channel coupling"):
+        MSO8104Scope(transport=transport).channel_coupling(1)
+
+    assert transport.queries == [
+        ":CHANnel1:COUPling?",
+        ":CHANnel1:IMPedance?",
+    ]
+
+
+@pytest.mark.parametrize("response", ["", "50", "FIFTY", "UNKNOWN"])
+def test_channel_coupling_rejects_unknown_impedance(response: str) -> None:
+    transport = FakeTransport(
+        {
+            ":CHANnel3:COUPling?": "DC",
+            ":CHANnel3:IMPedance?": response,
+        }
+    )
+
+    with pytest.raises(DataError, match="channel impedance"):
+        MSO8104Scope(transport=transport).channel_coupling(3)
+
+    assert transport.queries == [
+        ":CHANnel3:COUPling?",
+        ":CHANnel3:IMPedance?",
+    ]
+
+
+def test_core_guard_accepts_only_high_impedance_mapping_by_default() -> None:
+    assert (
+        assert_scope_high_impedance(
+            "DCL",
+            channel=1,
+            coupling_policy="switchable-termination",
+        )
+        == "DCL"
+    )
+    with pytest.raises(ConfigError, match="50 ohm"):
+        assert_scope_high_impedance(
+            "DC",
+            channel=1,
+            coupling_policy="switchable-termination",
+        )
+    with pytest.raises(ConfigError, match="not recognized"):
+        assert_scope_high_impedance(
+            "GND",
+            channel=1,
+            coupling_policy="switchable-termination",
+        )
+
+
 def test_close_is_idempotent_and_blocks_later_queries() -> None:
     transport = FakeTransport(
         {"*IDN?": "RIGOL TECHNOLOGIES,MSO8104,SERIAL,00.01"}
@@ -120,4 +223,6 @@ def test_close_is_idempotent_and_blocks_later_queries() -> None:
     assert transport.close_calls == 1
     with pytest.raises(InstrumentError, match="closed"):
         scope.idn()
+    with pytest.raises(InstrumentError, match="closed"):
+        scope.channel_coupling(1)
     assert transport.queries == []

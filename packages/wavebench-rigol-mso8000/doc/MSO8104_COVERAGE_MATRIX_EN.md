@@ -10,7 +10,7 @@ The audited source is RIGOL MSO8000 Programming Guide `PGA26006-1110`, which cov
 | --- | --- | --- | --- |
 | Identity | `*IDN?` | `scope.idn` | Offline complete; strict RIGOL/MSO8104 identity, hardware unverified |
 | Error queue | `:SYSTem:ERRor[:NEXT]?` | `scope.errors` | RFC and skip; consuming text queries cannot disable replay through the current transport API |
-| Input safety | channel coupling and impedance queries | `scope.channel_coupling` | M2; combine both values and fail closed for 50 ohms or unknown states |
+| Input safety | channel coupling and impedance queries | `scope.channel_coupling` | Offline complete; combine both values and let the core reject 50 ohms, GND, or unknown states by default |
 | Analog state | display, scale, offset, bandwidth, probe | part of `scope.snapshot` | M7 review; never fabricate required snapshot fields |
 | Acquisition/timebase/edge trigger | type, averages, depth, rate, main timebase, edge trigger | capture/status/snapshot | M4/M7; keep acquisition and restoration explicit |
 | Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | M3; at most 1000 screen points and no implicit stop |

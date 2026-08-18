@@ -45,7 +45,7 @@
 | --- | --- | --- |
 | M0 | 完成 | 手册审计、核心合同、证据规则、永久拒绝区和发行隔离 |
 | M1 | 离线完成 | 最小身份插件与安装生命周期 |
-| M2 | 未开始 | 输入阻抗安全适配；消费型错误查询 RFC |
+| M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
 | M3 | 未开始 | 当前屏幕 `NORMal + BYTE` 波形 |
 | M4 | 未开始 | 单次、多通道与有界 RAW/DMAX |
 | M5 | 未开始 | PNG 截图 |
@@ -80,6 +80,8 @@
 公开 `scope.channel_coupling`。该方法联合查询 `:CHANnel<n>:COUPling?` 和 `:CHANnel<n>:IMPedance?`，返回 WaveBench 高阻保护所需的归一化 token。
 
 `scope.errors` 暂不公开：当前 `InstrumentTransport.query()` 允许重放，无法安全表达消费型错误队列。对应核心 RFC 合并前，调用波形 Service 时必须显式配置 `scope.check_errors=false`。
+
+离线证据：`0.2.0` 覆盖 4 个模拟通道的严格参数校验、耦合与端接枚举、六种已知组合、未知回包、关闭状态和核心高阻保护；没有发送真实通道查询。
 
 ## M3：当前屏幕波形
 
