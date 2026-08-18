@@ -20,7 +20,7 @@
 
 | 功能域 | 手册命令面 | WaveBench 接口 | 当前状态 | 边界与建议 |
 | --- | --- | --- | --- | --- |
-| 身份 | `*IDN?` | `scope.idn` | M1 计划 | 只接受 RIGOL/MSO8104；序列号不进入测试资料 |
+| 身份 | `*IDN?` | `scope.idn` | 离线通过 | 严格接受 RIGOL/MSO8104；FakeTransport 使用虚构序列号，未实机验证 |
 | 错误队列 | `:SYSTem:ERRor[:NEXT]?` | `scope.errors` | RFC 后跳过 | 查询会消费队首；核心普通文本 query 允许重放 |
 | 输入安全 | `:CHANnel<n>:COUPling?`、`:CHANnel<n>:IMPedance?` | `scope.channel_coupling` | M2 计划 | 联合映射 ACL/DCL/AC/DC；50 Ω 与未知组合默认拒绝 |
 | 模拟通道状态 | display、scale、offset、bandwidth、probe | `scope.snapshot` 的一部分 | M7 评审 | 公共快照要求完整 health/timebase/probe/waveform/trigger；不填虚假默认值 |

@@ -2,14 +2,14 @@
 
 [English](doc/README_EN.md)
 
-WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或一个仪器系列一个包”的方式，维护可由 WaveBench 发现和加载的外置仪器驱动。
+WaveBench 仪器插件的独立源码仓库。仓库计划按「一台仪器或一个仪器系列一个包」的方式，维护可由 WaveBench 发现和加载的外置仪器驱动。
 
 ## 当前状态
 
-正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 M3.5，保留最小 query-only descriptor 并提供五项经认证的厂商专用 RF-OFF 控制。前五个包是 WaveBench 预装驱动的可选外置发行版，用于独立升级、特定 transport 或后续扩展，并不替代或淘汰主包的开箱即用基线。WaveBench v0.8.0 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护。除既有 DS1000Z、DG4000、DM3000、DP800、RTM2000 与 Shengpu SP3000A 外，`wavebench-rigol-mso8000 0.1.0` 已加入仓库，首个目标为 MSO8104，当前只完成 `scope.idn` 离线合同且未连接实机。WaveBench 预装仪器的外置发行版用于独立升级、特定 transport 或后续扩展，不替代主包的开箱即用基线。本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 > [!IMPORTANT]
-> WaveBench `v0.7.0` 尚不包含 Instrument API V2、受管插件生命周期或覆盖槽位。本仓库当前包面向 WaveBench `v0.8.0` release，并统一要求 `wavebench>=0.8,<0.9`；它们不能与 `v0.7.0` 配套运行，也不能自动假定兼容未来 `0.9`。
+> WaveBench `v0.7.0` 尚不包含 Instrument API V2、受管插件生命周期或覆盖槽位。本仓库当前包面向 WaveBench `0.8.x`，各包按实际公开接口声明最低版本，并统一排除未来 `0.9`。MSO8000 当前要求 `wavebench>=0.8.22,<0.9`。
 
 ## 计划结构
 
@@ -19,6 +19,7 @@ packages/
 ├── wavebench-rigol-dm3000/
 ├── wavebench-rigol-dp800/
 ├── wavebench-rigol-ds1000z/
+├── wavebench-rigol-mso8000/
 ├── wavebench-rohde-schwarz-rtm2000/
 ├── wavebench-shengpu-sp3000a/
 └── wavebench-<vendor>-<instrument>/
@@ -32,11 +33,12 @@ packages/
 
 ## 预装基线与外置发行
 
-WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五个仪器族。外置包只在用户显式安装并配置 canonical ID 时提供可选实现；内置短 alias 始终留在主包。DG4000、DM3000、DP800 与 RTM2000 通过核心按 canonical ID + distribution 双重白名单控制的覆盖槽位切换，卸载后 canonical ID 自动恢复到内置实现。DS1000Z 外置包使用独立 canonical `rigol.ds1000z`，内置 `ds1104` / `ds1000z` alias 不受影响。源码历史中仍可能使用“迁移槽位”一词，它只表示受限覆盖机制，不表示预装驱动计划移除。
+WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五个仪器族。外置包只在用户显式安装并配置 canonical ID 时提供可选实现；内置短 alias 始终留在主包。DG4000、DM3000、DP800 与 RTM2000 通过核心按 canonical ID + distribution 双重白名单控制的覆盖槽位切换，卸载后 canonical ID 自动恢复到内置实现。DS1000Z 外置包使用独立 canonical `rigol.ds1000z`，内置 `ds1104` / `ds1000z` alias 不受影响。源码历史中仍可能使用「迁移槽位」一词，它只表示受限覆盖机制，不表示预装驱动计划移除。
 
 ## 当前插件
 
 - [`wavebench-rigol-ds1000z`](packages/wavebench-rigol-ds1000z/README.md)：四通道 RIGOL DS1104Z / DS1000Z 系列，canonical ID `rigol.ds1000z`。
+- [`wavebench-rigol-mso8000`](packages/wavebench-rigol-mso8000/README.md)：RIGOL MSO8104 混合信号示波器，canonical ID `rigol.mso8104`；当前仅完成离线身份能力，未连接实机。
 - [`wavebench-rigol-dg4000`](packages/wavebench-rigol-dg4000/README.md)：双通道 RIGOL DG4202 / DG4000 系列，canonical ID `rigol.dg4202`。
 - [`wavebench-rigol-dm3000`](packages/wavebench-rigol-dm3000/README.md)：LAN-only RIGOL DM3000 / DM3058 数字万用表，canonical ID `rigol.dm3000`；短 alias 保留内建双 backend fallback。
 - [`wavebench-rigol-dp800`](packages/wavebench-rigol-dp800/README.md)：RIGOL DP800 / DP832 / DP832A 可编程直流电源，canonical ID `rigol.dp800`；短 alias 保留内建 fallback。

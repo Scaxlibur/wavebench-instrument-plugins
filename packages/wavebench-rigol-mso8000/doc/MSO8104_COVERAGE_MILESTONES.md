@@ -44,7 +44,7 @@
 | 里程碑 | 状态 | 范围 |
 | --- | --- | --- |
 | M0 | 完成 | 手册审计、核心合同、证据规则、永久拒绝区和发行隔离 |
-| M1 | 未开始 | 最小身份插件与安装生命周期 |
+| M1 | 离线完成 | 最小身份插件与安装生命周期 |
 | M2 | 未开始 | 输入阻抗安全适配；消费型错误查询 RFC |
 | M3 | 未开始 | 当前屏幕 `NORMal + BYTE` 波形 |
 | M4 | 未开始 | 单次、多通道与有界 RAW/DMAX |
@@ -72,6 +72,8 @@
 公开 `scope.idn`。descriptor 导入零 I/O，factory 恰好打开一次核心 transport，`idn()` 严格验证 RIGOL/MSO8104，`close()` 幂等。
 
 退出门：FakeTransport、descriptor、wheel/sdist、package check、一次性虚拟环境安装/卸载全部离线通过。
+
+离线证据：`0.1.0` 的 package tests、Ruff、源码 package check、wheel/sdist 内容和一次性虚拟环境安装/发现/卸载通过。没有发送真实 `*IDN?`。
 
 ## M2：输入阻抗安全适配
 

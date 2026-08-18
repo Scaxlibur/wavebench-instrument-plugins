@@ -2,9 +2,9 @@
 
 [English](README_EN.md)
 
-该目录用于放置独立的 WaveBench 仪器插件源码包。当前正式包为 `wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800`、已完成 SocketIO 数据路径实机验收的 `wavebench-rohde-schwarz-rtm2000` 和 M3 query-only 的 `wavebench-shengpu-sp3000a`。前五个包是主包预装驱动的可选外置发行版；后续也按仪器或紧密相关系列逐包维护，但不以移除预装驱动为目标，也不在这里冻结第二套 manifest、安装器或 catalog 协议。
+该目录用于放置独立的 WaveBench 仪器插件源码包。当前还包含 `wavebench-rigol-mso8000`：首个目标为 MSO8104，`0.1.0` 仅完成 `scope.idn` 离线合同，未连接实机。DG4000、DM3000、DP800、DS1000Z 与 RTM2000 是主包预装驱动的可选外置发行版；MSO8000 与 Shengpu SP3000A 使用独立 canonical ID。后续仍按仪器或紧密相关系列逐包维护，不在这里定义第二套 manifest、安装器或 catalog 协议。
 
-这些包当前对齐 WaveBench `v0.8.0` release，并统一声明 `wavebench>=0.8,<0.9`。它们不能与 `v0.7.0` 配套运行，也不会把未来 `0.9` 自动视为兼容版本。
+这些包面向 WaveBench `0.8.x`，各自按实际使用的公开接口声明最低版本，并统一排除未来 `0.9`。MSO8000 当前要求 `wavebench>=0.8.22,<0.9`。
 
 每个正式包至少应具备：
 

@@ -2,9 +2,9 @@
 
 [中文](README.md)
 
-This directory contains independently packaged WaveBench instrument plugins. The current maintained packages are `wavebench-rigol-ds1000z`, `wavebench-rigol-dg4000`, the LAN-only `wavebench-rigol-dm3000`, `wavebench-rigol-dp800`, the SocketIO-data-path hardware-accepted `wavebench-rohde-schwarz-rtm2000`, and the M3 query-only `wavebench-shengpu-sp3000a`. The first five are optional external editions of drivers bundled with the main package. Future packages should continue the one-instrument-or-family layout without treating bundled-driver removal as a goal or defining a second manifest, installer, or catalog protocol here.
+This directory contains independently packaged WaveBench instrument plugins. It now also contains `wavebench-rigol-mso8000`: its first target is MSO8104, and version `0.1.0` has only an offline `scope.idn` contract with no hardware connection. DG4000, DM3000, DP800, DS1000Z, and RTM2000 are optional external editions of bundled drivers; MSO8000 and Shengpu SP3000A use independent canonical IDs. Future packages keep the one-instrument-or-family layout and do not define a second manifest, installer, or catalog protocol here.
 
-These packages target the WaveBench `v0.8.0` release and uniformly declare `wavebench>=0.8,<0.9`. They do not run with `v0.7.0` release and do not automatically assume compatibility with a future `0.9` core.
+These packages target WaveBench `0.8.x`, declare the minimum version required by their public API usage, and exclude a future `0.9` core. MSO8000 currently requires `wavebench>=0.8.22,<0.9`.
 
 Each maintained package should include:
 
