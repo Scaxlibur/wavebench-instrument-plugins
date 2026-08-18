@@ -24,13 +24,13 @@
     "result_property": 80
   },
   "counts_by_disposition": {
-    "core-gap-rfc": 7,
-    "firmware-unverified": 331,
+    "core-gap-rfc": 8,
+    "firmware-unverified": 340,
     "implemented": 16,
     "model-not-applicable": 2,
     "option-absent": 78,
     "partially-implemented": 2,
-    "planned": 10,
+    "planned": 0,
     "unsafe-quarantined": 132
   },
   "entities": [
@@ -296,7 +296,7 @@
       "directions": [
         "command"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "state-change",
       "wavebench_capabilities": [
         "scope.capture_waveform",
@@ -520,7 +520,7 @@
       "directions": [
         "command"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "state-change",
       "wavebench_capabilities": [
         "scope.autoscale"
@@ -539,7 +539,7 @@
       "directions": [
         "command"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "state-change",
       "wavebench_capabilities": [
         "scope.capture_average"
@@ -3720,7 +3720,7 @@
       "directions": [
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "core-gap-rfc",
       "safety": "read-only",
       "wavebench_capabilities": [
         "scope.acquisition_status"
@@ -3984,7 +3984,7 @@
       "directions": [
         "command"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "state-change",
       "wavebench_capabilities": [
         "scope.capture_waveform",
@@ -6157,7 +6157,7 @@
       "directions": [
         "command"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "state-change",
       "wavebench_capabilities": [
         "scope.autoscale"
@@ -6178,7 +6178,7 @@
       "subsystem": "ACQUISITION",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "planned"
+        "command": "firmware-unverified"
       }
     },
     {
@@ -6692,7 +6692,7 @@
       "directions": [
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "read-only",
       "wavebench_capabilities": [
         "scope.cursor_readout"
@@ -6713,7 +6713,7 @@
       "subsystem": "CURSOR",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "query": "planned"
+        "query": "firmware-unverified"
       }
     },
     {
@@ -8723,7 +8723,7 @@
         "command",
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "read-only",
       "wavebench_capabilities": [],
       "source": {
@@ -8742,8 +8742,8 @@
       "subsystem": "WAVEFORM TRANSFER",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "planned",
-        "query": "planned"
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
       }
     },
     {
@@ -9357,7 +9357,7 @@
       "directions": [
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "read-only",
       "wavebench_capabilities": [
         "scope.measurement_statistics"
@@ -9378,7 +9378,7 @@
       "subsystem": "CURSOR",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "query": "planned"
+        "query": "firmware-unverified"
       }
     },
     {
@@ -10028,7 +10028,7 @@
       "directions": [
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "firmware-unverified",
       "safety": "read-only",
       "wavebench_capabilities": [],
       "source": {
@@ -10047,7 +10047,7 @@
       "subsystem": "WAVEFORM TRANSFER",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "query": "planned"
+        "query": "firmware-unverified"
       }
     },
     {

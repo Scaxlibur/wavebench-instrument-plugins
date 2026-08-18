@@ -26,7 +26,22 @@ Automation 对象虽然不能直接调用，但它们决定名称空间、型号
 
 M1 完成时的状态如下。后续里程碑会在保留稳定 ID 的前提下更新处置状态。
 
-M4 起，目录 schema v2 为 legacy command 增加 `direction_dispositions`。该字段分别记录 command 和 query 方向，防止将已实现的 `WF?` 读取误报为 `WF` 写回支持。下表仍是 M1 分母冻结时的历史快照。
+M4 起，目录 schema v2 为 legacy command 增加 `direction_dispositions`。该字段分别记录 command 和 query 方向，防止将已实现的 `WF?` 读取误报为 `WF` 写回支持，也防止将已实现的 `*OPC?` 误报为 `*OPC` command 支持。
+
+M6 当前处置如下：
+
+| 状态 | 数量 |
+| --- | ---: |
+| `implemented` | 16 |
+| `partially-implemented` | 2 |
+| `core-gap-rfc` | 8 |
+| `firmware-unverified` | 340 |
+| `option-absent` | 78 |
+| `model-not-applicable` | 2 |
+| `unsafe-quarantined` | 132 |
+| `planned` | 0 |
+
+以下 M1 表格是分母冻结时的历史快照，不代表当前实现状态。
 
 | 状态 | 数量 | 含义 |
 | --- | ---: | --- |

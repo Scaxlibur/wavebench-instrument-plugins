@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+from collections import Counter
 
 import pytest
+from wavebench.instruments.capabilities import CAPABILITY_METHODS
+from wavebench_siglent_sds3000 import descriptor as plugin_descriptor
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +24,7 @@ from tools.manual_catalog import (  # noqa: E402
 
 CATALOG_PATH = PACKAGE_ROOT / "doc" / "command-catalog.json"
 BASELINE_PATH = PACKAGE_ROOT / "doc" / "manual-baseline.json"
+CAPABILITY_MATRIX_PATH = PACKAGE_ROOT / "doc" / "wavebench-capability-matrix.json"
 
 
 def test_parses_converter_html_tables_without_vendor_dependencies() -> None:
@@ -67,6 +71,16 @@ def test_committed_catalog_freezes_the_complete_explicit_denominator() -> None:
         for entity in catalog["entities"]
     )
     assert sum(catalog["counts_by_disposition"].values()) == catalog["entity_count"]
+    assert catalog["counts_by_disposition"] == {
+        "core-gap-rfc": 8,
+        "firmware-unverified": 340,
+        "implemented": 16,
+        "model-not-applicable": 2,
+        "option-absent": 78,
+        "partially-implemented": 2,
+        "planned": 0,
+        "unsafe-quarantined": 132,
+    }
 
 
 def test_catalog_does_not_copy_vendor_prose() -> None:
@@ -155,6 +169,38 @@ def test_m5_opc_query_is_not_misreported_as_opc_command_support() -> None:
         "scope.capture_waveform",
         "scope.capture_waveforms",
     ]
+
+
+def test_m6_matrix_disposes_every_wavebench_scope_capability() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    matrix = json.loads(CAPABILITY_MATRIX_PATH.read_text(encoding="utf-8"))
+    entries = matrix["capabilities"]
+    scope_capabilities = [
+        capability for capability in CAPABILITY_METHODS if capability.startswith("scope.")
+    ]
+
+    assert matrix["schema_version"] == 1
+    assert matrix["wavebench_version"] == "0.8.22"
+    assert matrix["scope_capability_count"] == len(scope_capabilities) == 19
+    assert [entry["capability"] for entry in entries] == scope_capabilities
+    assert len({entry["capability"] for entry in entries}) == len(entries)
+
+    dispositions = Counter(entry["disposition"] for entry in entries)
+    assert matrix["counts_by_disposition"] == dict(sorted(dispositions.items()))
+    declared = {entry["capability"] for entry in entries if entry["declared"]}
+    implemented = {
+        entry["capability"] for entry in entries if entry["disposition"] == "implemented"
+    }
+    assert declared == implemented == set(plugin_descriptor().capabilities)
+    assert matrix["declared_capability_count"] == len(declared) == 6
+
+    catalog_ids = {entity["id"] for entity in catalog["entities"]}
+    assert all(entry["manual_entities"] for entry in entries)
+    assert {
+        entity
+        for entry in entries
+        for entity in entry["manual_entities"]
+    } <= catalog_ids
 
 
 def test_local_manual_regenerates_the_committed_catalog() -> None:

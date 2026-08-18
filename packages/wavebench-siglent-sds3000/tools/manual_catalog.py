@@ -216,21 +216,6 @@ _UNSAFE_LEGACY = frozenset(
     }
 )
 
-_PLANNED_LEGACY = frozenset(
-    {
-        "ASET",
-        "CFMT",
-        "CHDR",
-        "CORD",
-        "CRVA?",
-        "INSP?",
-        "PAST?",
-        "TMPL?",
-        "WF",
-        "WFSU",
-    }
-)
-
 _CORE_GAP_LEGACY = frozenset(
     {
         "OFST",
@@ -302,8 +287,6 @@ def _legacy_classification(short: str, subsystem: str) -> tuple[str, str]:
         return "unsafe-quarantined", "destructive-or-external"
     if short in _CORE_GAP_LEGACY:
         return "core-gap-rfc", "state-change"
-    if short in _PLANNED_LEGACY:
-        return "planned", "state-change" if not short.endswith("?") else "read-only"
     return "firmware-unverified", "state-change" if not short.endswith("?") else "read-only"
 
 
@@ -341,14 +324,8 @@ def _automation_classification(
         return "firmware-unverified", "not-callable"
     if any(term in combined for term in _UNSAFE_AUTOMATION_TERMS):
         return "unsafe-quarantined", "destructive-or-external"
-    if path in {
-        "app.AutoSetup",
-        "app.Acquisition.Acquire",
-        "app.Acquisition.ForceTrigger",
-        "app.Acquisition.IsTriggerReady",
-        "app.ClearSweeps",
-    }:
-        return "planned", "read-only" if "IsTriggerReady" in path else "state-change"
+    if path == "app.Acquisition.IsTriggerReady":
+        return "core-gap-rfc", "read-only"
     if type_name.lower() == "action" or kind in {"automation_action", "automation_method"}:
         return "firmware-unverified", "state-change"
     if "read-only" in description.lower():
