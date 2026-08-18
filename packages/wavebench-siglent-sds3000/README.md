@@ -1,8 +1,8 @@
-# WaveBench SIGLENT SDS3000 插件（开发中）
+# WaveBench SIGLENT SDS3000 插件
 
 [English](README_EN.md)
 
-本包提供早期 SIGLENT SDS3000 系列示波器的 WaveBench 外置驱动。该系列不包含名称带 `X` 或 `HD` 的后续产品。当前已建立可安装插件、严格身份门禁、错误寄存器读取、通道耦合映射和二进制波形读取；其他 capability 仍在开发。
+本包提供早期 SIGLENT SDS3000 系列示波器的 WaveBench 外置驱动。该系列不包含名称带 `X` 或 `HD` 的后续产品。当前已完成可安装插件、严格身份门禁、错误寄存器读取、通道耦合映射、二进制波形读取，以及单通道和同次 acquisition 双通道采集。
 
 首个验证目标为 SIGLENT SDS3054。其他同代型号只有在厂商资料与测试证据充分时才会加入兼容范围。
 
@@ -18,14 +18,14 @@
 
 ## 当前状态
 
-- 阶段：M4 波形传输；
+- 阶段：M8 发布整理完成；
 - distribution：`wavebench-siglent-sds3000`；
 - canonical driver ID：`siglent.sds3000`；
 - 仪器类型：`scope`；
 - 首版型号：`SDS3054`；
 - WaveBench 兼容范围：`>=0.8.22,<0.9`；
 - transport：WaveBench `pyvisa`；已验证 `VICP::<host>::INSTR`，使用 `PyVICP>=1.1,<2`；
-- 已声明 capability：`scope.idn`、`scope.errors`、`scope.channel_coupling`、`scope.fetch_waveform`。
+- 已声明 capability：`scope.idn`、`scope.errors`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`。
 
 descriptor 加载和 driver 工厂阶段均不执行仪器 I/O。调用 `scope.idn` 时只发送一次 `*IDN?`，并严格接受 `*IDN LECROY,SDS3054,<serial>,8.4.1`；当 `CHDR OFF` 省略响应头时，也接受对应的裸身份形式。其他厂商、型号或固件均在零写入的情况下拒绝。
 
@@ -34,6 +34,8 @@ descriptor 加载和 driver 工厂阶段均不执行仪器 I/O。调用 `scope.i
 `scope.channel_coupling` 将 MAUI 的 `A1M`、`D1M`、`D50`、`GND` 分别映射为 WaveBench 的 `ACL`、`DCL`、`DC`、`GND`。仪器返回 `OVL` 时按 50 Ω 输入过载处理并拒绝继续。`scope.errors` 依次读取并清除 `CMR`、`EXR` 和 `DDR`；它是 WaveBench 已有的 `stateful_read`，不是普通无副作用查询。
 
 `scope.fetch_waveform` 使用 WaveBench 已有的波形模型和 `query_bin_block()` transport 接口。读取前查询 `CHDR`、`CFMT`、`CORD` 和 `WFSU` 状态，临时切换为 `DEF9,WORD,BIN` 与低字节在前，只读取一个分段，然后按逆序恢复原状态。恢复失败时返回 `StateDriftError`。当前只实现 `WF?` 读取；`WF` 写回内部存储仍隔离，不会被误报为已支持。
+
+`scope.capture_waveform` 与 `scope.capture_waveforms` 使用同一原子采集事务：先快照 trigger mode、timebase、请求通道的 V/div 与 trace 状态，再执行 `STOP → ARM → WAIT → *OPC?`；确认 `TRMD STOP` 后，在不重新触发的前提下读取全部请求通道，最后逆序恢复采集与传输状态。双通道 1 kHz、1 Vpp 三轮实机验收已通过。
 
 ## 编程手册投放位置
 
@@ -55,7 +57,11 @@ Oscilloscopes_Remote_Control_and_Automation_Manual_2026-02.pdf
 
 完整指令分母和处置状态见 [`doc/COMMAND_COVERAGE.md`](doc/COMMAND_COVERAGE.md)。当前目录已固定 578 个明确实体，其中 478 个可调用实体，未分类数量为 0。
 
-`doc/vendor-local/` 中除说明文件外的内容由仓库级 `.gitignore` 排除。厂商资料不会进入 Git；项目原创的协议摘要、覆盖矩阵和验收记录后续另写入 `doc/`。
+WaveBench `0.8.22` 的 19 项 `scope` capability 全量处置见 [`doc/WAVEBENCH_CAPABILITY_MATRIX.md`](doc/WAVEBENCH_CAPABILITY_MATRIX.md)；当前声明 6 项，其余均有固件、选件、核心模型或安全边界结论。跨厂商核心影响评估见 [`doc/WAVEBENCH_CORE_RFC.md`](doc/WAVEBENCH_CORE_RFC.md)，本插件分支没有修改 WaveBench 核心。
+
+脱敏实机结果见 [`doc/HARDWARE_ACCEPTANCE.md`](doc/HARDWARE_ACCEPTANCE.md)。该记录不含资源地址、序列号、原始波形、截图或命令日志。
+
+`doc/vendor-local/` 中除说明文件外的内容由仓库级 `.gitignore` 排除。厂商资料不会进入 Git；项目原创的协议摘要、覆盖矩阵和验收记录位于 `doc/`。
 
 ## 手册到位后的检查顺序
 
