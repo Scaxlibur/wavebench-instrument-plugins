@@ -15,3 +15,9 @@
 - 中英双语的用户可见说明；
 - 独立可打包的 MIT 许可证文件和 SPDX 包元数据；
 - 不含真实设备资源、凭据、原始波形或私有实验记录。
+
+## 孵化目录
+
+- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README.md)：正在审计 MAUI 编程手册的早期 SIGLENT SDS3000 系列目录，首个验证型号为 SDS3054。
+
+孵化目录在协议边界冻结前不提供 `pyproject.toml`、entry point 或 capability。仓库级开发环境会跳过这类目录，避免尚未完成审计的驱动进入正式插件集合。
