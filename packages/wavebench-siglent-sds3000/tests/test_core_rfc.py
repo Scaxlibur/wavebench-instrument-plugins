@@ -37,6 +37,9 @@ def test_rfc_is_explicitly_a_draft_and_milestones_are_aligned() -> None:
         "plugin_adoption": "blocked-until-core-release",
     }
     assert assessment["scope"]["p0_safety_hardening_pending"] is True
+    assert assessment["scope"]["transport_session_api_frozen"] is True
+    assert assessment["scope"]["typed_scope_api_frozen"] is False
+    assert "public_api_frozen" not in assessment["scope"]
 
 
 def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
@@ -55,17 +58,35 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
         "no_replay",
         "read_continuation_only",
     }
+    assert replay["public_api"] == {
+        "methods": [
+            "query",
+            "query_opc",
+            "query_bin_block",
+            "query_float_list",
+        ],
+        "replay_parameter": "keyword-only",
+        "default_replay_policy": "no_replay",
+        "parallel_query_once_method": False,
+    }
     assert "PyVISA" in replay["minimum_behavior"]["backends"]
     assert "GuardedAuditedTransport" in replay["minimum_behavior"]["backends"]
     assert "no_replay" in replay["minimum_behavior"]["legacy_query_default"]
-    assert "fail closed" in replay["minimum_behavior"]["unsupported_continuation"]
+    assert "attempts=0" in replay["minimum_behavior"]["unsupported_continuation"]
+    assert "structured" in replay["minimum_behavior"]["partial_response"]
+    assert "does not replace" in replay["minimum_behavior"]["telemetry"]
     assert any("at most one" in item for item in replay["acceptance"])
+    assert any("before transmission with attempts=0" in item for item in replay["acceptance"])
 
     session = foundations["shared-session-health-and-poison"]
     assert session["status"] == "implemented-unreleased"
     assert set(session["states"]) == {"healthy", "uncertain", "poisoned", "closed"}
-    assert set(session["configuration_states"]) == {"verified", "unverified"}
-    assert "unverified" in session["transitions"]["new_or_reconnected_session"]
+    assert session["configuration_trust"] == {
+        "representation": "epoch-scoped verified_fields set",
+        "initial_verified_fields": [],
+        "global_verified_boolean": False,
+    }
+    assert "empty verified_fields" in session["transitions"]["new_or_reconnected_session"]
     unknown_write = session["transitions"]["write_result_unknown"]
     assert unknown_write["communication_synchronized"] == {
         "next_state": "uncertain",
@@ -78,7 +99,12 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
         "next_state": "poisoned",
         "allowed_instrument_io": [],
     }
-    assert "unrecoverable" in session["transitions"]["restore_failure"]
+    restore_failure = session["transitions"]["restore_failure"]
+    assert restore_failure["next_state"] == "poisoned"
+    assert "TransportIOError" in restore_failure["error_priority"]
+    assert "SessionHealthError" in restore_failure["error_priority"]
+    assert "StateDriftError only" in restore_failure["error_priority"]
+    assert "verified_fields" in session["transitions"]["restore_success"]
     assert "all later instrument operations" in " ".join(session["acceptance"])
     assert "restored" in " ".join(session["acceptance"])
     assert "on_failure=continue" in " ".join(session["acceptance"])
@@ -135,7 +161,11 @@ def test_active_proposals_are_typed_read_only_first_and_cross_vendor() -> None:
         "scope-partial-status-v2",
     }
     assert proposals["scope-read-only-state"]["priority"] == "P1"
-    assert proposals["scope-read-only-state"]["status"] == "blocked-on-p0"
+    assert proposals["scope-read-only-state"]["status"] == "blocked-on-typed-scope-rfc"
+    assert (
+        proposals["scope-read-only-state"]["implementation_gate"]
+        == "released R1 core plus completed plugin P0 adoption"
+    )
     state_contract = proposals["scope-read-only-state"]["public_contract"]
     assert state_contract["field_metadata"]
     assert state_contract["termination"] == "read-only in the first version"
@@ -266,12 +296,13 @@ def test_release_gates_cover_wheel_descriptor_api_and_implementation_order() -> 
     }
     assert gates["changed_by_r1"] is False
     adoption = " ".join(gates["p0_adoption"])
-    assert "wheel and descriptor lower bounds move together" in adoption
-    assert "new api_version" in adoption
+    assert "atomic adoption commit" in adoption
+    assert "wavebench.instrument.v2" in adoption
     assert "before driver factory and transport I/O" in adoption
     adoption_checklist = gates["plugin_adoption_checklist"]
     assert any("TransportIOError" in item for item in adoption_checklist)
     assert any("zero secondary" in item for item in adoption_checklist)
+    assert any("one atomic adoption commit" in item for item in adoption_checklist)
 
     implementation_order = assessment["implementation_order"]
     operation_audit = next(item for item in implementation_order if "OperationSpec" in item)
@@ -284,3 +315,6 @@ def test_release_gates_cover_wheel_descriptor_api_and_implementation_order() -> 
     ):
         assert operation in operation_audit
     assert any("released P0 core" in item for item in implementation_order)
+    atomic_adoption = next(item for item in implementation_order if "atomic adoption" in item)
+    assert "wheel and descriptor version gates together" in atomic_adoption
+    assert "marks the plugin adopted only after every check passes" in atomic_adoption

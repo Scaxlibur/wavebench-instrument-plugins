@@ -59,7 +59,7 @@ Before R1 implementation, `RsInstrumentTransport` and `SerialTransport` did not 
 
 ### Minimum behavior
 
-R1 does not freeze final method names, but the implementation must define at least three explicit policies:
+R1 freezes the existing `query()`, `query_opc()`, `query_bin_block()`, and `query_float_list()` method names and adds a keyword-only `replay` parameter to each method. The first version defines three explicit policies:
 
 ```text
 safe_to_replay
@@ -71,7 +71,7 @@ read_continuation_only
 - `no_replay`: transmits the command at most once. Timeout, partial response, or ambiguous completion never resends the command.
 - `read_continuation_only`: may continue reading an already transmitted response but must not resend the command.
 
-`query_once()` may be a convenience entry point, but it cannot replace the underlying contract. Every backend must make command transmission count, response continuation, partial response, and communication uncertainty observable.
+R1 does not add a parallel public `query_once()` method. Every backend reports command transmission count, response progress, and communication synchronization through the existing methods and structured errors.
 
 The following calls default to `no_replay`:
 
@@ -86,8 +86,8 @@ Independent status polling may opt into replay only through an explicit operatio
 
 - PyVISA, RsInstrument, Serial, `GuardedAuditedTransport`, and FakeTransport share one replay contract.
 - Fault injection proves that a failed `no_replay` query transmits at most once.
-- `read_continuation_only` tests prove that response reading can continue without another command write.
-- Telemetry records replay policy, partial response, and uncertainty without recording sensitive payloads.
+- No first-version backend declares continuation support. `read_continuation_only` tests prove that the request fails before transmission with `attempts=0` and no command write. A later backend may continue the current response only after declaring the capability and passing dedicated tests.
+- `TransportIOError` records replay policy, response progress, and communication synchronization. Telemetry contains only approved non-sensitive metrics and is not a substitute for structured error evidence.
 - SDS3000 `CMR?`, `EXR?`, and `DDR?` migrate only after the core primitive is released; until then the plugin keeps its current version floor and source syntax.
 - The plugin `_acquire_once` path, OPC waits, and temporary restoration context managers must preserve `TransportIOError` and `SessionHealthError` and must not issue a second unauthorized recovery command.
 
@@ -99,18 +99,18 @@ Independent status polling may opt into replay only through an explicit operatio
 healthy -> uncertain -> poisoned -> closed
 ```
 
-This axis describes whether the communication session is trustworthy. Instrument configuration verification is a separate `verified/unverified` marker. A newly connected or reconnected communication session may be `healthy`, but its configuration starts `unverified` and becomes `verified` only after an explicit read-only baseline check.
+This axis describes whether the communication session is trustworthy. Configuration trust is represented by an epoch-scoped `verified_fields` set rather than a global `verified/unverified` boolean. A newly connected or reconnected communication session may be `healthy`, but `verified_fields` starts empty. Explicit read-only verification adds only the proven field closure and never expands an unrelated query into a claim that the whole instrument configuration is verified.
 
 Transitions may skip states. An unknown write result enters `uncertain` when the transport can still prove synchronization; only bounded restoration and verification are then permitted. A possibly desynchronized channel enters `poisoned` immediately. `uncertain` returns to `healthy` only when the channel remains synchronized and restoration is independently read back. `poisoned` cannot recover within the original session.
 
 | Phase | Result | Session behavior |
 | --- | --- | --- |
 | Preflight rejection | No I/O occurred | Remains `healthy` |
-| New connection or reconnect | Communication channel is re-established | `healthy + unverified`; only explicit baseline verification is allowed before configuration is trusted |
+| New connection or reconnect | Communication channel is re-established | `healthy` with an empty `verified_fields`; instrument configuration is not assumed to be restored |
 | Unknown write result | The instrument may have changed | Becomes `uncertain` if synchronization is proven; otherwise immediately `poisoned` |
 | Post-write readback failure | Current value cannot be proved | Becomes `uncertain`; only restoration and verification I/O are allowed |
 | Restoration failure | Original state is unknown | `poisoned` |
-| Restoration success | The channel is synchronized and original state passes tolerance checks | Returns from `uncertain` to `healthy + verified` and records actual quantized values |
+| Restoration success | The channel is synchronized and the related field closure passes independent tolerance checks | Returns from `uncertain` to `healthy`, adds only proven fields to `verified_fields`, and records actual quantized values |
 | Close | Session is no longer usable | `closed` |
 
 ### Responsibility split
@@ -128,12 +128,13 @@ The core development branch now places the latch on the shared `InstrumentSessio
 - Unknown write result with a synchronized channel: uncertain session, limited to restoration and verification.
 - Desynchronized or unprovably synchronized channel: poisoned session.
 - Readback mismatch: failed transaction followed by restoration.
-- Restoration failure: `StateDriftError` plus poisoned session.
+- Independent readback mismatch after restoration: `StateDriftError` plus a poisoned session.
+- Structured failure of a restoration or verification exchange: preserve `TransportIOError` or `SessionHealthError` and poison the session.
 - Later operation on a poisoned session: stable session-health error before I/O.
 
 ## P1-1: Typed read-only state
 
-After P0, the first scope capabilities are read-only:
+After a released core containing R1, completed plugin P0 adoption, and a frozen typed-scope RFC, the first scope capabilities are read-only:
 
 ```text
 scope.analog_channel_state
@@ -282,7 +283,7 @@ Before the plugin adopts P0 core behavior:
 
 1. P0 must exist in a released WaveBench version rather than an unpublished commit.
 2. The wheel and descriptor lower bounds move together to the first P0 release, and the upper bound is reviewed again.
-3. The current `api_version` remains only if `wavebench.instrument.v2` stays compatible. An incompatible executable-plugin contract requires a new core API version and a matching literal in the plugin descriptor.
+3. Core R1 has decided that `wavebench.instrument.v2` remains compatible, so this adoption retains that value. The adoption change still verifies that the core constant and plugin descriptor match. A new API version is required only if the executable-plugin contract changes incompatibly again before release.
 4. Registry validation rejects an API or core-version mismatch before driver-factory or transport I/O.
 5. Isolated wheel installation tests verify `Requires-Dist`, descriptor bounds, `api_version`, and the entry point together.
 
@@ -290,13 +291,13 @@ R1 does not raise any current version gate.
 
 ### Plugin P0 adoption checklist
 
-Core R1 is currently implemented on a development branch but is not released. Before raising any version floor, the plugin must:
+Core R1 is currently implemented on a development branch but is not released. Plugin adoption uses one atomic commit: call-site and fault-injection preparation happens first; that commit raises version gates, validates the final wheel, and marks the plugin adopted only after every check passes.
 
-1. Wait for the first released WaveBench version containing R1; raise the wheel `Requires-Dist` and descriptor `wavebench_min_version` in the same change, then review `wavebench_max_version` and `api_version`.
+1. Wait for the first released WaveBench version containing R1; do not change any version gate before that release.
 2. Classify every plugin transport query explicitly; `CMR?`, `EXR?`, `DDR?`, and acquisition-bound `*OPC?` use `no_replay`.
 3. Preserve `TransportIOError` and `SessionHealthError` through `_acquire_once`, OPC waits, and temporary restoration context managers; do not issue a second unauthorized recovery or validation I/O.
 4. Add fault-injection tests for transmission counts, `uncertain`/`poisoned` latching, `on_failure=continue` zero-I/O blocking, and a new `epoch_id` after reconnect.
-5. Run isolated wheel, descriptor, entry-point, and API-version compatibility tests before marking the plugin adopted.
+5. In one atomic adoption commit, raise the wheel `Requires-Dist` and descriptor lower bound to the first R1 core release, review the upper bound, confirm `api_version="wavebench.instrument.v2"`, and run isolated wheel, descriptor, entry-point, and API-version compatibility tests. Mark the plugin adopted only after every check passes.
 
 ## Acceptance test matrix
 
@@ -339,12 +340,11 @@ P0 foundations apply to every instrument kind and are not SDS3000-specific. P1 a
 
 1. Keep this document as a plugin impact assessment, distinguishing “M8 functionally complete, plugin P0 adoption pending,” RFC R1, and “core implemented but unreleased.”
 2. Reference the accepted transport replay/session RFC, its core development implementation, and the stable reference docs without raising the plugin version floor.
-3. Complete the plugin P0 adoption checklist after the core release.
-4. Verify that the core M7 `OperationSpec` audit for `scope.capture`, `scope.capture_waveforms`, `scope.capture_multiple`, and `scope.fetch_waveform` covers SDS3000 temporary settings; record any gap explicitly in plugin adoption tests.
+3. After the core release, complete call-site migration, structured-exception handling, and fault-injection tests, then verify that the core M7 `OperationSpec` audit for `scope.capture`, `scope.capture_waveforms`, `scope.capture_multiple`, and `scope.fetch_waveform` covers SDS3000 temporary settings.
+4. Create one atomic adoption commit: raise the wheel and descriptor lower bounds together, review the upper bound, confirm `api_version`, run isolated compatibility tests, and mark the plugin adopted only after every check passes.
 5. Freeze a separate typed-scope state RFC covering channel/timebase/edge-trigger fields, core consumers, v1 precedence, and three-vendor mappings.
 6. Implement only frozen typed read-only state. Continue collecting three-vendor acquisition-state evidence without promising `scope.acquisition_run_state`.
-7. Raise the wheel and descriptor version gates together and review `api_version` only after a formal P0 core release and a passing adoption checklist.
-8. Review narrow scale, offset, and timebase patches in a separate RFC after safety evidence exists.
-9. Revisit termination writes, generic trigger writes, and snapshot v2 separately and last.
+7. Review narrow scale, offset, and timebase patches in a separate RFC after safety evidence exists.
+8. Revisit termination writes, generic trigger writes, and snapshot v2 separately and last.
 
-No generic scope write API is frozen until both P0 exit gates pass.
+No generic scope write API is frozen until the typed-scope RFC, typed read-only state, core consumers, and corresponding contract tests are complete.

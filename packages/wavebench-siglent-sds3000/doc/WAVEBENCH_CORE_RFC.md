@@ -59,7 +59,7 @@ R1 实施前，`RsInstrumentTransport` 和 `SerialTransport` 没有相同的显�
 
 ### 最低行为契约
 
-R1 不冻结最终方法名，但核心实现至少需要三类明确策略：
+R1 已冻结现有 `query()`、`query_opc()`、`query_bin_block()` 和 `query_float_list()` 方法名，并为这些方法增加只能以关键字传入的 `replay` 参数。首版包含三类明确策略：
 
 ```text
 safe_to_replay
@@ -71,7 +71,7 @@ read_continuation_only
 - `no_replay`：命令最多发送一次。超时、部分响应或结果不明确后不得再次发送命令。
 - `read_continuation_only`：命令已经发送后，可以继续读取同一响应，但不得重新发送命令。
 
-`query_once()` 可以作为便捷入口，但不能代替底层契约。所有后端都必须能证明命令发送次数、是否只继续读取、是否出现部分响应，以及通信状态是否仍可信。
+R1 不增加平行的 `query_once()` 公共方法。所有后端都必须通过现有方法和结构化错误报告命令发送次数、响应进度和通信同步状态。
 
 以下调用默认使用 `no_replay`：
 
@@ -86,8 +86,8 @@ read_continuation_only
 
 - PyVISA、RsInstrument、Serial、`GuardedAuditedTransport` 和 FakeTransport 使用同一 replay contract。
 - `no_replay` 故障注入测试证明命令最多发送一次。
-- `read_continuation_only` 测试证明可以继续读当前响应，但不会再次写命令。
-- telemetry 记录 replay policy、部分响应和不确定状态，不记录敏感 payload。
+- 首版所有 backend 都不声明 continuation 能力；`read_continuation_only` 测试证明请求在发送前失败、`attempts=0`，且不会写入命令。后续 backend 只有在声明能力并通过专项测试后才能继续读取当前响应。
+- `TransportIOError` 记录 replay policy、响应进度和通信同步状态。telemetry 仅记录经过批准的非敏感指标，不能代替结构化错误证据。
 - SDS3000 的 `CMR?`、`EXR?`、`DDR?` 只有在核心原语发布后才迁移；迁移前插件保持当前最低版本和旧调用语法。
 - 插件 `_acquire_once`、`query_opc()` 包装和临时恢复 contextmanager 必须原样保留 `TransportIOError` / `SessionHealthError`，不得降级成普通超时或继续发送第二条恢复命令。
 
@@ -99,18 +99,18 @@ read_continuation_only
 healthy -> uncertain -> poisoned -> closed
 ```
 
-该状态轴表示通信 session 是否可信；仪器配置是否已经验证使用独立的 `verified/unverified` 标记。新建或重连成功后，通信 session 可以是 `healthy`，但配置必须从 `unverified` 开始，只有显式只读基线复核通过后才能成为 `verified`。
+该状态轴表示通信 session 是否可信；配置可信度使用与连接代次绑定的 `verified_fields` 集合表示，不使用全局 `verified/unverified` 布尔标记。新建或重连成功后，通信 session 可以是 `healthy`，但 `verified_fields` 初始为空。显式只读验证只把已证明的字段闭包加入集合，不能把无关查询扩大为整机配置已验证。
 
 允许跳过中间状态。写入结果未知但 transport 仍能证明通信同步时，session 进入 `uncertain`，仅允许有界恢复与验证；通信可能失步时直接进入 `poisoned`。`uncertain` 只有在通信仍同步且原配置恢复并回读验证通过后才能回到 `healthy`。`poisoned` 在原 session 内不可恢复。
 
 | 阶段 | 结果 | session 行为 |
 | --- | --- | --- |
 | 预检拒绝 | 尚未发生 I/O | 保持 `healthy` |
-| 新建或重连 | 通信通道重新建立 | `healthy + unverified`；只允许执行显式基线复核，不能假定仪器配置已恢复 |
+| 新建或重连 | 通信通道重新建立 | `healthy`，且 `verified_fields` 为空；不能假定仪器配置已恢复 |
 | 写入结果未知 | 设备可能已经改变 | 通信同步可证明时进入 `uncertain`；否则立即 `poisoned` |
 | 写后回读失败 | 当前值无法证明 | 进入 `uncertain`；只允许恢复与验证 I/O |
 | 恢复失败 | 原状态未知 | `poisoned` |
-| 恢复成功 | 通信同步且原状态经容差验证 | 从 `uncertain` 回到 `healthy + verified`，记录实际量化值 |
+| 恢复成功 | 通信同步且相关字段闭包经独立容差验证 | 从 `uncertain` 回到 `healthy`，仅把已证明字段加入 `verified_fields`，并记录实际量化值 |
 | close | session 不再可用 | `closed` |
 
 ### 责任边界
@@ -128,12 +128,13 @@ healthy -> uncertain -> poisoned -> closed
 - 写入结果未知且通信仍同步：session uncertain，只允许恢复与验证；
 - 通信失步或无法证明同步：session poisoned；
 - 回读不一致：事务失败，尝试恢复；
-- 恢复失败：`StateDriftError` 加 session poisoned；
+- 恢复后的独立回读不一致：`StateDriftError` 加 session poisoned；
+- 恢复或验证 exchange 返回结构化传输或健康错误：原样保留 `TransportIOError` / `SessionHealthError`，并把 session 标记为 poisoned；
 - poisoned session 上的后续操作：稳定的 session-health 错误，零 I/O。
 
 ## P1-1：类型化只读状态
 
-P0 完成后，第一批 scope capability 只提供读取：
+包含 R1 的核心版本发布、插件完成 P0 采用且 typed scope RFC 冻结后，第一批 scope capability 只提供读取：
 
 ```text
 scope.analog_channel_state
@@ -282,7 +283,7 @@ session_poisoned
 
 1. P0 已进入正式 WaveBench 版本，不能依赖未发布提交；
 2. wheel 下限与 descriptor 下限在同一提交中提高到首个包含 P0 的核心版本，并重新评审上限；
-3. 只有 `wavebench.instrument.v2` 合同保持兼容时才能保留当前 `api_version`；若可执行插件合同不兼容，核心常量与插件 descriptor 必须使用新的 API 版本；
+3. 核心 R1 已裁决 `wavebench.instrument.v2` 保持兼容，本次采用继续使用该值；采用提交仍须核对核心常量与插件 descriptor 一致。只有发布前的可执行插件合同再次发生不兼容变化时才升级 API 版本；
 4. registry 必须在 driver factory 和 transport I/O 前拒绝 API 或核心版本不匹配；
 5. 隔离 wheel 安装测试必须同时核对 `Requires-Dist`、descriptor 版本范围、`api_version` 和 entry point。
 
@@ -290,13 +291,13 @@ session_poisoned
 
 ### 插件 P0 采用清单
 
-核心 R1 目前是「开发分支已实现、正式版本未发布」。插件在提高版本门之前必须完成以下动作：
+核心 R1 目前是「开发分支已实现、正式版本未发布」。插件采用使用一个原子提交：提交前完成调用点和故障注入准备；同一提交提高版本门、验证最终 wheel，并在全部检查通过后标记 adopted。
 
-1. 等待首个包含 R1 的 WaveBench 正式版本，并在同一提交中提高 wheel `Requires-Dist`、descriptor `wavebench_min_version`，重新评审 `wavebench_max_version` 和 `api_version`。
+1. 等待首个包含 R1 的 WaveBench 正式版本；正式发布前不修改任何版本门。
 2. 将 driver 中所有 transport query 显式标为 `no_replay` 或经专项审计批准的 `safe_to_replay`；`CMR?`、`EXR?`、`DDR?` 和 acquisition-bound `*OPC?` 固定使用 `no_replay`。
 3. 在 `_acquire_once`、OPC 等待和临时恢复路径中原样传播 `TransportIOError`、`SessionHealthError`；结构化异常发生后不执行未经授权的第二次恢复/验证 I/O。
 4. 增加故障注入测试，断言发送次数、`uncertain`/`poisoned` 转移、`on_failure=continue` 的零二次 I/O，以及关闭/重连后的新 `epoch_id`。
-5. 通过隔离 wheel、descriptor、entry point 和 API 版本联合测试后，才把本 RFC 的插件状态改为 adopted。
+5. 在一个原子采用提交中，同时把 wheel `Requires-Dist` 和 descriptor 下限提高到首个 R1 核心版本，重新评审上限，确认 `api_version="wavebench.instrument.v2"`，并运行隔离 wheel、descriptor、entry point 和 API 版本联合测试；全部通过后才把插件状态改为 adopted。
 
 ## 验收测试矩阵
 
@@ -339,12 +340,11 @@ P0 基础设施适用于所有仪器类型，不是 SDS3000 专用接口；P1/P2
 
 1. 保留本文件作为插件影响评估，区分「M8 功能完成、插件 P0 采用待处理」、RFC R1 和「核心已实现但未发布」三类状态。
 2. 核对已接受的 transport replay/session RFC、核心开发分支实现和稳定 reference 文档，不把未发布提交写入插件版本门。
-3. 在核心正式发布后完成上面的插件 P0 采用清单和合同测试。
-4. 核对核心 M7 已审计的 `scope.capture`、`scope.capture_waveforms`、`scope.capture_multiple` 和 `scope.fetch_waveform` `OperationSpec` 是否覆盖 SDS3000 的实际临时设置；差异必须在插件采用测试中显式记录。
+3. 核心正式发布后，完成调用点迁移、结构化异常处理和故障注入测试，并核对核心 M7 的 `scope.capture`、`scope.capture_waveforms`、`scope.capture_multiple` 和 `scope.fetch_waveform` `OperationSpec` 是否覆盖 SDS3000 的实际临时设置。
+4. 创建单一原子采用提交：同步提高 wheel/descriptor 下限，重新评审上限，确认 `api_version`，运行隔离兼容性测试，并在全部检查通过后标记 adopted。
 5. 单独冻结 typed scope state RFC，明确 channel/timebase/edge-trigger 字段、核心消费矩阵、v1 优先级和三厂商映射。
 6. 实现已冻结的类型化只读状态；采集状态轴继续收集三厂商证据，不预先承诺 `scope.acquisition_run_state`。
-7. 只有 P0 核心正式发布且采用清单通过后，才同时提高 wheel/descriptor 版本门并复核 `api_version`。
-8. 在安全证据充分后另立 RFC 评审窄范围 scale/offset/timebase patch。
-9. 最后分别重新评审 termination 写入、通用触发写入和 snapshot v2。
+7. 在安全证据充分后另立 RFC 评审窄范围 scale/offset/timebase patch。
+8. 最后分别重新评审 termination 写入、通用触发写入和 snapshot v2。
 
-前两项 P0 退出门全部通过前，不冻结任何通用 scope 写入 API。
+typed scope RFC、类型化只读状态、核心消费入口和对应合同测试全部完成前，不冻结任何通用 scope 写入 API。

@@ -31,7 +31,8 @@
     ],
     "current_plugin_blocked_by_core": false,
     "p0_safety_hardening_pending": true,
-    "public_api_frozen": false
+    "transport_session_api_frozen": true,
+    "typed_scope_api_frozen": false
   },
   "specification_freeze_gates": [
     {
@@ -100,24 +101,36 @@
         "no_replay",
         "read_continuation_only"
       ],
+      "public_api": {
+        "methods": [
+          "query",
+          "query_opc",
+          "query_bin_block",
+          "query_float_list"
+        ],
+        "replay_parameter": "keyword-only",
+        "default_replay_policy": "no_replay",
+        "parallel_query_once_method": false
+      },
       "minimum_behavior": {
-        "query_once": "one command transmission at most; a timeout or ambiguous result is not retried",
-        "read_continuation_only": "may continue reading an already transmitted response, but must never resend the command",
-        "unsupported_continuation": "fail closed with a structured non-replayable transport error; never resend the command",
+        "no_replay": "one command transmission at most; a timeout or ambiguous result is not retried",
+        "read_continuation_only": "reserved by the public policy type; every first-version backend fails before transmission, while a future capable backend may continue only the current response and never resend the command",
+        "unsupported_continuation": "fail closed before transmission with attempts=0 and a structured non-replayable transport error",
         "safe_to_replay": "the caller explicitly opts in; the transport never infers safety from command text",
         "consuming_reads": "read-to-clear registers and acquisition-bound *OPC? use no_replay",
-        "partial_response": "record partial-response telemetry and return a non-replayable failure",
+        "partial_response": "return a structured, non-replayable TransportIOError carrying response_progress and synchronization evidence; telemetry is not the contract source",
         "legacy_query_default": "unclassified legacy calls remain source-compatible but use no_replay by default",
         "structured_errors": "record whether the command was transmitted, whether bytes arrived, and whether the channel may be desynchronized",
+        "telemetry": "may record approved non-sensitive operational metrics but does not replace structured replay, response-progress, or synchronization evidence",
         "backends": "PyVISA, RsInstrument, Serial, GuardedAuditedTransport, and FakeTransport share the same contract"
       },
       "acceptance": [
         "a failed no_replay query sends at most one command",
-        "an allowed continuation read never sends a second command",
-        "a backend without continuation support fails without resending",
+        "every first-version backend rejects read_continuation_only before transmission with attempts=0",
+        "a future backend with declared continuation support may continue the current response but never resend the command",
         "*OPC? can be marked no_replay for acquisition synchronization",
         "read-to-clear errors cannot be silently replayed",
-        "transport telemetry records replay policy and uncertain response state"
+        "TransportIOError records replay policy, response progress, and communication synchronization without sensitive payloads"
       ]
     },
     {
@@ -130,12 +143,13 @@
         "poisoned",
         "closed"
       ],
-      "configuration_states": [
-        "verified",
-        "unverified"
-      ],
+      "configuration_trust": {
+        "representation": "epoch-scoped verified_fields set",
+        "initial_verified_fields": [],
+        "global_verified_boolean": false
+      },
       "transitions": {
-        "new_or_reconnected_session": "healthy communication channel with unverified instrument configuration; explicit read-only baseline validation is required",
+        "new_or_reconnected_session": "healthy communication channel with an empty verified_fields set; no previous configuration trust is inherited",
         "preflight_rejection": "no I/O and session remains healthy",
         "write_result_unknown": {
           "communication_synchronized": {
@@ -151,9 +165,13 @@
           }
         },
         "readback_failure": "uncertain with only bounded restoration and verification I/O allowed",
-        "restore_failure": "poisoned and unrecoverable in the original session",
-        "restore_success": "uncertain returns to healthy only when communication is synchronized and restoration readback passes; configuration becomes verified",
-        "close": "closed; reconnect creates a new healthy communication session whose configuration remains unverified"
+        "restore_failure": {
+          "next_state": "poisoned",
+          "error_priority": "preserve TransportIOError or SessionHealthError when the restoration or verification exchange fails; use StateDriftError only for an independently observed semantic or readback mismatch"
+        },
+        "restore_success": "uncertain returns to healthy only when communication is synchronized and the related field closure passes independent readback; only proven fields are added to verified_fields",
+        "health_degradation": "leaving healthy clears verified_fields for the current epoch",
+        "close": "closed; reconnect creates a new healthy communication session with an empty verified_fields set"
       },
       "responsibility": {
         "core": "shared health state, error taxonomy, operation gate, and on_failure=continue stop behavior",
@@ -164,8 +182,8 @@
         "the latch lives on the shared driver/session rather than a temporary Service",
         "all later instrument operations reject a poisoned session before transport I/O",
         "rebuilding a Service does not clear the latch",
-        "explicit close and reconnect create a new session but do not claim that instrument configuration was restored",
-        "uncertain returns to healthy only after synchronized restoration and independent readback",
+        "explicit close and reconnect create a new session with empty verified_fields and do not claim that instrument configuration was restored",
+        "uncertain returns to healthy only after synchronized restoration and independent readback of the complete related field closure",
         "run plans with on_failure=continue cannot continue any instrument I/O on a poisoned session"
       ]
     }
@@ -174,7 +192,8 @@
     {
       "id": "scope-read-only-state",
       "priority": "P1",
-      "status": "blocked-on-p0",
+      "status": "blocked-on-typed-scope-rfc",
+      "implementation_gate": "released R1 core plus completed plugin P0 adoption",
       "compatibility": "additive",
       "capabilities": [
         "scope.analog_channel_state",
@@ -450,18 +469,18 @@
     },
     "p0_adoption": [
       "P0 behavior exists in a released WaveBench version",
-      "wheel and descriptor lower bounds move together to the first P0 release and the upper bound is reviewed",
-      "wavebench.instrument.v2 remains only if its executable-plugin contract is compatible; otherwise core and descriptor use a new api_version",
+      "one atomic adoption commit moves the wheel and descriptor lower bounds together to the first P0 release and reviews the upper bound",
+      "core R1 retains wavebench.instrument.v2; the atomic adoption commit verifies that the core constant and descriptor match",
       "registry rejects core-version or api_version mismatch before driver factory and transport I/O",
-      "isolated wheel tests verify Requires-Dist, descriptor bounds, api_version, and entry point together"
+      "the atomic adoption commit runs isolated wheel tests for Requires-Dist, descriptor bounds, api_version, and entry point before marking the plugin adopted"
     ],
     "plugin_adoption_checklist": [
-      "wait for the first released core containing R1 before raising any version floor",
+      "wait for the first released core containing R1 and leave every version gate unchanged before that release",
       "classify every plugin transport query explicitly; CMR?, EXR?, DDR?, and acquisition-bound *OPC? use no_replay",
       "preserve TransportIOError and SessionHealthError through _acquire_once, OPC waits, and temporary restoration context managers",
       "prove zero secondary recovery or validation I/O after structured transport/session failure",
       "assert transmission counts, uncertain/poisoned latching, on_failure=continue blocking, and new epoch_id after reconnect",
-      "run isolated wheel, descriptor, entry-point, and api_version compatibility tests before marking the plugin adopted"
+      "in one atomic adoption commit, update the wheel and descriptor lower bounds, review the upper bound, confirm wavebench.instrument.v2, run isolated compatibility tests, and only then mark the plugin adopted"
     ],
     "changed_by_r1": false
   },
@@ -553,11 +572,10 @@
   "implementation_order": [
     "keep M8-functional-complete, plugin-P0-pending, accepted RFC R1, and core-M1-M7-implemented-unreleased labels distinct",
     "reference the accepted transport replay/session RFC and its offline-tested development implementation without raising the plugin version floor",
-    "complete the plugin adoption checklist after a released P0 core",
-    "verify that the core M7 OperationSpec audit for scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform covers SDS3000 temporary settings and record gaps in plugin adoption tests",
+    "after a released P0 core, complete call-site migration, structured-exception handling, fault-injection tests, and verification that the core M7 OperationSpec audit for scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform covers SDS3000 temporary settings",
+    "create one atomic adoption commit that updates wheel and descriptor version gates together, confirms wavebench.instrument.v2, runs isolated compatibility tests, and marks the plugin adopted only after every check passes",
     "freeze a separate typed-scope state RFC with exact fields, consumers, v1 precedence, and three-vendor mappings",
     "implement only frozen typed read-only state and continue collecting acquisition-state evidence",
-    "after a released P0 core, raise wheel and descriptor version gates together and review api_version before plugin adoption",
     "consider narrow scale/offset/timebase patches in a separate RFC after the safety gate",
     "revisit termination, generic trigger writes, and snapshot v2 only in separate future RFCs"
   ]
