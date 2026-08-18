@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-M0～M4 与 M7 已离线完成，M5 截图和 M6 数字通道经 RFC/证据评审后跳过。当前 `0.7.0` 已新增 `scope.autoscale`、`scope.math_metadata` 与受限 `scope.cursor_readout`；其余高级能力按核心模型或厂商证据缺口保持未声明，下一步为 M8 发行审计。
+M0～M4、M7 与 M8 已离线完成，M5 截图和 M6 数字通道经 RFC/证据评审后跳过。当前 `0.7.0` 已新增 `scope.autoscale`、`scope.math_metadata` 与受限 `scope.cursor_readout`；其余高级能力按核心模型或厂商证据缺口保持未声明。M8 发行审计已收口。
 
 本轮开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期验证，不连接真实仪器。所有型号、固件、transport、吞吐、恢复和测量结论均保持「未实机验证」。
 
@@ -30,9 +30,16 @@ M0～M4 与 M7 已离线完成，M5 截图和 M6 数字通道经 RFC/证据评�
 - [MSO8104 功能覆盖里程碑](doc/MSO8104_COVERAGE_MILESTONES.md)
 - [MSO8104 编程手册功能覆盖矩阵](doc/MSO8104_COVERAGE_MATRIX.md)
 
-## 推荐开发顺序
+## M8 离线发行证据
 
-1. M8 对文档、测试、制品和安装生命周期做全量离线审计。
+- MSO8104 包测试：168 项通过；全仓 Ruff 通过。
+- 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
+- WaveBench `0.8.22` package check：源码目录和真实 wheel 均通过。
+- wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。
+- 一次性虚拟环境：安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过。
+- 文档：61 个受跟踪 Markdown 文件的本地链接有效。
+
+这些结果只证明离线合同与发行完整性，不构成型号、固件、transport、吞吐、恢复或测量准确度的实机证据。
 
 ## 安全边界
 

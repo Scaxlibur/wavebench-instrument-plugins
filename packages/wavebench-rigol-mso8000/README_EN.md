@@ -4,7 +4,7 @@ This directory is the starting point for a WaveBench plugin for the RIGOL MSO800
 
 ## Current status
 
-M0 through M4 and M7 are offline complete. M5 screenshot and M6 digital support were reviewed then skipped under RFC/evidence gaps. Version `0.7.0` adds `scope.autoscale`, `scope.math_metadata`, and a restricted `scope.cursor_readout`; other advanced capabilities remain undeclared under explicit core-model or vendor-evidence gaps. M8 package audit is next.
+M0 through M4, M7, and M8 are offline complete. M5 screenshot and M6 digital support were reviewed then skipped under RFC/evidence gaps. Version `0.7.0` adds `scope.autoscale`, `scope.math_metadata`, and a restricted `scope.cursor_readout`; other advanced capabilities remain undeclared under explicit core-model or vendor-evidence gaps. The M8 package audit is complete.
 
 This development pass is offline-only. It uses the manual, FakeTransport tests, fault injection, builds, and installation lifecycle checks, and does not connect to hardware. Model, firmware, transport, throughput, restoration, and measurement claims remain unverified.
 
@@ -16,6 +16,17 @@ Current identity:
 - Target model: `MSO8104`
 - Python: `>=3.11`
 - WaveBench: `>=0.8.22,<0.9`
+
+## M8 offline release evidence
+
+- All 168 MSO8104 package tests and repository-wide Ruff checks pass.
+- In a disposable sibling WaveBench-core layout, 715 root tests pass and two SP3000A private-hardware-evidence tests skip as expected.
+- WaveBench `0.8.22` package checks pass for both the source directory and the real wheel.
+- The wheel/sdist contracts cover the single instrument entry point, WaveBench runtime dependency, MIT license, and public content; vendor-local material is absent.
+- A disposable virtual environment passes installation, zero-I/O descriptor discovery, uninstall, and canonical-ID fallback.
+- Local links resolve in all 61 tracked Markdown files.
+
+This evidence covers offline contracts and distribution integrity only. Model, firmware, transport, throughput, restoration, and measurement accuracy remain hardware-unverified.
 
 ## Directory layout
 
