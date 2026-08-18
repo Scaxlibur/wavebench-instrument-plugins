@@ -93,6 +93,22 @@ def parse_display_state(response: str) -> bool:
     return normalized == "1"
 
 
+def parse_timebase_mode(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="timebase mode",
+        allowed=frozenset({"MAIN", "XY", "ROLL"}),
+    )
+
+
+def parse_trigger_status(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="trigger status",
+        allowed=frozenset({"TD", "WAIT", "RUN", "AUTO", "STOP"}),
+    )
+
+
 def _parse_bounded_integer(
     response: str,
     *,

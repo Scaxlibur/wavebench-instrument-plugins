@@ -6,7 +6,10 @@ from wavebench.instruments import InstrumentDescriptor
 def _open_driver(context):
     from .driver import MSO8104Scope
 
-    return MSO8104Scope(transport=context.open_transport())
+    return MSO8104Scope(
+        transport=context.open_transport(),
+        acquisition_timeout_s=context.opc_timeout_ms / 1000.0,
+    )
 
 
 def descriptor() -> InstrumentDescriptor:
@@ -17,7 +20,13 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="RIGOL Technologies",
         models=("MSO8104",),
         aliases=(),
-        capabilities=("scope.idn", "scope.channel_coupling", "scope.fetch_waveform"),
+        capabilities=(
+            "scope.idn",
+            "scope.channel_coupling",
+            "scope.fetch_waveform",
+            "scope.capture_waveform",
+            "scope.capture_waveforms",
+        ),
         idn_patterns=("RIGOL TECHNOLOGIES,MSO8104",),
         backends=("pyvisa",),
         resource_schemes=("tcpip", "usb", "gpib"),
@@ -30,7 +39,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.22",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-mso8000",
-        version="0.3.0",
+        version="0.3.1",
         source="entry_point:rigol.mso8104",
         scope_coupling_policy="switchable-termination",
         config_fields=(

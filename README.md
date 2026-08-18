@@ -6,7 +6,7 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按「一台仪器或�
 
 ## 当前状态
 
-正式源码包已进入独立维护。除既有 DS1000Z、DG4000、DM3000、DP800、RTM2000 与 Shengpu SP3000A 外，`wavebench-rigol-mso8000 0.3.0` 已加入仓库，首个目标为 MSO8104，当前完成身份、输入阻抗保护与当前屏幕波形的离线合同且未连接实机。WaveBench 预装仪器的外置发行版用于独立升级、特定 transport 或后续扩展，不替代主包的开箱即用基线。本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护。除既有 DS1000Z、DG4000、DM3000、DP800、RTM2000 与 Shengpu SP3000A 外，`wavebench-rigol-mso8000 0.3.1` 已加入仓库，首个目标为 MSO8104，当前完成身份、输入安全、当前屏幕波形与 `DEF` 单次/多通道采集的离线合同且未连接实机。WaveBench 预装仪器的外置发行版用于独立升级、特定 transport 或后续扩展，不替代主包的开箱即用基线。本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 > [!IMPORTANT]
 > WaveBench `v0.7.0` 尚不包含 Instrument API V2、受管插件生命周期或覆盖槽位。本仓库当前包面向 WaveBench `0.8.x`，各包按实际公开接口声明最低版本，并统一排除未来 `0.9`。MSO8000 当前要求 `wavebench>=0.8.22,<0.9`。
@@ -38,7 +38,7 @@ WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五�
 ## 当前插件
 
 - [`wavebench-rigol-ds1000z`](packages/wavebench-rigol-ds1000z/README.md)：四通道 RIGOL DS1104Z / DS1000Z 系列，canonical ID `rigol.ds1000z`。
-- [`wavebench-rigol-mso8000`](packages/wavebench-rigol-mso8000/README.md)：RIGOL MSO8104 混合信号示波器，canonical ID `rigol.mso8104`；当前完成离线身份、输入阻抗保护与屏幕波形能力，未连接实机。
+- [`wavebench-rigol-mso8000`](packages/wavebench-rigol-mso8000/README.md)：RIGOL MSO8104 混合信号示波器，canonical ID `rigol.mso8104`；当前完成离线身份、输入安全、屏幕波形与 `DEF` 采集能力，未连接实机。
 - [`wavebench-rigol-dg4000`](packages/wavebench-rigol-dg4000/README.md)：双通道 RIGOL DG4202 / DG4000 系列，canonical ID `rigol.dg4202`。
 - [`wavebench-rigol-dm3000`](packages/wavebench-rigol-dm3000/README.md)：LAN-only RIGOL DM3000 / DM3058 数字万用表，canonical ID `rigol.dm3000`；短 alias 保留内建双 backend fallback。
 - [`wavebench-rigol-dp800`](packages/wavebench-rigol-dp800/README.md)：RIGOL DP800 / DP832 / DP832A 可编程直流电源，canonical ID `rigol.dp800`；短 alias 保留内建 fallback。

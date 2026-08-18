@@ -36,13 +36,15 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.idn",
         "scope.channel_coupling",
         "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms",
     )
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb", "gpib")
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.wavebench_min_version == "0.8.22"
     assert descriptor.wavebench_max_version == "0.9.0"
-    assert descriptor.version == "0.3.0"
+    assert descriptor.version == "0.3.1"
     assert descriptor.validate_options({}) == {}
 
 
@@ -71,6 +73,7 @@ def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> Non
 
     assert open_calls == 1
     assert driver.transport is transport
+    assert driver.acquisition_timeout_s == 2.0
     assert transport.queries == []
 
 

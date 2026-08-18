@@ -29,7 +29,7 @@
 | edge trigger | source、slope、level、status、sweep | capture、snapshot | M4/M7 计划 | 首轮沿用已配置 trigger；任意 setter 不开放 |
 | 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | 离线通过 | 固定 1000 点；目标通道须已显示；恢复六项传输状态，不隐式停止 acquisition |
 | 深存储波形 | MAX/RAW/TRACE、start/stop 分块 | fetch/capture | M4 计划 | DMAX 有硬上限；WORD 字节序未定义；超大流式输出需核心 RFC |
-| 单次与多通道 | `:SINGle`、`*OPC?`、逐源 waveform | `scope.capture_waveform(s)` | M4 计划 | 一次 acquisition 后读多通道；不宣称额外硬件同步保证 |
+| 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | `DEF` 离线通过 | 一次 SINGLE 后轮询 STOP 并读多通道；X 轴一致；不使用 `*OPC?` 冒充采集完成 |
 | 截图 | `:DISPlay:DATA?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot` | M5 计划 | 只采用核心能安全读取的 TMC block；不写仪器文件 |
 | 数字通道 | `:LA:*`、D0～D15 waveform | digital status/waveform | M6 计划 | 依赖模块与探头；停止状态和轴一致性必需 |
 | 自动测量与统计 | `:MEASure:*` | measurement statistics | M7 评审 | 只读已配置项目；不自动创建或清空统计 |

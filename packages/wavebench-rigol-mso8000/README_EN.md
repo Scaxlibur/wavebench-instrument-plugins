@@ -4,7 +4,7 @@ This directory is the starting point for a WaveBench plugin for the RIGOL MSO800
 
 ## Current status
 
-M0 through M3 are offline complete. Version `0.3.0` declares `scope.idn`, `scope.channel_coupling`, and `scope.fetch_waveform`. It does not yet declare active capture, screenshot, digital, or consuming error-queue capabilities.
+M0 through M3 are offline complete, and version `0.3.1` adds the `DEF` slice of M4. It declares identity, coupling, fetch, single-capture, and multi-capture capabilities. MAX/DMAX, screenshot, digital, and consuming error-queue capabilities remain incomplete.
 
 This development pass is offline-only. It uses the manual, FakeTransport tests, fault injection, builds, and installation lifecycle checks, and does not connect to hardware. Model, firmware, transport, throughput, restoration, and measurement claims remain unverified.
 
@@ -39,3 +39,5 @@ The descriptor accepts `tcpip`, `usb`, and `gpib` resource prefixes as a manual-
 `channel_coupling()` combines channel coupling and input impedance. `AC/DC + OMEG` maps to the core high-impedance tokens `ACL/DCL`, while `AC/DC + FIFT` maps to the low-impedance tokens `AC/DC`; the core rejects 50 ohms, `GND`, and unknown states by default. The plugin does not declare `scope.errors` because `:SYSTem:ERRor?` consumes an entry while ordinary core text queries may replay. Future waveform service calls must explicitly set `scope.check_errors=false` until [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) is implemented.
 
 The current waveform path accepts only `points="def"`, requires the target channel to be displayed, and temporarily selects `NORMal + BYTE + 1000` points. It snapshots, reads back, and restores SOURCE, MODE, FORMAT, POINTS, START, and STOP without issuing STOP, SINGLE, or AUTOSCALE. An ambiguous write or failed restore latches the waveform write domain until the session is reopened. Because transfer state is written, use `scope.access="read_write"` together with `scope.check_errors=false`.
+
+`capture_waveform(s)` also accepts only `points="def"`, requires every target channel to be displayed, and requires MAIN timebase mode. A multi-channel call sends one `:SINGle`, polls `:TRIGger:STATus?` until STOP, then reads channels and checks X-axis consistency. It does not use `*OPC?` as acquisition evidence and never forces STOP, RUN, or another trigger. Timeout or uncertain status latches acquisition writes. Time-range and vertical-scale arguments remain unsupported, and capture leaves the scope in the natural STOP state reached by SINGLE.

@@ -15,7 +15,7 @@ The audited source is RIGOL MSO8000 Programming Guide `PGA26006-1110`, which cov
 | Acquisition/timebase/edge trigger | type, averages, depth, rate, main timebase, edge trigger | capture/status/snapshot | M4/M7; keep acquisition and restoration explicit |
 | Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | Offline complete; fixed 1000 displayed-channel points, six-field transfer-state restoration, and no implicit stop |
 | Deep waveform | MAX/RAW/TRACE and chunk ranges | fetch/capture | M4; hard point and memory limits; streaming needs a core RFC |
-| Single and multi-channel capture | SINGLE/OPC plus per-source waveform | capture protocols | M4; one acquisition before all channel reads; no extra synchronization claim |
+| Single and multi-channel capture | SINGLE, trigger status, and per-source waveform | capture protocols | `DEF` offline complete; one SINGLE, STOP polling, consistent X axes, and no OPC completion claim |
 | Screenshot | display data or save-image data | `scope.screenshot` | M5; use core-supported block framing and no instrument files |
 | Digital/MSO | LA state and D0-D15 waveform | digital status/waveform | M6; module gate, stopped acquisition, axis consistency, uint16 packing |
 | Measurement, math, FFT, reference, cursor | corresponding query families | typed scope capabilities | M7 review; read existing configuration only and skip model mismatches |

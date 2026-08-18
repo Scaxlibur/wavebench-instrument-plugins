@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pytest
 
-from wavebench.errors import ConfigError, DataError, InstrumentError
+from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench_rigol_mso8000.driver import MSO8104Scope, WaveformTransferState
 from wavebench_rigol_mso8000.parsers import parse_rigol_waveform_preamble
 
@@ -42,7 +42,11 @@ class WaveformTransport:
         self.state = asdict(state or _initial_state())
         self.preamble = preamble or _normal_preamble()
         self.payload = payload if payload is not None else _normal_payload()
+        self.preambles: dict[str, str] = {}
+        self.payloads: dict[str, bytes] = {}
         self.displayed = {channel: True for channel in range(1, 5)}
+        self.timebase_mode = "MAIN"
+        self.trigger_statuses = ["STOP"]
         self.events: list[tuple[str, str]] = []
         self.fail_writes: set[str] = set()
         self.binary_error: Exception | None = None
@@ -66,12 +70,23 @@ class WaveformTransport:
         }
         if command in queries:
             return str(self.state[queries[command]])
+        if command == ":TIMebase:MODE?":
+            return self.timebase_mode
+        if command == ":TRIGger:STATus?":
+            if len(self.trigger_statuses) > 1:
+                return self.trigger_statuses.pop(0)
+            return self.trigger_statuses[0]
         if command == ":WAVeform:PREamble?":
-            return self.preamble
+            return self.preambles.get(str(self.state["source"]), self.preamble)
         raise AssertionError(f"unexpected text query: {command}")
 
     def write(self, command: str) -> None:
         self.events.append(("write", command))
+        if command == ":SINGle":
+            if command in self.fail_writes:
+                self.fail_writes.remove(command)
+                raise InstrumentError(f"injected ambiguous write: {command}")
+            return
         prefixes = {
             ":WAVeform:SOURce ": "source",
             ":WAVeform:MODE ": "mode",
@@ -103,7 +118,7 @@ class WaveformTransport:
                 raise AssertionError("binary release was not signaled")
         if self.binary_error is not None:
             raise self.binary_error
-        return self.payload
+        return self.payloads.get(str(self.state["source"]), self.payload)
 
     def close(self) -> None:
         self.close_calls += 1
@@ -346,4 +361,222 @@ def test_two_fetch_transactions_do_not_interleave() -> None:
     assert errors == []
     assert sorted(results) == [1, 2]
     assert transport.binary_calls == 2
+    assert transport.state == asdict(_initial_state())
+
+
+def test_multi_channel_capture_uses_one_single_and_stop_poll() -> None:
+    transport = WaveformTransport()
+    transport.trigger_statuses = ["WAIT", "RUN", "TD", "STOP"]
+    scope = MSO8104Scope(
+        transport=transport,
+        trigger_poll_interval_s=0.0,
+        _sleep=lambda _: None,
+    )
+    callbacks: list[tuple[str, int]] = []
+
+    waveforms = scope.capture_waveforms(
+        channels=[1, 2],
+        points="DEF",
+        check_errors=False,
+        on_channel_start=lambda channel: callbacks.append(("start", int(channel))),
+        on_waveform=lambda channel, _: callbacks.append(("waveform", channel)),
+    )
+
+    assert list(waveforms) == [1, 2]
+    assert callbacks == [
+        ("start", 1),
+        ("waveform", 1),
+        ("start", 2),
+        ("waveform", 2),
+    ]
+    assert transport.events.count(("write", ":SINGle")) == 1
+    assert transport.events.count(("query", ":TRIGger:STATus?")) == 4
+    assert transport.binary_calls == 2
+    assert transport.state == asdict(_initial_state())
+    acquisition_writes = [
+        command
+        for direction, command in transport.events
+        if direction == "write" and command in {":SINGle", ":RUN", ":STOP"}
+    ]
+    assert acquisition_writes == [":SINGle"]
+    assert scope.acquisition_writes_blocked is False
+
+
+def test_single_channel_capture_delegates_to_one_multi_capture() -> None:
+    transport = WaveformTransport()
+    scope = MSO8104Scope(transport=transport)
+
+    waveform = scope.capture_waveform(
+        channel=3,
+        points="DEF",
+        check_errors=False,
+    )
+
+    assert waveform.channel == 3
+    assert transport.events.count(("write", ":SINGle")) == 1
+    assert transport.binary_calls == 1
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"channels": [], "points": "DEF", "check_errors": False},
+        {"channels": (1,), "points": "DEF", "check_errors": False},
+        {"channels": [1, 1], "points": "DEF", "check_errors": False},
+        {"channels": [5], "points": "DEF", "check_errors": False},
+        {"channels": [1], "points": "MAX", "check_errors": False},
+        {"channels": [1], "points": "DEF", "check_errors": True},
+        {
+            "channels": [1],
+            "points": "DEF",
+            "check_errors": False,
+            "time_range_s": 1.0,
+        },
+        {
+            "channels": [1],
+            "points": "DEF",
+            "check_errors": False,
+            "vertical_scale_v_per_div": 1.0,
+        },
+        {
+            "channels": [1],
+            "points": "DEF",
+            "check_errors": False,
+            "on_channel_start": "not-callable",
+        },
+        {
+            "channels": [1],
+            "points": "DEF",
+            "check_errors": False,
+            "on_waveform": "not-callable",
+        },
+    ],
+)
+def test_capture_rejects_unsupported_arguments_without_io(kwargs: dict[str, Any]) -> None:
+    transport = WaveformTransport()
+
+    with pytest.raises((ConfigError, DataError)):
+        MSO8104Scope(transport=transport).capture_waveforms(**kwargs)
+
+    assert transport.events == []
+
+
+def test_capture_preflights_every_display_before_single() -> None:
+    transport = WaveformTransport()
+    transport.displayed[2] = False
+
+    with pytest.raises(ConfigError, match="CH2 is not displayed"):
+        MSO8104Scope(transport=transport).capture_waveforms(
+            channels=[1, 2, 3],
+            points="DEF",
+            check_errors=False,
+        )
+
+    assert transport.events == [
+        ("query", ":CHANnel1:DISPlay?"),
+        ("query", ":CHANnel2:DISPlay?"),
+    ]
+
+
+@pytest.mark.parametrize("mode", ["XY", "ROLL", "BROKEN"])
+def test_capture_refuses_non_main_or_unknown_timebase_without_single(mode: str) -> None:
+    transport = WaveformTransport()
+    transport.timebase_mode = mode
+
+    with pytest.raises((ConfigError, DataError)):
+        MSO8104Scope(transport=transport).capture_waveforms(
+            channels=[1, 2],
+            points="DEF",
+            check_errors=False,
+        )
+
+    assert all(event != ("write", ":SINGle") for event in transport.events)
+
+
+def test_single_timeout_does_not_force_or_retry_and_latches_acquisition() -> None:
+    transport = WaveformTransport()
+    transport.trigger_statuses = ["WAIT"]
+    clock_values = iter((0.0, 1.0))
+    scope = MSO8104Scope(
+        transport=transport,
+        acquisition_timeout_s=0.1,
+        trigger_poll_interval_s=0.0,
+        _clock=lambda: next(clock_values),
+        _sleep=lambda _: None,
+    )
+
+    with pytest.raises(OperationTimeout, match="did not reach STOP"):
+        scope.capture_waveforms(
+            channels=[1],
+            points="DEF",
+            check_errors=False,
+        )
+
+    assert transport.events.count(("write", ":SINGle")) == 1
+    assert transport.events.count(("query", ":TRIGger:STATus?")) == 1
+    assert transport.binary_calls == 0
+    assert scope.acquisition_writes_blocked is True
+    event_count = len(transport.events)
+    with pytest.raises(InstrumentError, match="close and reopen"):
+        scope.capture_waveforms(
+            channels=[1],
+            points="DEF",
+            check_errors=False,
+        )
+    assert len(transport.events) == event_count
+
+
+@pytest.mark.parametrize("failure", ["write", "status"])
+def test_uncertain_single_or_status_latches_acquisition(failure: str) -> None:
+    transport = WaveformTransport()
+    if failure == "write":
+        transport.fail_writes.add(":SINGle")
+    else:
+        transport.trigger_statuses = ["UNKNOWN"]
+    scope = MSO8104Scope(transport=transport)
+
+    with pytest.raises(InstrumentError, match="acquisition writes are blocked"):
+        scope.capture_waveforms(
+            channels=[1],
+            points="DEF",
+            check_errors=False,
+        )
+
+    assert scope.acquisition_writes_blocked is True
+    assert transport.binary_calls == 0
+
+
+def test_multi_channel_axis_mismatch_preserves_first_callback_result() -> None:
+    transport = WaveformTransport()
+    transport.preambles["CHAN2"] = "0,0,1000,1,0.6,-1,1,0.25,10,128"
+    completed: list[int] = []
+
+    with pytest.raises(DataError, match="consistent X axis"):
+        MSO8104Scope(transport=transport).capture_waveforms(
+            channels=[1, 2, 3],
+            points="DEF",
+            check_errors=False,
+            on_waveform=lambda channel, _: completed.append(channel),
+        )
+
+    assert completed == [1]
+    assert transport.binary_calls == 2
+    assert transport.state == asdict(_initial_state())
+
+
+def test_callback_failure_stops_later_channels_after_restoration() -> None:
+    transport = WaveformTransport()
+
+    def fail_after_first(channel: int, _: object) -> None:
+        raise RuntimeError(f"injected callback failure on CH{channel}")
+
+    with pytest.raises(RuntimeError, match="CH1"):
+        MSO8104Scope(transport=transport).capture_waveforms(
+            channels=[1, 2],
+            points="DEF",
+            check_errors=False,
+            on_waveform=fail_after_first,
+        )
+
+    assert transport.binary_calls == 1
     assert transport.state == asdict(_initial_state())
