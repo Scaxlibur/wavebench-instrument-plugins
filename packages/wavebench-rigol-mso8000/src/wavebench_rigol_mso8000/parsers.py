@@ -113,6 +113,63 @@ def parse_trigger_status(response: str) -> str:
     )
 
 
+def parse_cursor_mode(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="cursor mode",
+        allowed=frozenset({"MAN", "TRAC", "XY", "MEAS"}),
+    )
+
+
+def parse_manual_cursor_type(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="manual cursor type",
+        allowed=frozenset({"HBA", "VBA", "TIME", "AMPL"}),
+    )
+
+
+def parse_cursor_source(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="cursor source",
+        allowed=frozenset(
+            {
+                *(f"CHAN{index}" for index in range(1, 5)),
+                *(f"MATH{index}" for index in range(1, 5)),
+                "LA",
+                "NONE",
+            }
+        ),
+    )
+
+
+def parse_cursor_time_unit(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="manual cursor horizontal unit",
+        allowed=frozenset({"SEC", "HZ", "DEGR", "PERC"}),
+    )
+
+
+def parse_cursor_vertical_unit(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="manual cursor vertical unit",
+        allowed=frozenset({"SOUR", "PERC"}),
+    )
+
+
+def parse_finite_float(response: str, *, field: str) -> float:
+    try:
+        value = float(response.strip())
+    except ValueError as exc:
+        raise DataError(f"invalid MSO8104 {field} response: {response!r}") from exc
+    if not math.isfinite(value):
+        raise DataError(f"non-finite MSO8104 {field} response: {response!r}")
+    return value
+
+
 def _parse_bounded_integer(
     response: str,
     *,

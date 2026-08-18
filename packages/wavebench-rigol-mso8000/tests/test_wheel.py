@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.6.0"
+PACKAGE_VERSION = "0.7.0"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -167,6 +167,7 @@ assert descriptor.capabilities == (
     "scope.capture_waveform",
     "scope.capture_waveforms",
     "scope.math_metadata",
+    "scope.cursor_readout",
 )
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)

@@ -4,7 +4,7 @@ This directory is the starting point for a WaveBench plugin for the RIGOL MSO800
 
 ## Current status
 
-M0 through M4 are offline complete. M5 screenshot and M6 digital support were reviewed then skipped under RFC/evidence gaps, and M7 is in progress. Version `0.6.0` adds `scope.autoscale` and `scope.math_metadata`. Screenshot, digital, and consuming error-queue capabilities are not declared.
+M0 through M4 are offline complete. M5 screenshot and M6 digital support were reviewed then skipped under RFC/evidence gaps, and M7 is in progress. Version `0.7.0` adds `scope.autoscale`, `scope.math_metadata`, and a restricted `scope.cursor_readout`. Screenshot, digital, and consuming error-queue capabilities are not declared.
 
 This development pass is offline-only. It uses the manual, FakeTransport tests, fault injection, builds, and installation lifecycle checks, and does not connect to hardware. Model, firmware, transport, throughput, restoration, and measurement claims remain unverified.
 
@@ -43,6 +43,8 @@ The descriptor also omits `scope.digital_status` and `scope.digital_waveform`. T
 `scope.autoscale` intentionally changes vertical, timebase, and trigger settings under the core operation contract. The driver first queries `:SYSTem:AUToscale?`, requires `check_errors=false`, and latches only the autoscale write domain when the command or OPC completion is uncertain. Its command sequence and fault handling are offline-tested; autoscale effect remains hardware-unverified.
 
 `scope.math_metadata` accepts only displayed MATH1-MATH4 slots in MAIN timebase mode. The driver saves all six waveform-transfer fields, switches to NORM before selecting the MATH source and BYTE format, reads only the preamble, and restores the previous state. It does not read waveform data. `values_per_sample` remains unknown and Y resolution is the documented eight-bit BYTE transfer width. Math content, FFT accuracy, and device restoration remain hardware-unverified.
+
+`scope.cursor_readout` reads only an explicitly preconfigured global manual cursor, represented by public cursor index `1`. It accepts same-source A/B cursors in `TIME + SEC` or `AMPL + SOUR` configurations and does not move or reconfigure them. Tracking, XY, measurement mode, dual-source, NONE, LA amplitude, and nonportable units fail closed. Readout accuracy remains hardware-unverified.
 
 `channel_coupling()` combines channel coupling and input impedance. `AC/DC + OMEG` maps to the core high-impedance tokens `ACL/DCL`, while `AC/DC + FIFT` maps to the low-impedance tokens `AC/DC`; the core rejects 50 ohms, `GND`, and unknown states by default. The plugin does not declare `scope.errors` because `:SYSTem:ERRor?` consumes an entry while ordinary core text queries may replay. Future waveform service calls must explicitly set `scope.check_errors=false` until [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) is implemented.
 

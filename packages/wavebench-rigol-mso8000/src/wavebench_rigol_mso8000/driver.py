@@ -10,6 +10,7 @@ import numpy as np
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import (
+    ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
     WaveformData,
     WaveformHeader,
@@ -19,7 +20,13 @@ from wavebench.transport.base import InstrumentTransport
 from .parsers import (
     normalize_channel_input,
     parse_boolean_state,
+    parse_cursor_mode,
+    parse_cursor_source,
+    parse_cursor_time_unit,
+    parse_cursor_vertical_unit,
     parse_display_state,
+    parse_finite_float,
+    parse_manual_cursor_type,
     parse_mso8104_identity,
     parse_positive_integer,
     parse_rigol_waveform_preamble,
@@ -608,6 +615,92 @@ class MSO8104Scope:
                 )
             finally:
                 self._restore_waveform_state(previous)
+
+    def get_cursor_readout(
+        self,
+        cursor_index: int,
+        *,
+        configured_cursor: bool,
+    ) -> ScopeCursorReadout:
+        if type(cursor_index) is not int or cursor_index != 1:
+            raise DataError("MSO8104 cursor index must be the integer 1")
+        if type(configured_cursor) is not bool:
+            raise DataError("MSO8104 configured_cursor must be a boolean")
+        if not configured_cursor:
+            raise ConfigError(
+                "reading an MSO8104 cursor requires explicit confirmation that it is "
+                "already configured"
+            )
+        with self._io_lock:
+            self._require_open()
+            mode = parse_cursor_mode(self.transport.query(":CURSor:MODE?"))
+            if mode != "MAN":
+                raise ConfigError(
+                    "MSO8104 cursor readout supports only the preconfigured manual mode; "
+                    f"current mode is {mode}"
+                )
+            cursor_type = parse_manual_cursor_type(
+                self.transport.query(":CURSor:MANual:TYPE?")
+            )
+            source_a = parse_cursor_source(
+                self.transport.query(":CURSor:MANual:SOURce1?")
+            )
+            source_b = parse_cursor_source(
+                self.transport.query(":CURSor:MANual:SOURce2?")
+            )
+            if source_a == "NONE" or source_a != source_b:
+                raise ConfigError(
+                    "MSO8104 cursor readout requires the manual A and B cursors to use "
+                    f"the same non-NONE source, got {source_a} and {source_b}"
+                )
+            if cursor_type == "TIME":
+                unit = parse_cursor_time_unit(
+                    self.transport.query(":CURSor:MANual:TUNit?")
+                )
+                if unit != "SEC":
+                    raise ConfigError(
+                        "MSO8104 TIME cursor readout requires the preconfigured SEC unit, "
+                        f"got {unit}"
+                    )
+                return ScopeCursorReadout(
+                    cursor_index=cursor_index,
+                    source=source_a,
+                    function="VERTICAL",
+                    x_delta_s=parse_finite_float(
+                        self.transport.query(":CURSor:MANual:XDELta?"),
+                        field="manual cursor X delta",
+                    ),
+                    inverse_x_delta_hz=parse_finite_float(
+                        self.transport.query(":CURSor:MANual:IXDelta?"),
+                        field="manual cursor inverse X delta",
+                    ),
+                )
+            if cursor_type == "AMPL":
+                if source_a == "LA":
+                    raise ConfigError(
+                        "MSO8104 AMPL cursor readout does not support the LA source"
+                    )
+                unit = parse_cursor_vertical_unit(
+                    self.transport.query(":CURSor:MANual:VUNit?")
+                )
+                if unit != "SOUR":
+                    raise ConfigError(
+                        "MSO8104 AMPL cursor readout requires the preconfigured SOUR unit, "
+                        f"got {unit}"
+                    )
+                return ScopeCursorReadout(
+                    cursor_index=cursor_index,
+                    source=source_a,
+                    function="HORIZONTAL",
+                    y_delta=parse_finite_float(
+                        self.transport.query(":CURSor:MANual:YDELta?"),
+                        field="manual cursor Y delta",
+                    ),
+                )
+            raise ConfigError(
+                "MSO8104 cursor readout supports only preconfigured TIME or AMPL manual "
+                f"cursor types, got {cursor_type}"
+            )
 
     @staticmethod
     def _validate_check_errors(check_errors: bool) -> None:

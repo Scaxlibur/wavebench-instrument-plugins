@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-M0～M4 已离线完成，M5 截图与 M6 数字通道经 RFC/证据评审后跳过，M7 正在实施。当前 `0.6.0` 已新增 `scope.autoscale` 与 `scope.math_metadata`；截图、数字通道和消费型错误队列均未声明。
+M0～M4 已离线完成，M5 截图与 M6 数字通道经 RFC/证据评审后跳过，M7 正在实施。当前 `0.7.0` 已新增 `scope.autoscale`、`scope.math_metadata` 与受限 `scope.cursor_readout`；截图、数字通道和消费型错误队列均未声明。
 
 本轮开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期验证，不连接真实仪器。所有型号、固件、transport、吞吐、恢复和测量结论均保持「未实机验证」。
 
@@ -48,6 +48,8 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 `scope.autoscale` 会按核心操作合同改变垂直、时基和触发设置。driver 先查询 `:SYSTem:AUToscale?`，禁用时不发送写命令；调用必须设置 `check_errors=false`。写入或 OPC 完成状态不确定时会锁存 autoscale 写域，关闭并重新打开会话前不再重试。该能力只有离线序列与故障注入证据，自动设置效果未实机验证。
 
 `scope.math_metadata` 只接受已显示的 MATH1～MATH4 和 MAIN 时基。driver 保存六项 waveform 传输状态，按手册要求先切换到 NORM，再选择 MATH 源与 BYTE 格式，只查询 preamble 后恢复原状态；不读取波形数据。返回的 `values_per_sample` 为未知，Y 分辨率来自 BYTE 格式的 8 位合同。数学运算内容、FFT 精度和设备恢复均未实机验证。
+
+`scope.cursor_readout` 只读取调用方确认已配置的全局手动光标，公共 `cursor_index` 固定为 `1`。当前仅接受 A/B 同源的 `TIME + SEC` 或 `AMPL + SOUR`：前者返回 X 差和倒数，后者返回 Y 差。追踪、XY、测量模式、双源、NONE、LA 幅度以及 Hz、角度、百分比单位均默认拒绝；driver 不移动或重配光标。读数准确度未实机验证。
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 

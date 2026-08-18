@@ -127,6 +127,8 @@ M6 评审结果为两项 capability 均跳过。
 
 `0.6.0` 已公开 `scope.math_metadata`。核心将该操作定义为 `stateful_read`；MSO8104 没有独立的 Math metadata query，因此 driver 仅在目标 MATH 槽位已显示且时基为 MAIN 时，保存 waveform SOURCE、MODE、FORMAT、POINTS、START 与 STOP，先切换 NORM 再选择 MATH 源和 BYTE 格式，查询十字段 preamble 后恢复。该路径不发送 `:WAVeform:DATA?`。138 项包测试覆盖两项 M7 能力及此前能力；数学结果、频域轴与状态恢复未实机验证。
 
+`0.7.0` 已公开受限 `scope.cursor_readout`。MSO8104 只有一套全局 cursor 状态，公共 `cursor_index` 因此只接受整数 `1`；调用方必须设置 `configured_cursor=true`。driver 只读取手动模式下 A/B 同源的 `TIME + SEC` 或 `AMPL + SOUR` 配置，分别返回 X 差/倒数或 Y 差，不移动任何光标。其余模式、双源和单位无法由当前单 source 模型无歧义表达，均在结果查询前拒绝。168 项包测试全部为离线证据，光标读数准确度未实机验证。
+
 ## M8：离线发行审计
 
 完成条件：
