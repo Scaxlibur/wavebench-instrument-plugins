@@ -32,14 +32,16 @@ M6 当前处置如下：
 
 | 状态 | 数量 |
 | --- | ---: |
-| `implemented` | 16 |
-| `partially-implemented` | 2 |
-| `core-gap-rfc` | 8 |
+| `implemented` | 15 |
+| `partially-implemented` | 3 |
+| `core-gap-rfc` | 7 |
 | `firmware-unverified` | 340 |
 | `option-absent` | 78 |
 | `model-not-applicable` | 2 |
-| `unsafe-quarantined` | 132 |
+| `unsafe-quarantined` | 133 |
 | `planned` | 0 |
+
+`CPL?` 查询已通过 `scope.channel_coupling` 实现；`CPL` 写入会触及耦合与输入阻抗的复合状态，因此保持 `unsafe-quarantined`。`SCDP` 命令把内容发送到已配置的 hardcopy 设备，查询只返回状态，不构成 `scope.screenshot` 核心缺口；其 command/query 方向分别标为 `unsafe-quarantined` 和 `firmware-unverified`。
 
 以下 M1 表格是分母冻结时的历史快照，不代表当前实现状态。
 

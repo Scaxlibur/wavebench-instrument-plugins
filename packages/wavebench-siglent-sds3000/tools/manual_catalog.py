@@ -219,7 +219,6 @@ _UNSAFE_LEGACY = frozenset(
 _CORE_GAP_LEGACY = frozenset(
     {
         "OFST",
-        "SCDP",
         "TRCP",
         "TRDL",
         "TRLV",
@@ -243,7 +242,6 @@ _LEGACY_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "EXR?": ("scope.errors",),
     "*OPC": ("scope.capture_waveform", "scope.capture_waveforms"),
     "PAST?": ("scope.measurement_statistics",),
-    "SCDP": ("scope.screenshot",),
     "STOP": ("scope.capture_waveform", "scope.capture_waveforms"),
     "TDIV": ("scope.capture_waveform", "scope.capture_waveforms"),
     "TRA": ("scope.capture_waveform", "scope.capture_waveforms"),
@@ -256,6 +254,8 @@ _LEGACY_CAPABILITIES: dict[str, tuple[str, ...]] = {
 
 _LEGACY_DIRECTION_DISPOSITIONS: dict[str, dict[str, str]] = {
     "*OPC": {"command": "firmware-unverified", "query": "implemented"},
+    "CPL": {"command": "unsafe-quarantined", "query": "implemented"},
+    "SCDP": {"command": "unsafe-quarantined", "query": "firmware-unverified"},
     "WF": {"command": "unsafe-quarantined", "query": "implemented"},
 }
 
@@ -263,7 +263,7 @@ _LEGACY_DIRECTION_DISPOSITIONS: dict[str, dict[str, str]] = {
 def _legacy_classification(short: str, subsystem: str) -> tuple[str, str]:
     if short in {"CMR?", "DDR?", "EXR?"}:
         return "implemented", "stateful-read"
-    if short in {"*IDN?", "CPL"}:
+    if short == "*IDN?":
         return "implemented", "read-only"
     if short in {
         "ARM",
@@ -279,6 +279,8 @@ def _legacy_classification(short: str, subsystem: str) -> tuple[str, str]:
         "WFSU",
     }:
         return "implemented", "state-change"
+    if short == "SCDP":
+        return "unsafe-quarantined", "state-change"
     if short in _LEGACY_DIRECTION_DISPOSITIONS:
         return "partially-implemented", "state-change"
     if subsystem in {"DDA", "ET-PMT"}:

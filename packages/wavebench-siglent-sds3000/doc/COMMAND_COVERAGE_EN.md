@@ -26,7 +26,9 @@ Automation objects remain in the catalog because they establish namespaces and m
 
 Starting with M4, catalog schema v2 adds `direction_dispositions` to each legacy command. It tracks command and query directions separately so implemented `WF?` reads cannot be mistaken for `WF` write-back support, and implemented `*OPC?` cannot be mistaken for `*OPC` command support.
 
-The current M6 dispositions are 16 `implemented`, 2 `partially-implemented`, 8 `core-gap-rfc`, 340 `firmware-unverified`, 78 `option-absent`, 2 `model-not-applicable`, 132 `unsafe-quarantined`, and zero `planned` entities.
+The current M6 dispositions are 15 `implemented`, 3 `partially-implemented`, 7 `core-gap-rfc`, 340 `firmware-unverified`, 78 `option-absent`, 2 `model-not-applicable`, 133 `unsafe-quarantined`, and zero `planned` entities.
+
+The `CPL?` query is implemented through `scope.channel_coupling`; the `CPL` command can change the composite coupling and input-termination state and remains `unsafe-quarantined`. `SCDP` sends content to the configured hardcopy device, while its query returns status rather than screenshot bytes, so it is not a `scope.screenshot` core gap. Its command and query directions are respectively `unsafe-quarantined` and `firmware-unverified`.
 
 The following M1 figures are the historical denominator-freeze snapshot rather than the current implementation state.
 

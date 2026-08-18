@@ -72,14 +72,14 @@ def test_committed_catalog_freezes_the_complete_explicit_denominator() -> None:
     )
     assert sum(catalog["counts_by_disposition"].values()) == catalog["entity_count"]
     assert catalog["counts_by_disposition"] == {
-        "core-gap-rfc": 8,
+        "core-gap-rfc": 7,
         "firmware-unverified": 340,
-        "implemented": 16,
+        "implemented": 15,
         "model-not-applicable": 2,
         "option-absent": 78,
-        "partially-implemented": 2,
+        "partially-implemented": 3,
         "planned": 0,
-        "unsafe-quarantined": 132,
+        "unsafe-quarantined": 133,
     }
 
 
@@ -125,7 +125,6 @@ def test_m5_implemented_legacy_entries_match_the_text_transfer_and_capture_proto
         "CHDR",
         "CMR?",
         "CORD",
-        "CPL",
         "DDR?",
         "EXR?",
         "STOP",
@@ -152,6 +151,34 @@ def test_m4_waveform_query_is_not_misreported_as_waveform_write_support() -> Non
         "scope.capture_waveform",
         "scope.capture_waveforms",
     ]
+
+
+def test_coupling_query_is_not_misreported_as_safe_coupling_write_support() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    coupling = next(entity for entity in catalog["entities"] if entity.get("short") == "CPL")
+
+    assert coupling["disposition"] == "partially-implemented"
+    assert coupling["safety"] == "state-change"
+    assert coupling["direction_dispositions"] == {
+        "command": "unsafe-quarantined",
+        "query": "implemented",
+    }
+    assert coupling["wavebench_capabilities"] == ["scope.channel_coupling"]
+
+
+def test_screen_dump_is_not_misreported_as_a_core_screenshot_gap() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    screen_dump = next(
+        entity for entity in catalog["entities"] if entity.get("short") == "SCDP"
+    )
+
+    assert screen_dump["disposition"] == "unsafe-quarantined"
+    assert screen_dump["safety"] == "state-change"
+    assert screen_dump["direction_dispositions"] == {
+        "command": "unsafe-quarantined",
+        "query": "firmware-unverified",
+    }
+    assert screen_dump["wavebench_capabilities"] == []
 
 
 def test_m5_opc_query_is_not_misreported_as_opc_command_support() -> None:

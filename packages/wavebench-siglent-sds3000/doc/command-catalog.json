@@ -24,14 +24,14 @@
     "result_property": 80
   },
   "counts_by_disposition": {
-    "core-gap-rfc": 8,
+    "core-gap-rfc": 7,
     "firmware-unverified": 340,
-    "implemented": 16,
+    "implemented": 15,
     "model-not-applicable": 2,
     "option-absent": 78,
-    "partially-implemented": 2,
+    "partially-implemented": 3,
     "planned": 0,
-    "unsafe-quarantined": 132
+    "unsafe-quarantined": 133
   },
   "entities": [
     {
@@ -6567,8 +6567,8 @@
         "command",
         "query"
       ],
-      "disposition": "implemented",
-      "safety": "read-only",
+      "disposition": "partially-implemented",
+      "safety": "state-change",
       "wavebench_capabilities": [
         "scope.channel_coupling"
       ],
@@ -6588,7 +6588,7 @@
       "subsystem": "ACQUISITION",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "implemented",
+        "command": "unsafe-quarantined",
         "query": "implemented"
       }
     },
@@ -9844,11 +9844,9 @@
         "command",
         "query"
       ],
-      "disposition": "core-gap-rfc",
+      "disposition": "unsafe-quarantined",
       "safety": "state-change",
-      "wavebench_capabilities": [
-        "scope.screenshot"
-      ],
+      "wavebench_capabilities": [],
       "source": {
         "segment": "segment-002",
         "logical_page": 208,
@@ -9865,8 +9863,8 @@
       "subsystem": "HARD COPY",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "core-gap-rfc",
-        "query": "core-gap-rfc"
+        "command": "unsafe-quarantined",
+        "query": "firmware-unverified"
       }
     },
     {
