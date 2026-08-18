@@ -13,7 +13,7 @@ The audited source is RIGOL MSO8000 Programming Guide `PGA26006-1110`, which cov
 | Input safety | channel coupling and impedance queries | `scope.channel_coupling` | Offline complete; combine both values and let the core reject 50 ohms, GND, or unknown states by default |
 | Analog state | display, scale, offset, bandwidth, probe | part of `scope.snapshot` | M7 review; never fabricate required snapshot fields |
 | Acquisition/timebase/edge trigger | type, averages, depth, rate, main timebase, edge trigger | capture/status/snapshot | M4/M7; keep acquisition and restoration explicit |
-| Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | M3; at most 1000 screen points and no implicit stop |
+| Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | Offline complete; fixed 1000 displayed-channel points, six-field transfer-state restoration, and no implicit stop |
 | Deep waveform | MAX/RAW/TRACE and chunk ranges | fetch/capture | M4; hard point and memory limits; streaming needs a core RFC |
 | Single and multi-channel capture | SINGLE/OPC plus per-source waveform | capture protocols | M4; one acquisition before all channel reads; no extra synchronization claim |
 | Screenshot | display data or save-image data | `scope.screenshot` | M5; use core-supported block framing and no instrument files |

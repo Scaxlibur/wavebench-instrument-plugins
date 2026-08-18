@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.2.0"
+PACKAGE_VERSION = "0.3.0"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -159,7 +159,11 @@ assert [point.name for point in points] == ["rigol.mso8104"]
 descriptor = points[0].load()()
 assert descriptor.driver_id == "rigol.mso8104"
 assert descriptor.distribution == "wavebench-rigol-mso8000"
-assert descriptor.capabilities == ("scope.idn", "scope.channel_coupling")
+assert descriptor.capabilities == (
+    "scope.idn",
+    "scope.channel_coupling",
+    "scope.fetch_waveform",
+)
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)
     _run(

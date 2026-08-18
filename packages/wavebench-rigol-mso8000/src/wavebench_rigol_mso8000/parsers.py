@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+import re
 
 from wavebench.errors import DataError
 
@@ -11,6 +13,30 @@ class RigolIdentity:
     model: str
     serial_number: str
     firmware: str
+
+
+@dataclass(frozen=True)
+class RigolWaveformPreamble:
+    format_code: int
+    type_code: int
+    points: int
+    count: int
+    x_increment: float
+    x_origin: float
+    x_reference: float
+    y_increment: float
+    y_origin: float
+    y_reference: float
+
+
+_STRICT_INTEGER = re.compile(r"[0-9]+")
+_WAVEFORM_SOURCES = frozenset(
+    (
+        *(f"D{index}" for index in range(16)),
+        *(f"CHAN{index}" for index in range(1, 5)),
+        *(f"MATH{index}" for index in range(1, 5)),
+    )
+)
 
 
 def parse_mso8104_identity(response: str) -> RigolIdentity:
@@ -38,6 +64,107 @@ def _parse_enum(response: str, *, field: str, allowed: frozenset[str]) -> str:
     if normalized not in allowed:
         raise DataError(f"invalid MSO8104 {field} response: {response!r}")
     return normalized
+
+
+def parse_waveform_source(response: str) -> str:
+    return _parse_enum(response, field="waveform source", allowed=_WAVEFORM_SOURCES)
+
+
+def parse_waveform_mode(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="waveform mode",
+        allowed=frozenset({"NORM", "MAX", "RAW", "TRAC"}),
+    )
+
+
+def parse_waveform_format(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="waveform format",
+        allowed=frozenset({"BYTE", "WORD", "ASC"}),
+    )
+
+
+def parse_display_state(response: str) -> bool:
+    normalized = response.strip()
+    if normalized not in {"0", "1"}:
+        raise DataError(f"invalid MSO8104 channel display response: {response!r}")
+    return normalized == "1"
+
+
+def _parse_bounded_integer(
+    response: str,
+    *,
+    field: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    normalized = response.strip()
+    if _STRICT_INTEGER.fullmatch(normalized) is None:
+        raise DataError(f"invalid MSO8104 {field} response: {response!r}")
+    value = int(normalized)
+    if not minimum <= value <= maximum:
+        raise DataError(
+            f"MSO8104 {field} must be between {minimum} and {maximum}, got {value}"
+        )
+    return value
+
+
+def parse_positive_integer(response: str, *, field: str, maximum: int) -> int:
+    return _parse_bounded_integer(
+        response,
+        field=field,
+        minimum=1,
+        maximum=maximum,
+    )
+
+
+def parse_rigol_waveform_preamble(response: str) -> RigolWaveformPreamble:
+    parts = tuple(item.strip() for item in response.split(","))
+    if len(parts) != 10:
+        raise DataError(f"invalid MSO8104 waveform preamble: {response!r}")
+    format_code = _parse_bounded_integer(
+        parts[0],
+        field="preamble format code",
+        minimum=0,
+        maximum=2,
+    )
+    type_code = _parse_bounded_integer(
+        parts[1],
+        field="preamble type code",
+        minimum=0,
+        maximum=2,
+    )
+    points = parse_positive_integer(parts[2], field="preamble points", maximum=1000)
+    count = parse_positive_integer(parts[3], field="preamble count", maximum=1_000_000_000)
+    try:
+        numeric = tuple(float(item) for item in parts[4:])
+    except ValueError as exc:
+        raise DataError(f"invalid MSO8104 waveform preamble: {response!r}") from exc
+    if not all(math.isfinite(value) for value in numeric):
+        raise DataError(f"non-finite MSO8104 waveform preamble: {response!r}")
+    x_increment, x_origin, x_reference, y_increment, y_origin, y_reference = numeric
+    if format_code != 0:
+        raise DataError(f"expected BYTE waveform format code 0, got {format_code}")
+    if type_code != 0:
+        raise DataError(f"expected NORMal waveform type code 0, got {type_code}")
+    if x_increment <= 0:
+        raise DataError(f"MSO8104 waveform X increment must be positive, got {x_increment}")
+    if y_increment <= 0:
+        raise DataError(f"MSO8104 waveform Y increment must be positive, got {y_increment}")
+    return RigolWaveformPreamble(
+        format_code=format_code,
+        type_code=type_code,
+        points=points,
+        count=count,
+        x_increment=x_increment,
+        x_origin=x_origin,
+        x_reference=x_reference,
+        y_increment=y_increment,
+        y_origin=y_origin,
+        y_reference=y_reference,
+    )
 
 
 def normalize_channel_input(*, coupling: str, impedance: str) -> str:

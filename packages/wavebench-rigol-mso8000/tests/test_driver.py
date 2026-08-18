@@ -32,13 +32,17 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.api_version == "wavebench.instrument.v2"
     assert descriptor.models == ("MSO8104",)
     assert descriptor.aliases == ()
-    assert descriptor.capabilities == ("scope.idn", "scope.channel_coupling")
+    assert descriptor.capabilities == (
+        "scope.idn",
+        "scope.channel_coupling",
+        "scope.fetch_waveform",
+    )
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb", "gpib")
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.wavebench_min_version == "0.8.22"
     assert descriptor.wavebench_max_version == "0.9.0"
-    assert descriptor.version == "0.2.0"
+    assert descriptor.version == "0.3.0"
     assert descriptor.validate_options({}) == {}
 
 
@@ -225,4 +229,6 @@ def test_close_is_idempotent_and_blocks_later_queries() -> None:
         scope.idn()
     with pytest.raises(InstrumentError, match="closed"):
         scope.channel_coupling(1)
+    with pytest.raises(InstrumentError, match="closed"):
+        scope.fetch_waveform(channel=1, points="DEF", check_errors=False)
     assert transport.queries == []

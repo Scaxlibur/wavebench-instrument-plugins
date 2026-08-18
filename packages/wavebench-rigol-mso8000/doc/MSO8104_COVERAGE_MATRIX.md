@@ -27,7 +27,7 @@
 | acquisition | type、averages、memory depth、sample rate、run/stop/single | capture 与 acquisition status | M4/M7 计划 | 深度最高 500 Mpts；设置深度会改变采样率 |
 | 时基 | main offset/scale、MAIN/XY/ROLL | capture 参数、snapshot | M4/M7 计划 | 慢时基可能进入 ROLL 并禁用多项功能 |
 | edge trigger | source、slope、level、status、sweep | capture、snapshot | M4/M7 计划 | 首轮沿用已配置 trigger；任意 setter 不开放 |
-| 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | M3 计划 | 最多 1000 点；不隐式停止 acquisition |
+| 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | 离线通过 | 固定 1000 点；目标通道须已显示；恢复六项传输状态，不隐式停止 acquisition |
 | 深存储波形 | MAX/RAW/TRACE、start/stop 分块 | fetch/capture | M4 计划 | DMAX 有硬上限；WORD 字节序未定义；超大流式输出需核心 RFC |
 | 单次与多通道 | `:SINGle`、`*OPC?`、逐源 waveform | `scope.capture_waveform(s)` | M4 计划 | 一次 acquisition 后读多通道；不宣称额外硬件同步保证 |
 | 截图 | `:DISPlay:DATA?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot` | M5 计划 | 只采用核心能安全读取的 TMC block；不写仪器文件 |

@@ -30,7 +30,7 @@ The base plugin does not expose raw SCPI, reset or setup slots, option installat
 | M0 | Complete | Manual audit, core contract, evidence rules, default-deny boundary, distribution isolation |
 | M1 | Offline complete | Minimal identity plugin and lifecycle |
 | M2 | Offline complete | Input-termination safety; consuming-query RFC |
-| M3 | Not started | Current-screen NORM/BYTE waveform |
+| M3 | Offline complete | Current-screen NORM/BYTE waveform |
 | M4 | Not started | Single, multi-channel, and bounded RAW/DMAX acquisition |
 | M5 | Not started | PNG screenshot |
 | M6 | Not started | D0-D15 status and waveform |
@@ -52,3 +52,5 @@ The base plugin does not expose raw SCPI, reset or setup slots, option installat
 M1 offline evidence: version `0.1.0` passed package tests, Ruff, source package check, wheel/sdist content checks, and disposable-environment install/discovery/removal. No real `*IDN?` query was sent.
 
 M2 offline evidence: version `0.2.0` covers strict four-channel validation, coupling and termination enums, all six known combinations, unknown responses, closed state, and the core high-impedance guard. No real channel query was sent; `scope.errors` remains skipped under RFC-0001.
+
+M3 offline evidence: version `0.3.0` covers displayed-channel preflight, the strict ten-field preamble, an exact 1000-byte payload, X/Y conversion, six-field write/readback/restoration, non-replayed binary failure, ambiguous-write and restore-failure latches, and non-interleaving threaded transactions. All 66 package tests pass; no real waveform query was sent.

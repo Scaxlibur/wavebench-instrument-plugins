@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-M0～M2 已离线完成。当前 `0.2.0` 声明 `scope.idn` 与 `scope.channel_coupling`；尚不提供波形、采集、截图、数字通道或消费型错误队列 capability。
+M0～M3 已离线完成。当前 `0.3.0` 声明 `scope.idn`、`scope.channel_coupling` 与 `scope.fetch_waveform`；尚不提供主动采集、截图、数字通道或消费型错误队列 capability。
 
 本轮开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期验证，不连接真实仪器。所有型号、固件、transport、吞吐、恢复和测量结论均保持「未实机验证」。
 
@@ -20,8 +20,8 @@ M0～M2 已离线完成。当前 `0.2.0` 声明 `scope.idn` 与 `scope.channel_c
 ## 目录说明
 
 - `doc/vendor-local/`：本地厂商手册。原始 PDF 和转换后的 Markdown 都放在这里；除说明文件外的内容会被 Git 忽略，也不会进入发行包。
-- `src/wavebench_rigol_mso8000/`：descriptor 和 driver 的开发占位文件。
-- `tests/`：后续放 FakeTransport 单元测试；默认测试不得连接真实仪器。
+- `src/wavebench_rigol_mso8000/`：descriptor、driver 与严格解析器。
+- `tests/`：FakeTransport、故障注入与制品生命周期测试；默认测试不得连接真实仪器。
 - `pyproject.toml`：distribution 元数据、WaveBench 版本范围和唯一 entry point。
 - `doc/`：公开覆盖矩阵和验收记录；厂商原文不要放到公开文档目录。
 
@@ -32,7 +32,7 @@ M0～M2 已离线完成。当前 `0.2.0` 声明 `scope.idn` 与 `scope.channel_c
 
 ## 推荐开发顺序
 
-1. M3 实现 `NORMal + BYTE` 当前屏幕波形。
+1. M4 实现单次、多通道与有界长记录。
 2. 后续 capability 按里程碑分别补齐离线测试、写入副作用和恢复边界。
 
 ## 安全边界
@@ -42,6 +42,27 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 当前 descriptor 允许 `tcpip`、`usb`、`gpib` 资源前缀，这是手册声明和离线路由合同，不是连接实机通过的证据。
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
+
+当前波形能力只接受 `points="def"`，要求目标通道已经显示，并暂时把传输状态设为 `NORMal + BYTE + 1000` 点。driver 保存、逐字段回读并恢复 SOURCE、MODE、FORMAT、POINTS、START 与 STOP；不发送 STOP、SINGLE 或 AUTOSCALE。恢复失败或写入结果不明会锁存波形写域，后续调用必须关闭并重新打开会话。该能力会写波形传输状态，因此配置需使用 `scope.access="read_write"`。
+
+```toml
+[connection]
+backend = "pyvisa"
+resource = "TCPIP0::192.0.2.80::INSTR"
+
+[scope]
+driver = "rigol.mso8104"
+default_channel = 1
+check_errors = false
+access = "read_write"
+
+[waveform]
+format = "real"
+byte_order = "lsbf"
+points = "def"
+```
+
+示例地址属于 RFC 5737 文档网段，不是实验室资源。
 
 ## 开发手册位置
 
