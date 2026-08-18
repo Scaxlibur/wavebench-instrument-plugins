@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "manual": {
+    "title": "Oscilloscopes Remote Control and Automation Manual",
+    "vendor": "Teledyne LeCroy",
+    "cover_filename": "maui-remote-control-automation.pdf",
+    "publication": "2026-02",
+    "logical_page_count": 411,
+    "segments": [
+      {
+        "id": "segment-001",
+        "origin_basename": "4b5ff6a8-d8d4-4bad-9896-ea3726f05d09_origin.pdf",
+        "logical_page_first": 1,
+        "logical_page_last": 200,
+        "page_count": 200,
+        "byte_count": 2588943,
+        "sha256": "1a035e879600ee75d1d381c1fe8e5c2bcffc09d3fbc0fa02d4db46d82d04af53"
+      },
+      {
+        "id": "segment-002",
+        "origin_basename": "168938dc-ae70-49bd-a83a-d07f46c1595a_origin.pdf",
+        "logical_page_first": 201,
+        "logical_page_last": 400,
+        "page_count": 200,
+        "byte_count": 914888,
+        "sha256": "bb316a51ccd76ff58f4aa6ecab68da6ef993086cfd605b6fdd7395501379edeb"
+      },
+      {
+        "id": "segment-003",
+        "origin_basename": "fa153b65-d124-4ed0-b30b-12c8eae51490_origin.pdf",
+        "logical_page_first": 401,
+        "logical_page_last": 411,
+        "page_count": 11,
+        "byte_count": 125917,
+        "sha256": "39dac5d034da11fe3df2d7d13a0ffd2edb48e8c05efda2ee023f1cd93dcda55f"
+      }
+    ]
+  },
+  "device_baseline": {
+    "physical_vendor": "SIGLENT",
+    "model": "SDS3054",
+    "remote_manufacturer": "LECROY",
+    "firmware": "8.4.1",
+    "redacted_identity": "LECROY,SDS3054,<serial>,8.4.1"
+  },
+  "audit_denominator": {
+    "part_7_short_form_rows": 164,
+    "automation_scope": "all explicitly documented Part 4 actions, methods and CVARs plus Part 5 result properties",
+    "undocumented_cvars_in_scope": false
+  }
+}

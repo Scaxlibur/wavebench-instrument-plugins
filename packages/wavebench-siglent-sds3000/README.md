@@ -44,6 +44,8 @@ Oscilloscopes_Remote_Control_and_Automation_Manual_2026-02.pdf
 
 该手册晚于实机固件 `8.4.1`，且部分内容明确以 MAUI `8.5.0.0+` 为基线。手册中明确列出的实体构成审计分母，但只有离线证据或安全实机测试确认后，才会计入固件 `8.4.1` 的已支持集合。型号操作手册、数据表和发行说明也可放入同一目录。
 
+来源哈希、分段顺序、适用边界和覆盖口径见 [`doc/MANUAL_BASELINE.md`](doc/MANUAL_BASELINE.md)。
+
 `doc/vendor-local/` 中除说明文件外的内容由仓库级 `.gitignore` 排除。厂商资料不会进入 Git；项目原创的协议摘要、覆盖矩阵和验收记录后续另写入 `doc/`。
 
 ## 手册到位后的检查顺序

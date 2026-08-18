@@ -44,6 +44,8 @@ Oscilloscopes_Remote_Control_and_Automation_Manual_2026-02.pdf
 
 This manual is newer than the instrument firmware `8.4.1`, and some sections explicitly require MAUI `8.5.0.0+`. Explicitly documented entities form the audit denominator, but an entity counts as supported by firmware `8.4.1` only after offline evidence or safe hardware testing confirms it. Model operator manuals, datasheets, and release notes may be placed in the same directory.
 
+See [`doc/MANUAL_BASELINE_EN.md`](doc/MANUAL_BASELINE_EN.md) for source hashes, segment order, applicability boundaries, and the coverage denominator.
+
 The repository-level `.gitignore` excludes everything under `doc/vendor-local/` except its explanatory README. Vendor material therefore does not enter Git. Project-authored protocol summaries, coverage matrices, and acceptance records will be written separately under `doc/`.
 
 ## Review order after the manuals arrive
