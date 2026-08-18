@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Iterator
+from math import isfinite
+import re
+from threading import RLock
+from typing import Callable, Iterator
 
-from wavebench.errors import DataError, InstrumentError, StateDriftError
+from wavebench.errors import DataError, InstrumentError, OperationTimeout, StateDriftError
 from wavebench.instruments.models import WaveformData
 from wavebench.transport.base import InstrumentTransport
 
@@ -21,6 +24,9 @@ _COUPLING_MAP = {
     "D50": "DC",
     "GND": "GND",
 }
+_QUANTITY_RE = re.compile(
+    r"(?P<number>[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d+)?)\s*(?P<unit>[A-Z]*)"
+)
 
 
 @dataclass(frozen=True)
@@ -70,8 +76,11 @@ def parse_sds3000_identity(response: str) -> SDS3000Identity:
 @dataclass
 class SDS3000Scope:
     transport: InstrumentTransport
+    io_timeout_ms: int = 30_000
+    opc_timeout_ms: int = 30_000
     _closed: bool = field(default=False, init=False, repr=False)
     _identity: SDS3000Identity | None = field(default=None, init=False, repr=False)
+    _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     @staticmethod
     def _validate_channel(channel: int) -> None:
@@ -279,6 +288,69 @@ class SDS3000Scope:
             raise DataError("SDS3054 waveform points must be DEF, MAX, or DMAX")
         return normalized
 
+    @classmethod
+    def _parse_trigger_mode(cls, response: str) -> str:
+        value = cls._response_value(response, "TRMD", "TRIG_MODE")
+        if value not in {"AUTO", "NORM", "SINGLE", "STOP"}:
+            raise DataError("invalid SDS3000 TRMD? response")
+        return value
+
+    @classmethod
+    def _parse_trace_state(cls, response: str, *, channel: int) -> str:
+        value = cls._response_value(response, f"C{channel}:TRA", f"C{channel}:TRACE")
+        if value not in {"ON", "OFF"}:
+            raise DataError(f"invalid C{channel}:TRA? response")
+        return value
+
+    @classmethod
+    def _parse_positive_quantity(
+        cls,
+        response: str,
+        *,
+        headers: tuple[str, ...],
+        units: frozenset[str],
+        name: str,
+    ) -> str:
+        value = cls._response_value(response, *headers)
+        match = _QUANTITY_RE.fullmatch(value)
+        if match is None or match.group("unit") not in units:
+            raise DataError(f"invalid SDS3000 {name}? response")
+        number = float(match.group("number"))
+        if not isfinite(number) or number <= 0:
+            raise DataError(f"invalid SDS3000 {name}? response")
+        return value
+
+    @classmethod
+    def _parse_opc(cls, response: str) -> None:
+        if cls._response_value(response, "*OPC") != "1":
+            raise DataError("invalid SDS3000 *OPC? response")
+
+    @staticmethod
+    def _validate_optional_positive(value: float | None, *, name: str) -> None:
+        if value is None:
+            return
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise DataError(f"SDS3054 {name} must be a positive finite number")
+        if not isfinite(float(value)) or value <= 0:
+            raise DataError(f"SDS3054 {name} must be a positive finite number")
+
+    def _read_waveform_in_transfer_state(self, channel: int) -> WaveformData:
+        descriptor = parse_waveform_descriptor(
+            self.transport.query_bin_block(f"C{channel}:WF? DESC")
+        )
+        if descriptor.byte_order != "little" or descriptor.sample_width_bytes != 2:
+            raise DataError("SDS3000 waveform transfer settings did not take effect")
+        return decode_waveform_data(
+            descriptor,
+            self.transport.query_bin_block(f"C{channel}:WF? DAT1"),
+            channel=channel,
+        )
+
+    def _read_waveforms(self, channels: list[int]) -> dict[int, WaveformData]:
+        state = self._query_waveform_transfer_state()
+        with self._temporary_waveform_transfer_state(state):
+            return {channel: self._read_waveform_in_transfer_state(channel) for channel in channels}
+
     def fetch_waveform(
         self,
         channel: int,
@@ -287,22 +359,166 @@ class SDS3000Scope:
     ) -> WaveformData:
         self._validate_channel(channel)
         self._validate_waveform_points(points)
-        self._require_identity()
-        state = self._query_waveform_transfer_state()
-        with self._temporary_waveform_transfer_state(state):
-            descriptor = parse_waveform_descriptor(
-                self.transport.query_bin_block(f"C{channel}:WF? DESC")
+        with self._io_lock:
+            self._require_identity()
+            waveform = self._read_waveforms([channel])[channel]
+            if check_errors:
+                self.assert_no_errors()
+            return waveform
+
+    @contextmanager
+    def _temporary_capture_state(
+        self,
+        channels: list[int],
+        *,
+        time_range_s: float | None,
+        vertical_scale_v_per_div: float | None,
+    ) -> Iterator[None]:
+        trigger_mode = self._parse_trigger_mode(self.transport.query("TRMD?"))
+        time_division = (
+            self._parse_positive_quantity(
+                self.transport.query("TDIV?"),
+                headers=("TDIV", "TIME_DIV"),
+                units=frozenset({"", "S", "MS", "US", "NS", "KS"}),
+                name="TDIV",
             )
-            if descriptor.byte_order != "little" or descriptor.sample_width_bytes != 2:
-                raise DataError("SDS3000 waveform transfer settings did not take effect")
-            waveform = decode_waveform_data(
-                descriptor,
-                self.transport.query_bin_block(f"C{channel}:WF? DAT1"),
+            if time_range_s is not None
+            else None
+        )
+        vertical_divisions = {
+            channel: self._parse_positive_quantity(
+                self.transport.query(f"C{channel}:VDIV?"),
+                headers=(f"C{channel}:VDIV", f"C{channel}:VOLT_DIV"),
+                units=frozenset({"", "V", "MV", "UV", "NV", "KV"}),
+                name=f"C{channel}:VDIV",
+            )
+            for channel in channels
+            if vertical_scale_v_per_div is not None
+        }
+        traces = {
+            channel: self._parse_trace_state(
+                self.transport.query(f"C{channel}:TRA?"),
                 channel=channel,
             )
-        if check_errors:
-            self.assert_no_errors()
-        return waveform
+            for channel in channels
+        }
+
+        restore: list[tuple[str, str, str]] = []
+        try:
+            restore.append(("TRMD", f"TRMD {trigger_mode}", trigger_mode))
+            self.transport.write("STOP")
+            if time_division is not None:
+                restore.append(("TDIV", f"TDIV {time_division}", time_division))
+                self.transport.write(f"TDIV {float(time_range_s) / 10.0:.12g}")
+            for channel, previous in vertical_divisions.items():
+                name = f"C{channel}:VDIV"
+                restore.append((name, f"{name} {previous}", previous))
+                self.transport.write(f"{name} {float(vertical_scale_v_per_div):.12g}")
+            for channel, previous in traces.items():
+                if previous == "ON":
+                    continue
+                name = f"C{channel}:TRA"
+                restore.append((name, f"{name} {previous}", previous))
+                self.transport.write(f"{name} ON")
+            yield
+        finally:
+            failures: list[tuple[str, str, Exception]] = []
+            for name, command, expected in reversed(restore):
+                try:
+                    self.transport.write(command)
+                except Exception as exc:  # pragma: no branch - all failures are retained
+                    failures.append((name, expected, exc))
+            if failures:
+                expected = {name: value for name, value, _ in failures}
+                diff = {
+                    name: {"expected": value, "actual": "unknown"} for name, value, _ in failures
+                }
+                names = ", ".join(name for name, _, _ in failures)
+                raise StateDriftError(
+                    f"failed to restore SDS3000 capture state: {names}",
+                    expected=expected,
+                    actual={name: "unknown" for name in expected},
+                    diff=diff,
+                ) from failures[0][2]
+
+    def _acquire_once(self) -> None:
+        budget_ms = max(min(self.io_timeout_ms, self.opc_timeout_ms), 1_000)
+        wait_seconds = max((budget_ms - 2_000) / 1_000.0, 1.0)
+        self.transport.write("ARM")
+        self.transport.write(f"WAIT {wait_seconds:.12g}")
+        try:
+            self._parse_opc(self.transport.query_opc())
+        except Exception as exc:
+            raise OperationTimeout(
+                "SDS3054 single acquisition timed out while waiting for WAIT/*OPC?"
+            ) from exc
+        if self._parse_trigger_mode(self.transport.query("TRMD?")) != "STOP":
+            raise OperationTimeout(
+                "SDS3054 did not complete a triggered acquisition before the WAIT timeout"
+            )
+
+    def capture_waveform(
+        self,
+        channel: int,
+        points: str = "dmax",
+        check_errors: bool = True,
+        time_range_s: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+    ) -> WaveformData:
+        return self.capture_waveforms(
+            [channel],
+            points=points,
+            check_errors=check_errors,
+            time_range_s=time_range_s,
+            vertical_scale_v_per_div=vertical_scale_v_per_div,
+        )[channel]
+
+    def capture_waveforms(
+        self,
+        channels: list[int],
+        points: str = "dmax",
+        check_errors: bool = True,
+        time_range_s: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+        on_channel_start: Callable[[int | None], None] | None = None,
+        on_waveform: Callable[[int, WaveformData], None] | None = None,
+    ) -> dict[int, WaveformData]:
+        if not isinstance(channels, list) or not channels:
+            raise DataError("SDS3054 capture channels must be a non-empty list")
+        for channel in channels:
+            self._validate_channel(channel)
+        if len(set(channels)) != len(channels):
+            raise DataError("SDS3054 capture channels must be unique")
+        self._validate_waveform_points(points)
+        self._validate_optional_positive(time_range_s, name="time range")
+        self._validate_optional_positive(
+            vertical_scale_v_per_div,
+            name="vertical scale",
+        )
+
+        with self._io_lock:
+            self._require_identity()
+            with self._temporary_capture_state(
+                channels,
+                time_range_s=time_range_s,
+                vertical_scale_v_per_div=vertical_scale_v_per_div,
+            ):
+                self._acquire_once()
+                transfer_state = self._query_waveform_transfer_state()
+                waveforms: dict[int, WaveformData] = {}
+                with self._temporary_waveform_transfer_state(transfer_state):
+                    for channel in channels:
+                        if on_channel_start is not None:
+                            on_channel_start(channel)
+                        waveform = self._read_waveform_in_transfer_state(channel)
+                        waveforms[channel] = waveform
+                        if on_waveform is not None:
+                            on_waveform(channel, waveform)
+            if check_errors:
+                if on_channel_start is not None:
+                    on_channel_start(None)
+                self.assert_no_errors()
+            return waveforms
 
     def close(self) -> None:
         if self._closed:

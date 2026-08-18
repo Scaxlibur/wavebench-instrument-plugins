@@ -6,7 +6,11 @@ from wavebench.instruments.api import DriverContext, InstrumentDescriptor
 def _open_driver(context: DriverContext):
     from .driver import SDS3000Scope
 
-    return SDS3000Scope(transport=context.open_transport())
+    return SDS3000Scope(
+        transport=context.open_transport(),
+        io_timeout_ms=context.timeout_ms,
+        opc_timeout_ms=context.opc_timeout_ms,
+    )
 
 
 def descriptor() -> InstrumentDescriptor:
