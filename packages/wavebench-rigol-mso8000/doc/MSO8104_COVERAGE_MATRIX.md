@@ -24,10 +24,11 @@
 | 错误队列 | `:SYSTem:ERRor[:NEXT]?` | `scope.errors` | RFC 后跳过 | 查询会消费队首；核心普通文本 query 允许重放 |
 | 输入安全 | `:CHANnel<n>:COUPling?`、`:CHANnel<n>:IMPedance?` | `scope.channel_coupling` | 离线通过 | 联合映射 ACL/DCL/AC/DC；核心默认拒绝 50 Ω、GND 与未知组合 |
 | 自动设置 | `:SYSTem:AUToscale?`、`:AUToscale` | `scope.autoscale` | 离线通过 | 预检系统使能；明确改变垂直、时基和触发；写入或 OPC 不确定时锁存，效果未实机验证 |
-| 模拟通道状态 | display、scale、offset、bandwidth、probe | `scope.snapshot` 的一部分 | M7 评审 | 公共快照要求完整 health/timebase/probe/waveform/trigger；不填虚假默认值 |
-| acquisition | type、averages、memory depth、sample rate、run/stop/single | capture 与 acquisition status | M4/M7 计划 | 深度最高 500 Mpts；设置深度会改变采样率 |
-| 时基 | main offset/scale、MAIN/XY/ROLL | capture 参数、snapshot | M4/M7 计划 | 慢时基可能进入 ROLL 并禁用多项功能 |
-| edge trigger | source、slope、level、status、sweep | capture、snapshot | M4/M7 计划 | 首轮沿用已配置 trigger；任意 setter 不开放 |
+| 完整状态快照 | channel/timebase/probe/waveform/trigger 与部分 health | `scope.snapshot` | RFC 后跳过 | 公共快照强制要求设备无法查询的字段；`*STB?` 还会清零；见 RFC-0005 |
+| acquisition 基础配置 | type、averages、memory depth、sample rate、run/stop/single | fetch/capture 的既有状态 | M4 离线通过 | capture 沿用既有配置；深度最高 500 Mpts；设置深度会改变采样率 |
+| acquisition 状态 | averages 与 trigger status | `scope.acquisition_status` | RFC 后跳过 | 没有 average-complete 或 segmented 状态；trigger STOP 不替代平均完成；见 RFC-0006 |
+| 平均采集事务 | global acquisition type 与 averages | `scope.capture_average` | RFC 后跳过 | 公共配置要求 single count/逐通道 arithmetic；设备也没有平均完成位；见 RFC-0006 |
+| 时基与 edge trigger | main offset/scale、MAIN/XY/ROLL、edge settings/status | capture 前提 | 部分离线通过 | capture 只读前提并沿用配置；任意 setter 不开放，完整 snapshot 见 RFC-0005 |
 | 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | 离线通过 | 固定 1000 点；目标通道须已显示；恢复六项传输状态，不隐式停止 acquisition |
 | 深存储波形 | MAX/RAW、start/stop 分块 | fetch/capture | 离线通过 | 每块最多 250,000 点、每次调用总计最多 4,000,000 点；超大流式输出需核心 RFC |
 | 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | 离线通过 | 一次 SINGLE 后轮询 STOP 并读多通道；DEF/MAX/DMAX；X 轴一致；不使用 `*OPC?` 冒充采集完成 |
@@ -36,8 +37,10 @@
 | 截图 | `:DISPlay:DATA?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot` | RFC 后跳过 | DISPLAY 路径未声明 block framing；SAVE DATA 路径不能证明 `include_menu=False`；见 RFC-0003 |
 | 数字通道状态 | `:SYSTem:MODules?`、`:LA:*?` | `scope.digital_status` | RFC 后跳过 | 核心模型必填 activity、technology、hysteresis 等设备无法查询的字段；见 RFC-0004 |
 | 数字波形 | D0～D15 waveform source/data | `scope.digital_waveform` | 手册证据不足后跳过 | 公共 bitset 模型可用，但手册未定义 BYTE/WORD 的 LOW/HIGH code，WORD 字节序也不明确 |
-| 自动测量与统计 | `:MEASure:*` | measurement statistics | M7 评审 | 只读已配置项目；不自动创建或清空统计 |
-| FFT/Reference | 对应命令族 | 对应 typed capability | M7 评审 | 只读取既有配置；公共模型不匹配时 RFC 后跳过 |
+| 自动测量与统计 | item/source statistic queries | `scope.measurement_statistics` | RFC 后跳过 | 核心按 slot 寻址；设备不能反查 slot 且无统计 buffer；见 RFC-0007 |
+| FFT 状态 | FFT source/window/unit/frequency settings | `scope.fft_status` | RFC 后跳过 | 设备没有公共模型必填的 average-complete、RBW 与 FFT sample rate；见 RFC-0007 |
+| Reference 元数据 | source、vertical scale/offset、label | `scope.reference_metadata` | 手册证据不足后跳过 | waveform source 不接受 REF，无法查询轴、点数与 Y 分辨率 |
+| History 时间戳 | record enable/start/play/current/frames | `scope.history_timestamps` | 手册证据不足后跳过 | 没有逐帧 relative/calendar timestamp；帧号不冒充时间戳 |
 | DVM/counter | DVM 与 counter 命令族 | 当前无合适 scope capability | RFC 后跳过 | 需要新的类型化公共模型与 Service |
 | AWG | `:SOURce*` | scope descriptor 不应私自混入 source API | RFC 后跳过 | 需要解决同一物理资源的多 kind/共享 lease |
 | 协议、mask、search、record | 大量选件命令族 | 当前无对应基础接口 | RFC 后跳过 | 选件、状态恢复和结果模型需独立设计 |

@@ -50,7 +50,7 @@
 | M4 | 离线完成 | 单次、多通道与有界 MAX/DMAX |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | RFC/证据缺口后跳过 | 数字状态模型不完整；数字 payload 编码未定义 |
-| M7 | 实施中 | autoscale 已离线完成；高级只读能力逐项评审中 |
+| M7 | 离线完成 | autoscale、Math metadata、受限 cursor；其余能力按 RFC/证据缺口跳过 |
 | M8 | 未开始 | 覆盖文档、全量离线验证和发行包审计 |
 
 ## M0：合同与发行边界
@@ -128,6 +128,20 @@ M6 评审结果为两项 capability 均跳过。
 `0.6.0` 已公开 `scope.math_metadata`。核心将该操作定义为 `stateful_read`；MSO8104 没有独立的 Math metadata query，因此 driver 仅在目标 MATH 槽位已显示且时基为 MAIN 时，保存 waveform SOURCE、MODE、FORMAT、POINTS、START 与 STOP，先切换 NORM 再选择 MATH 源和 BYTE 格式，查询十字段 preamble 后恢复。该路径不发送 `:WAVeform:DATA?`。138 项包测试覆盖两项 M7 能力及此前能力；数学结果、频域轴与状态恢复未实机验证。
 
 `0.7.0` 已公开受限 `scope.cursor_readout`。MSO8104 只有一套全局 cursor 状态，公共 `cursor_index` 因此只接受整数 `1`；调用方必须设置 `configured_cursor=true`。driver 只读取手动模式下 A/B 同源的 `TIME + SEC` 或 `AMPL + SOUR` 配置，分别返回 X 差/倒数或 Y 差，不移动任何光标。其余模式、双源和单位无法由当前单 source 模型无歧义表达，均在结果查询前拒绝。168 项包测试全部为离线证据，光标读数准确度未实机验证。
+
+其余 M7 capability 的结论如下：
+
+| capability | 结论 | 原因 |
+| --- | --- | --- |
+| `scope.snapshot` | RFC 后跳过 | 完整模型强制要求 MSO8000 无法查询的 health、probe 与 channel 字段；见 [RFC-0005](rfcs/0005-portable-scope-snapshot.md) |
+| `scope.acquisition_status` | RFC 后跳过 | 模型把平均完成与 segmented 状态绑定，设备没有对应查询；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
+| `scope.capture_average` | RFC 后跳过 | 配置模型要求设备不存在的 single count 与逐通道 arithmetic，也没有平均完成位；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
+| `scope.measurement_statistics` | RFC 后跳过 | 核心按 slot 寻址，设备按 item/source 查询且不能反查界面 slot；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |
+| `scope.fft_status` | RFC 后跳过 | 公共模型强制要求 average-complete、RBW 与 FFT sample rate，设备没有这些 query；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |
+| `scope.reference_metadata` | 厂商证据缺口后跳过 | Reference 命令只有 source、垂直显示和标签；waveform source 不接受 REF，无法得到轴、点数和分辨率 |
+| `scope.history_timestamps` | 厂商证据缺口后跳过 | Record 命令只有 enable/start/play/current/frame count，没有逐帧相对或日历时间戳 |
+
+M7 退出证据：descriptor 只新增三项已经实现的 capability，三份核心 RFC 和覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
 
 ## M8：离线发行审计
 

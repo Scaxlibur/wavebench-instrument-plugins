@@ -4,7 +4,7 @@ This directory is the starting point for a WaveBench plugin for the RIGOL MSO800
 
 ## Current status
 
-M0 through M4 are offline complete. M5 screenshot and M6 digital support were reviewed then skipped under RFC/evidence gaps, and M7 is in progress. Version `0.7.0` adds `scope.autoscale`, `scope.math_metadata`, and a restricted `scope.cursor_readout`. Screenshot, digital, and consuming error-queue capabilities are not declared.
+M0 through M4 and M7 are offline complete. M5 screenshot and M6 digital support were reviewed then skipped under RFC/evidence gaps. Version `0.7.0` adds `scope.autoscale`, `scope.math_metadata`, and a restricted `scope.cursor_readout`; other advanced capabilities remain undeclared under explicit core-model or vendor-evidence gaps. M8 package audit is next.
 
 This development pass is offline-only. It uses the manual, FakeTransport tests, fault injection, builds, and installation lifecycle checks, and does not connect to hardware. Model, firmware, transport, throughput, restoration, and measurement claims remain unverified.
 
