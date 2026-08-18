@@ -112,6 +112,30 @@ def test_sdist_excludes_vendor_material_and_contains_public_audit(tmp_path: Path
     assert not any("/doc/vendor-local/" in name for name in names)
     assert any(name.endswith("/doc/manual-baseline.json") for name in names)
     assert any(name.endswith("/doc/command-catalog.json") for name in names)
+    for public_doc in (
+        "HARDWARE_ACCEPTANCE.md",
+        "HARDWARE_ACCEPTANCE_EN.md",
+        "WAVEBENCH_CAPABILITY_MATRIX.md",
+        "WAVEBENCH_CAPABILITY_MATRIX_EN.md",
+        "WAVEBENCH_CORE_RFC.md",
+        "WAVEBENCH_CORE_RFC_EN.md",
+        "hardware-acceptance.json",
+        "wavebench-capability-matrix.json",
+        "wavebench-core-rfc.json",
+    ):
+        assert any(name.endswith(f"/doc/{public_doc}") for name in names)
+    forbidden_suffixes = (
+        ".bin",
+        ".csv",
+        ".dat",
+        ".npy",
+        ".npz",
+        ".pdf",
+        ".raw",
+        "commands.log",
+    )
+    assert not any(name.lower().endswith(forbidden_suffixes) for name in names)
+    assert not any("restore-journal" in name.lower() for name in names)
 
 
 def test_install_discovery_reinstall_and_uninstall_without_io(tmp_path: Path) -> None:
