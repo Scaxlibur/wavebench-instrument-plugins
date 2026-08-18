@@ -34,8 +34,9 @@
 | --- | --- |
 | 物理品牌 | SIGLENT |
 | 机身型号 | SDS3054 |
-| 脱敏远程身份 | `LECROY,SDS3054,<serial>,8.4.1` |
+| 脱敏远程身份 | `*IDN LECROY,SDS3054,<serial>,8.4.1` |
 | 协议平台 | Teledyne LeCroy MAUI/XStreamDSO |
+| 已验证传输 | VICP（WaveBench `pyvisa` + `PyVICP`） |
 | 首版支持范围 | 仅 SDS3054 |
 
 手册正文明确提示，部分单位、脚本和接口只适用于较新的 XStreamDSO 版本。所有未在 SDS3054 固件 `8.4.1` 上取得证据的实体先标记为 `firmware-unverified`；型号、选件或平台明显不适用的实体分别标记为 `model-not-applicable` 或 `option-absent`。
@@ -56,6 +57,7 @@ M1 审计采用以下边界：
 覆盖矩阵使用以下处置状态：
 
 - `implemented`：已通过离线测试，并在需要时通过安全实机测试；
+- `partially-implemented`：同一手册实体只有部分 command/query 方向已实现，其余方向有独立处置；
 - `planned`：WaveBench 现有接口可表达，尚未完成实现；
 - `core-gap-rfc`：需要可被至少两个独立仪器系列复用的 WaveBench 核心接口；
 - `firmware-unverified`：手册版本晚于实机，尚未确认固件 `8.4.1` 支持；

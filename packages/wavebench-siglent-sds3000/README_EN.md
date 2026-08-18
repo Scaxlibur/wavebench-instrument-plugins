@@ -10,7 +10,7 @@ The first validation target is the SIGLENT SDS3054. Other models from the same g
 
 - Chassis model: SIGLENT SDS3054, 500 MHz, 4 GSa/s.
 - Platform mark: `SIGLENT Powered by TELEDYNE LECROY`.
-- Redacted remote identity: `LECROY,SDS3054,<serial>,8.4.1`.
+- Redacted remote identity: `*IDN LECROY,SDS3054,<serial>,8.4.1`.
 - Front-panel remote mode: `TCPIP (VICP)`.
 - Command family: Teledyne LeCroy MAUI/X-Stream Remote Command Set.
 
@@ -24,10 +24,12 @@ This identity constrains only the SDS3054 driver. It does not permit arbitrary L
 - Instrument kind: `scope`.
 - Initial model: `SDS3054`.
 - WaveBench compatibility: `>=0.8.22,<0.9`.
-- Transport: WaveBench `pyvisa`, currently restricted to `tcpip` resources.
+- Transport: WaveBench `pyvisa`; `VICP::<host>::INSTR` is verified using `PyVICP>=1.1,<2`.
 - Declared capabilities: `scope.idn`, `scope.errors`, `scope.channel_coupling`, and `scope.fetch_waveform`.
 
-Descriptor loading and driver construction perform no instrument I/O. Calling `scope.idn` sends exactly one `*IDN?` and accepts only `LECROY,SDS3054,<serial>,8.4.1`. Other manufacturers, models, or firmware revisions are rejected without writes.
+Descriptor loading and driver construction perform no instrument I/O. Calling `scope.idn` sends exactly one `*IDN?` and accepts only `*IDN LECROY,SDS3054,<serial>,8.4.1`, plus the corresponding bare identity when `CHDR OFF` suppresses the response header. Other manufacturers, models, or firmware revisions are rejected without writes.
+
+When the front panel selects `TCP/IP (VICP)`, use `VICP::<host>::INSTR`. `TCPIP::<host>::INSTR` means VXI-11 and is valid only after the front panel is switched to `LXI (VXI-11)`; the two resource forms are not interchangeable.
 
 `scope.channel_coupling` maps MAUI `A1M`, `D1M`, `D50`, and `GND` to WaveBench `ACL`, `DCL`, `DC`, and `GND`. An `OVL` response is treated as a 50-ohm input overload and stops the operation. `scope.errors` reads and clears `CMR`, `EXR`, and `DDR` in order; it is an existing WaveBench `stateful_read`, not a side-effect-free query.
 

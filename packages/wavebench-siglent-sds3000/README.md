@@ -10,7 +10,7 @@
 
 - 机身型号：SIGLENT SDS3054，500 MHz、4 GSa/s；
 - 平台标识：`SIGLENT Powered by TELEDYNE LECROY`；
-- 脱敏远程身份：`LECROY,SDS3054,<serial>,8.4.1`；
+- 脱敏远程身份：`*IDN LECROY,SDS3054,<serial>,8.4.1`；
 - 前面板远程模式：`TCPIP (VICP)`；
 - 命令体系：Teledyne LeCroy MAUI/X-Stream Remote Command Set。
 
@@ -24,10 +24,12 @@
 - 仪器类型：`scope`；
 - 首版型号：`SDS3054`；
 - WaveBench 兼容范围：`>=0.8.22,<0.9`；
-- transport：WaveBench `pyvisa`，当前只接受 `tcpip` 资源；
+- transport：WaveBench `pyvisa`；已验证 `VICP::<host>::INSTR`，使用 `PyVICP>=1.1,<2`；
 - 已声明 capability：`scope.idn`、`scope.errors`、`scope.channel_coupling`、`scope.fetch_waveform`。
 
-descriptor 加载和 driver 工厂阶段均不执行仪器 I/O。调用 `scope.idn` 时只发送一次 `*IDN?`，并严格接受 `LECROY,SDS3054,<serial>,8.4.1`；其他厂商、型号或固件均在零写入的情况下拒绝。
+descriptor 加载和 driver 工厂阶段均不执行仪器 I/O。调用 `scope.idn` 时只发送一次 `*IDN?`，并严格接受 `*IDN LECROY,SDS3054,<serial>,8.4.1`；当 `CHDR OFF` 省略响应头时，也接受对应的裸身份形式。其他厂商、型号或固件均在零写入的情况下拒绝。
+
+前面板选择 `TCP/IP (VICP)` 时，必须使用 `VICP::<host>::INSTR`。`TCPIP::<host>::INSTR` 是 VXI-11，只能在前面板切到 `LXI (VXI-11)` 后使用；两种资源不得混用。
 
 `scope.channel_coupling` 将 MAUI 的 `A1M`、`D1M`、`D50`、`GND` 分别映射为 WaveBench 的 `ACL`、`DCL`、`DC`、`GND`。仪器返回 `OVL` 时按 50 Ω 输入过载处理并拒绝继续。`scope.errors` 依次读取并清除 `CMR`、`EXR` 和 `DDR`；它是 WaveBench 已有的 `stateful_read`，不是普通无副作用查询。
 

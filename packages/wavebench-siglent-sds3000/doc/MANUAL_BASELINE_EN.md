@@ -28,8 +28,9 @@ The upload system regenerated all three PDFs with PDFium. Their file creation ti
 | --- | --- |
 | Physical brand | SIGLENT |
 | Chassis model | SDS3054 |
-| Redacted remote identity | `LECROY,SDS3054,<serial>,8.4.1` |
+| Redacted remote identity | `*IDN LECROY,SDS3054,<serial>,8.4.1` |
 | Protocol platform | Teledyne LeCroy MAUI/XStreamDSO |
+| Verified transport | VICP through WaveBench `pyvisa` and `PyVICP` |
 | Initial support scope | SDS3054 only |
 
 Entities without evidence on SDS3054 firmware `8.4.1` begin as `firmware-unverified`. Model-, option-, or platform-specific entities use `model-not-applicable` or `option-absent` as appropriate.
@@ -45,7 +46,7 @@ The M1 audit covers:
 
 Each entity requires a stable ID, manual location, read/write direction, parameters or response, version and option constraints, side effects, safety class, WaveBench mapping, and disposition. M1 requires reproducible totals, unique stable IDs, and zero unclassified entities.
 
-The allowed dispositions are `implemented`, `planned`, `core-gap-rfc`, `firmware-unverified`, `option-absent`, `model-not-applicable`, and `unsafe-quarantined`.
+The allowed dispositions are `implemented`, `partially-implemented`, `planned`, `core-gap-rfc`, `firmware-unverified`, `option-absent`, `model-not-applicable`, and `unsafe-quarantined`. A partially implemented legacy entity records command and query directions separately.
 
 Coverage means auditing and explicitly disposing every documented entity. It must never be achieved by exposing arbitrary SCPI or VBS execution.
 
