@@ -23,10 +23,12 @@ def test_rfc_is_explicitly_a_draft_and_milestones_are_aligned() -> None:
     assert assessment["core_changed_by_this_plugin"] is False
     assert assessment["decision"] == "assessment-only"
     assert assessment["milestones"] == {
-        "plugin": "M8-complete",
+        "plugin": "M8-functional-complete",
+        "p0_safety_hardening": "pending",
         "rfc": "R1-draft-needs-revision",
         "core_implementation": "not-started",
     }
+    assert assessment["scope"]["p0_safety_hardening_pending"] is True
 
 
 def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
@@ -54,6 +56,18 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
     assert set(session["states"]) == {"healthy", "uncertain", "poisoned", "closed"}
     assert set(session["configuration_states"]) == {"verified", "unverified"}
     assert "unverified" in session["transitions"]["new_or_reconnected_session"]
+    unknown_write = session["transitions"]["write_result_unknown"]
+    assert unknown_write["communication_synchronized"] == {
+        "next_state": "uncertain",
+        "allowed_instrument_io": [
+            "authorized_bounded_recovery",
+            "state_validation",
+        ],
+    }
+    assert unknown_write["communication_desynchronized_or_unproven"] == {
+        "next_state": "poisoned",
+        "allowed_instrument_io": [],
+    }
     assert "unrecoverable" in session["transitions"]["restore_failure"]
     assert "all later instrument operations" in " ".join(session["acceptance"])
     assert "restored" in " ".join(session["acceptance"])
@@ -75,6 +89,15 @@ def test_separate_transport_and_typed_scope_specs_are_required_before_coding() -
     assert "default replay policy" in transport
     assert "legacy call-site migration" in transport
     assert "read_continuation_only" in transport
+    session_contract = gates["transport-replay-session-rfc"]["session_contract_freeze"]
+    assert set(session_contract) == {
+        "health_owner",
+        "recovery_authorization",
+        "state_validation_scope",
+    }
+    assert "authoritative shared owner" in session_contract["health_owner"]
+    assert "transaction coordinator" in session_contract["recovery_authorization"]
+    assert "affected-field closure" in session_contract["state_validation_scope"]
 
     typed_scope = " ".join(gates["typed-scope-state-rfc"]["must_define"])
     assert "Protocol signatures" in typed_scope
@@ -163,6 +186,7 @@ def test_rfc_keeps_safety_rejections_and_test_layers_explicit() -> None:
         "session-transaction",
         "typed-read-only-state",
         "service-cli-run-plan",
+        "plugin-version-gate",
         "hardware-acceptance",
     } <= set(layers)
     assert layers["hardware-acceptance"]["hardware_required"] is True
@@ -184,6 +208,20 @@ def test_rfc_keeps_safety_rejections_and_test_layers_explicit() -> None:
         "scope-configuration-patch",
     }
 
+    session_cases = layers["session-transaction"]["required_cases"]
+    assert any("proven communication synchronization enters uncertain" in item for item in session_cases)
+    assert any("unproven communication enters poisoned" in item for item in session_cases)
+
+    service_cases = layers["service-cli-run-plan"]["required_cases"]
+    operation_audit = next(item for item in service_cases if "actual side effects" in item)
+    for operation in (
+        "scope.capture",
+        "scope.capture_waveforms",
+        "scope.capture_multiple",
+        "scope.fetch_waveform",
+    ):
+        assert operation in operation_audit
+
 
 def test_compatibility_contract_records_observable_behavior_changes() -> None:
     assessment = _assessment()
@@ -195,3 +233,31 @@ def test_compatibility_contract_records_observable_behavior_changes() -> None:
     assert "structured transport errors" in changes
     assert "on_failure=continue" in changes
     assert "legacy call-site migration inventory" in compatibility["required_controls"]
+
+
+def test_release_gates_cover_wheel_descriptor_api_and_implementation_order() -> None:
+    assessment = _assessment()
+    gates = assessment["release_version_gates"]
+
+    assert gates["current_plugin"] == {
+        "wheel_requires_dist": "wavebench>=0.8.22,<0.9",
+        "descriptor_wavebench_min_version": "0.8.22",
+        "descriptor_wavebench_max_version": "0.9.0",
+        "descriptor_api_version": "wavebench.instrument.v2",
+    }
+    assert gates["changed_by_r1"] is False
+    adoption = " ".join(gates["p0_adoption"])
+    assert "wheel and descriptor lower bounds move together" in adoption
+    assert "new api_version" in adoption
+    assert "before driver factory and transport I/O" in adoption
+
+    implementation_order = assessment["implementation_order"]
+    operation_audit = next(item for item in implementation_order if "OperationSpecs" in item)
+    for operation in (
+        "scope.capture",
+        "scope.capture_waveforms",
+        "scope.capture_multiple",
+        "scope.fetch_waveform",
+    ):
+        assert operation in operation_audit
+    assert any("raise wheel and descriptor version gates together" in item for item in implementation_order)

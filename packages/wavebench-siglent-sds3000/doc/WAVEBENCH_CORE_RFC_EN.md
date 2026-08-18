@@ -10,7 +10,7 @@
 
 ## Conclusion
 
-The SDS3054 plugin has completed M0–M8. Its six declared capabilities—identity, error registers, channel coupling, waveform fetch, single-channel capture, and same-acquisition multi-channel capture—do not depend on new interfaces from this RFC. VICP text and binary waveform operations passed hardware acceptance through the existing `PyVisaTransport`, `PyVICP`, and `query_bin_block()` path.
+The SDS3054 plugin is functionally complete through M8, while P0 safety hardening remains pending. Its six declared capabilities—identity, error registers, channel coupling, waveform fetch, single-channel capture, and same-acquisition multi-channel capture—do not depend on new interfaces from this RFC. VICP text and binary waveform operations passed hardware acceptance through the existing `PyVisaTransport`, `PyVICP`, and `query_bin_block()` path. Those results do not claim that non-replayable queries or shared session health are implemented.
 
 This document is suitable as a core impact assessment and implementation roadmap, but it is not a directly implementable or accepted public API specification. The first draft placed read-only state, generic patches, and partial status v2 too close together without fully defining replay policy, shared-session latching, field permissions, core consumers, or electrical safety gates. R1 promotes those foundations to P0 and defers generic writes and `ScopeSnapshotV2`. Separate transport and typed-scope RFCs must be frozen before core implementation begins.
 
@@ -22,7 +22,7 @@ Plugin milestones and RFC revisions use separate labels so that a completed plug
 
 | Subject | Current state | Meaning |
 | --- | --- | --- |
-| SDS3000 plugin | `M8-complete` | The current six capabilities passed their offline and hardware gates |
+| SDS3000 plugin | `M8-functional-complete` | The current six capabilities passed their offline and hardware gates; P0 safety hardening remains pending |
 | This RFC | `R1-draft-needs-revision` | Contracts remain open to revision; the public API is not frozen |
 | WaveBench core implementation | `not-started` | No implementation commit or plugin minimum-version increase exists |
 
@@ -32,10 +32,12 @@ R1 defines problem boundaries, priorities, and implementation order only. Two se
 
 | Separate specification | Required frozen content | Gate |
 | --- | --- | --- |
-| Transport replay/session RFC | The default policy of existing `query()`, migration of old call sites, structured transport errors, command transmission count, partial responses, desynchronization, and fail-closed behavior when a backend cannot support `read_continuation_only` | Before any P0 core implementation |
+| Transport replay/session RFC | The default policy of existing `query()`, migration of old call sites, structured transport errors, command transmission count, partial responses, desynchronization, session-health ownership, recovery authorization, state-validation scope, and fail-closed behavior when a backend cannot support `read_continuation_only` | Before any P0 core implementation |
 | Typed scope state RFC | Exact fields, `Protocol` signatures, static and runtime field support, `OperationSpec`, Service/CLI/run-plan consumption, v1 precedence, error envelopes, and three-vendor mappings | Before any P1 capability is frozen |
 
 The transport RFC must distinguish source compatibility from observable behavior compatibility. Migrating consuming reads from automatic retries to `no_replay`, and stopping later instrument I/O on a poisoned session under `on_failure=continue`, are observable changes and cannot be described as entirely additive.
+
+The transport RFC must also freeze three session contracts: the single authoritative owner and lifecycle of health state; the transaction coordinator allowed to perform plugin-declared bounded recovery and validation under the session lock while state is `uncertain`; and the communication synchronization, identity continuity, affected-field closure, and plugin-declared invariants required to leave `uncertain` or trust configuration after reconnect. Ordinary Service calls receive no recovery authority and cannot treat unverified configuration as healthy.
 
 ## Confirmed core facts
 
@@ -234,7 +236,7 @@ state_uncertain
 session_poisoned
 ```
 
-`changed_fields` describes instrument fields that may be touched during the transaction, not only values retained after completion. Existing `scope.capture`, `scope.capture_waveforms`, and `scope.fetch_waveform` specs also require an audit of timebase, vertical scale, trace, trigger mode, and waveform-transfer state.
+`changed_fields` describes instrument fields that may be touched during the transaction, not only values retained after completion. Existing `scope.capture`, `scope.capture_waveforms`, `scope.capture_multiple`, and `scope.fetch_waveform` specs also require an audit of timebase, vertical scale, trace, trigger mode, and waveform-transfer state.
 
 ## Termination safety boundary
 
@@ -271,6 +273,20 @@ Every new capability requires:
 
 New symbols should remain source-additive: existing `scope.channel_coupling`, capture arguments, v1 snapshot, and acquisition status types do not change in place. R1 does not freeze the default replay policy of existing `query()`. Moving consuming reads to `no_replay`, replacing implicit retries with structured errors, and blocking later I/O under `on_failure=continue` on a poisoned session are intentional observable behavior changes. The transport RFC must include a call-site migration inventory, release notes, and regression tests. The plugin raises its minimum WaveBench version only after a core release.
 
+## Release and version gates
+
+The current plugin uses three concurrent version gates. Wheel metadata declares `wavebench>=0.8.22,<0.9`; the descriptor declares `wavebench_min_version="0.8.22"` and `wavebench_max_version="0.9.0"`; and the descriptor explicitly declares `api_version="wavebench.instrument.v2"`. These independently gate dependency resolution, runtime core compatibility, and the executable plugin API.
+
+Before the plugin adopts P0 core behavior:
+
+1. P0 must exist in a released WaveBench version rather than an unpublished commit.
+2. The wheel and descriptor lower bounds move together to the first P0 release, and the upper bound is reviewed again.
+3. The current `api_version` remains only if `wavebench.instrument.v2` stays compatible. An incompatible executable-plugin contract requires a new core API version and a matching literal in the plugin descriptor.
+4. Registry validation rejects an API or core-version mismatch before driver-factory or transport I/O.
+5. Isolated wheel installation tests verify `Requires-Dist`, descriptor bounds, `api_version`, and the entry point together.
+
+R1 does not raise any current version gate.
+
 ## Acceptance test matrix
 
 The plugin's `test_core_rfc.py` verifies only this document's JSON structure. It does not prove that core behavior exists. Behavioral contracts belong in the WaveBench core repository.
@@ -278,9 +294,10 @@ The plugin's `test_core_rfc.py` verifies only this document's JSON structure. It
 | Layer | Required cases | Instrument connection in default CI |
 | --- | --- | --- |
 | Transport contract | Three replay policies, partial response, single transmission, backend and Guarded consistency | No |
-| Session transaction | Zero-I/O preflight, unknown write result, readback failure, reverse restoration, shared latch, `on_failure=continue` | No |
+| Session transaction | Zero-I/O preflight, unknown write outcome entering uncertain when synchronization is proven and poisoned when it is not, readback failure, reverse restoration, shared latch, `on_failure=continue` | No |
 | Typed read-only state | Read-only and unsupported fields, availability, structured query errors, termination patch rejection before I/O | No |
 | Service / CLI / run plan | Capability consumer, OperationSpec, JSON, strict mode, existing v1 regression only, session-health diagnostics | No |
+| Plugin version gate | Wheel `Requires-Dist`, descriptor min/max, `api_version`, entry point, and zero-I/O rejection | No |
 | Three-vendor fake driver | Only per-value mappings frozen with evidence by the typed-scope RFC; no invented common semantics | No |
 | Opt-in hardware | Real transport for released P0/P1 operations, read-only state mappings on approved instruments, and configuration revalidation after reconnect | Yes |
 
@@ -309,12 +326,14 @@ P0 foundations apply to every instrument kind and are not SDS3000-specific. P1 a
 
 ## Recommended implementation order
 
-1. Merge R1 as an impact assessment and implementation roadmap while keeping plugin M8, RFC R1, and core-not-started status distinct.
+1. Merge R1 as an impact assessment and implementation roadmap while keeping “M8 functionally complete, P0 safety hardening pending,” RFC R1, and core-not-started status distinct.
 2. Freeze a separate transport replay/session RFC, then implement replay policy, non-replayable queries, structured errors, and session gates on a separate WaveBench branch.
 3. Complete P0 transport and shared-session contract tests.
-4. Freeze a separate typed-scope state RFC covering channel/timebase/edge-trigger fields, core consumers, v1 precedence, and three-vendor mappings.
-5. Implement only frozen typed read-only state. Continue collecting three-vendor acquisition-state evidence without promising `scope.acquisition_run_state`.
-6. Review narrow scale, offset, and timebase patches in a separate RFC after safety evidence exists.
-7. Revisit termination writes, generic trigger writes, and snapshot v2 separately and last.
+4. Audit the `OperationSpec` of `scope.capture`, `scope.capture_waveforms`, `scope.capture_multiple`, and `scope.fetch_waveform` for actual side effects, `changed_fields`, risk, and restoration coverage.
+5. Freeze a separate typed-scope state RFC covering channel/timebase/edge-trigger fields, core consumers, v1 precedence, and three-vendor mappings.
+6. Implement only frozen typed read-only state. Continue collecting three-vendor acquisition-state evidence without promising `scope.acquisition_run_state`.
+7. After a formal P0 core release, raise the wheel and descriptor version gates together and review `api_version` before the plugin adopts the new behavior.
+8. Review narrow scale, offset, and timebase patches in a separate RFC after safety evidence exists.
+9. Revisit termination writes, generic trigger writes, and snapshot v2 separately and last.
 
 No generic scope write API is frozen until both P0 exit gates pass.

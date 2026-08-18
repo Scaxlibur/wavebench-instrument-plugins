@@ -18,7 +18,7 @@ This identity constrains only the SDS3054 driver. It does not permit arbitrary L
 
 ## Current status
 
-- Stage: M8 release preparation complete.
+- Stage: M8 functionally complete; P0 safety hardening remains pending.
 - Distribution: `wavebench-siglent-sds3000`.
 - Canonical driver ID: `siglent.sds3000`.
 - Instrument kind: `scope`.
@@ -26,6 +26,8 @@ This identity constrains only the SDS3054 driver. It does not permit arbitrary L
 - WaveBench compatibility: `>=0.8.22,<0.9`.
 - Transport: WaveBench `pyvisa`; `VICP::<host>::INSTR` is verified using `PyVICP>=1.1,<2`.
 - Declared capabilities: `scope.idn`, `scope.errors`, `scope.channel_coupling`, `scope.fetch_waveform`, `scope.capture_waveform`, and `scope.capture_waveforms`.
+
+“M8 functionally complete” means that these capabilities are implemented and passed their defined acceptance gates. It does not claim completion of non-replayable queries or shared session health. See the [core RFC](doc/WAVEBENCH_CORE_RFC_EN.md) for the P0 impact assessment and entry gates.
 
 Descriptor loading and driver construction perform no instrument I/O. Calling `scope.idn` sends exactly one `*IDN?` and accepts only `*IDN LECROY,SDS3054,<serial>,8.4.1`, plus the corresponding bare identity when `CHDR OFF` suppresses the response header. Other manufacturers, models, or firmware revisions are rejected without writes.
 
