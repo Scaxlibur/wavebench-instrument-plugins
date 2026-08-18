@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "wavebench_baseline": "0.8.22",
+  "core_changed_by_this_plugin": false,
+  "decision": "assessment-only",
+  "existing_interface_findings": [
+    {
+      "interface": "InstrumentTransport.query_bin_block",
+      "decision": "sufficient",
+      "evidence": "SDS3054 VICP descriptor and waveform payloads passed hardware acceptance"
+    },
+    {
+      "interface": "OperationSpec.effect=acquire",
+      "decision": "sufficient",
+      "evidence": "scope fetch and capture already require read_write access"
+    },
+    {
+      "interface": "PyVisaTransport",
+      "decision": "sufficient",
+      "evidence": "VICP works through pyvisa-py with the plugin-owned PyVICP dependency"
+    }
+  ],
+  "proposals": [
+    {
+      "id": "scope-configuration-state-and-patch",
+      "priority": "P1",
+      "compatibility": "additive",
+      "capabilities": [
+        "scope.analog_channel_state",
+        "scope.analog_channel_configure",
+        "scope.timebase_state",
+        "scope.timebase_configure",
+        "scope.edge_trigger_state",
+        "scope.edge_trigger_configure"
+      ],
+      "operation_contracts": {
+        "read_effect": "stateful_read",
+        "write_effect": "write",
+        "read_access": [
+          "read_only",
+          "read_write"
+        ],
+        "write_access": [
+          "read_write"
+        ],
+        "write_retry": "never",
+        "restore": "snapshot-before-write, exact-readback, reverse-restore, failure-latch",
+        "timeout": "explicit connection and optional operation-complete budgets"
+      },
+      "vendors": [
+        {
+          "manufacturer": "SIGLENT / Teledyne LeCroy",
+          "drivers": [
+            "siglent.sds3000"
+          ],
+          "evidence": [
+            "CPL",
+            "TRA",
+            "VDIV",
+            "OFST",
+            "TDIV",
+            "TRMD",
+            "TRSE",
+            "TRSL",
+            "TRCP",
+            "TRLV"
+          ]
+        },
+        {
+          "manufacturer": "RIGOL",
+          "drivers": [
+            "rigol.ds1000z"
+          ],
+          "evidence": [
+            "channel_coupling",
+            "set_vertical_scale",
+            "set_time_range",
+            "capture uses current trigger"
+          ]
+        },
+        {
+          "manufacturer": "Rohde & Schwarz",
+          "drivers": [
+            "rohde-schwarz.rtm2032"
+          ],
+          "evidence": [
+            "analog_channel_snapshot",
+            "timebase_snapshot",
+            "edge_trigger_snapshot",
+            "set_vertical_scale",
+            "set_time_range",
+            "configure_ch2_edge_trigger"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scope-partial-status-v2",
+      "priority": "P1",
+      "compatibility": "additive",
+      "capabilities": [
+        "scope.snapshot_v2",
+        "scope.acquisition_status_v2"
+      ],
+      "operation_contracts": {
+        "read_effect": "stateful_read",
+        "read_access": [
+          "read_only",
+          "read_write"
+        ],
+        "retry": "only non-consuming queries before any stateful read",
+        "restore": "not applicable to pure status components",
+        "timeout": "per-component query budget with explicit unavailable reasons"
+      },
+      "vendors": [
+        {
+          "manufacturer": "SIGLENT / Teledyne LeCroy",
+          "drivers": [
+            "siglent.sds3000"
+          ],
+          "evidence": [
+            "identity and coupling are available",
+            "TRMD and SEQ expose partial acquisition state",
+            "complete v1 health and option fields are unavailable"
+          ]
+        },
+        {
+          "manufacturer": "RIGOL",
+          "drivers": [
+            "rigol.ds1000z"
+          ],
+          "evidence": [
+            "identity and coupling are available",
+            "the external plugin does not declare the all-or-nothing v1 snapshot"
+          ]
+        },
+        {
+          "manufacturer": "Rohde & Schwarz",
+          "drivers": [
+            "rohde-schwarz.rtm2032"
+          ],
+          "evidence": [
+            "complete v1 snapshot is implemented",
+            "acquisition status changes shape when the K15 option is absent"
+          ]
+        }
+      ]
+    }
+  ],
+  "rejected_or_deferred": [
+    {
+      "id": "arbitrary-raw-scpi-or-vbs",
+      "decision": "rejected",
+      "reason": "would bypass capability, access, audit, validation, and restoration contracts"
+    },
+    {
+      "id": "sds3000-vicp-core-backend",
+      "decision": "not-needed",
+      "reason": "the existing PyVISA transport works with PyVICP supplied by the plugin"
+    },
+    {
+      "id": "raw-screenshot-transport-for-sds3000",
+      "decision": "not-justified",
+      "reason": "SCDP sends output to the configured hardcopy device and SCDP query returns status, not image bytes"
+    },
+    {
+      "id": "mutate-v1-status-models-in-place",
+      "decision": "rejected",
+      "reason": "making required fields optional in place would silently change existing client assumptions"
+    },
+    {
+      "id": "dynamic-descriptor-instrument-probing",
+      "decision": "rejected",
+      "reason": "descriptor loading must remain zero-I/O; option checks stay inside typed operations"
+    }
+  ]
+}
