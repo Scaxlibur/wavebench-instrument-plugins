@@ -26,6 +26,8 @@ Automation 对象虽然不能直接调用，但它们决定名称空间、型号
 
 M1 完成时的状态如下。后续里程碑会在保留稳定 ID 的前提下更新处置状态。
 
+M4 起，目录 schema v2 为 legacy command 增加 `direction_dispositions`。该字段分别记录 command 和 query 方向，防止将已实现的 `WF?` 读取误报为 `WF` 写回支持。下表仍是 M1 分母冻结时的历史快照。
+
 | 状态 | 数量 | 含义 |
 | --- | ---: | --- |
 | `planned` | 20 | WaveBench 现有接口可表达，已进入实现计划 |

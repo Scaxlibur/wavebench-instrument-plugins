@@ -18,6 +18,6 @@
 
 ## 开发中的插件
 
-- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README.md)：面向早期 SIGLENT SDS3000 系列的正式插件，首个验证型号为 SDS3054；当前声明身份、错误寄存器和通道耦合能力。
+- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README.md)：面向早期 SIGLENT SDS3000 系列的正式插件，首个验证型号为 SDS3054；当前声明身份、错误寄存器、通道耦合和波形读取能力。
 
 该插件已经提供 `pyproject.toml` 和唯一 entry point，因此进入仓库级开发环境。尚未完成的 capability 不会提前声明；每项能力必须先通过离线测试和相应级别的实机验收。

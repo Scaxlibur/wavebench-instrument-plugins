@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-This package provides an external WaveBench driver for the early SIGLENT SDS3000 oscilloscope family. It does not cover later products whose names include `X` or `HD`. The installable plugin, strict identity gate, error-register reads, and channel-coupling mapping are in place; other capabilities remain under development.
+This package provides an external WaveBench driver for the early SIGLENT SDS3000 oscilloscope family. It does not cover later products whose names include `X` or `HD`. The installable plugin, strict identity gate, error-register reads, channel-coupling mapping, and binary waveform reads are in place; other capabilities remain under development.
 
 The first validation target is the SIGLENT SDS3054. Other models from the same generation will enter the compatibility range only when supported by vendor documentation and test evidence.
 
@@ -18,18 +18,20 @@ This identity constrains only the SDS3054 driver. It does not permit arbitrary L
 
 ## Current status
 
-- Stage: M3 text protocol.
+- Stage: M4 waveform transfer.
 - Distribution: `wavebench-siglent-sds3000`.
 - Canonical driver ID: `siglent.sds3000`.
 - Instrument kind: `scope`.
 - Initial model: `SDS3054`.
 - WaveBench compatibility: `>=0.8.22,<0.9`.
 - Transport: WaveBench `pyvisa`, currently restricted to `tcpip` resources.
-- Declared capabilities: `scope.idn`, `scope.errors`, and `scope.channel_coupling`.
+- Declared capabilities: `scope.idn`, `scope.errors`, `scope.channel_coupling`, and `scope.fetch_waveform`.
 
 Descriptor loading and driver construction perform no instrument I/O. Calling `scope.idn` sends exactly one `*IDN?` and accepts only `LECROY,SDS3054,<serial>,8.4.1`. Other manufacturers, models, or firmware revisions are rejected without writes.
 
 `scope.channel_coupling` maps MAUI `A1M`, `D1M`, `D50`, and `GND` to WaveBench `ACL`, `DCL`, `DC`, and `GND`. An `OVL` response is treated as a 50-ohm input overload and stops the operation. `scope.errors` reads and clears `CMR`, `EXR`, and `DDR` in order; it is an existing WaveBench `stateful_read`, not a side-effect-free query.
+
+`scope.fetch_waveform` uses the existing WaveBench waveform models and `query_bin_block()` transport interface. It snapshots `CHDR`, `CFMT`, `CORD`, and `WFSU`, temporarily selects `DEF9,WORD,BIN` with low byte first and one segment, then restores the original state in reverse order. A restoration failure becomes `StateDriftError`. Only the `WF?` read direction is implemented; writing `WF` back into internal memory remains quarantined and is not reported as supported.
 
 ## Programming-manual drop location
 

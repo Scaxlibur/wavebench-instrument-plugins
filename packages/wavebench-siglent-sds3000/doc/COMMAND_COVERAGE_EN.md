@@ -24,6 +24,8 @@ Automation objects remain in the catalog because they establish namespaces and m
 
 ## Current dispositions
 
+Starting with M4, catalog schema v2 adds `direction_dispositions` to each legacy command. It tracks command and query directions separately so implemented `WF?` reads cannot be mistaken for `WF` write-back support. The figures below remain the historical M1 denominator-freeze snapshot.
+
 At the M1 boundary, the catalog contains 20 `planned`, 10 `core-gap-rfc`, 336 `firmware-unverified`, 78 `option-absent`, 2 `model-not-applicable`, and 132 `unsafe-quarantined` entities. No entity claims `implemented` during the denominator-freeze milestone.
 
 “100% coverage” means that every explicit entity must ultimately have reproducible implementation or disposition evidence. It does not mean executing every instruction. Option-specific, model-inapplicable, and dangerous instructions remain covered without being run on hardware merely to improve a percentage.
