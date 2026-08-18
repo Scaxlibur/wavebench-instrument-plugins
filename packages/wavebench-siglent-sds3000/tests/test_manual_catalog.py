@@ -51,7 +51,7 @@ def test_committed_catalog_freezes_the_complete_explicit_denominator() -> None:
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 
-    assert catalog["schema_version"] == 1
+    assert catalog["schema_version"] == 2
     assert catalog["entity_count"] == 578
     assert catalog["callable_entity_count"] == 478
     assert catalog["counts_by_kind"] == EXPECTED_KIND_COUNTS
@@ -96,7 +96,7 @@ def test_idn_catalog_entry_tracks_the_implemented_capability() -> None:
     assert identity["wavebench_capabilities"] == ["scope.idn"]
 
 
-def test_m3_implemented_legacy_entries_match_the_text_protocol() -> None:
+def test_m4_implemented_legacy_entries_match_the_text_and_transfer_protocols() -> None:
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     implemented = {
         entity["short"]
@@ -104,7 +104,29 @@ def test_m3_implemented_legacy_entries_match_the_text_protocol() -> None:
         if entity["kind"] == "legacy_command" and entity["disposition"] == "implemented"
     }
 
-    assert implemented == {"*IDN?", "CMR?", "CPL", "DDR?", "EXR?"}
+    assert implemented == {
+        "*IDN?",
+        "CFMT",
+        "CHDR",
+        "CMR?",
+        "CORD",
+        "CPL",
+        "DDR?",
+        "EXR?",
+        "WFSU",
+    }
+
+
+def test_m4_waveform_query_is_not_misreported_as_waveform_write_support() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    waveform = next(entity for entity in catalog["entities"] if entity.get("short") == "WF")
+
+    assert waveform["disposition"] == "partially-implemented"
+    assert waveform["direction_dispositions"] == {
+        "command": "unsafe-quarantined",
+        "query": "implemented",
+    }
+    assert waveform["wavebench_capabilities"] == ["scope.fetch_waveform"]
 
 
 def test_local_manual_regenerates_the_committed_catalog() -> None:

@@ -22,6 +22,7 @@ from typing import Any, Iterable
 ALLOWED_DISPOSITIONS = frozenset(
     {
         "implemented",
+        "partially-implemented",
         "planned",
         "core-gap-rfc",
         "firmware-unverified",
@@ -255,12 +256,16 @@ _LEGACY_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "ARM": ("scope.capture_waveform", "scope.capture_waveforms"),
     "CPL": ("scope.channel_coupling",),
     "CMR?": ("scope.errors",),
+    "CFMT": ("scope.fetch_waveform",),
+    "CHDR": ("scope.fetch_waveform",),
+    "CORD": ("scope.fetch_waveform",),
     "CRVA?": ("scope.cursor_readout",),
     "DDR?": ("scope.errors",),
     "EXR?": ("scope.errors",),
     "PAST?": ("scope.measurement_statistics",),
     "SCDP": ("scope.screenshot",),
-    "WF": ("scope.fetch_waveform", "scope.capture_waveform", "scope.capture_waveforms"),
+    "WF": ("scope.fetch_waveform",),
+    "WFSU": ("scope.fetch_waveform",),
 }
 
 
@@ -269,6 +274,10 @@ def _legacy_classification(short: str, subsystem: str) -> tuple[str, str]:
         return "implemented", "stateful-read"
     if short in {"*IDN?", "CPL"}:
         return "implemented", "read-only"
+    if short in {"CFMT", "CHDR", "CORD", "WFSU"}:
+        return "implemented", "state-change"
+    if short == "WF":
+        return "partially-implemented", "state-change"
     if subsystem in {"DDA", "ET-PMT"}:
         return "option-absent", "not-tested"
     if short in _UNSAFE_LEGACY:
@@ -710,6 +719,11 @@ def _extract_part7(segments: list[Segment]) -> list[dict[str, Any]]:
                 short=short,
                 subsystem=subsystem,
                 manual_anomalies=anomalies,
+                direction_dispositions=(
+                    {"command": "unsafe-quarantined", "query": "implemented"}
+                    if short == "WF"
+                    else {direction: disposition for direction in directions}
+                ),
             )
         )
     return records
@@ -740,6 +754,14 @@ def _validate_catalog(records: list[dict[str, Any]]) -> dict[str, int]:
         record["kind"] != "automation_object" and not record["directions"] for record in records
     ):
         raise CatalogError("callable catalog entity without a direction")
+    for record in records:
+        if record["kind"] != "legacy_command":
+            continue
+        per_direction = record.get("direction_dispositions")
+        if not isinstance(per_direction, dict) or set(per_direction) != set(record["directions"]):
+            raise CatalogError(f"invalid direction dispositions for {record['id']}")
+        if any(value not in ALLOWED_DISPOSITIONS for value in per_direction.values()):
+            raise CatalogError(f"unknown direction disposition for {record['id']}")
     return {kind: counts[kind] for kind in EXPECTED_KIND_COUNTS}
 
 
@@ -757,7 +779,7 @@ def build_catalog(package_root: Path) -> dict[str, Any]:
     counts = _validate_catalog(records)
     disposition_counts = Counter(record["disposition"] for record in records)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "manual_publication": baseline["manual"]["publication"],
         "manual_segment_sha256": [segment["sha256"] for segment in baseline["manual"]["segments"]],
         "device_baseline": baseline["device_baseline"],

@@ -66,11 +66,17 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.idn",
         "scope.errors",
         "scope.channel_coupling",
+        "scope.fetch_waveform",
     )
     assert descriptor.idn_patterns == ("LECROY,SDS3054,",)
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip",)
     assert descriptor.scope_coupling_policy == "switchable-termination"
+    assert descriptor.config_fields == (
+        "connection.resource",
+        "scope.driver",
+        "waveform.*",
+    )
     assert descriptor.validate_options({}) == {}
 
 

@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "manual_publication": "2026-02",
   "manual_segment_sha256": [
     "1a035e879600ee75d1d381c1fe8e5c2bcffc09d3fbc0fa02d4db46d82d04af53",
@@ -26,10 +26,11 @@
   "counts_by_disposition": {
     "core-gap-rfc": 10,
     "firmware-unverified": 333,
-    "implemented": 5,
+    "implemented": 9,
     "model-not-applicable": 2,
     "option-absent": 78,
-    "planned": 18,
+    "partially-implemented": 1,
+    "planned": 13,
     "unsafe-quarantined": 132
   },
   "entities": [
@@ -5571,7 +5572,10 @@
       },
       "short": "*CAL?",
       "subsystem": "MISC",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:*CLS",
@@ -5597,7 +5601,10 @@
       },
       "short": "*CLS",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*ESE",
@@ -5624,7 +5631,11 @@
       },
       "short": "*ESE",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*ESR?",
@@ -5650,7 +5661,10 @@
       },
       "short": "*ESR?",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*IDN?",
@@ -5678,7 +5692,10 @@
       },
       "short": "*IDN?",
       "subsystem": "MISC",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:*OPC",
@@ -5705,7 +5722,11 @@
       },
       "short": "*OPC",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*OPT?",
@@ -5731,7 +5752,10 @@
       },
       "short": "*OPT?",
       "subsystem": "MISC",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*PRE",
@@ -5758,7 +5782,11 @@
       },
       "short": "*PRE",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*RCL",
@@ -5784,7 +5812,10 @@
       },
       "short": "*RCL",
       "subsystem": "SAVE/RECALL",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:*RST",
@@ -5810,7 +5841,10 @@
       },
       "short": "*RST",
       "subsystem": "SAVE/RECALL",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:*SAV",
@@ -5836,7 +5870,10 @@
       },
       "short": "*SAV",
       "subsystem": "SAVE/RECALL",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:*SRE",
@@ -5863,7 +5900,11 @@
       },
       "short": "*SRE",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*STB?",
@@ -5889,7 +5930,10 @@
       },
       "short": "*STB?",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*TRG",
@@ -5915,7 +5959,10 @@
       },
       "short": "*TRG",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:*TST?",
@@ -5941,7 +5988,10 @@
       },
       "short": "*TST?",
       "subsystem": "MISC",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:*WAI",
@@ -5967,7 +6017,10 @@
       },
       "short": "*WAI",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:ALL_STATUS?",
@@ -5995,7 +6048,10 @@
       },
       "short": "ALST?",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:ARM_ACQUISITION",
@@ -6024,7 +6080,10 @@
       },
       "short": "ARM",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "planned"
+      }
     },
     {
       "id": "legacy:ATTENUATION",
@@ -6051,7 +6110,11 @@
       },
       "short": "ATTN",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:AUTO_CALIBRATE",
@@ -6078,7 +6141,11 @@
       },
       "short": "ACAL",
       "subsystem": "MISC",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined",
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:AUTO_SETUP",
@@ -6106,7 +6173,10 @@
       },
       "short": "ASET",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "planned"
+      }
     },
     {
       "id": "legacy:BANDWIDTH_LIMIT",
@@ -6133,7 +6203,11 @@
       },
       "short": "BWL",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:BUZZER",
@@ -6159,7 +6233,10 @@
       },
       "short": "BUZZ",
       "subsystem": "MISC",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:CAL_OUTPUT",
@@ -6186,7 +6263,11 @@
       },
       "short": "COUT",
       "subsystem": "MISC",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined",
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:CLEAR_MEMORY",
@@ -6212,7 +6293,10 @@
       },
       "short": "CLM",
       "subsystem": "FUNCTION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:CLEAR_SWEEPS",
@@ -6238,7 +6322,10 @@
       },
       "short": "CLSW",
       "subsystem": "FUNCTION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:CMR?",
@@ -6266,7 +6353,10 @@
       },
       "short": "CMR?",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:COMBINE_CHANNELS",
@@ -6293,7 +6383,11 @@
       },
       "short": "COMB",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:COMM_FORMAT",
@@ -6303,9 +6397,11 @@
         "command",
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.fetch_waveform"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 204,
@@ -6320,7 +6416,11 @@
       },
       "short": "CFMT",
       "subsystem": "COMM",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "implemented",
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:COMM_HEADER",
@@ -6330,9 +6430,11 @@
         "command",
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.fetch_waveform"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 204,
@@ -6347,7 +6449,11 @@
       },
       "short": "CHDR",
       "subsystem": "COMM",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "implemented",
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:COMM_HELP",
@@ -6374,7 +6480,11 @@
       },
       "short": "CHLP",
       "subsystem": "COMM",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:COMM_HELP_LOG",
@@ -6402,7 +6512,10 @@
       "subsystem": "COMM",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:COMM_ORDER",
@@ -6412,9 +6525,11 @@
         "command",
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.fetch_waveform"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 204,
@@ -6429,7 +6544,11 @@
       },
       "short": "CORD",
       "subsystem": "COMM",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "implemented",
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:COUPLING",
@@ -6458,7 +6577,11 @@
       },
       "short": "CPL",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "implemented",
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:CURSORS",
@@ -6485,7 +6608,11 @@
       },
       "short": "CRS",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:CURSOR_MEASURE",
@@ -6512,7 +6639,11 @@
       },
       "short": "CRMS",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:CURSOR_SET",
@@ -6539,7 +6670,11 @@
       },
       "short": "CRST",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:CURSOR_VALUE?",
@@ -6567,7 +6702,10 @@
       },
       "short": "CRVA?",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "planned"
+      }
     },
     {
       "id": "legacy:CUSTOM_APPLICATION",
@@ -6594,7 +6732,11 @@
       },
       "short": "CUAP",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:CUSTOM_OPTIONS?",
@@ -6620,7 +6762,10 @@
       },
       "short": "CU_OPT?",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DATE",
@@ -6647,7 +6792,11 @@
       },
       "short": "DATE",
       "subsystem": "MISC",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined",
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:DDR?",
@@ -6675,7 +6824,10 @@
       },
       "short": "DDR?",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:DD_ANALOG_COMP_THRESH",
@@ -6702,7 +6854,11 @@
       },
       "short": "DACT",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_ANALYZE_REGION_DISABLE",
@@ -6728,7 +6884,10 @@
       },
       "short": "DARD",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_ANALYZE_REGION_LENGTH",
@@ -6755,7 +6914,11 @@
       },
       "short": "DARL",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_ANALYZE_REGION_START",
@@ -6782,7 +6945,11 @@
       },
       "short": "DARS",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_BITCELL",
@@ -6809,7 +6976,11 @@
       },
       "short": "DBIT",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_BYTE_OFFSET",
@@ -6836,7 +7007,11 @@
       },
       "short": "DBYT",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_BYTE_OFFSET_SEGMENT",
@@ -6863,7 +7038,11 @@
       },
       "short": "DSEG",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_CTAF_3DB",
@@ -6892,7 +7071,11 @@
       "subsystem": "DDA",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_CTAF_BOOST",
@@ -6919,7 +7102,11 @@
       },
       "short": "DBST",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_CTAF_FC",
@@ -6946,7 +7133,11 @@
       },
       "short": "DDFC",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_CTAF_GROUP_DELAY",
@@ -6973,7 +7164,11 @@
       },
       "short": "DFGD",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_ENCODING",
@@ -7000,7 +7195,11 @@
       },
       "short": "DENC",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_ERR_INFO",
@@ -7028,7 +7227,10 @@
       "subsystem": "DDA",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_ERR_NUM",
@@ -7054,7 +7256,10 @@
       },
       "short": "DERR",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_FIND_BITCELL",
@@ -7082,7 +7287,10 @@
       "subsystem": "DDA",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_FIND_ERROR",
@@ -7109,7 +7317,11 @@
       },
       "short": "DFER",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_FIND_METHOD",
@@ -7136,7 +7348,11 @@
       },
       "short": "DDFM",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_FIR",
@@ -7163,7 +7379,11 @@
       },
       "short": "DFIR",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_FIR_ENABLE",
@@ -7190,7 +7410,11 @@
       },
       "short": "DFEN",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_HEADSIGNAL_CHANNEL",
@@ -7217,7 +7441,11 @@
       },
       "short": "DHSC",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_IGNORE_SAMPLES",
@@ -7244,7 +7472,11 @@
       },
       "short": "DIGS",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_ML_MIN_SPACING",
@@ -7271,7 +7503,11 @@
       },
       "short": "DRLM",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_ML_RUN_LENGTH_LIMIT",
@@ -7298,7 +7534,11 @@
       },
       "short": "DRLE",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_NUM_ERRORS",
@@ -7326,7 +7566,10 @@
       "subsystem": "DDA",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_OVERLAP_REF",
@@ -7353,7 +7596,11 @@
       },
       "short": "DOVL",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_PES_ANALYSIS",
@@ -7380,7 +7627,11 @@
       },
       "short": "DPA",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_PES_DATA",
@@ -7408,7 +7659,10 @@
       "subsystem": "DDA",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_PES_SETUP",
@@ -7433,7 +7687,11 @@
       "subsystem": "DDA",
       "manual_anomalies": [
         "body-heading-not-present"
-      ]
+      ],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_PES_SUMMARY_DATA",
@@ -7461,7 +7719,10 @@
       "subsystem": "DDA",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_READCLOCK_CHANNEL",
@@ -7488,7 +7749,11 @@
       },
       "short": "DRCC",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_READGATE_CHANNEL",
@@ -7515,7 +7780,11 @@
       },
       "short": "DRGC",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_READ_GATE_POLARITY",
@@ -7542,7 +7811,11 @@
       },
       "short": "DRGP",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_RESET_AVERAGE",
@@ -7568,7 +7841,10 @@
       },
       "short": "DRAV",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_SAMPLE_PHASE",
@@ -7595,7 +7871,11 @@
       },
       "short": "DSPH",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_SAM_THRESH",
@@ -7622,7 +7902,11 @@
       },
       "short": "DST",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_SHOW_FILTERED",
@@ -7649,7 +7933,11 @@
       },
       "short": "DSF",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_SHOW_LEVELS",
@@ -7676,7 +7964,11 @@
       },
       "short": "DSLV",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_SHOW_ML",
@@ -7703,7 +7995,11 @@
       },
       "short": "DSML",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_SHOW_SAMPLE_TIMES",
@@ -7730,7 +8026,11 @@
       },
       "short": "DSST",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_SIGNAL_INPUT",
@@ -7757,7 +8057,11 @@
       },
       "short": "DDSI",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_SIGNAL_TYPE",
@@ -7784,7 +8088,11 @@
       },
       "short": "DSIG",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_START_AVERAGING",
@@ -7811,7 +8119,11 @@
       },
       "short": "DSAV",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_STORE_REFERENCE",
@@ -7837,7 +8149,10 @@
       },
       "short": "DSTR",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_TRAIN_FILTER",
@@ -7865,7 +8180,10 @@
       "subsystem": "DDA",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_VCOSYNCH_TO_DATA",
@@ -7892,7 +8210,11 @@
       },
       "short": "DVTD",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DD_VCO_SYNCH_PATTERN",
@@ -7919,7 +8241,11 @@
       },
       "short": "DVSP",
       "subsystem": "DDA",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:DEFINE",
@@ -7948,7 +8274,11 @@
       "subsystem": "FUNCTION",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:DELETE_FILE",
@@ -7974,7 +8304,10 @@
       },
       "short": "DELF",
       "subsystem": "STORAGE",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:DIRECTORY",
@@ -8001,7 +8334,11 @@
       },
       "short": "DIR",
       "subsystem": "STORAGE",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined",
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:DISPLAY",
@@ -8028,7 +8365,11 @@
       },
       "short": "DISP",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:DOT_JOIN",
@@ -8055,7 +8396,11 @@
       },
       "short": "DTJN",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:EXR?",
@@ -8083,7 +8428,10 @@
       },
       "short": "EXR?",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:FIND_CENTER_RANGE",
@@ -8111,7 +8459,10 @@
       "subsystem": "FUNCTION",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:FORCE_TRIGGER",
@@ -8137,7 +8488,10 @@
       },
       "short": "FRTR",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:FUNCTION_RESET",
@@ -8163,7 +8517,10 @@
       },
       "short": "FRST",
       "subsystem": "FUNCTION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:GRID",
@@ -8190,7 +8547,11 @@
       },
       "short": "GRID",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:HARDCOPY_SETUP",
@@ -8217,7 +8578,11 @@
       },
       "short": "HCSU",
       "subsystem": "HARD COPY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:HOR_MAGNIFY",
@@ -8244,7 +8609,11 @@
       },
       "short": "HMAG",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:HOR_POSITION",
@@ -8271,7 +8640,11 @@
       },
       "short": "HPOS",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:INE",
@@ -8298,7 +8671,11 @@
       },
       "short": "INE",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:INR?",
@@ -8324,7 +8701,10 @@
       },
       "short": "INR?",
       "subsystem": "STATUS",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:INSPECT?",
@@ -8351,7 +8731,11 @@
       },
       "short": "INSP?",
       "subsystem": "WAVEFORM TRANSFER",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "planned",
+        "query": "planned"
+      }
     },
     {
       "id": "legacy:INTENSITY",
@@ -8378,7 +8762,11 @@
       },
       "short": "INTS",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:INTERLEAVED",
@@ -8405,7 +8793,11 @@
       },
       "short": "ILVD",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:IST?",
@@ -8433,7 +8825,10 @@
       "subsystem": "STATUS",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:MEMORY_SIZE",
@@ -8459,7 +8854,10 @@
       },
       "short": "MSIZ",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:MESSAGE",
@@ -8486,7 +8884,11 @@
       },
       "short": "MSG",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:MT_FAIL_ACTION",
@@ -8513,7 +8915,11 @@
       },
       "short": "MTFA",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:MT_OFFSET",
@@ -8540,7 +8946,11 @@
       },
       "short": "MTOF",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:MT_OPC?",
@@ -8566,7 +8976,10 @@
       },
       "short": "MTOP?",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:MT_PF_COUNTERS?",
@@ -8592,7 +9005,10 @@
       },
       "short": "MTPC?",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:MT_SELECT_TEST",
@@ -8619,7 +9035,11 @@
       },
       "short": "MTST",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:MT_SYMBOL?",
@@ -8645,7 +9065,10 @@
       },
       "short": "MTSY?",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:MT_TEST_STATE",
@@ -8672,7 +9095,11 @@
       },
       "short": "MTTS",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent",
+        "query": "option-absent"
+      }
     },
     {
       "id": "legacy:MT_VERTICAL_ALIGN",
@@ -8698,7 +9125,10 @@
       },
       "short": "MTVA",
       "subsystem": "ET-PMT",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "option-absent"
+      }
     },
     {
       "id": "legacy:OFFSET",
@@ -8725,7 +9155,11 @@
       },
       "short": "OFST",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:OFFSET_CONSTANT",
@@ -8752,7 +9186,11 @@
       },
       "short": "OFCT",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PANEL_SETUP",
@@ -8779,7 +9217,11 @@
       },
       "short": "PNSU",
       "subsystem": "SAVE/RECALL",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PARAMETER",
@@ -8806,7 +9248,11 @@
       },
       "short": "PARM",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PARAMETER_CLR",
@@ -8832,7 +9278,10 @@
       },
       "short": "PACL",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PARAMETER_CUSTOM",
@@ -8858,7 +9307,10 @@
       },
       "short": "PACU",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PARAMETER_DELETE",
@@ -8884,7 +9336,10 @@
       },
       "short": "PADL",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PARAMETER_STATISTICS?",
@@ -8912,7 +9367,10 @@
       },
       "short": "PAST?",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "planned"
+      }
     },
     {
       "id": "legacy:PARAMETER_VALUE?",
@@ -8938,7 +9396,10 @@
       },
       "short": "PAVA?",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PASS_FAIL",
@@ -8965,7 +9426,11 @@
       },
       "short": "PF",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PASS_FAIL_DO",
@@ -8992,7 +9457,11 @@
       },
       "short": "PFDO",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PERSIST",
@@ -9019,7 +9488,11 @@
       },
       "short": "PERS",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PERSIST_COLOR",
@@ -9046,7 +9519,11 @@
       },
       "short": "PECL",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PERSIST_LAST",
@@ -9073,7 +9550,11 @@
       },
       "short": "PELT",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PERSIST_SAT",
@@ -9100,7 +9581,11 @@
       },
       "short": "PESA",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PERSIST_SETUP",
@@ -9127,7 +9612,11 @@
       },
       "short": "PESU",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PER_CURSOR_SET",
@@ -9153,7 +9642,10 @@
       },
       "short": "PECS",
       "subsystem": "CURSOR",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PROBE_CAL?",
@@ -9179,7 +9671,10 @@
       },
       "short": "PRCA?",
       "subsystem": "PROBE",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:PROBE_DEGAUSS",
@@ -9207,7 +9702,10 @@
       "subsystem": "PROBE",
       "manual_anomalies": [
         "index-body-token-mismatch"
-      ]
+      ],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:PROBE_NAME?",
@@ -9233,7 +9731,10 @@
       },
       "short": "PRNA?",
       "subsystem": "PROBE",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:RECALL_PANEL",
@@ -9259,7 +9760,10 @@
       },
       "short": "RCPN",
       "subsystem": "SAVE/RECALL",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:REFERENCE_CLOCK",
@@ -9286,7 +9790,11 @@
       },
       "short": "RCLK",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:SAMPLE_CLOCK",
@@ -9313,7 +9821,11 @@
       },
       "short": "SCLK",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:SCREEN_DUMP",
@@ -9342,7 +9854,11 @@
       },
       "short": "SCDP",
       "subsystem": "HARD COPY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:SEQUENCE",
@@ -9369,7 +9885,11 @@
       },
       "short": "SEQ",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:STOP",
@@ -9395,7 +9915,10 @@
       },
       "short": "STOP",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "planned"
+      }
     },
     {
       "id": "legacy:STORE",
@@ -9421,7 +9944,10 @@
       },
       "short": "STO",
       "subsystem": "WAVEFORM TRANSFER",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:STORE_PANEL",
@@ -9447,7 +9973,10 @@
       },
       "short": "STPN",
       "subsystem": "SAVE/RECALL",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:STORE_SETUP",
@@ -9474,7 +10003,11 @@
       },
       "short": "STST",
       "subsystem": "WAVEFORM TRANSFER",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined",
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:TEMPLATE?",
@@ -9500,7 +10033,10 @@
       },
       "short": "TMPL?",
       "subsystem": "WAVEFORM TRANSFER",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "query": "planned"
+      }
     },
     {
       "id": "legacy:TIME_DIV",
@@ -9527,7 +10063,11 @@
       },
       "short": "TDIV",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:TRACE",
@@ -9554,7 +10094,11 @@
       },
       "short": "TRA",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:TRANSFER_FILE",
@@ -9581,7 +10125,11 @@
       },
       "short": "TRFL",
       "subsystem": "WAVEFORM TRANSFER",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined",
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:TRIG_COUPLING",
@@ -9608,7 +10156,11 @@
       },
       "short": "TRCP",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:TRIG_DELAY",
@@ -9635,7 +10187,11 @@
       },
       "short": "TRDL",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:TRIG_LEVEL",
@@ -9662,7 +10218,11 @@
       },
       "short": "TRLV",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:TRIG_MODE",
@@ -9689,7 +10249,11 @@
       },
       "short": "TRMD",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:TRIG_PATTERN",
@@ -9716,7 +10280,11 @@
       },
       "short": "TRPA",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:TRIG_SELECT",
@@ -9743,7 +10311,11 @@
       },
       "short": "TRSE",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:TRIG_SLOPE",
@@ -9770,7 +10342,11 @@
       },
       "short": "TRSL",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:VBS",
@@ -9797,7 +10373,11 @@
       },
       "short": "VBS",
       "subsystem": "AUTOMATION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined",
+        "query": "unsafe-quarantined"
+      }
     },
     {
       "id": "legacy:VERT_MAGNIFY",
@@ -9824,7 +10404,11 @@
       },
       "short": "VMAG",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:VERT_POSITION",
@@ -9851,7 +10435,11 @@
       },
       "short": "VPOS",
       "subsystem": "DISPLAY",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "firmware-unverified",
+        "query": "firmware-unverified"
+      }
     },
     {
       "id": "legacy:VOLT_DIV",
@@ -9878,7 +10466,11 @@
       },
       "short": "VDIV",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "core-gap-rfc",
+        "query": "core-gap-rfc"
+      }
     },
     {
       "id": "legacy:WAIT",
@@ -9904,7 +10496,10 @@
       },
       "short": "WAIT",
       "subsystem": "ACQUISITION",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "planned"
+      }
     },
     {
       "id": "legacy:WAVEFORM",
@@ -9914,12 +10509,10 @@
         "command",
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "partially-implemented",
       "safety": "state-change",
       "wavebench_capabilities": [
-        "scope.fetch_waveform",
-        "scope.capture_waveform",
-        "scope.capture_waveforms"
+        "scope.fetch_waveform"
       ],
       "source": {
         "segment": "segment-002",
@@ -9935,7 +10528,11 @@
       },
       "short": "WF",
       "subsystem": "WAVEFORM TRANSFER",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "unsafe-quarantined",
+        "query": "implemented"
+      }
     },
     {
       "id": "legacy:WAVEFORM_SETUP",
@@ -9945,9 +10542,11 @@
         "command",
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.fetch_waveform"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 209,
@@ -9962,7 +10561,11 @@
       },
       "short": "WFSU",
       "subsystem": "WAVEFORM TRANSFER",
-      "manual_anomalies": []
+      "manual_anomalies": [],
+      "direction_dispositions": {
+        "command": "implemented",
+        "query": "implemented"
+      }
     },
     {
       "id": "result-property:Base",

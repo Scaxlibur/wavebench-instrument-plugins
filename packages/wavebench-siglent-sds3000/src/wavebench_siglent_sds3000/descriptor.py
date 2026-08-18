@@ -17,7 +17,12 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="SIGLENT / Teledyne LeCroy MAUI",
         models=("SDS3054",),
         aliases=(),
-        capabilities=("scope.idn", "scope.errors", "scope.channel_coupling"),
+        capabilities=(
+            "scope.idn",
+            "scope.errors",
+            "scope.channel_coupling",
+            "scope.fetch_waveform",
+        ),
         idn_patterns=("LECROY,SDS3054,",),
         backends=("pyvisa",),
         option_specs=(),
@@ -33,6 +38,6 @@ def descriptor() -> InstrumentDescriptor:
         version="0.1.0",
         source="entry_point:siglent.sds3000",
         scope_coupling_policy="switchable-termination",
-        config_fields=("connection.resource", "scope.driver"),
+        config_fields=("connection.resource", "scope.driver", "waveform.*"),
         resource_schemes=("tcpip",),
     )
