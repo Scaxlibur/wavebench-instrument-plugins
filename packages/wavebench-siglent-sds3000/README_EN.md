@@ -2,7 +2,7 @@
 
 [中文](README.md)
 
-This package provides an external WaveBench driver for the early SIGLENT SDS3000 oscilloscope family. It does not cover later products whose names include `X` or `HD`. The installable scaffold and strict identity gate are in place; only the offline-verified `scope.idn` capability is currently declared.
+This package provides an external WaveBench driver for the early SIGLENT SDS3000 oscilloscope family. It does not cover later products whose names include `X` or `HD`. The installable plugin, strict identity gate, error-register reads, and channel-coupling mapping are in place; other capabilities remain under development.
 
 The first validation target is the SIGLENT SDS3054. Other models from the same generation will enter the compatibility range only when supported by vendor documentation and test evidence.
 
@@ -18,16 +18,18 @@ This identity constrains only the SDS3054 driver. It does not permit arbitrary L
 
 ## Current status
 
-- Stage: M2 installable plugin scaffold.
+- Stage: M3 text protocol.
 - Distribution: `wavebench-siglent-sds3000`.
 - Canonical driver ID: `siglent.sds3000`.
 - Instrument kind: `scope`.
 - Initial model: `SDS3054`.
 - WaveBench compatibility: `>=0.8.22,<0.9`.
 - Transport: WaveBench `pyvisa`, currently restricted to `tcpip` resources.
-- Declared capability: `scope.idn`.
+- Declared capabilities: `scope.idn`, `scope.errors`, and `scope.channel_coupling`.
 
 Descriptor loading and driver construction perform no instrument I/O. Calling `scope.idn` sends exactly one `*IDN?` and accepts only `LECROY,SDS3054,<serial>,8.4.1`. Other manufacturers, models, or firmware revisions are rejected without writes.
+
+`scope.channel_coupling` maps MAUI `A1M`, `D1M`, `D50`, and `GND` to WaveBench `ACL`, `DCL`, `DC`, and `GND`. An `OVL` response is treated as a 50-ohm input overload and stops the operation. `scope.errors` reads and clears `CMR`, `EXR`, and `DDR` in order; it is an existing WaveBench `stateful_read`, not a side-effect-free query.
 
 ## Programming-manual drop location
 

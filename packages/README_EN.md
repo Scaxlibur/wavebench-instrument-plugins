@@ -18,6 +18,6 @@ Each maintained package should include:
 
 ## Plugin under development
 
-- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README_EN.md): the installable plugin scaffold for the early SIGLENT SDS3000 family, initially targeting the SDS3054 and currently declaring only the verified `scope.idn` capability.
+- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README_EN.md): the installable plugin for the early SIGLENT SDS3000 family, initially targeting the SDS3054 and currently declaring identity, error-register, and channel-coupling capabilities.
 
 The plugin now provides a `pyproject.toml` and one canonical entry point, so it participates in the repository development environment. Incomplete capabilities are not declared; each capability requires offline tests and the appropriate tier of hardware acceptance first.
