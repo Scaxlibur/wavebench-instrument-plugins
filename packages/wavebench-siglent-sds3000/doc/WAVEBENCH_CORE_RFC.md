@@ -5,16 +5,16 @@
 > 状态：`Draft / Needs revision`
 > 修订：`R1`
 > 核心基线：WaveBench `0.8.22`
-> API 状态：未冻结
-> 核心实现：尚未开始
+> API 状态：transport/session R1 已冻结；typed scope 未冻结
+> 核心实现：`M1–M7 implemented-unreleased`（核心开发分支）
 
 ## 结论
 
-SDS3054 插件的 M0–M8 功能已完成，P0 安全加固仍待处理。当前声明的身份、错误寄存器、通道耦合、波形读取、单通道采集和同次 acquisition 多通道采集，不以本 RFC 的新接口为前提。VICP 文本与二进制波形已通过现有 `PyVisaTransport`、`PyVICP` 和 `query_bin_block()` 实机验证；这些结果不表示不可重放查询与共享 session health 已经实现。
+SDS3054 插件的 M0–M8 功能已完成，插件侧 P0 安全加固仍待处理。WaveBench 核心的 transport replay/session R1 已在开发分支完成 M1–M7，但尚未发布；插件当前不能把该分支当作运行时依赖。当前声明的身份、错误寄存器、通道耦合、波形读取、单通道采集和同次 acquisition 多通道采集，不以本 RFC 的新接口为前提。VICP 文本与二进制波形已通过现有 `PyVisaTransport`、`PyVICP` 和 `query_bin_block()` 实机验证；这些结果不表示插件已经完成结构化异常迁移或共享 session health 采用。
 
-本文件可作为核心影响评估和实施路线图保留，但不是可直接编码或已接受的公共 API 规范。首稿把只读状态、通用 patch 和部分状态 v2 放得过近，没有完整定义重放策略、共享 session 锁存、字段权限、核心消费入口和电气安全门。R1 将这些基础问题升为 P0，并把通用写入与 `ScopeSnapshotV2` 延后。进入核心实现前，还必须分别冻结 transport 与 typed scope 两份独立 RFC。
+本文件继续作为插件影响评估和采用门槛，不是 typed scope 的公共 API 规范。首稿把只读状态、通用 patch 和部分状态 v2 放得过近；R1 已将 transport/session 基础问题升为 P0，并把通用写入与 `ScopeSnapshotV2` 延后。核心 transport/session RFC 已接受并在开发分支实现，typed scope RFC 仍须独立冻结；插件只有在包含 R1 的核心版本发布后才能进入采用阶段。
 
-机器可读版本见 [`wavebench-core-rfc.json`](wavebench-core-rfc.json)。本分支不修改 WaveBench 核心，也不提前依赖未发布接口。
+机器可读版本见 [`wavebench-core-rfc.json`](wavebench-core-rfc.json)。本插件分支不修改 WaveBench 核心，也不提前依赖未发布接口。
 
 ## 阶段标记
 
@@ -23,16 +23,16 @@ SDS3054 插件的 M0–M8 功能已完成，P0 安全加固仍待处理。当前
 | 对象 | 当前状态 | 含义 |
 | --- | --- | --- |
 | SDS3000 插件 | `M8-functional-complete` | 当前 6 项 capability 已通过既定离线与实机门禁；P0 安全加固待处理 |
-| 本 RFC | `R1-draft-needs-revision` | 契约仍可修订，公共 API 尚未冻结 |
-| WaveBench 核心实现 | `not-started` | 尚未创建实现提交或提高插件最低版本 |
+| 本插件影响评估 | `R1-draft-needs-revision` | typed scope 提案仍可修订；核心 transport/session R1 以独立 Accepted RFC 为准 |
+| WaveBench 核心实现 | `M1–M7-implemented-unreleased` | 核心开发分支已完成离线实现，但尚未发布；插件最低版本保持不变 |
 
-## 进入核心实现前的规范拆分
+## 规范拆分与当前状态
 
-R1 只确定问题边界、优先级和实施顺序。以下两份独立规范是编码前置条件：
+本影响评估把公共合同拆为两份独立规范。transport/session RFC 已完成冻结和开发分支实现；typed scope RFC 仍是 P1 编码的前置条件：
 
 | 独立规范 | 必须冻结的内容 | 进入条件 |
 | --- | --- | --- |
-| transport replay/session RFC | 现有 `query()` 的默认策略、旧调用迁移清单、结构化传输错误、命令发送次数、部分响应、通信失步、session health 所有者、恢复授权、状态验证范围，以及 backend 不支持 `read_continuation_only` 时的失败行为 | 任何 P0 核心实现前 |
+| transport replay/session RFC | 现有 `query()` 的默认策略、旧调用迁移清单、结构化传输错误、命令发送次数、部分响应、通信失步、session health 所有者、恢复授权、状态验证范围，以及 backend 不支持 `read_continuation_only` 时的失败行为 | 已完成核心冻结与开发分支离线实现；插件采用仍等待正式发布 |
 | typed scope state RFC | 精确字段、`Protocol` 签名、静态与运行时字段支持、`OperationSpec`、Service/CLI/run plan 消费矩阵、v1 共存优先级、错误包络和三厂商映射 | 任何 P1 capability 冻结前 |
 
 transport RFC 必须明确区分源码兼容与可观察行为兼容。把消费型读取从自动重试迁移到 `no_replay`，以及让 poisoned session 在 `on_failure=continue` 下停止后续仪器 I/O，都会改变可观察行为，不能笼统表述为「全部增量兼容」。
@@ -44,18 +44,18 @@ transport RFC 还必须冻结三个 session 合同：唯一权威 health 状态�
 | 接口或模型 | 当前结论 | 后续处理 |
 | --- | --- | --- |
 | `InstrumentTransport.query_bin_block()` | 当前 SDS3054 二进制路径足够，失败时不在同一 session 重放 | 保留不可重放语义并纳入统一 transport contract |
-| `PyVisaTransport.query()` / `query_opc()` | VICP 可用，但文本 query 和 `*OPC?` 会进入通用读取重试 | P0 增加明确 replay policy；读后清除和 acquisition-bound `*OPC?` 禁止重发 |
-| `OperationSpec.effect=acquire` | 已能要求 `read_write`，无需为访问控制立刻新增 effect | `changed_fields` 和恢复审计不完整，不能据此宣称核心无状态影响缺口 |
+| `PyVisaTransport.query()` / `query_opc()` | 核心开发分支已要求显式 replay policy，未声明调用默认 `no_replay` | 插件在核心正式发布后迁移读后清除和 acquisition-bound `*OPC?`，并保留结构化异常 |
+| `OperationSpec.effect=acquire` | 已能要求 `read_write`，无需为访问控制新增 effect；核心 M7 已补 capture/fetch 字段闭包、验证字段和恢复覆盖 | 插件采用 R1 时核对 SDS3000 实际临时设置与核心字段闭包，并补故障注入断言 |
 | `ScopeStatusSummary` | 已能返回 IDN、coupling 和缺失能力 | 优先复用现有部分状态路径，不急于增加大而泛的 snapshot v2 |
-| `PyVisaTransport` + `PyVICP` | 已满足当前 VICP 文本和二进制连接 | 不新增 SDS3000 专用核心 transport |
+| `PyVisaTransport` + `PyVICP` | 已满足当前 VICP 文本和二进制连接；核心 R1 不新增 SDS3000 专用后端 | 插件只需完成调用点分类和结构化异常采用，不改变 VICP 传输实现 |
 
 ## P0-1：不可重放查询契约
 
 ### 问题
 
-`InstrumentTransport` 当前没有 replay policy 或统一的 `query_once()` 契约。`PyVisaTransport.query()` 和 `query_opc()` 会重发完整 query；SDS3000 的 `CMR?`、`EXR?`、`DDR?` 是读后清除寄存器，第一次请求可能已清除状态，超时后的第二次请求可能返回空值并掩盖原始错误。
+R1 实施前，`InstrumentTransport` 没有 replay policy 或统一的 `query_once()` 契约。核心开发分支现在已冻结并实现显式 `replay` 关键字、默认 `no_replay` 和结构化传输错误；SDS3000 的 `CMR?`、`EXR?`、`DDR?` 仍需在插件采用阶段迁移并验证异常优先级。
 
-`RsInstrumentTransport` 和 `SerialTransport` 当前没有相同的显式自动重试，不代表核心已经提供跨后端保证。`GuardedAuditedTransport` 也只是委托给内部 transport。
+R1 实施前，`RsInstrumentTransport` 和 `SerialTransport` 没有相同的显式自动重试；核心开发分支现在已提供跨 backend 的 replay contract，插件仍需在正式发布后完成采用。`GuardedAuditedTransport` 的健康门禁由核心负责，插件不能绕过。
 
 ### 最低行为契约
 
@@ -82,13 +82,14 @@ read_continuation_only
 
 独立状态轮询是否允许重发，由上层 operation contract 明确声明，不能把所有 `*OPC?` 场景混成同一种行为。
 
-### P0 退出门
+### P0 退出门（核心已完成；插件采用仍待发布门）
 
 - PyVISA、RsInstrument、Serial、`GuardedAuditedTransport` 和 FakeTransport 使用同一 replay contract。
 - `no_replay` 故障注入测试证明命令最多发送一次。
 - `read_continuation_only` 测试证明可以继续读当前响应，但不会再次写命令。
 - telemetry 记录 replay policy、部分响应和不确定状态，不记录敏感 payload。
-- SDS3000 的 `CMR?`、`EXR?`、`DDR?` 只有在核心原语发布后才迁移。
+- SDS3000 的 `CMR?`、`EXR?`、`DDR?` 只有在核心原语发布后才迁移；迁移前插件保持当前最低版本和旧调用语法。
+- 插件 `_acquire_once`、`query_opc()` 包装和临时恢复 contextmanager 必须原样保留 `TransportIOError` / `SessionHealthError`，不得降级成普通超时或继续发送第二条恢复命令。
 
 ## P0-2：共享 session 健康状态与锁存
 
@@ -118,7 +119,7 @@ healthy -> uncertain -> poisoned -> closed
 - 插件负责：受影响字段闭包、快照内容、恢复顺序、厂商合法组合和量化容差。
 - transport 负责：命令是否发送、响应是否部分到达、通信通道是否可能失步。
 
-锁存必须属于共享 driver/session，不能只存在于临时 `ScopeService` 对象。run plan 会复用同一 scope session；当某一步标记 `on_failure=continue` 时，poisoned session 上的全部后续仪器操作都必须在 transport I/O 前拒绝。只允许本地审计、关闭旧 session 和建立新 session 等生命周期动作；重新创建 Service 不能清除锁存。
+核心开发分支已把锁存放在共享 `InstrumentSessionState`，不能只存在于临时 `ScopeService` 对象。run plan 会复用同一 scope session；当某一步标记 `on_failure=continue` 时，poisoned session 上的全部后续仪器操作都必须在 transport I/O 前拒绝。只允许本地审计、关闭旧 session 和建立新 session 等生命周期动作；重新创建 Service 不能清除锁存。插件在采用 R1 时必须覆盖这一门禁，而不是在 driver 内部自行重置 health。
 
 ### 需要区分的错误
 
@@ -271,7 +272,7 @@ session_poisoned
 - strict 行为和 v1/v2 优先级；
 - CLI/run plan 是否首版支持的明确说明。
 
-新增符号应保持源码层面的增量兼容：现有 `scope.channel_coupling`、capture 参数、v1 snapshot 和 acquisition status 不原地改型。现有 `query()` 的默认重试策略尚未在 R1 冻结；消费型读取迁移到 `no_replay`、结构化错误取代隐式重试，以及 poisoned session 阻断 `on_failure=continue` 后续 I/O，都是有意的可观察行为变化。transport RFC 必须给出迁移清单、版本说明和回归测试。只有核心发布新版本后，插件才提高最低 WaveBench 版本。
+新增符号应保持源码层面的增量兼容：现有 `scope.channel_coupling`、capture 参数、v1 snapshot 和 acquisition status 不原地改型。核心 R1 已冻结 `query()` 默认 `no_replay`、结构化错误和 poisoned session 门禁；消费型读取迁移、`on_failure=continue` 后续 I/O 阻断等都是有意的可观察行为变化。插件仍须在采用阶段补齐调用点迁移、版本说明和回归测试，只有核心发布新版本后才提高最低 WaveBench 版本。
 
 ## 发布与版本门
 
@@ -286,6 +287,16 @@ session_poisoned
 5. 隔离 wheel 安装测试必须同时核对 `Requires-Dist`、descriptor 版本范围、`api_version` 和 entry point。
 
 本 R1 不提高任何版本门。
+
+### 插件 P0 采用清单
+
+核心 R1 目前是「开发分支已实现、正式版本未发布」。插件在提高版本门之前必须完成以下动作：
+
+1. 等待首个包含 R1 的 WaveBench 正式版本，并在同一提交中提高 wheel `Requires-Dist`、descriptor `wavebench_min_version`，重新评审 `wavebench_max_version` 和 `api_version`。
+2. 将 driver 中所有 transport query 显式标为 `no_replay` 或经专项审计批准的 `safe_to_replay`；`CMR?`、`EXR?`、`DDR?` 和 acquisition-bound `*OPC?` 固定使用 `no_replay`。
+3. 在 `_acquire_once`、OPC 等待和临时恢复路径中原样传播 `TransportIOError`、`SessionHealthError`；结构化异常发生后不执行未经授权的第二次恢复/验证 I/O。
+4. 增加故障注入测试，断言发送次数、`uncertain`/`poisoned` 转移、`on_failure=continue` 的零二次 I/O，以及关闭/重连后的新 `epoch_id`。
+5. 通过隔离 wheel、descriptor、entry point 和 API 版本联合测试后，才把本 RFC 的插件状态改为 adopted。
 
 ## 验收测试矩阵
 
@@ -326,13 +337,13 @@ P0 基础设施适用于所有仪器类型，不是 SDS3000 专用接口；P1/P2
 
 ## 建议实施顺序
 
-1. 合并 R1 作为影响评估与实施路线图，保持「M8 功能完成、P0 安全加固待处理」、RFC R1 和核心未开始三类状态。
-2. 单独冻结 transport replay/session RFC，再在 WaveBench 独立分支实现 replay policy、不可重放 query、结构化错误和 session 门禁。
-3. 完成 P0 transport 与共享 session 合同测试。
-4. 审计 `scope.capture`、`scope.capture_waveforms`、`scope.capture_multiple` 和 `scope.fetch_waveform` 的 `OperationSpec`，补齐真实副作用、`changed_fields`、风险与恢复覆盖。
+1. 保留本文件作为插件影响评估，区分「M8 功能完成、插件 P0 采用待处理」、RFC R1 和「核心已实现但未发布」三类状态。
+2. 核对已接受的 transport replay/session RFC、核心开发分支实现和稳定 reference 文档，不把未发布提交写入插件版本门。
+3. 在核心正式发布后完成上面的插件 P0 采用清单和合同测试。
+4. 核对核心 M7 已审计的 `scope.capture`、`scope.capture_waveforms`、`scope.capture_multiple` 和 `scope.fetch_waveform` `OperationSpec` 是否覆盖 SDS3000 的实际临时设置；差异必须在插件采用测试中显式记录。
 5. 单独冻结 typed scope state RFC，明确 channel/timebase/edge-trigger 字段、核心消费矩阵、v1 优先级和三厂商映射。
 6. 实现已冻结的类型化只读状态；采集状态轴继续收集三厂商证据，不预先承诺 `scope.acquisition_run_state`。
-7. P0 核心正式发布后，同时提高 wheel/descriptor 版本门并复核 `api_version`，再允许插件采用新能力。
+7. 只有 P0 核心正式发布且采用清单通过后，才同时提高 wheel/descriptor 版本门并复核 `api_version`。
 8. 在安全证据充分后另立 RFC 评审窄范围 scale/offset/timebase patch。
 9. 最后分别重新评审 termination 写入、通用触发写入和 snapshot v2。
 

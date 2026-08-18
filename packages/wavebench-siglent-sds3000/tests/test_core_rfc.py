@@ -22,11 +22,19 @@ def test_rfc_is_explicitly_a_draft_and_milestones_are_aligned() -> None:
     assert assessment["wavebench_baseline"] == "0.8.22"
     assert assessment["core_changed_by_this_plugin"] is False
     assert assessment["decision"] == "assessment-only"
+    assert assessment["core_contract_reference"] == {
+        "document": "WaveBench_transport重放与session健康RFC.md",
+        "revision": "R1",
+        "status": "accepted",
+        "implementation": "M1-M7-implemented-unreleased",
+        "release_required_for_plugin_adoption": True,
+    }
     assert assessment["milestones"] == {
         "plugin": "M8-functional-complete",
         "p0_safety_hardening": "pending",
         "rfc": "R1-draft-needs-revision",
-        "core_implementation": "not-started",
+        "core_implementation": "M1-M7-implemented-unreleased",
+        "plugin_adoption": "blocked-until-core-release",
     }
     assert assessment["scope"]["p0_safety_hardening_pending"] is True
 
@@ -41,6 +49,7 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
     }
     replay = foundations["transport-replay-contract"]
     assert replay["priority"] == "P0"
+    assert replay["status"] == "implemented-unreleased"
     assert set(replay["replay_policies"]) == {
         "safe_to_replay",
         "no_replay",
@@ -48,11 +57,12 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
     }
     assert "PyVISA" in replay["minimum_behavior"]["backends"]
     assert "GuardedAuditedTransport" in replay["minimum_behavior"]["backends"]
-    assert "not frozen" in replay["minimum_behavior"]["legacy_query_default"]
+    assert "no_replay" in replay["minimum_behavior"]["legacy_query_default"]
     assert "fail closed" in replay["minimum_behavior"]["unsupported_continuation"]
     assert any("at most one" in item for item in replay["acceptance"])
 
     session = foundations["shared-session-health-and-poison"]
+    assert session["status"] == "implemented-unreleased"
     assert set(session["states"]) == {"healthy", "uncertain", "poisoned", "closed"}
     assert set(session["configuration_states"]) == {"verified", "unverified"}
     assert "unverified" in session["transitions"]["new_or_reconnected_session"]
@@ -77,7 +87,7 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
     assert session["responsibility"]["transport"]
 
 
-def test_separate_transport_and_typed_scope_specs_are_required_before_coding() -> None:
+def test_transport_spec_is_complete_and_typed_scope_spec_remains_required() -> None:
     assessment = _assessment()
     gates = {item["id"]: item for item in assessment["specification_freeze_gates"]}
 
@@ -85,6 +95,10 @@ def test_separate_transport_and_typed_scope_specs_are_required_before_coding() -
         "transport-replay-session-rfc",
         "typed-scope-state-rfc",
     }
+    assert (
+        gates["transport-replay-session-rfc"]["status"]
+        == "completed-in-core-development-release-gated-for-plugin"
+    )
     transport = " ".join(gates["transport-replay-session-rfc"]["must_define"])
     assert "default replay policy" in transport
     assert "legacy call-site migration" in transport
@@ -103,6 +117,11 @@ def test_separate_transport_and_typed_scope_specs_are_required_before_coding() -
     assert "Protocol signatures" in typed_scope
     assert "Service/CLI/run-plan" in typed_scope
     assert "SDS3000, DS1000Z, and RTM2000" in typed_scope
+
+    findings = {item["interface"]: item for item in assessment["existing_interface_findings"]}
+    operation_spec = findings["OperationSpec.effect=acquire"]
+    assert operation_spec["decision"] == "core-audit-complete-plugin-verification-pending"
+    assert "core M7" in operation_spec["evidence"]
 
 
 def test_active_proposals_are_typed_read_only_first_and_cross_vendor() -> None:
@@ -250,9 +269,13 @@ def test_release_gates_cover_wheel_descriptor_api_and_implementation_order() -> 
     assert "wheel and descriptor lower bounds move together" in adoption
     assert "new api_version" in adoption
     assert "before driver factory and transport I/O" in adoption
+    adoption_checklist = gates["plugin_adoption_checklist"]
+    assert any("TransportIOError" in item for item in adoption_checklist)
+    assert any("zero secondary" in item for item in adoption_checklist)
 
     implementation_order = assessment["implementation_order"]
-    operation_audit = next(item for item in implementation_order if "OperationSpecs" in item)
+    operation_audit = next(item for item in implementation_order if "OperationSpec" in item)
+    assert "core M7" in operation_audit
     for operation in (
         "scope.capture",
         "scope.capture_waveforms",
@@ -260,4 +283,4 @@ def test_release_gates_cover_wheel_descriptor_api_and_implementation_order() -> 
         "scope.fetch_waveform",
     ):
         assert operation in operation_audit
-    assert any("raise wheel and descriptor version gates together" in item for item in implementation_order)
+    assert any("released P0 core" in item for item in implementation_order)

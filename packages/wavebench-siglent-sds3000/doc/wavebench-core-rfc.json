@@ -6,11 +6,19 @@
   "wavebench_baseline": "0.8.22",
   "core_changed_by_this_plugin": false,
   "decision": "assessment-only",
+  "core_contract_reference": {
+    "document": "WaveBench_transport重放与session健康RFC.md",
+    "revision": "R1",
+    "status": "accepted",
+    "implementation": "M1-M7-implemented-unreleased",
+    "release_required_for_plugin_adoption": true
+  },
   "milestones": {
     "plugin": "M8-functional-complete",
     "p0_safety_hardening": "pending",
     "rfc": "R1-draft-needs-revision",
-    "core_implementation": "not-started"
+    "core_implementation": "M1-M7-implemented-unreleased",
+    "plugin_adoption": "blocked-until-core-release"
   },
   "scope": {
     "current_plugin_capabilities": [
@@ -28,7 +36,7 @@
   "specification_freeze_gates": [
     {
       "id": "transport-replay-session-rfc",
-      "status": "required-before-p0-implementation",
+      "status": "completed-in-core-development-release-gated-for-plugin",
       "must_define": [
         "default replay policy for existing query()",
         "legacy call-site migration inventory",
@@ -65,15 +73,15 @@
     },
     {
       "interface": "OperationSpec.effect=acquire",
-      "decision": "compatible-but-audit-gap",
-      "evidence": "scope fetch and capture already require read_write access",
-      "follow_up": "audit declared_changed_fields, observed_changed_fields, restored_fields, and session health"
+      "decision": "core-audit-complete-plugin-verification-pending",
+      "evidence": "scope fetch and capture require read_write access; core M7 declares changed-field closures, verification fields, restoration coverage, and timeout sources",
+      "follow_up": "during plugin adoption, verify the core closure against SDS3000 temporary settings and add fault-injection assertions for any gap"
     },
     {
       "interface": "PyVisaTransport.query-and-query_opc",
-      "decision": "works-for-current-path-with-contract-gap",
-      "evidence": "VICP works through pyvisa-py with the plugin-owned PyVICP dependency",
-      "follow_up": "add a backend-independent replay policy before consuming reads use this path"
+      "decision": "core-contract-implemented-unreleased-plugin-adoption-gap",
+      "evidence": "VICP works through pyvisa-py with the plugin-owned PyVICP dependency; core R1 development tests cover explicit replay policy and no_replay OPC behavior",
+      "follow_up": "after core release, migrate SDS3000 consuming reads and preserve structured transport/session exceptions"
     },
     {
       "interface": "ScopeStatusSummary",
@@ -86,7 +94,7 @@
     {
       "id": "transport-replay-contract",
       "priority": "P0",
-      "status": "proposed",
+      "status": "implemented-unreleased",
       "replay_policies": [
         "safe_to_replay",
         "no_replay",
@@ -99,7 +107,7 @@
         "safe_to_replay": "the caller explicitly opts in; the transport never infers safety from command text",
         "consuming_reads": "read-to-clear registers and acquisition-bound *OPC? use no_replay",
         "partial_response": "record partial-response telemetry and return a non-replayable failure",
-        "legacy_query_default": "not frozen by R1; the transport RFC must define the default and migrate every affected call site",
+        "legacy_query_default": "unclassified legacy calls remain source-compatible but use no_replay by default",
         "structured_errors": "record whether the command was transmitted, whether bytes arrived, and whether the channel may be desynchronized",
         "backends": "PyVISA, RsInstrument, Serial, GuardedAuditedTransport, and FakeTransport share the same contract"
       },
@@ -115,7 +123,7 @@
     {
       "id": "shared-session-health-and-poison",
       "priority": "P0",
-      "status": "proposed",
+      "status": "implemented-unreleased",
       "states": [
         "healthy",
         "uncertain",
@@ -447,6 +455,14 @@
       "registry rejects core-version or api_version mismatch before driver factory and transport I/O",
       "isolated wheel tests verify Requires-Dist, descriptor bounds, api_version, and entry point together"
     ],
+    "plugin_adoption_checklist": [
+      "wait for the first released core containing R1 before raising any version floor",
+      "classify every plugin transport query explicitly; CMR?, EXR?, DDR?, and acquisition-bound *OPC? use no_replay",
+      "preserve TransportIOError and SessionHealthError through _acquire_once, OPC waits, and temporary restoration context managers",
+      "prove zero secondary recovery or validation I/O after structured transport/session failure",
+      "assert transmission counts, uncertain/poisoned latching, on_failure=continue blocking, and new epoch_id after reconnect",
+      "run isolated wheel, descriptor, entry-point, and api_version compatibility tests before marking the plugin adopted"
+    ],
     "changed_by_r1": false
   },
   "test_matrix": [
@@ -535,10 +551,10 @@
     }
   ],
   "implementation_order": [
-    "merge R1 as an impact assessment and implementation roadmap while keeping M8-functional-complete, P0-safety-hardening-pending, and core-not-started labels distinct",
-    "freeze a separate transport replay/session RFC",
-    "implement and test transport replay policy, structured errors, and shared session gates",
-    "audit scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform OperationSpecs for actual side effects, changed fields, risk, and restoration coverage",
+    "keep M8-functional-complete, plugin-P0-pending, accepted RFC R1, and core-M1-M7-implemented-unreleased labels distinct",
+    "reference the accepted transport replay/session RFC and its offline-tested development implementation without raising the plugin version floor",
+    "complete the plugin adoption checklist after a released P0 core",
+    "verify that the core M7 OperationSpec audit for scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform covers SDS3000 temporary settings and record gaps in plugin adoption tests",
     "freeze a separate typed-scope state RFC with exact fields, consumers, v1 precedence, and three-vendor mappings",
     "implement only frozen typed read-only state and continue collecting acquisition-state evidence",
     "after a released P0 core, raise wheel and descriptor version gates together and review api_version before plugin adoption",
