@@ -26,10 +26,10 @@
   "counts_by_disposition": {
     "core-gap-rfc": 10,
     "firmware-unverified": 336,
-    "implemented": 0,
+    "implemented": 1,
     "model-not-applicable": 2,
     "option-absent": 78,
-    "planned": 20,
+    "planned": 19,
     "unsafe-quarantined": 132
   },
   "entities": [
@@ -5659,7 +5659,7 @@
       "directions": [
         "query"
       ],
-      "disposition": "planned",
+      "disposition": "implemented",
       "safety": "read-only",
       "wavebench_capabilities": [
         "scope.idn"

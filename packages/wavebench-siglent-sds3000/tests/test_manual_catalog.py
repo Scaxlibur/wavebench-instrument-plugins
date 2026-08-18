@@ -87,6 +87,15 @@ def test_only_known_part7_body_anomaly_is_missing() -> None:
     assert missing == ["DPSU"]
 
 
+def test_idn_catalog_entry_tracks_the_implemented_capability() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    identity = next(entity for entity in catalog["entities"] if entity.get("short") == "*IDN?")
+
+    assert identity["disposition"] == "implemented"
+    assert identity["directions"] == ["query"]
+    assert identity["wavebench_capabilities"] == ["scope.idn"]
+
+
 def test_local_manual_regenerates_the_committed_catalog() -> None:
     origins = list((PACKAGE_ROOT / "doc" / "vendor-local").rglob("*_origin.pdf"))
     if len(origins) != 3:

@@ -217,7 +217,6 @@ _UNSAFE_LEGACY = frozenset(
 
 _PLANNED_LEGACY = frozenset(
     {
-        "*IDN?",
         "ARM",
         "ASET",
         "CFMT",
@@ -264,6 +263,8 @@ _LEGACY_CAPABILITIES: dict[str, tuple[str, ...]] = {
 
 
 def _legacy_classification(short: str, subsystem: str) -> tuple[str, str]:
+    if short == "*IDN?":
+        return "implemented", "read-only"
     if subsystem in {"DDA", "ET-PMT"}:
         return "option-absent", "not-tested"
     if short in _UNSAFE_LEGACY:
