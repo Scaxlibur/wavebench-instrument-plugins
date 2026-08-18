@@ -46,6 +46,8 @@ Oscilloscopes_Remote_Control_and_Automation_Manual_2026-02.pdf
 
 来源哈希、分段顺序、适用边界和覆盖口径见 [`doc/MANUAL_BASELINE.md`](doc/MANUAL_BASELINE.md)。
 
+完整指令分母和处置状态见 [`doc/COMMAND_COVERAGE.md`](doc/COMMAND_COVERAGE.md)。当前目录已固定 578 个明确实体，其中 478 个可调用实体，未分类数量为 0。
+
 `doc/vendor-local/` 中除说明文件外的内容由仓库级 `.gitignore` 排除。厂商资料不会进入 Git；项目原创的协议摘要、覆盖矩阵和验收记录后续另写入 `doc/`。
 
 ## 手册到位后的检查顺序

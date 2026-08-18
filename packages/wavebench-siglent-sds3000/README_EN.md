@@ -46,6 +46,8 @@ This manual is newer than the instrument firmware `8.4.1`, and some sections exp
 
 See [`doc/MANUAL_BASELINE_EN.md`](doc/MANUAL_BASELINE_EN.md) for source hashes, segment order, applicability boundaries, and the coverage denominator.
 
+See [`doc/COMMAND_COVERAGE_EN.md`](doc/COMMAND_COVERAGE_EN.md) for the complete denominator and dispositions. The current catalog freezes 578 explicit entities, including 478 callable entities, with zero unclassified entries.
+
 The repository-level `.gitignore` excludes everything under `doc/vendor-local/` except its explanatory README. Vendor material therefore does not enter Git. Project-authored protocol summaries, coverage matrices, and acceptance records will be written separately under `doc/`.
 
 ## Review order after the manuals arrive
