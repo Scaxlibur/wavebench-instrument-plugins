@@ -1,8 +1,8 @@
-# WaveBench SIGLENT SDS3000 Plugin (Incubating)
+# WaveBench SIGLENT SDS3000 Plugin (Under Development)
 
 [中文](README.md)
 
-This directory prepares an external WaveBench driver for the early SIGLENT SDS3000 oscilloscope family. It does not cover later products whose names include `X` or `HD`. It currently provides only a protocol-material entry point and contains no executable plugin, entry point, or declared capability.
+This package provides an external WaveBench driver for the early SIGLENT SDS3000 oscilloscope family. It does not cover later products whose names include `X` or `HD`. The installable scaffold and strict identity gate are in place; only the offline-verified `scope.idn` capability is currently declared.
 
 The first validation target is the SIGLENT SDS3054. Other models from the same generation will enter the compatibility range only when supported by vendor documentation and test evidence.
 
@@ -18,15 +18,16 @@ This identity constrains only the SDS3054 driver. It does not permit arbitrary L
 
 ## Current status
 
-- Stage: the February 2026 MAUI programming manual has arrived and the protocol-review baseline is being established.
-- Candidate distribution: `wavebench-siglent-sds3000`.
-- Candidate canonical driver ID: `siglent.sds3000`.
-- Candidate instrument kind: `scope`.
-- Initial candidate model: `SDS3054`.
-- `pyproject.toml`: not created; the repository development environment skips this directory.
-- Executable code and capabilities: none.
+- Stage: M2 installable plugin scaffold.
+- Distribution: `wavebench-siglent-sds3000`.
+- Canonical driver ID: `siglent.sds3000`.
+- Instrument kind: `scope`.
+- Initial model: `SDS3054`.
+- WaveBench compatibility: `>=0.8.22,<0.9`.
+- Transport: WaveBench `pyvisa`, currently restricted to `tcpip` resources.
+- Declared capability: `scope.idn`.
 
-The candidate identifiers organize this incubation directory and are not a public compatibility commitment. Final model scope, transports, WaveBench version range, and capabilities must be based on the manuals, redacted identity samples, and tests.
+Descriptor loading and driver construction perform no instrument I/O. Calling `scope.idn` sends exactly one `*IDN?` and accepts only `LECROY,SDS3054,<serial>,8.4.1`. Other manufacturers, models, or firmware revisions are rejected without writes.
 
 ## Programming-manual drop location
 
@@ -57,7 +58,7 @@ The repository-level `.gitignore` excludes everything under `doc/vendor-local/` 
 3. Verify VICP, VXI-11, and USBTMC behavior against existing WaveBench transports.
 4. Review termination, communication headers, error semantics, waveform templates, binary transfer, screenshots, and state effects.
 5. Freeze the distribution, canonical driver ID, identity gate, and supported models.
-6. Add a read-only M0 scaffold, FakeTransport tests, and wheel lifecycle gates.
+6. Add capabilities through M3–M8 only after FakeTransport tests and tiered hardware acceptance.
 
 ## Safety boundaries
 

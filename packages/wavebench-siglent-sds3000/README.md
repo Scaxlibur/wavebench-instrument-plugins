@@ -1,8 +1,8 @@
-# WaveBench SIGLENT SDS3000 插件（孵化）
+# WaveBench SIGLENT SDS3000 插件（开发中）
 
 [English](README_EN.md)
 
-本目录用于准备早期 SIGLENT SDS3000 系列示波器的 WaveBench 外置驱动。该系列不包含名称带 `X` 或 `HD` 的后续产品。当前仅建立协议资料入口，不包含可执行插件、entry point 或已声明 capability。
+本包提供早期 SIGLENT SDS3000 系列示波器的 WaveBench 外置驱动。该系列不包含名称带 `X` 或 `HD` 的后续产品。当前已建立可安装插件骨架和严格身份门禁，只声明已经完成离线验证的 `scope.idn`；其他 capability 仍在开发。
 
 首个验证目标为 SIGLENT SDS3054。其他同代型号只有在厂商资料与测试证据充分时才会加入兼容范围。
 
@@ -18,15 +18,16 @@
 
 ## 当前状态
 
-- 阶段：已收到 2026 年 2 月版 MAUI 编程手册，正在建立协议审计基线；
-- 候选 distribution：`wavebench-siglent-sds3000`；
-- 候选 canonical driver ID：`siglent.sds3000`；
-- 候选仪器类型：`scope`；
-- 初始候选型号：`SDS3054`；
-- `pyproject.toml`：尚未创建，仓库级开发环境会跳过本目录；
-- 可执行代码与 capability：无。
+- 阶段：M2 正式插件骨架；
+- distribution：`wavebench-siglent-sds3000`；
+- canonical driver ID：`siglent.sds3000`；
+- 仪器类型：`scope`；
+- 首版型号：`SDS3054`；
+- WaveBench 兼容范围：`>=0.8.22,<0.9`；
+- transport：WaveBench `pyvisa`，当前只接受 `tcpip` 资源；
+- 已声明 capability：`scope.idn`。
 
-候选标识只用于组织孵化目录，不构成公开兼容承诺。正式型号范围、transport、WaveBench 版本范围和 capability 必须以手册、脱敏身份样本及测试结果为依据。
+descriptor 加载和 driver 工厂阶段均不执行仪器 I/O。调用 `scope.idn` 时只发送一次 `*IDN?`，并严格接受 `LECROY,SDS3054,<serial>,8.4.1`；其他厂商、型号或固件均在零写入的情况下拒绝。
 
 ## 编程手册投放位置
 
@@ -57,7 +58,7 @@ Oscilloscopes_Remote_Control_and_Automation_Manual_2026-02.pdf
 3. 核对 VICP、VXI-11、USBTMC 等通信方式与 WaveBench 现有 transport 的实际兼容情况。
 4. 审计终止符、通信头、错误语义、波形模板、二进制传输、截图及状态副作用。
 5. 冻结 distribution、canonical driver ID、身份门禁和兼容型号范围。
-6. 建立只读 M0 插件骨架、FakeTransport 测试和 wheel 生命周期门禁。
+6. 按 M3–M8 逐项加入通过 FakeTransport 和分级实机验收的 capability。
 
 ## 安全边界
 

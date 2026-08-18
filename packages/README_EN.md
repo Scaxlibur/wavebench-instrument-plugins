@@ -16,8 +16,8 @@ Each maintained package should include:
 - a package-local MIT license file and SPDX package metadata;
 - no real device resources, credentials, raw waveforms, or private experiment records.
 
-## Incubation directory
+## Plugin under development
 
-- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README_EN.md): an early SIGLENT SDS3000 family directory whose MAUI programming manual is under review, initially targeting the SDS3054.
+- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README_EN.md): the installable plugin scaffold for the early SIGLENT SDS3000 family, initially targeting the SDS3054 and currently declaring only the verified `scope.idn` capability.
 
-Before its protocol boundary is frozen, an incubation directory provides no `pyproject.toml`, entry point, or capability. The repository development environment skips such directories so an unaudited driver does not enter the maintained plugin set.
+The plugin now provides a `pyproject.toml` and one canonical entry point, so it participates in the repository development environment. Incomplete capabilities are not declared; each capability requires offline tests and the appropriate tier of hardware acceptance first.
