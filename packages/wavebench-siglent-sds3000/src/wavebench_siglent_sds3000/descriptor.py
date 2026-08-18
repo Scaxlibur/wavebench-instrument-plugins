@@ -17,7 +17,7 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="SIGLENT / Teledyne LeCroy MAUI",
         models=("SDS3054",),
         aliases=(),
-        capabilities=("scope.idn",),
+        capabilities=("scope.idn", "scope.errors", "scope.channel_coupling"),
         idn_patterns=("LECROY,SDS3054,",),
         backends=("pyvisa",),
         option_specs=(),

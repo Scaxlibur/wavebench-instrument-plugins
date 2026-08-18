@@ -147,7 +147,7 @@ assert [point.name for point in points] == ["siglent.sds3000"]
 descriptor = points[0].load()()
 assert descriptor.driver_id == "siglent.sds3000"
 assert descriptor.distribution == "wavebench-siglent-sds3000"
-assert descriptor.capabilities == ("scope.idn",)
+assert descriptor.capabilities == ("scope.idn", "scope.errors", "scope.channel_coupling")
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)
     _run([*install_command[:-1], "--force-reinstall", str(wheel)], cwd=tmp_path)

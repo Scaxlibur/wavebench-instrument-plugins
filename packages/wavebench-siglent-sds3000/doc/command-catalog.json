@@ -25,11 +25,11 @@
   },
   "counts_by_disposition": {
     "core-gap-rfc": 10,
-    "firmware-unverified": 336,
-    "implemented": 1,
+    "firmware-unverified": 333,
+    "implemented": 5,
     "model-not-applicable": 2,
     "option-absent": 78,
-    "planned": 19,
+    "planned": 18,
     "unsafe-quarantined": 132
   },
   "entities": [
@@ -6247,9 +6247,11 @@
       "directions": [
         "query"
       ],
-      "disposition": "firmware-unverified",
-      "safety": "read-only",
-      "wavebench_capabilities": [],
+      "disposition": "implemented",
+      "safety": "stateful-read",
+      "wavebench_capabilities": [
+        "scope.errors"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 204,
@@ -6437,8 +6439,8 @@
         "command",
         "query"
       ],
-      "disposition": "planned",
-      "safety": "state-change",
+      "disposition": "implemented",
+      "safety": "read-only",
       "wavebench_capabilities": [
         "scope.channel_coupling"
       ],
@@ -6654,9 +6656,11 @@
       "directions": [
         "query"
       ],
-      "disposition": "firmware-unverified",
-      "safety": "read-only",
-      "wavebench_capabilities": [],
+      "disposition": "implemented",
+      "safety": "stateful-read",
+      "wavebench_capabilities": [
+        "scope.errors"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 205,
@@ -8060,9 +8064,11 @@
       "directions": [
         "query"
       ],
-      "disposition": "firmware-unverified",
-      "safety": "read-only",
-      "wavebench_capabilities": [],
+      "disposition": "implemented",
+      "safety": "stateful-read",
+      "wavebench_capabilities": [
+        "scope.errors"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 206,

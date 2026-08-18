@@ -96,6 +96,17 @@ def test_idn_catalog_entry_tracks_the_implemented_capability() -> None:
     assert identity["wavebench_capabilities"] == ["scope.idn"]
 
 
+def test_m3_implemented_legacy_entries_match_the_text_protocol() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    implemented = {
+        entity["short"]
+        for entity in catalog["entities"]
+        if entity["kind"] == "legacy_command" and entity["disposition"] == "implemented"
+    }
+
+    assert implemented == {"*IDN?", "CMR?", "CPL", "DDR?", "EXR?"}
+
+
 def test_local_manual_regenerates_the_committed_catalog() -> None:
     origins = list((PACKAGE_ROOT / "doc" / "vendor-local").rglob("*_origin.pdf"))
     if len(origins) != 3:

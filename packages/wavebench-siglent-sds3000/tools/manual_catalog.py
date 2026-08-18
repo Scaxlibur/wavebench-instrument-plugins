@@ -222,7 +222,6 @@ _PLANNED_LEGACY = frozenset(
         "CFMT",
         "CHDR",
         "CORD",
-        "CPL",
         "CRVA?",
         "INSP?",
         "PAST?",
@@ -255,7 +254,10 @@ _LEGACY_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "ASET": ("scope.autoscale",),
     "ARM": ("scope.capture_waveform", "scope.capture_waveforms"),
     "CPL": ("scope.channel_coupling",),
+    "CMR?": ("scope.errors",),
     "CRVA?": ("scope.cursor_readout",),
+    "DDR?": ("scope.errors",),
+    "EXR?": ("scope.errors",),
     "PAST?": ("scope.measurement_statistics",),
     "SCDP": ("scope.screenshot",),
     "WF": ("scope.fetch_waveform", "scope.capture_waveform", "scope.capture_waveforms"),
@@ -263,7 +265,9 @@ _LEGACY_CAPABILITIES: dict[str, tuple[str, ...]] = {
 
 
 def _legacy_classification(short: str, subsystem: str) -> tuple[str, str]:
-    if short == "*IDN?":
+    if short in {"CMR?", "DDR?", "EXR?"}:
+        return "implemented", "stateful-read"
+    if short in {"*IDN?", "CPL"}:
         return "implemented", "read-only"
     if subsystem in {"DDA", "ET-PMT"}:
         return "option-absent", "not-tested"
