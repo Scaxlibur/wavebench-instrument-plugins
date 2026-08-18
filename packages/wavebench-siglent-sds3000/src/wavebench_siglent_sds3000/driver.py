@@ -50,7 +50,10 @@ def parse_sds3000_identity(response: str) -> SDS3000Identity:
     fields = tuple(field.strip() for field in normalized.split(","))
     if len(fields) != 4 or any(not field for field in fields):
         raise DataError("invalid SDS3000 *IDN? response")
-    identity = SDS3000Identity(*fields)
+    remote_manufacturer = fields[0]
+    if remote_manufacturer.startswith("*IDN "):
+        remote_manufacturer = remote_manufacturer.removeprefix("*IDN ").strip()
+    identity = SDS3000Identity(remote_manufacturer, *fields[1:])
     if identity.remote_manufacturer != _SUPPORTED_REMOTE_MANUFACTURER:
         raise InstrumentError("configured instrument is not a supported SIGLENT SDS3000")
     if identity.model != _SUPPORTED_MODEL:

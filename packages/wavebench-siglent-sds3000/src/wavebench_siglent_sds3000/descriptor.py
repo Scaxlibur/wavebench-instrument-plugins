@@ -23,7 +23,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.channel_coupling",
             "scope.fetch_waveform",
         ),
-        idn_patterns=("LECROY,SDS3054,",),
+        idn_patterns=("*IDN LECROY,SDS3054,", "LECROY,SDS3054,"),
         backends=("pyvisa",),
         option_specs=(),
         permissions=("instrument.io", "configured-resource-only"),
@@ -39,5 +39,5 @@ def descriptor() -> InstrumentDescriptor:
         source="entry_point:siglent.sds3000",
         scope_coupling_policy="switchable-termination",
         config_fields=("connection.resource", "scope.driver", "waveform.*"),
-        resource_schemes=("tcpip",),
+        resource_schemes=("vicp", "tcpip"),
     )

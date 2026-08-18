@@ -83,6 +83,9 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
     assert any(
         requirement.replace(" ", "") == "wavebench<0.9,>=0.8.22" for requirement in requirements
     )
+    assert any(
+        requirement.replace(" ", "").lower() == "pyvicp<2,>=1.1" for requirement in requirements
+    )
     assert [(item.name, item.value) for item in entry_points] == [
         ("siglent.sds3000", "wavebench_siglent_sds3000:descriptor")
     ]

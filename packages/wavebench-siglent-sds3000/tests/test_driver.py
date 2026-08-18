@@ -68,9 +68,12 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.channel_coupling",
         "scope.fetch_waveform",
     )
-    assert descriptor.idn_patterns == ("LECROY,SDS3054,",)
+    assert descriptor.idn_patterns == (
+        "*IDN LECROY,SDS3054,",
+        "LECROY,SDS3054,",
+    )
     assert descriptor.backends == ("pyvisa",)
-    assert descriptor.resource_schemes == ("tcpip",)
+    assert descriptor.resource_schemes == ("vicp", "tcpip")
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.config_fields == (
         "connection.resource",
@@ -111,12 +114,19 @@ def test_identity_parser_accepts_only_the_verified_device_baseline() -> None:
         serial="redacted",
         firmware="8.4.1",
     )
+    assert parse_sds3000_identity("*IDN LECROY,SDS3054,redacted,8.4.1\n") == SDS3000Identity(
+        remote_manufacturer="LECROY",
+        model="SDS3054",
+        serial="redacted",
+        firmware="8.4.1",
+    )
 
 
 @pytest.mark.parametrize(
     ("response", "error", "message"),
     [
         ("bad", DataError, "invalid"),
+        ("*IDN? LECROY,SDS3054,redacted,8.4.1", InstrumentError, "not a supported"),
         ("SIGLENT,SDS3054,redacted,8.4.1", InstrumentError, "not a supported"),
         ("LECROY,SDS3024,redacted,8.4.1", InstrumentError, "unsupported.*model"),
         ("LECROY,SDS3054,redacted,8.5.0", InstrumentError, "unsupported.*firmware"),

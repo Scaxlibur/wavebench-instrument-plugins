@@ -11,7 +11,7 @@
     "model": "SDS3054",
     "remote_manufacturer": "LECROY",
     "firmware": "8.4.1",
-    "redacted_identity": "LECROY,SDS3054,<serial>,8.4.1"
+    "redacted_identity": "*IDN LECROY,SDS3054,<serial>,8.4.1"
   },
   "entity_count": 578,
   "callable_entity_count": 478,
