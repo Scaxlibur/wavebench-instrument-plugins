@@ -17,10 +17,11 @@ The audited source is RIGOL MSO8000 Programming Guide `PGA26006-1110`, which cov
 | Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | Offline complete; fixed 1000 displayed-channel points, six-field transfer-state restoration, and no implicit stop |
 | Deep waveform | MAX/RAW and chunk ranges | fetch/capture | Offline complete; at most 250,000 points per block and four million total points per call; streaming needs a core RFC |
 | Single and multi-channel capture | SINGLE, trigger status, and per-source waveform | capture protocols | Offline complete for DEF/MAX/DMAX; one SINGLE, STOP polling, consistent X axes, and no OPC completion claim |
+| Math waveform metadata | MATH display and waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | Offline complete for displayed slots in MAIN mode; restore six transfer fields and read no data; math results remain hardware-unverified |
 | Screenshot | display data or save-image data | `scope.screenshot` | RFC and skip; DISPLAY framing is undocumented and SAVE DATA cannot prove `include_menu=False`; see RFC-0003 |
 | Digital status | hardware-module and LA status queries | `scope.digital_status` | RFC and skip; the mandatory core model requires activity, technology, hysteresis, and other fields the device cannot query; see RFC-0004 |
 | Digital waveform | D0-D15 waveform source and data | `scope.digital_waveform` | Manual-evidence gap and skip; the bitset model is suitable, but BYTE/WORD logic codes are undefined and WORD byte order is unclear |
-| Measurement, math, FFT, reference, cursor | corresponding query families | typed scope capabilities | M7 review; read existing configuration only and skip model mismatches |
+| Measurement, FFT, reference, cursor | corresponding query families | typed scope capabilities | M7 review; read existing configuration only and skip model mismatches |
 | DVM and counter | DVM/counter families | no suitable scope capability | RFC and skip |
 | AWG | source families | unresolved shared-resource multi-kind contract | RFC and skip |
 | Protocol, mask, search, record | option-heavy application families | no base contract | RFC and skip |

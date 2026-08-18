@@ -39,13 +39,14 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.fetch_waveform",
         "scope.capture_waveform",
         "scope.capture_waveforms",
+        "scope.math_metadata",
     )
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb", "gpib")
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.wavebench_min_version == "0.8.22"
     assert descriptor.wavebench_max_version == "0.9.0"
-    assert descriptor.version == "0.5.0"
+    assert descriptor.version == "0.6.0"
     assert descriptor.validate_options({}) == {
         "max_total_points": 4_000_000,
         "max_chunk_points": 250_000,
@@ -405,4 +406,6 @@ def test_close_is_idempotent_and_blocks_later_queries() -> None:
         scope.channel_coupling(1)
     with pytest.raises(InstrumentError, match="closed"):
         scope.fetch_waveform(channel=1, points="DEF", check_errors=False)
+    with pytest.raises(InstrumentError, match="closed"):
+        scope.get_math_waveform_metadata(1)
     assert transport.queries == []

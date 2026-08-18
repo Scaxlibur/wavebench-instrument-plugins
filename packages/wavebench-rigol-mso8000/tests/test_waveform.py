@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
+from wavebench.instruments.models import ScopeDerivedWaveformMetadata
 from wavebench_rigol_mso8000.driver import MSO8104Scope, WaveformTransferState
 from wavebench_rigol_mso8000.parsers import parse_rigol_waveform_preamble
 
@@ -49,6 +50,7 @@ class WaveformTransport:
         self.preambles: dict[str, str] = {}
         self.payloads: dict[str, bytes] = {}
         self.displayed = {channel: True for channel in range(1, 5)}
+        self.math_display_responses = {index: "1" for index in range(1, 5)}
         self.timebase_mode = "MAIN"
         self.trigger_statuses = ["STOP"]
         self.events: list[tuple[str, str]] = []
@@ -65,6 +67,9 @@ class WaveformTransport:
         for channel in range(1, 5):
             if command == f":CHANnel{channel}:DISPlay?":
                 return "1" if self.displayed[channel] else "0"
+        for math_index in range(1, 5):
+            if command == f":MATH{math_index}:DISPlay?":
+                return self.math_display_responses[math_index]
         queries = {
             ":WAVeform:SOURce?": "source",
             ":WAVeform:MODE?": "mode",
@@ -163,6 +168,124 @@ def test_fetch_normal_byte_waveform_restores_complete_transfer_state() -> None:
         command.upper() in {":STOP", ":SINGLE", ":AUTOSCALE"} for command in writes
     )
     assert scope.waveform_writes_blocked is False
+
+
+def test_math_metadata_uses_normal_byte_preamble_and_restores_state() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous)
+    transport.preambles["MATH2"] = _normal_preamble()
+
+    metadata = MSO8104Scope(transport=transport).get_math_waveform_metadata(2)
+
+    assert metadata == ScopeDerivedWaveformMetadata(
+        source_kind="math",
+        index=2,
+        source_catalog=None,
+        x_start=-1.5,
+        x_stop=498.0,
+        points=1000,
+        values_per_sample=None,
+        x_increment=0.5,
+        x_origin=-1.0,
+        y_increment=0.25,
+        y_origin=10.0,
+        y_resolution_bits=8,
+    )
+    assert transport.state == asdict(previous)
+    assert transport.binary_calls == 0
+    writes = [command for direction, command in transport.events if direction == "write"]
+    assert writes[:6] == [
+        ":WAVeform:MODE NORM",
+        ":WAVeform:SOURce MATH2",
+        ":WAVeform:FORMat BYTE",
+        ":WAVeform:POINts 1000",
+        ":WAVeform:STARt 1",
+        ":WAVeform:STOP 1000",
+    ]
+
+
+@pytest.mark.parametrize("math_index", [0, 5, True, 1.0, "1"])
+def test_math_metadata_rejects_invalid_index_without_io(math_index: object) -> None:
+    transport = WaveformTransport()
+
+    with pytest.raises(DataError, match="math waveform index"):
+        MSO8104Scope(transport=transport).get_math_waveform_metadata(
+            math_index,  # type: ignore[arg-type]
+        )
+
+    assert transport.events == []
+
+
+@pytest.mark.parametrize("display_response", ["0", "OFF", "", "2"])
+def test_math_metadata_refuses_hidden_or_invalid_math_without_writes(
+    display_response: str,
+) -> None:
+    transport = WaveformTransport()
+    transport.math_display_responses[3] = display_response
+
+    with pytest.raises((ConfigError, DataError)):
+        MSO8104Scope(transport=transport).get_math_waveform_metadata(3)
+
+    assert transport.events == [("query", ":MATH3:DISPlay?")]
+    assert transport.state == asdict(_initial_state())
+
+
+@pytest.mark.parametrize("mode", ["XY", "ROLL", "BROKEN"])
+def test_math_metadata_refuses_non_main_timebase_without_writes(mode: str) -> None:
+    transport = WaveformTransport()
+    transport.timebase_mode = mode
+
+    with pytest.raises((ConfigError, DataError)):
+        MSO8104Scope(transport=transport).get_math_waveform_metadata(2)
+
+    assert transport.events == [
+        ("query", ":MATH2:DISPlay?"),
+        ("query", ":TIMebase:MODE?"),
+    ]
+    assert transport.state == asdict(_initial_state())
+
+
+@pytest.mark.parametrize(
+    ("preamble", "message"),
+    [
+        ("1,0,1000,1,0.5,-1,1,0.25,10,128", "BYTE"),
+        ("0,1,1000,1,0.5,-1,1,0.25,10,128", "type code 0"),
+        ("0,0,999,1,0.5,-1,1,0.25,10,128", "point count"),
+        ("0,0,1000,1,1e308,1e308,0,0.25,10,128", "X axis"),
+    ],
+)
+def test_math_metadata_invalid_preamble_restores_without_latching(
+    preamble: str,
+    message: str,
+) -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous)
+    transport.preambles["MATH1"] = preamble
+    scope = MSO8104Scope(transport=transport)
+
+    with pytest.raises(DataError, match=message):
+        scope.get_math_waveform_metadata(1)
+
+    assert transport.state == asdict(previous)
+    assert transport.binary_calls == 0
+    assert scope.waveform_writes_blocked is False
+
+
+def test_math_metadata_ambiguous_setup_latches_waveform_domain() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous)
+    transport.fail_writes.add(":WAVeform:SOURce MATH4")
+    scope = MSO8104Scope(transport=transport)
+
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        scope.get_math_waveform_metadata(4)
+
+    assert transport.state == asdict(previous)
+    assert scope.waveform_writes_blocked is True
+    event_count = len(transport.events)
+    with pytest.raises(InstrumentError, match="close and reopen"):
+        scope.get_math_waveform_metadata(4)
+    assert len(transport.events) == event_count
 
 
 @pytest.mark.parametrize(

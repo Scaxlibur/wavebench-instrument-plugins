@@ -9,7 +9,11 @@ import time
 import numpy as np
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
-from wavebench.instruments.models import WaveformData, WaveformHeader
+from wavebench.instruments.models import (
+    ScopeDerivedWaveformMetadata,
+    WaveformData,
+    WaveformHeader,
+)
 from wavebench.transport.base import InstrumentTransport
 
 from .parsers import (
@@ -106,6 +110,11 @@ class MSO8104Scope:
     def _validate_analog_channel(channel: int) -> None:
         if type(channel) is not int or channel not in _ANALOG_CHANNELS:
             raise DataError("MSO8104 analog channel must be an integer from 1 through 4")
+
+    @staticmethod
+    def _validate_math_index(math_index: int) -> None:
+        if type(math_index) is not int or math_index not in {1, 2, 3, 4}:
+            raise DataError("MSO8104 math waveform index must be an integer from 1 through 4")
 
     def channel_coupling(self, channel: int) -> str:
         self._validate_analog_channel(channel)
@@ -252,19 +261,23 @@ class MSO8104Scope:
             ) from exc
 
     def _apply_waveform_state(self, state: WaveformTransferState, *, phase: str) -> None:
+        source_field = (
+            f":WAVeform:SOURce {state.source}",
+            ":WAVeform:SOURce?",
+            state.source,
+            parse_waveform_source,
+        )
+        mode_field = (
+            f":WAVeform:MODE {state.mode}",
+            ":WAVeform:MODE?",
+            state.mode,
+            parse_waveform_mode,
+        )
+        prefix_fields = [source_field, mode_field]
+        if phase == "setup" and state.source.startswith("MATH"):
+            prefix_fields.reverse()
         fields = [
-            (
-                f":WAVeform:SOURce {state.source}",
-                ":WAVeform:SOURce?",
-                state.source,
-                parse_waveform_source,
-            ),
-            (
-                f":WAVeform:MODE {state.mode}",
-                ":WAVeform:MODE?",
-                state.mode,
-                parse_waveform_mode,
-            ),
+            *prefix_fields,
             (
                 f":WAVeform:FORMat {state.data_format}",
                 ":WAVeform:FORMat?",
@@ -532,6 +545,69 @@ class MSO8104Scope:
             )
         finally:
             self._restore_waveform_state(previous)
+
+    def get_math_waveform_metadata(
+        self,
+        math_index: int,
+    ) -> ScopeDerivedWaveformMetadata:
+        self._validate_math_index(math_index)
+        with self._io_lock:
+            self._require_open()
+            self._require_waveform_writes_allowed()
+            displayed = parse_boolean_state(
+                self.transport.query(f":MATH{math_index}:DISPlay?"),
+                field=f"MATH{math_index} display",
+            )
+            if not displayed:
+                raise ConfigError(
+                    f"MSO8104 MATH{math_index} is not displayed; refusing to change "
+                    "waveform transfer state"
+                )
+            self._require_main_timebase()
+            previous = self._snapshot_waveform_state()
+            try:
+                transfer = WaveformTransferState(
+                    source=f"MATH{math_index}",
+                    mode="NORM",
+                    data_format="BYTE",
+                    points=_NORMAL_WAVEFORM_POINTS,
+                    start=1,
+                    stop=_NORMAL_WAVEFORM_POINTS,
+                )
+                self._apply_waveform_state(transfer, phase="setup")
+                preamble = parse_rigol_waveform_preamble(
+                    self.transport.query(":WAVeform:PREamble?"),
+                    expected_type_code=0,
+                    maximum_points=_NORMAL_WAVEFORM_POINTS,
+                )
+                if preamble.points != _NORMAL_WAVEFORM_POINTS:
+                    raise DataError(
+                        "MSO8104 math waveform preamble point count does not match the "
+                        f"configured {_NORMAL_WAVEFORM_POINTS} points: {preamble.points}"
+                    )
+                x_start = (
+                    preamble.x_origin
+                    - preamble.x_reference * preamble.x_increment
+                )
+                x_stop = x_start + (preamble.points - 1) * preamble.x_increment
+                if not math.isfinite(x_start) or not math.isfinite(x_stop):
+                    raise DataError("MSO8104 math waveform X axis is non-finite")
+                return ScopeDerivedWaveformMetadata(
+                    source_kind="math",
+                    index=math_index,
+                    source_catalog=None,
+                    x_start=x_start,
+                    x_stop=x_stop,
+                    points=preamble.points,
+                    values_per_sample=None,
+                    x_increment=preamble.x_increment,
+                    x_origin=preamble.x_origin,
+                    y_increment=preamble.y_increment,
+                    y_origin=preamble.y_origin,
+                    y_resolution_bits=8,
+                )
+            finally:
+                self._restore_waveform_state(previous)
 
     @staticmethod
     def _validate_check_errors(check_errors: bool) -> None:
