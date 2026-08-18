@@ -174,6 +174,9 @@ assert [point.name for point in points] == ["siglent.sds3000"]
 descriptor = points[0].load()()
 assert descriptor.driver_id == "siglent.sds3000"
 assert descriptor.distribution == "wavebench-siglent-sds3000"
+assert descriptor.api_version == "wavebench.instrument.v2"
+assert descriptor.wavebench_min_version == "0.8.22"
+assert descriptor.wavebench_max_version == "0.9.0"
 assert descriptor.capabilities == (
     "scope.idn",
     "scope.errors",

@@ -38,6 +38,7 @@ def descriptor() -> InstrumentDescriptor:
             "Installable driver for the early SIGLENT SDS3054 running the "
             "Teledyne LeCroy MAUI platform."
         ),
+        api_version="wavebench.instrument.v2",
         wavebench_min_version="0.8.22",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sds3000",
