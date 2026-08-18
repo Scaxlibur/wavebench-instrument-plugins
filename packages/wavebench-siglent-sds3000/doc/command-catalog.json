@@ -24,13 +24,13 @@
     "result_property": 80
   },
   "counts_by_disposition": {
-    "core-gap-rfc": 10,
-    "firmware-unverified": 333,
-    "implemented": 9,
+    "core-gap-rfc": 7,
+    "firmware-unverified": 331,
+    "implemented": 16,
     "model-not-applicable": 2,
     "option-absent": 78,
-    "partially-implemented": 1,
-    "planned": 13,
+    "partially-implemented": 2,
+    "planned": 10,
     "unsafe-quarantined": 132
   },
   "entities": [
@@ -5705,9 +5705,12 @@
         "command",
         "query"
       ],
-      "disposition": "firmware-unverified",
+      "disposition": "partially-implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 207,
@@ -5725,7 +5728,7 @@
       "manual_anomalies": [],
       "direction_dispositions": {
         "command": "firmware-unverified",
-        "query": "firmware-unverified"
+        "query": "implemented"
       }
     },
     {
@@ -6060,7 +6063,7 @@
       "directions": [
         "command"
       ],
-      "disposition": "planned",
+      "disposition": "implemented",
       "safety": "state-change",
       "wavebench_capabilities": [
         "scope.capture_waveform",
@@ -6082,7 +6085,7 @@
       "subsystem": "ACQUISITION",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "planned"
+        "command": "implemented"
       }
     },
     {
@@ -6400,7 +6403,9 @@
       "disposition": "implemented",
       "safety": "state-change",
       "wavebench_capabilities": [
-        "scope.fetch_waveform"
+        "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
       ],
       "source": {
         "segment": "segment-002",
@@ -6433,7 +6438,9 @@
       "disposition": "implemented",
       "safety": "state-change",
       "wavebench_capabilities": [
-        "scope.fetch_waveform"
+        "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
       ],
       "source": {
         "segment": "segment-002",
@@ -6528,7 +6535,9 @@
       "disposition": "implemented",
       "safety": "state-change",
       "wavebench_capabilities": [
-        "scope.fetch_waveform"
+        "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
       ],
       "source": {
         "segment": "segment-002",
@@ -9898,9 +9907,12 @@
       "directions": [
         "command"
       ],
-      "disposition": "planned",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 208,
@@ -9917,7 +9929,7 @@
       "subsystem": "ACQUISITION",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "planned"
+        "command": "implemented"
       }
     },
     {
@@ -10046,9 +10058,12 @@
         "command",
         "query"
       ],
-      "disposition": "core-gap-rfc",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 208,
@@ -10065,8 +10080,8 @@
       "subsystem": "ACQUISITION",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "core-gap-rfc",
-        "query": "core-gap-rfc"
+        "command": "implemented",
+        "query": "implemented"
       }
     },
     {
@@ -10077,9 +10092,12 @@
         "command",
         "query"
       ],
-      "disposition": "firmware-unverified",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 208,
@@ -10096,8 +10114,8 @@
       "subsystem": "DISPLAY",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "firmware-unverified",
-        "query": "firmware-unverified"
+        "command": "implemented",
+        "query": "implemented"
       }
     },
     {
@@ -10232,9 +10250,12 @@
         "command",
         "query"
       ],
-      "disposition": "core-gap-rfc",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 209,
@@ -10251,8 +10272,8 @@
       "subsystem": "ACQUISITION",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "core-gap-rfc",
-        "query": "core-gap-rfc"
+        "command": "implemented",
+        "query": "implemented"
       }
     },
     {
@@ -10449,9 +10470,12 @@
         "command",
         "query"
       ],
-      "disposition": "core-gap-rfc",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 209,
@@ -10468,8 +10492,8 @@
       "subsystem": "ACQUISITION",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "core-gap-rfc",
-        "query": "core-gap-rfc"
+        "command": "implemented",
+        "query": "implemented"
       }
     },
     {
@@ -10479,9 +10503,12 @@
       "directions": [
         "command"
       ],
-      "disposition": "planned",
+      "disposition": "implemented",
       "safety": "state-change",
-      "wavebench_capabilities": [],
+      "wavebench_capabilities": [
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
+      ],
       "source": {
         "segment": "segment-002",
         "logical_page": 209,
@@ -10498,7 +10525,7 @@
       "subsystem": "ACQUISITION",
       "manual_anomalies": [],
       "direction_dispositions": {
-        "command": "planned"
+        "command": "implemented"
       }
     },
     {
@@ -10512,7 +10539,9 @@
       "disposition": "partially-implemented",
       "safety": "state-change",
       "wavebench_capabilities": [
-        "scope.fetch_waveform"
+        "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
       ],
       "source": {
         "segment": "segment-002",
@@ -10545,7 +10574,9 @@
       "disposition": "implemented",
       "safety": "state-change",
       "wavebench_capabilities": [
-        "scope.fetch_waveform"
+        "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms"
       ],
       "source": {
         "segment": "segment-002",

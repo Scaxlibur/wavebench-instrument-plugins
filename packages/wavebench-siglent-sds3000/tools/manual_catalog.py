@@ -218,7 +218,6 @@ _UNSAFE_LEGACY = frozenset(
 
 _PLANNED_LEGACY = frozenset(
     {
-        "ARM",
         "ASET",
         "CFMT",
         "CHDR",
@@ -226,9 +225,7 @@ _PLANNED_LEGACY = frozenset(
         "CRVA?",
         "INSP?",
         "PAST?",
-        "STOP",
         "TMPL?",
-        "WAIT",
         "WF",
         "WFSU",
     }
@@ -238,14 +235,11 @@ _CORE_GAP_LEGACY = frozenset(
     {
         "OFST",
         "SCDP",
-        "TDIV",
         "TRCP",
         "TRDL",
         "TRLV",
-        "TRMD",
         "TRSE",
         "TRSL",
-        "VDIV",
     }
 )
 
@@ -256,16 +250,28 @@ _LEGACY_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "ARM": ("scope.capture_waveform", "scope.capture_waveforms"),
     "CPL": ("scope.channel_coupling",),
     "CMR?": ("scope.errors",),
-    "CFMT": ("scope.fetch_waveform",),
-    "CHDR": ("scope.fetch_waveform",),
-    "CORD": ("scope.fetch_waveform",),
+    "CFMT": ("scope.fetch_waveform", "scope.capture_waveform", "scope.capture_waveforms"),
+    "CHDR": ("scope.fetch_waveform", "scope.capture_waveform", "scope.capture_waveforms"),
+    "CORD": ("scope.fetch_waveform", "scope.capture_waveform", "scope.capture_waveforms"),
     "CRVA?": ("scope.cursor_readout",),
     "DDR?": ("scope.errors",),
     "EXR?": ("scope.errors",),
+    "*OPC": ("scope.capture_waveform", "scope.capture_waveforms"),
     "PAST?": ("scope.measurement_statistics",),
     "SCDP": ("scope.screenshot",),
-    "WF": ("scope.fetch_waveform",),
-    "WFSU": ("scope.fetch_waveform",),
+    "STOP": ("scope.capture_waveform", "scope.capture_waveforms"),
+    "TDIV": ("scope.capture_waveform", "scope.capture_waveforms"),
+    "TRA": ("scope.capture_waveform", "scope.capture_waveforms"),
+    "TRMD": ("scope.capture_waveform", "scope.capture_waveforms"),
+    "VDIV": ("scope.capture_waveform", "scope.capture_waveforms"),
+    "WAIT": ("scope.capture_waveform", "scope.capture_waveforms"),
+    "WF": ("scope.fetch_waveform", "scope.capture_waveform", "scope.capture_waveforms"),
+    "WFSU": ("scope.fetch_waveform", "scope.capture_waveform", "scope.capture_waveforms"),
+}
+
+_LEGACY_DIRECTION_DISPOSITIONS: dict[str, dict[str, str]] = {
+    "*OPC": {"command": "firmware-unverified", "query": "implemented"},
+    "WF": {"command": "unsafe-quarantined", "query": "implemented"},
 }
 
 
@@ -274,9 +280,21 @@ def _legacy_classification(short: str, subsystem: str) -> tuple[str, str]:
         return "implemented", "stateful-read"
     if short in {"*IDN?", "CPL"}:
         return "implemented", "read-only"
-    if short in {"CFMT", "CHDR", "CORD", "WFSU"}:
+    if short in {
+        "ARM",
+        "CFMT",
+        "CHDR",
+        "CORD",
+        "STOP",
+        "TDIV",
+        "TRA",
+        "TRMD",
+        "VDIV",
+        "WAIT",
+        "WFSU",
+    }:
         return "implemented", "state-change"
-    if short == "WF":
+    if short in _LEGACY_DIRECTION_DISPOSITIONS:
         return "partially-implemented", "state-change"
     if subsystem in {"DDA", "ET-PMT"}:
         return "option-absent", "not-tested"
@@ -719,10 +737,9 @@ def _extract_part7(segments: list[Segment]) -> list[dict[str, Any]]:
                 short=short,
                 subsystem=subsystem,
                 manual_anomalies=anomalies,
-                direction_dispositions=(
-                    {"command": "unsafe-quarantined", "query": "implemented"}
-                    if short == "WF"
-                    else {direction: disposition for direction in directions}
+                direction_dispositions=_LEGACY_DIRECTION_DISPOSITIONS.get(
+                    short,
+                    {direction: disposition for direction in directions},
                 ),
             )
         )

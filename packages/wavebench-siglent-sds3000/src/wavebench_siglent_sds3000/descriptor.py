@@ -26,6 +26,8 @@ def descriptor() -> InstrumentDescriptor:
             "scope.errors",
             "scope.channel_coupling",
             "scope.fetch_waveform",
+            "scope.capture_waveform",
+            "scope.capture_waveforms",
         ),
         idn_patterns=("*IDN LECROY,SDS3054,", "LECROY,SDS3054,"),
         backends=("pyvisa",),

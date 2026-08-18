@@ -155,6 +155,8 @@ assert descriptor.capabilities == (
     "scope.errors",
     "scope.channel_coupling",
     "scope.fetch_waveform",
+    "scope.capture_waveform",
+    "scope.capture_waveforms",
 )
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)

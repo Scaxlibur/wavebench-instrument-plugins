@@ -77,6 +77,8 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.errors",
         "scope.channel_coupling",
         "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms",
     )
     assert descriptor.idn_patterns == (
         "*IDN LECROY,SDS3054,",

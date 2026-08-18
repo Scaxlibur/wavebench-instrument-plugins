@@ -96,7 +96,7 @@ def test_idn_catalog_entry_tracks_the_implemented_capability() -> None:
     assert identity["wavebench_capabilities"] == ["scope.idn"]
 
 
-def test_m4_implemented_legacy_entries_match_the_text_and_transfer_protocols() -> None:
+def test_m5_implemented_legacy_entries_match_the_text_transfer_and_capture_protocols() -> None:
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     implemented = {
         entity["short"]
@@ -106,6 +106,7 @@ def test_m4_implemented_legacy_entries_match_the_text_and_transfer_protocols() -
 
     assert implemented == {
         "*IDN?",
+        "ARM",
         "CFMT",
         "CHDR",
         "CMR?",
@@ -113,6 +114,12 @@ def test_m4_implemented_legacy_entries_match_the_text_and_transfer_protocols() -
         "CPL",
         "DDR?",
         "EXR?",
+        "STOP",
+        "TDIV",
+        "TRA",
+        "TRMD",
+        "VDIV",
+        "WAIT",
         "WFSU",
     }
 
@@ -126,7 +133,28 @@ def test_m4_waveform_query_is_not_misreported_as_waveform_write_support() -> Non
         "command": "unsafe-quarantined",
         "query": "implemented",
     }
-    assert waveform["wavebench_capabilities"] == ["scope.fetch_waveform"]
+    assert waveform["wavebench_capabilities"] == [
+        "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms",
+    ]
+
+
+def test_m5_opc_query_is_not_misreported_as_opc_command_support() -> None:
+    catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+    operation_complete = next(
+        entity for entity in catalog["entities"] if entity.get("short") == "*OPC"
+    )
+
+    assert operation_complete["disposition"] == "partially-implemented"
+    assert operation_complete["direction_dispositions"] == {
+        "command": "firmware-unverified",
+        "query": "implemented",
+    }
+    assert operation_complete["wavebench_capabilities"] == [
+        "scope.capture_waveform",
+        "scope.capture_waveforms",
+    ]
 
 
 def test_local_manual_regenerates_the_committed_catalog() -> None:
