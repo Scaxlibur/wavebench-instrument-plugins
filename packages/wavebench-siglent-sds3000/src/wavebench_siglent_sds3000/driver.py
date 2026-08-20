@@ -7,9 +7,17 @@ import re
 from threading import RLock
 from typing import Callable, Iterator
 
-from wavebench.errors import DataError, InstrumentError, OperationTimeout, StateDriftError
+from wavebench.errors import (
+    DataError,
+    InstrumentError,
+    OperationTimeout,
+    SessionHealthError,
+    StateDriftError,
+    TransportIOError,
+)
 from wavebench.instruments.models import WaveformData
 from wavebench.transport.base import InstrumentTransport
+from wavebench.transport.contracts import ReplayPolicy
 
 from .waveform import decode_waveform_data, parse_waveform_descriptor
 
@@ -27,6 +35,7 @@ _COUPLING_MAP = {
 _QUANTITY_RE = re.compile(
     r"(?P<number>[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d+)?)\s*(?P<unit>[A-Z]*)"
 )
+_STRUCTURED_IO_ERRORS = (TransportIOError, SessionHealthError)
 
 
 @dataclass(frozen=True)
@@ -88,7 +97,10 @@ class SDS3000Scope:
             raise DataError("SDS3054 channel must be one of CH1, CH2, CH3, or CH4")
 
     def _query_identity(self) -> tuple[str, SDS3000Identity]:
-        response = self.transport.query("*IDN?").strip()
+        response = self.transport.query(
+            "*IDN?",
+            replay=ReplayPolicy.NO_REPLAY,
+        ).strip()
         identity = parse_sds3000_identity(response)
         self._identity = identity
         return response, identity
@@ -106,7 +118,10 @@ class SDS3000Scope:
     def channel_coupling(self, channel: int) -> str:
         self._validate_channel(channel)
         self._require_identity()
-        response = self.transport.query(f"C{channel}:CPL?")
+        response = self.transport.query(
+            f"C{channel}:CPL?",
+            replay=ReplayPolicy.NO_REPLAY,
+        )
         normalized = response.strip().upper().split()
         if len(normalized) == 1:
             value = normalized[0]
@@ -149,15 +164,27 @@ class SDS3000Scope:
         registers = (
             (
                 "CMR",
-                self._parse_register(self.transport.query("CMR?"), register="CMR", maximum=13),
+                self._parse_register(
+                    self.transport.query("CMR?", replay=ReplayPolicy.NO_REPLAY),
+                    register="CMR",
+                    maximum=13,
+                ),
             ),
             (
                 "EXR",
-                self._parse_register(self.transport.query("EXR?"), register="EXR", maximum=64),
+                self._parse_register(
+                    self.transport.query("EXR?", replay=ReplayPolicy.NO_REPLAY),
+                    register="EXR",
+                    maximum=64,
+                ),
             ),
             (
                 "DDR",
-                self._parse_register(self.transport.query("DDR?"), register="DDR", maximum=65_535),
+                self._parse_register(
+                    self.transport.query("DDR?", replay=ReplayPolicy.NO_REPLAY),
+                    register="DDR",
+                    maximum=65_535,
+                ),
             ),
         )
         return [f"{register} {value}" for register, value in registers if value][:limit]
@@ -233,10 +260,18 @@ class SDS3000Scope:
 
     def _query_waveform_transfer_state(self) -> _WaveformTransferState:
         return _WaveformTransferState(
-            header=self._parse_header_state(self.transport.query("CHDR?")),
-            data_format=self._parse_format_state(self.transport.query("CFMT?")),
-            byte_order=self._parse_order_state(self.transport.query("CORD?")),
-            setup=self._parse_setup_state(self.transport.query("WFSU?")),
+            header=self._parse_header_state(
+                self.transport.query("CHDR?", replay=ReplayPolicy.NO_REPLAY)
+            ),
+            data_format=self._parse_format_state(
+                self.transport.query("CFMT?", replay=ReplayPolicy.NO_REPLAY)
+            ),
+            byte_order=self._parse_order_state(
+                self.transport.query("CORD?", replay=ReplayPolicy.NO_REPLAY)
+            ),
+            setup=self._parse_setup_state(
+                self.transport.query("WFSU?", replay=ReplayPolicy.NO_REPLAY)
+            ),
         )
 
     @contextmanager
@@ -251,6 +286,7 @@ class SDS3000Scope:
             ("WFSU", state.setup, "SP,0,NP,0,FP,0,SN,1"),
         )
         restore: list[tuple[str, str]] = []
+        operation_failure: BaseException | None = None
         try:
             for command, previous, desired in settings:
                 if previous == desired:
@@ -258,26 +294,32 @@ class SDS3000Scope:
                 restore.append((command, previous))
                 self.transport.write(f"{command} {desired}")
             yield
+        except BaseException as exc:
+            operation_failure = exc
+            raise
         finally:
-            failures: list[tuple[str, str, Exception]] = []
-            for command, previous in reversed(restore):
-                try:
-                    self.transport.write(f"{command} {previous}")
-                except Exception as exc:  # pragma: no branch - all failures are retained
-                    failures.append((command, previous, exc))
-            if failures:
-                expected = {command: previous for command, previous, _ in failures}
-                diff = {
-                    command: {"expected": previous, "actual": "unknown"}
-                    for command, previous, _ in failures
-                }
-                names = ", ".join(command for command, _, _ in failures)
-                raise StateDriftError(
-                    f"failed to restore SDS3000 waveform transfer state: {names}",
-                    expected=expected,
-                    actual={command: "unknown" for command in expected},
-                    diff=diff,
-                ) from failures[0][2]
+            if not isinstance(operation_failure, _STRUCTURED_IO_ERRORS):
+                failures: list[tuple[str, str, Exception]] = []
+                for command, previous in reversed(restore):
+                    try:
+                        self.transport.write(f"{command} {previous}")
+                    except _STRUCTURED_IO_ERRORS:
+                        raise
+                    except Exception as exc:  # pragma: no branch - all failures are retained
+                        failures.append((command, previous, exc))
+                if failures:
+                    expected = {command: previous for command, previous, _ in failures}
+                    diff = {
+                        command: {"expected": previous, "actual": "unknown"}
+                        for command, previous, _ in failures
+                    }
+                    names = ", ".join(command for command, _, _ in failures)
+                    raise StateDriftError(
+                        f"failed to restore SDS3000 waveform transfer state: {names}",
+                        expected=expected,
+                        actual={command: "unknown" for command in expected},
+                        diff=diff,
+                    ) from failures[0][2]
 
     @staticmethod
     def _validate_waveform_points(points: str) -> str:
@@ -336,13 +378,19 @@ class SDS3000Scope:
 
     def _read_waveform_in_transfer_state(self, channel: int) -> WaveformData:
         descriptor = parse_waveform_descriptor(
-            self.transport.query_bin_block(f"C{channel}:WF? DESC")
+            self.transport.query_bin_block(
+                f"C{channel}:WF? DESC",
+                replay=ReplayPolicy.NO_REPLAY,
+            )
         )
         if descriptor.byte_order != "little" or descriptor.sample_width_bytes != 2:
             raise DataError("SDS3000 waveform transfer settings did not take effect")
         return decode_waveform_data(
             descriptor,
-            self.transport.query_bin_block(f"C{channel}:WF? DAT1"),
+            self.transport.query_bin_block(
+                f"C{channel}:WF? DAT1",
+                replay=ReplayPolicy.NO_REPLAY,
+            ),
             channel=channel,
         )
 
@@ -374,10 +422,12 @@ class SDS3000Scope:
         time_range_s: float | None,
         vertical_scale_v_per_div: float | None,
     ) -> Iterator[None]:
-        trigger_mode = self._parse_trigger_mode(self.transport.query("TRMD?"))
+        trigger_mode = self._parse_trigger_mode(
+            self.transport.query("TRMD?", replay=ReplayPolicy.NO_REPLAY)
+        )
         time_division = (
             self._parse_positive_quantity(
-                self.transport.query("TDIV?"),
+                self.transport.query("TDIV?", replay=ReplayPolicy.NO_REPLAY),
                 headers=("TDIV", "TIME_DIV"),
                 units=frozenset({"", "S", "MS", "US", "NS", "KS"}),
                 name="TDIV",
@@ -387,7 +437,10 @@ class SDS3000Scope:
         )
         vertical_divisions = {
             channel: self._parse_positive_quantity(
-                self.transport.query(f"C{channel}:VDIV?"),
+                self.transport.query(
+                    f"C{channel}:VDIV?",
+                    replay=ReplayPolicy.NO_REPLAY,
+                ),
                 headers=(f"C{channel}:VDIV", f"C{channel}:VOLT_DIV"),
                 units=frozenset({"", "V", "MV", "UV", "NV", "KV"}),
                 name=f"C{channel}:VDIV",
@@ -397,13 +450,17 @@ class SDS3000Scope:
         }
         traces = {
             channel: self._parse_trace_state(
-                self.transport.query(f"C{channel}:TRA?"),
+                self.transport.query(
+                    f"C{channel}:TRA?",
+                    replay=ReplayPolicy.NO_REPLAY,
+                ),
                 channel=channel,
             )
             for channel in channels
         }
 
         restore: list[tuple[str, str, str]] = []
+        operation_failure: BaseException | None = None
         try:
             restore.append(("TRMD", f"TRMD {trigger_mode}", trigger_mode))
             self.transport.write("STOP")
@@ -421,25 +478,32 @@ class SDS3000Scope:
                 restore.append((name, f"{name} {previous}", previous))
                 self.transport.write(f"{name} ON")
             yield
+        except BaseException as exc:
+            operation_failure = exc
+            raise
         finally:
-            failures: list[tuple[str, str, Exception]] = []
-            for name, command, expected in reversed(restore):
-                try:
-                    self.transport.write(command)
-                except Exception as exc:  # pragma: no branch - all failures are retained
-                    failures.append((name, expected, exc))
-            if failures:
-                expected = {name: value for name, value, _ in failures}
-                diff = {
-                    name: {"expected": value, "actual": "unknown"} for name, value, _ in failures
-                }
-                names = ", ".join(name for name, _, _ in failures)
-                raise StateDriftError(
-                    f"failed to restore SDS3000 capture state: {names}",
-                    expected=expected,
-                    actual={name: "unknown" for name in expected},
-                    diff=diff,
-                ) from failures[0][2]
+            if not isinstance(operation_failure, _STRUCTURED_IO_ERRORS):
+                failures: list[tuple[str, str, Exception]] = []
+                for name, command, expected in reversed(restore):
+                    try:
+                        self.transport.write(command)
+                    except _STRUCTURED_IO_ERRORS:
+                        raise
+                    except Exception as exc:  # pragma: no branch - all failures are retained
+                        failures.append((name, expected, exc))
+                if failures:
+                    expected = {name: value for name, value, _ in failures}
+                    diff = {
+                        name: {"expected": value, "actual": "unknown"}
+                        for name, value, _ in failures
+                    }
+                    names = ", ".join(name for name, _, _ in failures)
+                    raise StateDriftError(
+                        f"failed to restore SDS3000 capture state: {names}",
+                        expected=expected,
+                        actual={name: "unknown" for name in expected},
+                        diff=diff,
+                    ) from failures[0][2]
 
     def _acquire_once(self) -> None:
         budget_ms = max(min(self.io_timeout_ms, self.opc_timeout_ms), 1_000)
@@ -447,12 +511,21 @@ class SDS3000Scope:
         self.transport.write("ARM")
         self.transport.write(f"WAIT {wait_seconds:.12g}")
         try:
-            self._parse_opc(self.transport.query_opc())
+            self._parse_opc(
+                self.transport.query_opc(replay=ReplayPolicy.NO_REPLAY)
+            )
+        except _STRUCTURED_IO_ERRORS:
+            raise
         except Exception as exc:
             raise OperationTimeout(
                 "SDS3054 single acquisition timed out while waiting for WAIT/*OPC?"
             ) from exc
-        if self._parse_trigger_mode(self.transport.query("TRMD?")) != "STOP":
+        if (
+            self._parse_trigger_mode(
+                self.transport.query("TRMD?", replay=ReplayPolicy.NO_REPLAY)
+            )
+            != "STOP"
+        ):
             raise OperationTimeout(
                 "SDS3054 did not complete a triggered acquisition before the WAIT timeout"
             )

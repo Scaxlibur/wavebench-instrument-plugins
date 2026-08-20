@@ -1,20 +1,41 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 import struct
 
 import numpy as np
 import pytest
 
-from wavebench.errors import DataError, InstrumentError, OperationTimeout, StateDriftError
+from wavebench.errors import (
+    DataError,
+    InstrumentError,
+    OperationTimeout,
+    SessionHealthError,
+    StateDriftError,
+    TransportIOError,
+)
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.logging import CommandLogger
+from wavebench.transport.contracts import (
+    CommandTransmission,
+    ReplayPolicy,
+    ResponseProgress,
+    Synchronization,
+    TransportPhase,
+)
+from wavebench.transport.guarded import GuardedAuditedTransport
+from wavebench.transport.session import InstrumentSessionState, SessionHealth
 from wavebench_siglent_sds3000 import descriptor as plugin_descriptor
 from wavebench_siglent_sds3000.driver import (
     SDS3000Scope,
     SDS3000Identity,
     parse_sds3000_identity,
 )
+
+
+DRIVER_PATH = Path(__file__).resolve().parents[1] / "src" / "wavebench_siglent_sds3000" / "driver.py"
 
 
 class FakeTransport:
@@ -24,44 +45,96 @@ class FakeTransport:
         *,
         responses: dict[str, str] | None = None,
         response_sequences: dict[str, list[str]] | None = None,
+        query_failures: dict[str, Exception] | None = None,
         binary_responses: dict[str, bytes | Exception] | None = None,
         failing_write: str | None = None,
-        opc_response: str = "*OPC 1",
+        write_failures: dict[str, Exception] | None = None,
+        opc_response: str | Exception = "*OPC 1",
     ) -> None:
         self.response = response
         self.responses = responses or {}
         self.response_sequences = response_sequences or {}
+        self.query_failures = query_failures or {}
         self.binary_responses = binary_responses or {}
         self.failing_write = failing_write
+        self.write_failures = write_failures or {}
         self.opc_response = opc_response
         self.writes: list[str] = []
         self.queries: list[str] = []
+        self.query_policies: list[tuple[str, ReplayPolicy]] = []
         self.close_count = 0
 
     def write(self, command: str) -> None:
         self.writes.append(command)
+        if command in self.write_failures:
+            raise self.write_failures[command]
         if command == self.failing_write:
             raise OSError("simulated write failure")
 
-    def query(self, command: str) -> str:
+    def query(self, command: str, *, replay: ReplayPolicy) -> str:
         self.queries.append(command)
+        self.query_policies.append((command, replay))
+        if command in self.query_failures:
+            raise self.query_failures[command]
         if command in self.response_sequences:
             return self.response_sequences[command].pop(0)
         return self.responses.get(command, self.response)
 
-    def query_bin_block(self, command: str) -> bytes:
+    def query_bin_block(self, command: str, *, replay: ReplayPolicy) -> bytes:
         self.queries.append(command)
+        self.query_policies.append((command, replay))
         response = self.binary_responses[command]
         if isinstance(response, Exception):
             raise response
         return response
 
-    def query_opc(self) -> str:
+    def query_opc(self, *, replay: ReplayPolicy) -> str:
         self.queries.append("*OPC?")
+        self.query_policies.append(("*OPC?", replay))
+        if isinstance(self.opc_response, Exception):
+            raise self.opc_response
         return self.opc_response
 
     def close(self) -> None:
         self.close_count += 1
+
+
+def _transport_failure(
+    *,
+    operation: str,
+    synchronization: Synchronization,
+    phase: TransportPhase = TransportPhase.READING,
+) -> TransportIOError:
+    return TransportIOError(
+        "structured transport failure",
+        operation=operation,
+        phase=phase,
+        replay_policy=ReplayPolicy.NO_REPLAY,
+        command_transmission=CommandTransmission.SENT,
+        response_progress=ResponseProgress.NONE,
+        synchronization=synchronization,
+        attempts=1,
+    )
+
+
+def test_every_transport_query_explicitly_uses_no_replay() -> None:
+    tree = ast.parse(DRIVER_PATH.read_text(encoding="utf-8"))
+    query_names = {"query", "query_bin_block", "query_float_list", "query_opc"}
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in query_names
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "transport"
+    ]
+
+    assert calls
+    for call in calls:
+        replay = next((keyword.value for keyword in call.keywords if keyword.arg == "replay"), None)
+        assert replay is not None, f"line {call.lineno} has no explicit replay policy"
+        assert ast.unparse(replay) == "ReplayPolicy.NO_REPLAY"
 
 
 def test_descriptor_is_executable_v2_metadata_without_io() -> None:
@@ -253,6 +326,34 @@ def test_assert_no_errors_uses_the_stateful_register_snapshot() -> None:
         SDS3000Scope(active).assert_no_errors()
 
 
+def test_read_to_clear_failure_is_no_replay_and_blocks_later_io() -> None:
+    failure = _transport_failure(
+        operation="query",
+        synchronization=Synchronization.PROVEN,
+    )
+    inner = FakeTransport(query_failures={"CMR?": failure})
+    state = InstrumentSessionState(epoch_id="sds-errors-epoch")
+    guarded = GuardedAuditedTransport(inner, session_state=state)
+    scope = SDS3000Scope(guarded)
+
+    with pytest.raises(TransportIOError) as captured:
+        scope.errors()
+
+    assert captured.value is failure
+    assert inner.queries == ["*IDN?", "CMR?"]
+    assert inner.query_policies == [
+        ("*IDN?", ReplayPolicy.NO_REPLAY),
+        ("CMR?", ReplayPolicy.NO_REPLAY),
+    ]
+    assert state.health is SessionHealth.UNCERTAIN
+
+    query_count = len(inner.queries)
+    with pytest.raises(SessionHealthError):
+        scope.channel_coupling(1)
+    assert len(inner.queries) == query_count
+    assert state.health is SessionHealth.UNCERTAIN
+
+
 def _word_descriptor(*, points: int = 4) -> bytes:
     block = bytearray(346)
     block[0:8] = b"WAVEDESC"
@@ -363,6 +464,31 @@ def test_fetch_waveform_reports_state_drift_when_restore_fails() -> None:
     assert captured.value.diff["CHDR"]["actual"] == "unknown"
 
 
+def test_structured_restore_failure_stops_remaining_restore_writes() -> None:
+    failure = _transport_failure(
+        operation="write",
+        synchronization=Synchronization.LOST,
+        phase=TransportPhase.SENDING,
+    )
+    inner = _waveform_transport()
+    inner.write_failures["WFSU SP,4,NP,10,FP,2,SN,0"] = failure
+    state = InstrumentSessionState(epoch_id="sds-restore-epoch")
+    guarded = GuardedAuditedTransport(inner, session_state=state)
+
+    with pytest.raises(TransportIOError) as captured:
+        SDS3000Scope(guarded).fetch_waveform(1, check_errors=False)
+
+    assert captured.value is failure
+    assert state.health is SessionHealth.POISONED
+    assert inner.writes == [
+        "CHDR OFF",
+        "CFMT DEF9,WORD,BIN",
+        "CORD LO",
+        "WFSU SP,0,NP,0,FP,0,SN,1",
+        "WFSU SP,4,NP,10,FP,2,SN,0",
+    ]
+
+
 def test_fetch_waveform_rejects_malformed_saved_state_without_writes() -> None:
     transport = _waveform_transport()
     transport.responses["CFMT?"] = "DEF9,FLOAT,BIN"
@@ -460,6 +586,25 @@ def test_capture_timeout_fails_before_waveform_read_and_restores_trigger_mode() 
 
     assert transport.writes == ["STOP", "ARM", "WAIT 28", "TRMD AUTO"]
     assert not any(query.endswith("WF? DESC") for query in transport.queries)
+
+
+def test_structured_opc_failure_is_not_wrapped_or_followed_by_restore_io() -> None:
+    failure = _transport_failure(
+        operation="query_opc",
+        synchronization=Synchronization.PROVEN,
+    )
+    inner = _capture_transport()
+    inner.opc_response = failure
+    state = InstrumentSessionState(epoch_id="sds-opc-epoch")
+    guarded = GuardedAuditedTransport(inner, session_state=state)
+
+    with pytest.raises(TransportIOError) as captured:
+        SDS3000Scope(guarded).capture_waveform(1, check_errors=False)
+
+    assert captured.value is failure
+    assert state.health is SessionHealth.UNCERTAIN
+    assert inner.writes == ["STOP", "ARM", "WAIT 28"]
+    assert inner.query_policies[-1] == ("*OPC?", ReplayPolicy.NO_REPLAY)
 
 
 def test_capture_restore_failure_is_reported_as_state_drift() -> None:
