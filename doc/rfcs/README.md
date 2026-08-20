@@ -13,6 +13,6 @@
 
 ## 当前 RFC
 
-- [WaveBench scope 通用扩展接口 RFC](WaveBench_scope通用扩展接口RFC.md)：`R1 Draft`，吸收
-  核心预审意见，补充 `OperationSpec` 映射、binary 失步语义、采集状态机、trace 不变量和
-  错误 artifact；仍不代表核心已实现这些接口。
+- [WaveBench scope 通用扩展接口 RFC](WaveBench_scope通用扩展接口RFC.md)：`R1.1 Draft`，吸收
+  核心预审意见，冻结 action-specific `OperationSpec`、核心 binary budget、采集状态机、
+  trace 首版类型边界和错误 artifact；仍不代表核心已实现这些接口。

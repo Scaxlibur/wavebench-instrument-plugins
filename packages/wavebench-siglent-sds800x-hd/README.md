@@ -86,7 +86,7 @@ doc/vendor-local/
 1. 使用其他 SDS800X HD 型号获取脱敏 `*IDN?` 样本，复核身份格式和二通道、四通道 coupling 返回。
 2. 后续取得 USB 条件时，复核 binary block、WORD 对齐、时基和 transfer 状态恢复；TCPIP 真实多块已验收。
 3. 仅在取得明确协议或实机证据后评估 `DEF/MAX` 点数模式；不得猜测关键字。
-4. 截图、独立采集控制和数学能力等待 `R1 Draft`
+4. 截图、独立采集控制和数学能力等待 `R1.1 Draft`
    [scope 通用扩展接口 RFC](../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md) 评审和核心合同
    冻结后再扩展；不通过私有 raw SCPI 绕过核心。
 

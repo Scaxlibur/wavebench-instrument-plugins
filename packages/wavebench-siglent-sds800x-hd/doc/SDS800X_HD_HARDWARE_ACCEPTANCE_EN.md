@@ -155,7 +155,7 @@ removed after acceptance and did not enter the repository.
   capabilities remain disabled.
 - No undocumented error-queue query was sent. `scope.errors` remains undeclared.
 
-These cross-instrument gaps are recorded in the `R1 Draft`
+These cross-instrument gaps are recorded in the `R1.1 Draft`
 [generic Scope RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md); core pre-review does not
 modify the main repository, and the driver does not add a private transport path or vendor-specific
 public method.
