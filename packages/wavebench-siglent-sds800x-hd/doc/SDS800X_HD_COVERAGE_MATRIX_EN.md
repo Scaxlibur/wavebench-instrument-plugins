@@ -32,7 +32,8 @@ Evidence labels used here:
 | Analog-channel coupling | `:CHANnel<n>:COUPling?`, returning `AC`, `DC`, or `GND` | `scope.channel_coupling` | **SDS804X HD hardware accepted** | CH1–CH4 returned DC; two-channel models and other coupling states remain pending |
 | Input termination | Shared manual lists `ONEMeg` and `FIFTy` | No standalone capability | **Rejected by default** | SDS800X HD product material specifies fixed `1 MΩ`; do not project the shared `FIFTy` setter onto this family |
 | Error queue | CN11G documents no error-queue query | `scope.errors` | **Not covered** | Do not guess `SYSTem:ERRor?`; consuming queries also conflict with automatic retries on ordinary core queries |
-| Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **SDS804X HD single-chunk hardware accepted** | Stop, sequence OFF, CH1/CH2 `DMAX`, WORD/LSB, numeric results, and success/failure restoration passed; real multi-chunk and USB remain pending |
+| Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **SDS804X HD multi-chunk hardware accepted** | Stop, sequence OFF, CH1/CH2 `DMAX`, WORD/LSB, numeric results, and success/failure restoration passed; a `10M` record passed as `5M + 5M`, while USB remains pending |
+| Sequence gate | `:ACQuire:SEQuence?` | `scope.fetch_waveform` precondition | **SDS804X HD hardware accepted** | Established Stop + sequence ON in `NORMAL` trigger mode; the driver rejected before any waveform write or binary query |
 | Single and multichannel capture | `TRIGger:MODE`, `RUN`, `STOP`, `STATus?`, and `*OPC?` | `scope.capture_waveform`, `scope.capture_waveforms` | **Hardware blocked** | The manual does not guarantee that `*OPC?` after `RUN` waits for a physical trigger; multichannel capture must read all channels after one acquisition |
 | Trigger run state | `:TRIGger:STATus?` returns `Arm`, `Ready`, `Auto`, `Trig'd`, `Stop`, or `Roll` | No standalone capability | **Manual reviewed** | It cannot be mapped to public `ScopeAcquisitionStatus`, which describes averaging and segmented acquisition |
 | Screenshot | `:PRINt? PNG,NORMal` or inverted form | `scope.screenshot` | **Core interface blocked / hardware blocked** | The example reads raw image bytes while the core exposes only definite-block queries; the command also has no reliable menu control |
@@ -53,7 +54,9 @@ to binary data.
 On the SDS804X HD with firmware `4.8.12.1.1.6.5`, a real preamble confirmed the non-sequence
 signature `read_frames=0`, `sum_frames=1`, `segment=-1`. The manual's `segment=1` form remains
 accepted; other frame combinations are still rejected. The same WORD preamble reported `100000`
-points, `200000` bytes, and a `50.000000584 ns` sample interval, consistent with the parser.
+points, `200000` bytes, and a `50.000000584 ns` sample interval, consistent with the parser. A
+supplementary long-record run confirmed two chunks at `START 0` and `START 5000000` for
+`10000000` points with `MAXPoint=5000000`.
 
 The first analog conversion uses these documented fields:
 
@@ -100,7 +103,7 @@ and reads only an already-stopped record.
 
 1. M1: strict identity parsing and read-only `scope.channel_coupling`, with offline tests.
 2. M2: the 346-byte preamble, data conversion, and stopped analog-record `scope.fetch_waveform` transaction have offline coverage; hardware evidence remains absent.
-3. M3: first real-instrument TCPIP WORD/LSB readout, CH1/CH2 numeric checks, and transfer-state restoration are complete on one SDS804X HD; longer-record chunking, USB, and additional models remain pending.
+3. M3: TCPIP WORD/LSB readout, CH1/CH2 numeric checks, transfer-state restoration, a real `10M` multi-chunk read, and safe sequence-ON rejection are complete on one SDS804X HD; USB and additional models remain pending.
 4. M4: independently validate trigger transitions, OPC waiting, and one multichannel acquisition before considering capture capabilities.
 5. Track screenshot, digital channels, FFT, sequence/history, Autoset, and writes as separate work items; do not bypass gates with raw SCPI.
 

@@ -14,7 +14,8 @@ TCPIP/VXI-11 实机验收。测试连接由一台 DG4202 CH1 同时驱动示波�
 - `scope.channel_coupling`
 - Stop、sequence OFF 下的 `scope.fetch_waveform(..., points="dmax", check_errors=False)`
 
-未测试截图、Autoset、capture、错误队列、sequence 波形和其他未声明能力。
+未测试截图、Autoset、capture、错误队列和 sequence 波形；另对 sequence ON 拒绝门禁做了
+负向验收。
 
 ## 仪器与初始状态
 
@@ -105,17 +106,39 @@ SOURCE=C2, START=10, INTERVAL=2, POINT=1000, WIDTH=WORD, BYTEorder=MSB
 `C1 / 0 / 1 / 0 / BYTE / LSB`，并回读确认。异常路径保留原始本地异常，没有被恢复动作
 覆盖。
 
-## 尚未通过的退出门
+## 真实多块读取
 
-- 当前记录 `100000` 点，小于 `MAXPoint=5000000`，因此实机只执行了一次 `DATA?`。多块
-  拼接继续只有离线 FakeTransport 证据。
-- 为制造长记录，验收脚本在 Stop 状态下尝试了 CN11G 记录的
-  `:ACQuire:MMANagement FMDepth`、短格式 `ACQ:MMAN FMD` 和 `:ACQuire:MDEPth 10M`。
-  目标固件均保持 `AUTO / 100k`，没有应用设置。脚本没有继续尝试未文档化形式，并恢复了
-  `AUTO / 100k`、原时基、水平延迟和运行态。
-- USBTMC、其他 SDS800X HD 型号、sequence ON 实机门禁及真正的多块记录仍待补。
-- 验收脚本在 Stop 状态下尝试文档化的 `:ACQuire:SEQuence ON`，目标固件回读仍为 OFF，
-  因此未进入 sequence-ON driver 门禁。脚本恢复 OFF 和运行态，没有尝试未文档化形式。
+补充验收确认，目标固件在 `AUTO` 触发模式下会静默忽略固定存储深度设置。切换到
+`NORMAL` 后，文档化的 `:ACQuire:MMANagement FMDepth` 和 `:ACQuire:MDEPth 10M`
+均能通过写后回读。验收脚本临时只保留 CH1，执行一次文档化的强制触发，随后停止采集。
+
+停止记录的实测边界为：
+
+| 项目 | 实测值 |
+|---|---:|
+| Record points | `10000000` |
+| `MAXPoint?` | `5000000` |
+| Chunk 1 | `START 0`，`5000000` 点，`10000000 bytes` |
+| Chunk 2 | `START 5000000`，`5000000` 点，`10000000 bytes` |
+| Result | `10000000` 个样点，header 与拼接长度一致 |
+
+两次真实 `DATA?` 均通过 definite-length block 读取。第二块起点、每块字节数、总样点数和
+最终 `WaveformData` 一致，因此多块拼接已不再只有 FakeTransport 证据。
+
+## Sequence ON 拒绝门禁
+
+`AUTO` 触发模式下，即使先停止采集，`:ACQuire:SEQuence ON` 仍会回读为 OFF。切换到
+`NORMAL` 后，该命令能回读为 ON；启用 sequence 会重新进入 Arm 状态，因此验收脚本再次
+发送 `:TRIGger:STOP`，建立 `Stop + sequence ON` 条件。
+
+此时 `fetch_waveform` 依次完成 identity、trigger status 和 sequence state 查询，随后以
+`SDS800X HD waveform reads do not support sequence acquisition` 拒绝。该调用没有发送任何
+waveform transfer 写命令或 binary query。测试结束后 sequence、触发模式和运行状态均恢复。
+
+## 剩余退出门
+
+- USBTMC 和其他 SDS800X HD 型号仍待补；本轮按计划不扩展这些实机范围。
+- sequence 波形解析仍未实现；当前证据只证明非 sequence 读取和 sequence ON 下的安全拒绝。
 
 ## 最终状态
 

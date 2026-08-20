@@ -79,7 +79,7 @@ doc/vendor-local/
 ## 下一阶段门禁
 
 1. 使用其他 SDS800X HD 型号获取脱敏 `*IDN?` 样本，复核身份格式和二通道、四通道 coupling 返回。
-2. 使用更长记录和 TCPIP/USB 脱敏样本核对 binary block、分片、WORD 对齐、时基和 transfer 状态恢复。
+2. 后续取得 USB 条件时，复核 binary block、WORD 对齐、时基和 transfer 状态恢复；TCPIP 真实多块已验收。
 3. 仅在取得明确协议或实机证据后评估 `DEF/MAX` 点数模式；不得猜测关键字。
 4. `*OPC?` 等待和一次多通道 acquisition 经实机确认后，再评估 capture 与其他写能力。
 

@@ -79,7 +79,7 @@ The repository-level `.gitignore` excludes every file under `doc/vendor-local/` 
 ## Next-stage gates
 
 1. Obtain redacted `*IDN?` samples from additional SDS800X HD models and verify identity plus two- and four-channel coupling responses.
-2. Use longer records and redacted TCPIP/USB samples to verify binary blocks, chunking, WORD alignment, timebase values, and transfer-state restoration.
+2. When USB hardware becomes available, verify binary blocks, WORD alignment, timebase values, and transfer-state restoration; real TCPIP multi-chunk reading is accepted.
 3. Consider `DEF/MAX` point modes only after explicit protocol or hardware evidence; do not guess keywords.
 4. Verify `*OPC?` waiting and one multichannel acquisition before considering capture or other write capabilities.
 

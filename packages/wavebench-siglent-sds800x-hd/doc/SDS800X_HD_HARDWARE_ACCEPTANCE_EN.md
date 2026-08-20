@@ -11,7 +11,8 @@ SCPI logs.
 
 The run covered only declared capabilities: identity, CH1–CH4 coupling, and stopped,
 non-sequence `DMAX` waveform fetch with `check_errors=False`. Screenshot, Autoset, capture, error
-queue, sequence waveforms, and other undeclared capabilities were not tested.
+queue, and sequence waveforms were not tested; the sequence-ON rejection gate received separate
+negative acceptance.
 
 ## Instruments and baseline
 
@@ -87,18 +88,34 @@ Both a successful CH1 read and a locally injected post-transfer `RuntimeError` r
 fields exactly. The harness then restored and verified the pre-test
 `C1 / 0 / 1 / 0 / BYTE / LSB` state. Restoration did not hide the injected primary error.
 
+## Real multi-chunk read
+
+Supplementary acceptance found that this firmware silently ignores fixed-memory settings while
+the trigger mode is `AUTO`. After changing the trigger mode to `NORMAL`, documented
+`:ACQuire:MMANagement FMDepth` and `:ACQuire:MDEPth 10M` writes both passed query-back. The harness
+temporarily left only CH1 enabled, issued one documented forced trigger, and then stopped
+acquisition.
+
+The stopped record contained `10000000` points with `MAXPoint=5000000`. Hardware returned two
+real `DATA?` blocks: `START 0`, `5000000` points, `10000000` bytes; then `START 5000000`,
+`5000000` points, `10000000` bytes. The final `WaveformData`, preamble header, and concatenated
+length all reported `10000000` samples, so real multi-chunk concatenation is now accepted.
+
+## Sequence-ON rejection gate
+
+While trigger mode remained `AUTO`, a documented `:ACQuire:SEQuence ON` still queried back OFF,
+even after stopping. With trigger mode `NORMAL`, it queried back ON. Enabling sequence returned the
+instrument to Arm, so the harness stopped acquisition again to establish `Stop + sequence ON`.
+
+`fetch_waveform` then queried identity, trigger status, and sequence state before rejecting the
+operation with `SDS800X HD waveform reads do not support sequence acquisition`. It sent no waveform
+transfer write or binary query. The harness restored sequence, trigger mode, and running state.
+
 ## Remaining gates
 
-- The `100000`-point record was below `MAXPoint=5000000`, so hardware executed one `DATA?`; true
-  multi-chunk concatenation still has only FakeTransport evidence.
-- Documented `:ACQuire:MMANagement FMDepth`, `ACQ:MMAN FMD`, and `:ACQuire:MDEPth 10M` attempts
-  left this firmware at `AUTO / 100k`. No undocumented variant was attempted. AUTO, `100k`, the
-  original timebase, horizontal delay, and running state were restored.
-- USBTMC, other SDS800X HD models, sequence-ON hardware gating, and a real multi-chunk record remain
-  pending.
-- A documented `:ACQuire:SEQuence ON` attempt while stopped still read back OFF on this firmware,
-  so the sequence-ON driver gate was not reached. The harness restored OFF and running state and
-  did not try an undocumented variant.
+- USBTMC and additional SDS800X HD models remain pending and are intentionally outside this run.
+- Sequence waveform parsing remains unsupported; current evidence covers non-sequence reads and
+  safe rejection while sequence is ON.
 
 ## Final state
 
