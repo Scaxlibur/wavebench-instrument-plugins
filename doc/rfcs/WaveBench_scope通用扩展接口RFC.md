@@ -316,6 +316,9 @@ verify 失败都会使父 capture operation 失败；已经取得的 waveform �
 不得作为成功值返回。父 operation 只执行一次 error policy，artifact 在父记录下增加
 `screenshot.status`、`screenshot.failure_reason`、`screenshot.cleanup` 和 `screenshot.verification`，
 不创建第二个 operation artifact。
+当前核心 `ScopeService` 在 capture 外单独调用 screenshot 的旧路径不满足该合同；在父 operation
+字段闭包实现前，旧路径只能保持 legacy 行为，不能声明 `scope.screenshot_v2` 或把截图错误
+降级为 capture 的部分成功。
 
 ### 1.3 输入、前置条件与输出
 
@@ -518,8 +521,10 @@ class ScopeOperationContextCoordinator(Protocol):
 `ScopeOperationContextCoordinator` 的实现规则固定为：`purpose="recovery"` 或
 `"verification"` 时，顺序调用当前 `SessionTransactionCoordinator.authorize()`；
 `purpose="normal"` 时复用现有公共 operation gate。核心在两条路径都维护同一个
-`_CorePhaseAuthorizationRecord(context_id, session_epoch, phase, purpose, fields, allowed_io,
-deadline, max_steps)` 侧记录，并在 authorization 关闭后才允许下一 phase。若当前
+`_CorePhaseAuthorizationRecord(authorization_handle_id, context_id, session_epoch, phase, purpose,
+fields, allowed_io, deadline, max_steps)` 侧记录；`authorization_handle_id` 是核心生成的
+opaque 一次性 handle，侧记录以该 handle 对应的 authorization object identity 绑定，并在
+authorization 关闭后才允许下一 phase。若当前
 `SessionAuthorization` 对象没有这些字段，侧记录必须以不可伪造的 opaque authorization
 identity 绑定；不能仅用 `operation_id` 或 `session_epoch` 推断 context。核心必须先扩展或
 包裹现有 gate，再开始任何新 capability 的实现；driver 只接收已授权的 transport facade，
@@ -1487,6 +1492,10 @@ class ScopeTraceTransferVerification:
 class ScopeTraceProfile:
     fetchable_kinds: tuple[Literal["analog", "digital", "reference"], ...]
     max_points: int
+    restore_order: tuple[ScopeTraceTransferField, ...]
+    snapshot_max_steps: int
+    restore_max_steps: int
+    verify_max_steps: int
     source_index_max: int = 65535
 
 class ScopeTraceTransferRecoveryDriver(InstrumentDriver, Protocol):
@@ -1521,7 +1530,10 @@ class ScopeTraceDriver(
 ```
 
 `ScopeTraceProfile` 是 descriptor 必须提供的静态事实；`fetchable_kinds` 只能是
-`analog`、`digital`、`reference` 的非空唯一子集，`max_points` 和 `source_index_max` 是有限正整数。
+`analog`、`digital`、`reference` 的非空唯一子集，`max_points`、`source_index_max` 和三个
+`*_max_steps` 是有限正整数。`restore_order` 必须唯一，并覆盖 profile 允许临时改变的所有
+transfer fields；每个 operation 的 baseline 只保留实际 changed fields 的有序子集，不能由
+driver 临时决定顺序。
 它必须位于 `InstrumentDescriptor.scope_extensions.trace_profile`；driver 或运行时 metadata
 不得新增 fetchable kind、提高 points/index 上限或改变编号基准。
 R1.3 不把 `math`、`spectrum` 或 `fft_phase` 放入可注册的 fetch profile；它们可以继续出现在
@@ -2218,8 +2230,9 @@ acceptance gate 为准；正文仍是跨仪器模型的唯一事实源。
 
 1. **transfer recovery**：`ScopeTraceTransferRecoveryDriver`、
    `ScopeTraceTransferStateSnapshot`、`ScopeTraceTransferBaseline`、restore result 和
-   fresh-snapshot verification 已实现；`fetch_trace` 在 changed transfer fields 非空时必须
-   传入同一 context 的 baseline，并按 `CHDR`/`CORD`/`WFSU` 等逐字段恢复和核对。
+   fresh-snapshot verification 已实现；descriptor `ScopeTraceProfile.restore_order` 和 step
+   上限已验证；`fetch_trace` 在 changed transfer fields 非空时必须传入同一 context 的
+   baseline，并按 `CHDR`/`CORD`/`WFSU` 等逐字段恢复和核对。
 2. **capability/descriptor**：`ScopeDescriptorExtensions` 字段、中央
    `CAPABILITY_METHODS` 映射和各 required Protocol 已实现；缺失 profile/method 时在零 I/O
    阶段拒绝，额外方法不产生隐式 capability。
