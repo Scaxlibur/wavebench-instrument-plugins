@@ -170,6 +170,7 @@ error policy 和 binary budget 必须可序列化、可审计。
 | `scope.query_response_header`、`scope.waveform_format`、`scope.waveform_byte_order`、`scope.waveform_points`、`scope.waveform_transfer_window` | 仪器状态 | 核心 waveform-transfer verifier，待实现 |
 | `scope.trace_configuration` | 仪器状态 | 核心 trace verifier，待实现 |
 | `scope.screenshot_profile` | descriptor/profile 事实 | 核心 profile validator，不写入 session verified fields |
+| `scope.acquisition_control_profile` | descriptor/profile 事实 | 核心静态 acquisition-control profile validator，不写入 session verified fields |
 | `scope.error_queue` | 条件性消耗状态 | 核心 error-policy executor；只作为 changed field/artifact，不写入 verified fields |
 
 波形协议字段的最小映射必须保持显式：
@@ -260,8 +261,8 @@ capture 的 changed/verification 字段并执行 baseline/restore，或以核心
 | `scope.screenshot_profile` | 无 | identity 已验证；profile source 可用 | `ScopeScreenshotProfile` |
 | `scope.screenshot_v2` | `ScopeScreenshotRequest`、operation 级 error policy | profile 精确匹配；access 允许写入；必要的 baseline 可读 | `ScopeScreenshot` + effective request |
 | `scope.acquisition_run_state` | 无 | identity 已验证；session healthy | `ScopeAcquisitionRunState` |
-| `scope.acquisition_start` | `ScopeContinuousAcquisitionRequest`、operation 级 error policy | identity 已验证；phase 属于 `stopped/ready/complete`；profile 明确支持请求的 `auto/normal/roll`；trigger/acquisition baseline 可读；access 允许写入 | `ScopeAcquisitionRunState`，trigger mode 等于请求，phase 为 `ready/arming/waiting/acquiring/rolling` |
-| `scope.acquisition_single` | operation 级 error policy | identity 已验证；phase 属于 `stopped/ready/complete`；trigger/acquisition baseline 可读；access 允许采集 | `ScopeAcquisitionCompletion`；失败则 cleanup diagnostics |
+| `scope.acquisition_start` | `ScopeContinuousAcquisitionRequest`、operation 级 error policy | identity 已验证；phase 属于 `stopped/ready/complete`；descriptor 的 `ScopeAcquisitionControlProfile` 已验证并支持请求 mode；trigger/acquisition baseline 可读；access 允许写入 | `ScopeAcquisitionRunState`，trigger mode 等于请求，phase 为 `ready/arming/waiting/acquiring/rolling` |
+| `scope.acquisition_single` | operation 级 error policy | identity 已验证；phase 属于 `stopped/ready/complete`；descriptor 的 `ScopeAcquisitionControlProfile` 已验证；trigger/acquisition baseline 可读；access 允许采集 | `ScopeAcquisitionCompletion`；失败则 cleanup diagnostics |
 | `scope.acquisition_stop` | operation 级 error policy | normal 路径要求 identity 已验证、session healthy 且 phase 非 `unknown/error`；recovery 路径使用独立 core authorization | `ScopeAcquisitionRunState`，postcondition 为 `stopped`；recovery 另记 cleanup |
 | `scope.trace_metadata` | 有效 `ScopeTraceRef` | source/index/name 不变量通过；identity 已验证 | `ScopeTraceMetadata` |
 | `scope.fetch_trace` | `ScopeTraceRef`、points profile、operation 级 error policy | source 已配置；sequence/segmentation 与 profile 兼容；必要时 acquisition stopped | `ScopeTraceData` + integrity/error artifact |
@@ -689,6 +690,15 @@ ScopeTriggerMode = Literal[
 
 ScopeContinuousTriggerMode = Literal["auto", "normal", "roll"]
 ScopeSingleBaselineStage = Literal["configured_pre_arm", "original_atomic_arm"]
+ScopeSingleArmSemantics = Literal["configure_then_arm", "atomic_configure_and_arm"]
+
+@dataclass(frozen=True)
+class ScopeAcquisitionControlProfile:
+    supported_continuous_modes: tuple[ScopeContinuousTriggerMode, ...]
+    single_arm_semantics: ScopeSingleArmSemantics
+    arm_resets_acquisition_count: bool
+    acquisition_count_modulus: int | None = None
+    atomic_arm_preserves_count_mode_semantics: bool = False
 
 @dataclass(frozen=True)
 class ScopeContinuousAcquisitionRequest:
@@ -721,6 +731,25 @@ class ScopeAcquisitionCompletion:
     completed_identity: str | None = None
     observed_states: tuple[ScopeAcquisitionRunState, ...] = ()
 ```
+
+`ScopeAcquisitionControlProfile` 是 descriptor 静态事实，不是 driver 在 operation 中自报的
+动态结果。候选 `InstrumentDescriptor.scope_acquisition_control_profile` 字段在声明
+`scope.acquisition_control` capability 时 MUST 非空；核心 factory 在第一次仪器 I/O 前
+完成静态校验，并把已验证 profile 传给 Service preflight。R1.2 不允许仪器查询或
+driver 返回值扩大 descriptor profile。
+
+profile 不变量为：
+
+- `supported_continuous_modes` 非空、唯一，且只包含 `auto/normal/roll`；
+- 两个 bool 字段必须是真正的 `bool`；`acquisition_count_modulus` 为 `None` 或不小于
+  `2` 的非 bool 整数；
+- `single_arm_semantics="configure_then_arm"` 时
+  `atomic_arm_preserves_count_mode_semantics` MUST 为 `false`；
+- `single_arm_semantics="atomic_configure_and_arm"` 时，只有
+  `atomic_arm_preserves_count_mode_semantics=true`、`arm_resets_acquisition_count=false` 且
+  `original_state.trigger_mode="single"` 同时成立，才允许 `count_delta`；
+- `arm_resets_acquisition_count=true` 时任何 arm 路径都不得使用 `count_delta`；只能使用
+  identity 或状态迁移证据。
 
 `raw_state` MUST 是短、可打印、无换行 token；无法无损映射时使用 `unknown`，不能把相近
 文字硬映射成 `stopped` 或 `complete`。`acquisition_count` 必须是非负、非 bool 整数；
@@ -771,7 +800,8 @@ class ScopeAcquisitionControlDriver(ScopeAcquisitionRunStateDriver, Protocol):
 ```
 
 `start_continuous()` 不保留一个未知或 `single` trigger mode。请求必须显式选择
-`auto`、`normal` 或 `roll`，并且该 mode 已在核心校验的 acquisition-control profile 中声明。
+`auto`、`normal` 或 `roll`，并且该 mode 已在核心校验的
+`ScopeAcquisitionControlProfile.supported_continuous_modes` 中声明。
 driver 必须保存 trigger/acquisition baseline，写入目标 mode 并 query-back，然后才发送连续运行
 action。成功结果必须同时回读 `state.trigger_mode == request.trigger_mode` 和允许的运行 phase；
 仅发送 RUN、保留 `single` 后再采一次，不得报告为 continuous success。
@@ -783,9 +813,16 @@ action。成功结果必须同时回读 `state.trigger_mode == request.trigger_m
   SINGLE」和「真正 arm/RUN」，driver 必须先写入 SINGLE、query-back，再读取同 mode 的
   count/identity，并标记 `proof_baseline_stage="configured_pre_arm"`。
 
+`proof_baseline_stage="configured_pre_arm"` 必须对应
+`single_arm_semantics="configure_then_arm"`；`proof_baseline_stage="original_atomic_arm"` 必须对应
+`single_arm_semantics="atomic_configure_and_arm"`。核心 result verifier 必须与已验证 descriptor
+profile 比对，不得信任 driver 自行选择更宽松的 stage。
+
 如果仪器的单条命令不可分地同时配置并 arm，则
 `proof_baseline_stage="original_atomic_arm"` 且 `proof_baseline_state == original_state`。该路径只有在
-original 已为 `trigger_mode="single"`，且 profile 明确证明 count 跨 atomic arm 保持同 mode 语义时，
+original 已为 `trigger_mode="single"`，且 `ScopeAcquisitionControlProfile` 同时声明
+`single_arm_semantics="atomic_configure_and_arm"`、
+`atomic_arm_preserves_count_mode_semantics=true` 和 `arm_resets_acquisition_count=false` 时，
 才能使用 `count_delta`；否则必须改用 identity delta 或可证明的 state transition。
 
 真正 arm 后，Service/driver 在同一 deadline 内等待新 acquisition 完成。只有看到有效
@@ -805,9 +842,10 @@ effect 为 `write`、成功输出只证明已 arm，不能复用 `scope.acquisit
 
 count 比较使用 `proof_baseline_state` 的同一 acquisition mode 基线。新 count 大于基线才构成
 `count_delta`；
-count 因 profile 已声明的「arm 会重置计数」而下降或归零时，不能使用
+count 因 `ScopeAcquisitionControlProfile.arm_resets_acquisition_count=true` 而下降或归零时，不能使用
 `count_delta`；只能在同时满足有效状态迁移时选择 `state_transition`。计数器回绕只有在
-profile 声明 modulus 后才能按模计算正向 delta；delta 必须位于 `1..modulus-1`，
+`ScopeAcquisitionControlProfile.acquisition_count_modulus` 非空时才能按模计算正向 delta；
+delta 必须位于 `1..modulus-1`，
 此时仍可使用 `count_delta`。mode 改变、仪器重启或前面板重置会使原 baseline 失效，
 必须改用新的 identity/state-transition 证据，不能沿用旧 count。
 
@@ -1166,8 +1204,10 @@ artifact、异常消息或 `ErrorRecord`。
 R1.2 首版按完整 drain 读取，最多读取 `max_records`，不自动 clear，
 并区分空队列、队列不可用和查询本身失败。`scope.error_drain_v1` 及现有
 `scope.errors` 都是 consumptive drain：
-读取到「无错误」终止 token 或达到 `max_records`。达到上限仍未看到终止 token 时以
-`error_queue_incomplete` 失败，不能把截断列表当作完整检查。
+读取最多 `max_records` 条错误后，必须再执行第 `max_records+1` 次证明 query。
+该 query 返回「无错误」终止 token 才表示 drain 完整；若仍返回错误记录，必须按上文
+`overflow_record` 分支记录并以 `error_queue_incomplete` 失败，不能少发一次证明 query，
+也不能把截断列表当作完整检查。
 
 before 阶段发现已有记录时，默认主 operation 不发送并报告
 `preexisting_instrument_error`；这些记录不归属于新的 `correlation_id`。只有在 operation
@@ -1179,6 +1219,16 @@ effect 为 `observe` 或 `stateful_read`，且显式选择 `record_and_continue`
 `failed` 并中止，不能降级成 unsupported；设备明确返回的 instrument error 仍按
 `on_instrument_error` 处理。批量通道共享一次 operation correlation，不把同一组设备错误任意
 复制到每个通道。
+
+after 阶段发现不允许继续的 instrument error 时，已成功返回的主 driver 调用必须转为
+operation failure。对 `write` 和 `acquire` operation，执行顺序固定为：after drain 完成并保存
+`instrument_error` 主异常 → 执行 `OperationSpec` 声明的 failure cleanup → 执行
+`cleanup_verification_fields` 验证 → 写入最终 session health 和 artifact。cleanup 或验证失败
+不得覆盖 after 的 `instrument_error`，但必须使 session 保持 `uncertain/poisoned`。
+对 `scope.acquisition_start` 和 `scope.acquisition_single`，这意味着必须按第 1.2/4.3 节尝试
+STOP、恢复 trigger/acquisition baseline 并 query-back；不得因为主 driver 曾返回成功就把
+仪器继续运行状态留作公共 success。若 after drain 本身使 session 不再允许普通 cleanup I/O，
+只能使用已声明的有界 recovery authorization；不得绕过 session gate。
 
 ### 6.3 固定 artifact 结构
 
@@ -1333,8 +1383,10 @@ scope.error_drain_v1
 - definite block：合法 `#N`、`#0`、非法长度位、截断、response/operation/query budget 超限、
   resync ceiling、精确 consumed 等式、`BinaryQueryResult` 和 transport trailing；
 - message：分片读取、EOM、超限后有界 drain/poison、termination 恢复失败和下一次 query；
-- acquisition：每个 action 的 allowed/rejected phase、调用前已 stopped、count 不变、跳过
-  acquiring 的最小状态序列、外部前面板改状态、timeout 后 recovery STOP 失败；
+- acquisition：descriptor profile 缺失/非法、continuous mode 支持集、configure-then-arm 与
+  atomic-arm 两条 baseline 路径、count reset/modulus、每个 action 的 allowed/rejected phase、
+  调用前已 stopped、count 不变、跳过 acquiring 的最小状态序列、外部前面板改状态、
+  after instrument error cleanup 和 timeout 后 recovery STOP 失败；
 - transfer restore：`CHDR`/`CORD`/`WFSU` 或等价状态的逐字段 changed/verification、恢复失败和
   healthy/poisoned 判定；
 - screenshot：baseline/query-back/成功与失败恢复、transport/content trailing 负向向量、
@@ -1355,7 +1407,7 @@ scope.error_drain_v1
 | M1 | OperationSpec 与 artifact schema | 八项候选 operation 进入 registry，Service/access/lease 和 transfer verification closure 测试通过 |
 | M2 | binary framing 与 backend capability | definite/message fake、四维 budget、有界 resync、失步、termination 恢复测试通过 |
 | M3 | screenshot profile/v2 | definite block 和 raw message 两种 fixture 通过 |
-| M4 | acquisition run state/control | 两个厂商状态机、READY、baseline proof、幂等 STOP、timeout recovery 通过 |
+| M4 | acquisition run state/control | descriptor profile validator、两个厂商状态机、continuous mode、两类 SINGLE baseline、幂等 STOP、after-error cleanup 和 timeout recovery 通过 |
 | M5 | trace source/axis | analog、digital、math、reference、spectrum 的跨厂商 fixture 通过 |
 | M6 | error policy、版本门和迁移 | `scope.error_drain_v1`、三态 artifact、聚合规则、四组合兼容和 CLI/Service 入口冻结 |
 | M7 | opt-in 实机 | 核心离线回归通过，实机范围另行授权 |
@@ -1383,7 +1435,9 @@ scope.error_drain_v1
 以下是 Draft 阶段暂定的安全不变量，不代表 schema、常量或核心实现已经接受：
 
 1. 采集 start、完成式 single、stop 是三个 action-specific operation；共享 capability 不改变
-   各自 effect、postcondition、失败 cleanup 或最低 access。arm-only 需要独立 operation。
+   各自 effect、postcondition、失败 cleanup 或最低 access。descriptor 的
+   `ScopeAcquisitionControlProfile` 是 continuous mode、SINGLE arm 语义和 count 比较的唯一
+   静态事实源；arm-only 需要独立 operation。
 2. binary response、operation-total、query-count 和 resynchronization 分别使用有限上限；核心通过 session authorization
    context 签发短生命周期 `BinaryQueryBudget`，插件不能构造、提升或跨 operation 复用。
 3. `query_binary()` 成功返回 `BinaryQueryResult`，显式携带 framing、长度、
