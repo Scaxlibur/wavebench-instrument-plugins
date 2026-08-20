@@ -166,6 +166,19 @@ CH1、CH2 各 `100000` 点。两通道原始 Vpp 为 `5.0354 V` 和 `5.0375 V`�
 - USBTMC 和其他 SDS800X HD 型号仍待补；本轮按计划不扩展这些实机范围。
 - sequence 波形解析仍未实现；当前证据只证明非 sequence 读取和 sequence ON 下的安全拒绝。
 
+## 未公开能力的只读探测
+
+- 截图查询返回 `43628` 字节，首 8 字节为 PNG signature，不以 `#` 开头。解析到 IEND 时为
+  `43627` 字节，随后还有 1 个尾字节。该结果确认响应不是 IEEE definite block；探测未保存
+  图片内容。当前核心 transport 和 screenshot 菜单参数均不足，因此 capability 保持关闭。
+- `FUNCtion1?` 至 `FUNCtion4?` 均返回 OFF。未开启或修改数学函数；现有状态不足以构造核心
+  `ScopeDerivedWaveformMetadata` 或 `ScopeFftStatus`，math/FFT capability 保持关闭。
+- 未发送任何未文档化错误队列命令。`scope.errors` 保持未声明。
+
+上述接口缺口按多个示波器插件的共同需求记录在
+[scope 通用扩展接口 RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md)，不在本 driver
+中增加私有 transport 或厂商专用公共方法。
+
 ## 最终状态
 
 - DG4202 CH1 与测试前一致：ON、SIN、`1 kHz`、`5 Vpp`、`0 V`、FIX、sweep OFF。

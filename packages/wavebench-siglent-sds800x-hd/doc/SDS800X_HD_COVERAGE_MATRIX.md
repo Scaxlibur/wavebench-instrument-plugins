@@ -28,16 +28,17 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 | 身份 | `*IDN?` | `scope.idn` | **SDS804X HD 实机已验收** | 四字段、厂商、型号、14 字符 ASCII 序列号和固件格式通过；其他型号待补 |
 | 模拟通道耦合 | `:CHANnel<n>:COUPling?`，返回 `AC`、`DC` 或 `GND` | `scope.channel_coupling` | **SDS804X HD 实机已验收** | CH1–CH4 均返回 DC；二通道型号和其他 coupling 状态待补 |
 | 输入阻抗 | 通用手册列出 `ONEMeg`、`FIFTy` | 无独立 capability | **默认拒绝** | SDS800X HD 专属产品资料说明固定 `1 MΩ`；不得把通用 `FIFTy` setter 外推到本系列 |
-| 错误队列 | CN11G 未记录错误队列命令 | `scope.errors` | **未覆盖** | 不猜测 `SYSTem:ERRor?`；消费型查询也不适合核心普通 query 的自动重试 |
+| 错误队列 | CN11G 未记录错误队列命令 | `scope.errors` | **设备协议阻塞** | 核心接口已经存在；本系列没有可依赖命令，不猜测 `SYSTem:ERRor?`，也不返回伪造的空列表 |
 | 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **SDS804X HD 多块实机已验收** | Stop、sequence OFF、CH1/CH2 `DMAX`、WORD/LSB、数值和成功/异常恢复通过；`10M` 记录按 `5M + 5M` 两块读取通过，USB 待补 |
 | Sequence 门禁 | `:ACQuire:SEQuence?` | `scope.fetch_waveform` 的前置条件 | **SDS804X HD 实机已验收** | `NORMAL` 触发模式下建立 Stop + sequence ON；driver 在任何 waveform 写入和 binary query 前拒绝 |
 | 测量统计 | `:MEASure:MODE?`、`ADVanced:P<n>?`、`TYPE?`、`STATistics?`、`SHIStory?` | `scope.measurement_statistics` | **SDS804X HD 实机已验收** | 只读既有槽位；P3 `PKPK` 的 6 项统计和停止态 5 项历史通过，driver 零写入 |
 | 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`ACQuire:NUMACq?` | `scope.capture_waveform`、`scope.capture_waveforms` | **SDS804X HD 实机已验收** | SINGLE 模式回读、Stop 轮询和采集计数通过；CH1/CH2 只执行一次 acquisition，不依赖 `*OPC?` |
-| 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | 无独立 capability | **手册已审计** | 不能误映射为公共 `ScopeAcquisitionStatus`；后者描述平均和分段采集状态 |
-| 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot` | **核心接口阻塞 / 实机阻塞** | 手册示例按原始图片字节读取，核心仅提供 definite-block query；命令也没有可靠的菜单开关 |
+| 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | 无独立 capability | **核心接口阻塞** | 不能误映射为公共 `ScopeAcquisitionStatus`；跨仪器运行状态和控制见通用 RFC |
+| 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot` | **核心接口阻塞；framing 实机确认** | 实机返回 `43628` 字节 raw PNG、无 IEEE block、IEND 后 1 个尾字节；核心缺 message-bounded binary，现有菜单参数也无法满足 |
 | Autoset | `:AUToset` | `scope.autoscale` | **默认拒绝** | 同时修改触发、垂直和水平设置；没有错误队列和恢复闭环 |
-| 采集状态 | `ACQuire:TYPE?`、`SEQuence?`、`NUMACq?` 等 | `scope.acquisition_status` | **未覆盖** | 无法完整提供 `average_complete`、选件、容量和可用段数，不能拼造公共模型 |
-| Snapshot、测量配置、数字、历史与分析 | 多个通用 SDS 子系统 | 对应可选 Scope capability | **未覆盖** | 逐能力核对型号、选件、公共模型和恢复语义后再拆分 |
+| 采集状态 | `ACQuire:TYPE?`、`SEQuence?`、`NUMACq?` 等 | `scope.acquisition_status` | **核心模型不匹配** | 无法完整提供 `average_complete`、选件、容量和可用段数；运行阶段应使用独立模型 |
+| Math / FFT | `FUNCtion<n>`、`OPERation?`、`SOURce?`、FFT scale/span 等 | `scope.math_metadata`、`scope.fft_status` | **核心模型不匹配** | 实机 F1–F4 均为 OFF；手册没有通用 FFT ready/RBW 合同，也不能把频率轴塞入模拟波形模型 |
+| Snapshot、测量配置、数字与历史 | 多个通用 SDS 子系统 | 对应可选 Scope capability | **未覆盖** | 逐能力核对型号、选件、公共模型和恢复语义后再拆分 |
 | Reset、系统和仪器文件系统 | `*RST`、系统设置、保存/调用、图片保存等 | 无基础 capability | **默认拒绝** | 可能改变全局状态、网络或持久存储，不纳入基础驱动 |
 
 ## 已确认的波形协议边界
@@ -93,8 +94,11 @@ transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖
 - 当前 `points` 只支持 `DMAX`；公共签名仍保持
   `fetch_waveform(channel, points="dmax", check_errors=True)`，不伪造 `DEF/MAX` 映射。
 - 多通道 capture 必须先配置全部通道，只触发一次 acquisition，再逐通道读取；不得逐通道重新触发。
-- 当前核心 PyVISA 没有把独立 `opc_timeout_ms` 应用于 `query_opc()`，因此 acquisition 暂不声明
-  独立 OPC 超时保证。
+- capture 使用 `DriverContext.opc_timeout_ms` 作为状态轮询 deadline，但不调用 `query_opc()`；
+  `*OPC?` 不作为物理触发完成证据。
+- 截图、独立采集运行控制、类型化 trace source 和三态错误检查的跨仪器方案见
+  [scope 通用扩展接口 RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md)。该 RFC 为 Draft，
+  不代表主仓库已经提供对应 capability。
 
 ## 开发顺序
 
@@ -104,15 +108,29 @@ transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖
 3. M3：已在一台 SDS804X HD 上完成 TCPIP WORD/LSB 读取、CH1/CH2 数值、transfer 恢复、
    `10M` 真实多块读取和 sequence ON 安全拒绝；USB 路径和其他型号仍待补。
 4. M4：SINGLE、Stop 轮询、采集计数和一次 CH1/CH2 acquisition 已完成实机验收；capture capability 已公开。
-5. 截图、数字通道、FFT、sequence/history、Autoset 和写能力分别立项，不经 raw SCPI 绕过门禁。
+5. 截图、独立采集控制和 math/FFT 等待通用 RFC 评审；数字通道、sequence/history、Autoset
+   和其他写能力分别立项，不经 raw SCPI 绕过门禁。
 
 ## 当前直接使用的 SCPI
 
 ```text
 *IDN?
 :CHANnel<n>:COUPling?
+:CHANnel<n>:SWITch
+:CHANnel<n>:SCALe
+:TIMebase:SCALe
+:TRIGger:MODE[?]
+:TRIGger:RUN
+:TRIGger:STOP
 :TRIGger:STATus?
+:ACQuire:NUMACq?
 :ACQuire:SEQuence?
+:MEASure:MODE?
+:MEASure:ADVanced:P<n>?
+:MEASure:ADVanced:P<n>:TYPE?
+:MEASure:ADVanced:P<n>:STATistics?
+:MEASure:ADVanced:P<n>:SHIStory?
+:MEASure:ADVanced:STATistics?
 :WAVeform:SOURce[?]
 :WAVeform:START[?]
 :WAVeform:INTerval[?]

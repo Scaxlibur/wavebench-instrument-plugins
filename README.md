@@ -6,7 +6,7 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或�
 
 ## 当前状态
 
-正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 M3.5，保留最小 query-only descriptor 并提供五项经认证的厂商专用 RF-OFF 控制；`wavebench-siglent-sds800x-hd` 已进入 `0.3.1`，离线实现严格身份、模拟通道耦合和保守的已停止 `DMAX` 波形读取，并已完成首轮真实仪器读取验收。前五个包是 WaveBench 预装驱动的可选外置发行版，用于独立升级、特定 transport 或后续扩展，并不替代或淘汰主包的开箱即用基线。WaveBench v0.8.0 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 M3.5，保留最小 query-only descriptor 并提供五项经认证的厂商专用 RF-OFF 控制；`wavebench-siglent-sds800x-hd` 已进入 `0.5.0`，提供身份、coupling、停止记录读取、单次采集和只读测量统计，并已完成 SDS804X HD 多块、双通道采集和主仓库服务路径验收。前五个包是 WaveBench 预装驱动的可选外置发行版，用于独立升级、特定 transport 或后续扩展，并不替代或淘汰主包的开箱即用基线。WaveBench v0.8.0 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 > [!IMPORTANT]
 > WaveBench `v0.7.0` 尚不包含 Instrument API V2、受管插件生命周期或覆盖槽位。本仓库当前包面向 WaveBench `v0.8.0` release，并统一要求 `wavebench>=0.8,<0.9`；它们不能与 `v0.7.0` 配套运行，也不能自动假定兼容未来 `0.9`。
@@ -43,7 +43,12 @@ WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五�
 - [`wavebench-rigol-dp800`](packages/wavebench-rigol-dp800/README.md)：RIGOL DP800 / DP832 / DP832A 可编程直流电源，canonical ID `rigol.dp800`；短 alias 保留内建 fallback。
 - [`wavebench-rohde-schwarz-rtm2000`](packages/wavebench-rohde-schwarz-rtm2000/README.md)：R&S RTM2000 / RTM2032 示波器，canonical ID `rohde-schwarz.rtm2032`；双通道 `DEF` / `MAX` / `DMAX`、autoscale、截图与恢复实机验收已完成。
 - [`wavebench-shengpu-sp3000a`](packages/wavebench-shengpu-sp3000a/README.md)：Shengpu SP30120 扫频仪驱动，canonical ID `shengpu.sp30120`；descriptor 只声明身份能力，另有五项经认证、类型化、RF-OFF 的厂商专用控制，曲线及通用配置仍关闭。
-- [`wavebench-siglent-sds800x-hd`](packages/wavebench-siglent-sds800x-hd/README.md)：SIGLENT SDS800X HD 系列示波器 `0.3.1` 驱动，canonical ID `siglent.sds800x-hd`；声明身份、coupling 和仅限 Stop/非 sequence 的 `DMAX` waveform fetch，已完成首轮真实仪器验收。
+- [`wavebench-siglent-sds800x-hd`](packages/wavebench-siglent-sds800x-hd/README.md)：SIGLENT SDS800X HD 系列示波器 `0.5.0` 驱动，canonical ID `siglent.sds800x-hd`；声明身份、coupling、停止记录读取、单次/多通道采集和只读测量统计，已完成 SDS804X HD 实机验收。
+
+## 接口提案
+
+插件侧发现但无法由单一 driver 安全解决的跨仪器问题记录在[接口 RFC](doc/rfcs/README.md)。
+RFC 不代表主仓库已经接受对应接口，也不能作为插件提高核心版本下限的依据。
 
 ## 安全边界
 

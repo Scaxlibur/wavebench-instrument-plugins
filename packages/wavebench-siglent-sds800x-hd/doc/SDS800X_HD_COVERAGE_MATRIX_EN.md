@@ -31,16 +31,17 @@ Evidence labels used here:
 | Identity | `*IDN?` | `scope.idn` | **SDS804X HD hardware accepted** | Four fields, manufacturer, model, 14-character ASCII serial, and firmware format passed; other models remain pending |
 | Analog-channel coupling | `:CHANnel<n>:COUPling?`, returning `AC`, `DC`, or `GND` | `scope.channel_coupling` | **SDS804X HD hardware accepted** | CH1–CH4 returned DC; two-channel models and other coupling states remain pending |
 | Input termination | Shared manual lists `ONEMeg` and `FIFTy` | No standalone capability | **Rejected by default** | SDS800X HD product material specifies fixed `1 MΩ`; do not project the shared `FIFTy` setter onto this family |
-| Error queue | CN11G documents no error-queue query | `scope.errors` | **Not covered** | Do not guess `SYSTem:ERRor?`; consuming queries also conflict with automatic retries on ordinary core queries |
+| Error queue | CN11G documents no error-queue query | `scope.errors` | **Device-protocol blocked** | The core interface exists, but this family has no dependable command; do not guess `SYSTem:ERRor?` or return a fabricated empty list |
 | Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **SDS804X HD multi-chunk hardware accepted** | Stop, sequence OFF, CH1/CH2 `DMAX`, WORD/LSB, numeric results, and success/failure restoration passed; a `10M` record passed as `5M + 5M`, while USB remains pending |
 | Sequence gate | `:ACQuire:SEQuence?` | `scope.fetch_waveform` precondition | **SDS804X HD hardware accepted** | Established Stop + sequence ON in `NORMAL` trigger mode; the driver rejected before any waveform write or binary query |
 | Measurement statistics | `:MEASure:MODE?`, `ADVanced:P<n>?`, `TYPE?`, `STATistics?`, and `SHIStory?` | `scope.measurement_statistics` | **SDS804X HD hardware accepted** | Query-only access to an existing slot; all six P3 `PKPK` fields and five stopped-history values passed with no driver writes |
 | Single and multichannel capture | `TRIGger:MODE`, `RUN`, `STOP`, `STATus?`, and `ACQuire:NUMACq?` | `scope.capture_waveform`, `scope.capture_waveforms` | **SDS804X HD hardware accepted** | SINGLE query-back, Stop polling, and acquisition count passed; CH1/CH2 use one acquisition without `*OPC?` |
-| Trigger run state | `:TRIGger:STATus?` returns `Arm`, `Ready`, `Auto`, `Trig'd`, `Stop`, or `Roll` | No standalone capability | **Manual reviewed** | It cannot be mapped to public `ScopeAcquisitionStatus`, which describes averaging and segmented acquisition |
-| Screenshot | `:PRINt? PNG,NORMal` or inverted form | `scope.screenshot` | **Core interface blocked / hardware blocked** | The example reads raw image bytes while the core exposes only definite-block queries; the command also has no reliable menu control |
+| Trigger run state | `:TRIGger:STATus?` returns `Arm`, `Ready`, `Auto`, `Trig'd`, `Stop`, or `Roll` | No standalone capability | **Core interface blocked** | It cannot be mapped to public `ScopeAcquisitionStatus`; the generic RFC separates run state and control |
+| Screenshot | `:PRINt? PNG,NORMal` or inverted form | `scope.screenshot` | **Core interface blocked; framing hardware confirmed** | Hardware returned `43628` raw PNG bytes with no IEEE block and one byte after IEND; core lacks message-bounded binary and the existing menu option cannot be honored |
 | Autoset | `:AUToset` | `scope.autoscale` | **Rejected by default** | Changes trigger, vertical, and horizontal state without an error queue or restore loop |
-| Acquisition status | `ACQuire:TYPE?`, `SEQuence?`, `NUMACq?`, and related queries | `scope.acquisition_status` | **Not covered** | Missing `average_complete`, option identity, capacity, and available-segment semantics prevent constructing the public model |
-| Snapshot, measurement configuration, digital, history, and analysis | Shared SDS subsystems | Corresponding optional Scope capabilities | **Not covered** | Review each capability for model, option, public-model, and restore semantics |
+| Acquisition status | `ACQuire:TYPE?`, `SEQuence?`, `NUMACq?`, and related queries | `scope.acquisition_status` | **Core-model mismatch** | The instrument cannot provide all averaging/option/capacity fields; run phase needs a separate model |
+| Math / FFT | `FUNCtion<n>`, `OPERation?`, `SOURce?`, FFT scale/span, and related queries | `scope.math_metadata`, `scope.fft_status` | **Core-model mismatch** | F1–F4 were all OFF; the manual has no generic FFT-ready/RBW contract, and a frequency axis cannot be represented as an analog waveform |
+| Snapshot, measurement configuration, digital, and history | Shared SDS subsystems | Corresponding optional Scope capabilities | **Not covered** | Review each capability for model, option, public-model, and restore semantics |
 | Reset, system, and instrument filesystem | `*RST`, system settings, save/recall, image save, and related commands | No baseline capability | **Rejected by default** | May alter global state, networking, or persistent storage |
 
 ## Confirmed waveform-protocol boundary
@@ -98,7 +99,12 @@ and reads only an already-stopped record.
 - CN11G provides no error queue, so waveform use must explicitly set `scope.check_errors=false`; a direct driver call with `check_errors=True` fails before any I/O.
 - The current `points` implementation supports only `DMAX`. The public signature remains `fetch_waveform(channel, points="dmax", check_errors=True)` without inventing `DEF/MAX` mappings.
 - Multichannel capture configures every channel, performs one acquisition, and then reads each channel. It must not retrigger per channel.
-- The current core PyVISA path does not apply the separate `opc_timeout_ms` to `query_opc()`, so acquisition cannot yet claim a separate OPC timeout guarantee.
+- Capture uses `DriverContext.opc_timeout_ms` as its status-polling deadline and does not call
+  `query_opc()`; `*OPC?` is not treated as physical-trigger completion evidence.
+- Cross-instrument proposals for screenshot, standalone acquisition control, typed trace sources,
+  and three-state error checking are in the
+  [generic Scope RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md). Its Draft status does not
+  imply that the core exposes those capabilities.
 
 ## Development order
 
@@ -106,15 +112,30 @@ and reads only an already-stopped record.
 2. M2: the 346-byte preamble, data conversion, and stopped analog-record `scope.fetch_waveform` transaction have offline coverage; M3 supplied the hardware evidence.
 3. M3: TCPIP WORD/LSB readout, CH1/CH2 numeric checks, transfer-state restoration, a real `10M` multi-chunk read, and safe sequence-ON rejection are complete on one SDS804X HD; USB and additional models remain pending.
 4. M4: SINGLE, Stop polling, acquisition count, and one CH1/CH2 acquisition are hardware accepted; capture capabilities are exposed.
-5. Track screenshot, digital channels, FFT, sequence/history, Autoset, and writes as separate work items; do not bypass gates with raw SCPI.
+5. Hold screenshot, standalone acquisition control, and math/FFT for generic RFC review. Track
+   digital channels, sequence/history, Autoset, and other writes separately; do not bypass gates
+   with raw SCPI.
 
 ## SCPI used directly today
 
 ```text
 *IDN?
 :CHANnel<n>:COUPling?
+:CHANnel<n>:SWITch
+:CHANnel<n>:SCALe
+:TIMebase:SCALe
+:TRIGger:MODE[?]
+:TRIGger:RUN
+:TRIGger:STOP
 :TRIGger:STATus?
+:ACQuire:NUMACq?
 :ACQuire:SEQuence?
+:MEASure:MODE?
+:MEASure:ADVanced:P<n>?
+:MEASure:ADVanced:P<n>:TYPE?
+:MEASure:ADVanced:P<n>:STATistics?
+:MEASure:ADVanced:P<n>:SHIStory?
+:MEASure:ADVanced:STATistics?
 :WAVeform:SOURce[?]
 :WAVeform:START[?]
 :WAVeform:INTerval[?]

@@ -144,6 +144,21 @@ removed after acceptance and did not enter the repository.
 - Sequence waveform parsing remains unsupported; current evidence covers non-sequence reads and
   safe rejection while sequence is ON.
 
+## Read-only probes for unexposed capabilities
+
+- The screenshot query returned `43628` bytes. It began with the PNG signature rather than `#`;
+  IEND completed at byte `43627`, followed by one trailing byte. This confirms a non-IEEE raw
+  response. The probe retained no image content. The current core transport and screenshot menu
+  semantics are insufficient, so the capability remains disabled.
+- `FUNCtion1?` through `FUNCtion4?` all returned OFF. No math function was enabled or changed, and
+  this state cannot construct `ScopeDerivedWaveformMetadata` or `ScopeFftStatus`; math and FFT
+  capabilities remain disabled.
+- No undocumented error-queue query was sent. `scope.errors` remains undeclared.
+
+These cross-instrument gaps are recorded in the
+[generic Scope RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md); the driver does not add a
+private transport path or vendor-specific public method.
+
 ## Final state
 
 DG4202 CH1 remained ON, SIN, `1 kHz`, `5 Vpp`, `0 V`, FIX, and sweep OFF. The SDS804X HD returned
