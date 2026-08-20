@@ -11,11 +11,12 @@
     "revision": "R1",
     "status": "accepted",
     "implementation": "M1-M7-implemented-unreleased",
+    "implementation_baseline": "a8e6b59",
     "release_required_for_plugin_adoption": true
   },
   "milestones": {
     "plugin": "M8-functional-complete",
-    "p0_safety_hardening": "pending",
+    "p0_safety_hardening": "migration-implemented-offline-tested",
     "rfc": "R1-draft-needs-revision",
     "core_implementation": "M1-M7-implemented-unreleased",
     "plugin_adoption": "blocked-until-core-release"
@@ -30,9 +31,48 @@
       "scope.capture_waveforms"
     ],
     "current_plugin_blocked_by_core": false,
-    "p0_safety_hardening_pending": true,
+    "p0_safety_hardening_pending": false,
+    "p0_call_site_migration_complete": true,
+    "p0_structured_exception_handling_complete": true,
+    "p0_fault_injection_complete": true,
+    "p0_runtime_adoption_pending": true,
+    "migration_branch_release_blocked": true,
     "transport_session_api_frozen": true,
     "typed_scope_api_frozen": false
+  },
+  "plugin_migration_evidence": {
+    "status": "implemented-and-offline-tested-not-adopted",
+    "core_baseline_commit": "a8e6b59",
+    "plugin_implementation_commit": "480eaec",
+    "replay_policy": "every SDS3000 transport query explicitly uses ReplayPolicy.NO_REPLAY",
+    "structured_errors": "TransportIOError and SessionHealthError retain priority across acquisition, OPC, and temporary-restoration paths; structured failure causes zero unauthorized secondary restoration or validation I/O",
+    "operation_spec_mapping": {
+      "CHDR": [
+        "scope.query_response_header"
+      ],
+      "CFMT": [
+        "scope.waveform_format"
+      ],
+      "CORD": [
+        "scope.waveform_byte_order"
+      ],
+      "WFSU": [
+        "scope.waveform_points",
+        "scope.waveform_transfer_window"
+      ]
+    },
+    "session_authority": {
+      "plugin_can_authorize_recovery": false,
+      "plugin_can_transition_uncertain_to_healthy": false,
+      "owner": "WaveBench core SessionTransactionCoordinator"
+    },
+    "verification": {
+      "plugin_package_tests": "80 passed",
+      "core_focused_contract_tests": "40 passed",
+      "ruff": "passed",
+      "manual_catalog_check": "passed",
+      "hardware_connected": false
+    }
   },
   "specification_freeze_gates": [
     {
@@ -74,15 +114,15 @@
     },
     {
       "interface": "OperationSpec.effect=acquire",
-      "decision": "core-audit-complete-plugin-verification-pending",
-      "evidence": "scope fetch and capture require read_write access; core M7 declares changed-field closures, verification fields, restoration coverage, and timeout sources",
-      "follow_up": "during plugin adoption, verify the core closure against SDS3000 temporary settings and add fault-injection assertions for any gap"
+      "decision": "core-audit-and-plugin-mapping-verification-complete",
+      "evidence": "core baseline a8e6b59 maps query response header, waveform format, byte order, points, and the complete transfer window into capture/fetch changed_fields and verification_fields; these fields cover SDS3000 CHDR, CFMT, CORD, and WFSU temporary state",
+      "follow_up": "after a core release, run final isolated compatibility checks and separately authorize any hardware validation; the plugin never performs uncertain-to-healthy"
     },
     {
       "interface": "PyVisaTransport.query-and-query_opc",
-      "decision": "core-contract-implemented-unreleased-plugin-adoption-gap",
-      "evidence": "VICP works through pyvisa-py with the plugin-owned PyVICP dependency; core R1 development tests cover explicit replay policy and no_replay OPC behavior",
-      "follow_up": "after core release, migrate SDS3000 consuming reads and preserve structured transport/session exceptions"
+      "decision": "plugin-migration-complete-core-release-gated",
+      "evidence": "plugin commit 480eaec classifies every transport query as no_replay, preserves structured transport/session exceptions, and adds GuardedAuditedTransport fault injection",
+      "follow_up": "after core release, update version gates atomically, run isolated wheel compatibility tests, and only then mark the plugin adopted"
     },
     {
       "interface": "ScopeStatusSummary",
@@ -475,12 +515,12 @@
       "the atomic adoption commit runs isolated wheel tests for Requires-Dist, descriptor bounds, api_version, and entry point before marking the plugin adopted"
     ],
     "plugin_adoption_checklist": [
-      "wait for the first released core containing R1 and leave every version gate unchanged before that release",
-      "classify every plugin transport query explicitly; CMR?, EXR?, DDR?, and acquisition-bound *OPC? use no_replay",
-      "preserve TransportIOError and SessionHealthError through _acquire_once, OPC waits, and temporary restoration context managers",
-      "prove zero secondary recovery or validation I/O after structured transport/session failure",
-      "assert transmission counts, uncertain/poisoned latching, on_failure=continue blocking, and new epoch_id after reconnect",
-      "in one atomic adoption commit, update the wheel and descriptor lower bounds, review the upper bound, confirm wavebench.instrument.v2, run isolated compatibility tests, and only then mark the plugin adopted"
+      "pending: wait for the first released core containing R1 and leave every version gate unchanged before that release",
+      "complete on the migration branch: classify every plugin transport query explicitly; CMR?, EXR?, DDR?, and acquisition-bound *OPC? use no_replay",
+      "complete on the migration branch: preserve TransportIOError and SessionHealthError through _acquire_once, OPC waits, and temporary restoration context managers",
+      "complete on the migration branch: prove zero secondary recovery or validation I/O after structured transport/session failure",
+      "complete across plugin and core baseline tests: assert transmission counts, uncertain/poisoned latching, on_failure=continue blocking, and new epoch_id after reconnect",
+      "pending: in one atomic adoption commit, update the wheel and descriptor lower bounds, review the upper bound, confirm wavebench.instrument.v2, run isolated compatibility tests, and only then mark the plugin adopted"
     ],
     "changed_by_r1": false
   },
@@ -570,10 +610,10 @@
     }
   ],
   "implementation_order": [
-    "keep M8-functional-complete, plugin-P0-pending, accepted RFC R1, and core-M1-M7-implemented-unreleased labels distinct",
-    "reference the accepted transport replay/session RFC and its offline-tested development implementation without raising the plugin version floor",
-    "after a released P0 core, complete call-site migration, structured-exception handling, fault-injection tests, and verification that the core M7 OperationSpec audit for scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform covers SDS3000 temporary settings",
-    "create one atomic adoption commit that updates wheel and descriptor version gates together, confirms wavebench.instrument.v2, runs isolated compatibility tests, and marks the plugin adopted only after every check passes",
+    "keep M8-functional-complete, plugin-P0-migration-prepared-not-adopted, accepted RFC R1, and core-M1-M7-implemented-unreleased labels distinct",
+    "use core baseline commit a8e6b59 for migration tests without raising the plugin version floor",
+    "complete before release: call-site migration, structured-exception handling, fault-injection tests, and verification that the core M7 OperationSpec audit for scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform covers SDS3000 CHDR, CFMT, CORD, and WFSU temporary state",
+    "after a released P0 core, create one atomic adoption commit that updates wheel and descriptor version gates together, confirms wavebench.instrument.v2, runs isolated compatibility tests, and marks the plugin adopted only after every check passes",
     "freeze a separate typed-scope state RFC with exact fields, consumers, v1 precedence, and three-vendor mappings",
     "implement only frozen typed read-only state and continue collecting acquisition-state evidence",
     "consider narrow scale/offset/timebase patches in a separate RFC after the safety gate",

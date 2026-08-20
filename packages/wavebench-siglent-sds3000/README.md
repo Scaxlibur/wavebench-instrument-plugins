@@ -18,7 +18,7 @@
 
 ## 当前状态
 
-- 阶段：M8 功能完成，P0 安全加固待处理；
+- 阶段：M8 功能完成；P0 调用点迁移和离线故障注入已完成，正式采用等待核心发布；
 - distribution：`wavebench-siglent-sds3000`；
 - canonical driver ID：`siglent.sds3000`；
 - 仪器类型：`scope`；
@@ -27,7 +27,7 @@
 - transport：WaveBench `pyvisa`；已验证 `VICP::<host>::INSTR`，使用 `PyVICP>=1.1,<2`；
 - 已声明 capability：`scope.idn`、`scope.errors`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`。
 
-M8「功能完成」表示上述能力已经实现并通过既定验收，不表示不可重放查询与共享 session health 已完成。P0 安全加固的影响评估和进入条件见[核心 RFC](doc/WAVEBENCH_CORE_RFC.md)。
+M8「功能完成」表示上述能力已经实现并通过既定验收。P0 迁移准备已基于 WaveBench 核心提交 `a8e6b59` 完成，包括显式不可重放策略、结构化异常传播和共享 session health 故障注入；该核心合同尚未正式发布，因此插件仍未标记为 adopted，wheel、descriptor 和 `api_version` 版本门保持不变。影响评估、证据和正式采用条件见[核心 RFC](doc/WAVEBENCH_CORE_RFC.md)。
 
 descriptor 加载和 driver 工厂阶段均不执行仪器 I/O。调用 `scope.idn` 时只发送一次 `*IDN?`，并严格接受 `*IDN LECROY,SDS3054,<serial>,8.4.1`；当 `CHDR OFF` 省略响应头时，也接受对应的裸身份形式。其他厂商、型号或固件均在零写入的情况下拒绝。
 

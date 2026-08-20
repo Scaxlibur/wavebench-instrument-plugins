@@ -6,15 +6,15 @@
 > Revision: `R1`
 > Core baseline: WaveBench `0.8.22`
 > API status: transport/session R1 frozen; typed scope not frozen
-> Core implementation: `M1–M7 implemented-unreleased` (core development branch)
+> Core implementation: `M1–M7 implemented-unreleased` (baseline commit `a8e6b59`)
 
 ## Conclusion
 
-The SDS3054 plugin is functionally complete through M8, while plugin-side P0 safety hardening remains pending. WaveBench core transport replay/session R1 is implemented through M1–M7 on a development branch but is not released, so the plugin cannot treat that branch as a runtime dependency. Its six declared capabilities—identity, error registers, channel coupling, waveform fetch, single-channel capture, and same-acquisition multi-channel capture—do not depend on new interfaces from this RFC. VICP text and binary waveform operations passed hardware acceptance through the existing `PyVisaTransport`, `PyVICP`, and `query_bin_block()` path. Those results do not claim that the plugin has adopted structured exceptions or shared session health.
+The SDS3054 plugin is functionally complete through M8. P0 call-site migration, structured-error handling, and offline fault injection are complete against WaveBench core commit `a8e6b59`. Core transport replay/session R1 is implemented through M1–M7 but is not released, so this plugin branch is migration-prepared rather than a releasable adopter of the contract. Its six declared capabilities—identity, error registers, channel coupling, waveform fetch, single-channel capture, and same-acquisition multi-channel capture—do not depend on new interfaces from this RFC. VICP text and binary waveform operations passed hardware acceptance through the existing `PyVisaTransport`, `PyVICP`, and `query_bin_block()` path. Those hardware results do not constitute formal adoption of the unreleased P0 contract.
 
-This document remains a plugin impact assessment and adoption gate, not a typed-scope public API specification. The first draft placed read-only state, generic patches, and partial status v2 too close together without fully defining replay policy, shared-session latching, field permissions, core consumers, or electrical safety gates. R1 promotes those foundations to P0 and defers generic writes and `ScopeSnapshotV2`. The transport/session RFC is now accepted and implemented on the core development branch; a separate typed-scope RFC must still be frozen, and plugin adoption waits for a released core version.
+This document remains a plugin impact assessment and adoption gate, not a typed-scope public API specification. The first draft placed read-only state, generic patches, and partial status v2 too close together without fully defining replay policy, shared-session latching, field permissions, core consumers, or electrical safety gates. R1 promotes those foundations to P0 and defers generic writes and `ScopeSnapshotV2`. The transport/session RFC is accepted and implemented, while a separate typed-scope RFC still must be frozen. The plugin may prepare its migration before release, but it becomes adopted only after a released core version and one atomic version-gate change.
 
-The machine-readable form is [`wavebench-core-rfc.json`](wavebench-core-rfc.json). This branch does not modify WaveBench core or depend on unpublished interfaces.
+The machine-readable form is [`wavebench-core-rfc.json`](wavebench-core-rfc.json). This branch does not modify WaveBench core. Migration tests use core commit `a8e6b59`, but no version gate is raised and the unreleased commit is not declared as a formal runtime dependency.
 
 ## Stage labels
 
@@ -22,9 +22,9 @@ Plugin milestones and RFC revisions use separate labels so that a completed plug
 
 | Subject | Current state | Meaning |
 | --- | --- | --- |
-| SDS3000 plugin | `M8-functional-complete` | The current six capabilities passed their offline and hardware gates; P0 safety hardening remains pending |
+| SDS3000 plugin | `M8-functional-complete / P0-migration-prepared` | The current six capabilities passed their gates; P0 migration and offline fault injection are complete, while formal adoption awaits a core release |
 | This plugin impact assessment | `R1-draft-needs-revision` | Typed-scope proposals remain open to revision; the separate Accepted transport/session R1 is authoritative |
-| WaveBench core implementation | `M1–M7-implemented-unreleased` | Offline implementation exists on the core development branch; no release or plugin minimum-version increase yet |
+| WaveBench core implementation | `M1–M7-implemented-unreleased` | Baseline commit `a8e6b59` is not released; the plugin minimum version remains unchanged |
 
 ## Specification split and current status
 
@@ -44,8 +44,8 @@ The transport RFC must also freeze three session contracts: the single authorita
 | Interface or model | Current conclusion | Follow-up |
 | --- | --- | --- |
 | `InstrumentTransport.query_bin_block()` | Sufficient for the current SDS3054 binary path and not replayed in the same session after failure | Preserve non-replayable behavior in a common transport contract |
-| `PyVisaTransport.query()` / `query_opc()` | The core development branch now requires an explicit replay policy; unclassified calls default to `no_replay` | The plugin migrates consuming reads and acquisition-bound `*OPC?` after the core release and preserves structured errors |
-| `OperationSpec.effect=acquire` | Already requires `read_write`; core M7 now declares capture/fetch field closures, verification fields, and restoration coverage | During R1 adoption, verify that the core field closure covers SDS3000 temporary settings and add fault-injection assertions |
+| `PyVisaTransport.query()` / `query_opc()` | Core requires an explicit replay policy; unclassified calls default to `no_replay` | Plugin call sites are explicitly migrated and preserve structured errors; formal adoption awaits a core release |
+| `OperationSpec.effect=acquire` | Already requires `read_write`; core M7 declares capture/fetch field closures, verification fields, and restoration coverage | SDS3000 temporary `CHDR`, `CFMT`, `CORD`, and `WFSU` settings are mapped to the common closure; the plugin must not perform `uncertain → healthy` itself |
 | `ScopeStatusSummary` | Already returns IDN, coupling, and missing capabilities | Reuse the existing partial-status path before adding a broad snapshot v2 |
 | `PyVisaTransport` plus `PyVICP` | Sufficient for the current VICP text and binary connection | Do not add an SDS3000-specific core transport |
 
@@ -53,9 +53,9 @@ The transport RFC must also freeze three session contracts: the single authorita
 
 ### Problem
 
-Before R1 implementation, `InstrumentTransport` had no replay policy or common `query_once()` contract. The core development branch now freezes and implements an explicit `replay` keyword, a `no_replay` default, and structured transport errors. SDS3000 `CMR?`, `EXR?`, and `DDR?` still need plugin-side migration and exception-priority tests during adoption.
+Before R1 implementation, `InstrumentTransport` had no replay policy or common `query_once()` contract. The core development branch now freezes and implements an explicit `replay` keyword, a `no_replay` default, and structured transport errors. SDS3000 `CMR?`, `EXR?`, `DDR?`, acquisition-bound `*OPC?`, and all other query call sites now explicitly use `no_replay` on the migration branch, with structured-error priority tests.
 
-Before R1 implementation, `RsInstrumentTransport` and `SerialTransport` did not apply the same explicit retry loop. The core development branch now provides a backend-independent replay contract; plugin adoption still waits for a formal release. The core owns the `GuardedAuditedTransport` health gate, which the plugin cannot bypass.
+Before R1 implementation, `RsInstrumentTransport` and `SerialTransport` did not apply the same explicit retry loop. The core development branch now provides a backend-independent replay contract. Core owns the `GuardedAuditedTransport` health gate; the plugin cannot bypass it, authorize recovery, or perform `uncertain → healthy`. The plugin remains migration-prepared until a formal release.
 
 ### Minimum behavior
 
@@ -88,8 +88,9 @@ Independent status polling may opt into replay only through an explicit operatio
 - Fault injection proves that a failed `no_replay` query transmits at most once.
 - No first-version backend declares continuation support. `read_continuation_only` tests prove that the request fails before transmission with `attempts=0` and no command write. A later backend may continue the current response only after declaring the capability and passing dedicated tests.
 - `TransportIOError` records replay policy, response progress, and communication synchronization. Telemetry contains only approved non-sensitive metrics and is not a substitute for structured error evidence.
-- SDS3000 `CMR?`, `EXR?`, and `DDR?` migrate only after the core primitive is released; until then the plugin keeps its current version floor and source syntax.
-- The plugin `_acquire_once` path, OPC waits, and temporary restoration context managers must preserve `TransportIOError` and `SessionHealthError` and must not issue a second unauthorized recovery command.
+- Every SDS3000 transport query explicitly uses `ReplayPolicy.NO_REPLAY`; fault injection for `CMR?`, `EXR?`, `DDR?`, and acquisition-bound `*OPC?` proves that failures are not replayed.
+- The plugin `_acquire_once` path, OPC waits, and temporary restoration context managers preserve `TransportIOError` and `SessionHealthError`; a structured failure is not converted into an ordinary timeout and does not issue another unauthorized recovery command.
+- This migration targets unreleased core commit `a8e6b59`, so current wheel and descriptor gates remain unchanged and the plugin is still not adopted.
 
 ## P0-2: Shared session health and poison latch
 
@@ -273,7 +274,7 @@ Every new capability requires:
 - strict behavior and v1/v2 precedence;
 - an explicit statement of whether CLI and run plans are included in the first release.
 
-New symbols should remain source-additive: existing `scope.channel_coupling`, capture arguments, v1 snapshot, and acquisition status types do not change in place. Core R1 now freezes a `no_replay` default for `query()`, structured errors, and poisoned-session gates. Moving consuming reads to `no_replay`, replacing implicit retries with structured errors, and blocking later I/O under `on_failure=continue` on a poisoned session are intentional observable behavior changes. The plugin still needs call-site migration, release notes, and regression tests during adoption, and raises its minimum WaveBench version only after a core release.
+New symbols should remain source-additive: existing `scope.channel_coupling`, capture arguments, v1 snapshot, and acquisition status types do not change in place. Core R1 now freezes a `no_replay` default for `query()`, structured errors, and poisoned-session gates. Moving consuming reads to `no_replay`, replacing implicit retries with structured errors, and blocking later I/O under `on_failure=continue` on a poisoned session are intentional observable behavior changes. Plugin call-site migration and offline regression are complete, while release notes, final wheel validation, and the adopted marker still wait for a core release. The minimum WaveBench version does not increase before that release.
 
 ## Release and version gates
 
@@ -291,17 +292,17 @@ R1 does not raise any current version gate.
 
 ### Plugin P0 adoption checklist
 
-Core R1 is currently implemented on a development branch but is not released. Plugin adoption uses one atomic commit: call-site and fault-injection preparation happens first; that commit raises version gates, validates the final wheel, and marks the plugin adopted only after every check passes.
+Core R1 is currently implemented on a development branch but is not released. Plugin call-site and fault-injection preparation is complete. Formal adoption still uses one later atomic commit that raises version gates, validates the final wheel, and marks the plugin adopted only after every check passes.
 
-1. Wait for the first released WaveBench version containing R1; do not change any version gate before that release.
-2. Classify every plugin transport query explicitly; `CMR?`, `EXR?`, `DDR?`, and acquisition-bound `*OPC?` use `no_replay`.
-3. Preserve `TransportIOError` and `SessionHealthError` through `_acquire_once`, OPC waits, and temporary restoration context managers; do not issue a second unauthorized recovery or validation I/O.
-4. Add fault-injection tests for transmission counts, `uncertain`/`poisoned` latching, `on_failure=continue` zero-I/O blocking, and a new `epoch_id` after reconnect.
-5. In one atomic adoption commit, raise the wheel `Requires-Dist` and descriptor lower bound to the first R1 core release, review the upper bound, confirm `api_version="wavebench.instrument.v2"`, and run isolated wheel, descriptor, entry-point, and API-version compatibility tests. Mark the plugin adopted only after every check passes.
+1. [ ] Wait for the first released WaveBench version containing R1; do not change any version gate before that release.
+2. [x] Classify every plugin transport query explicitly; `CMR?`, `EXR?`, `DDR?`, and acquisition-bound `*OPC?` use `no_replay`.
+3. [x] Preserve `TransportIOError` and `SessionHealthError` through `_acquire_once`, OPC waits, and temporary restoration context managers; do not issue a second unauthorized recovery or validation I/O.
+4. [x] Plugin fault injection covers transmission counts, `uncertain`/`poisoned` latching, and zero later ordinary I/O. Core baseline tests cover `on_failure=continue` and a new `epoch_id` after close/reconnect. The plugin has no recovery authorization and does not perform `uncertain → healthy`.
+5. [ ] In one atomic adoption commit, raise the wheel `Requires-Dist` and descriptor lower bound to the first R1 core release, review the upper bound, confirm `api_version="wavebench.instrument.v2"`, and run isolated wheel, descriptor, entry-point, and API-version compatibility tests. Mark the plugin adopted only after every check passes.
 
 ## Acceptance test matrix
 
-The plugin's `test_core_rfc.py` verifies only this document's JSON structure. It does not prove that core behavior exists. Behavioral contracts belong in the WaveBench core repository.
+The plugin's `test_core_rfc.py` verifies only this document's JSON structure. Plugin call sites, error priority, and fault injection are covered by `test_driver.py`; shared-session, run, and reconnect contracts remain proven by WaveBench core tests.
 
 | Layer | Required cases | Instrument connection in default CI |
 | --- | --- | --- |
@@ -338,10 +339,10 @@ P0 foundations apply to every instrument kind and are not SDS3000-specific. P1 a
 
 ## Recommended implementation order
 
-1. Keep this document as a plugin impact assessment, distinguishing “M8 functionally complete, plugin P0 adoption pending,” RFC R1, and “core implemented but unreleased.”
-2. Reference the accepted transport replay/session RFC, its core development implementation, and the stable reference docs without raising the plugin version floor.
-3. After the core release, complete call-site migration, structured-exception handling, and fault-injection tests, then verify that the core M7 `OperationSpec` audit for `scope.capture`, `scope.capture_waveforms`, `scope.capture_multiple`, and `scope.fetch_waveform` covers SDS3000 temporary settings.
-4. Create one atomic adoption commit: raise the wheel and descriptor lower bounds together, review the upper bound, confirm `api_version`, run isolated compatibility tests, and mark the plugin adopted only after every check passes.
+1. Keep this document as a plugin impact assessment, distinguishing “M8 functionally complete,” “P0 migration prepared but not adopted,” and “core implemented but unreleased.”
+2. Use core commit `a8e6b59` as the migration-test baseline without placing an unreleased commit in plugin version gates.
+3. Call-site migration, structured-error handling, and fault injection are complete. Core M7 `OperationSpec` coverage for `scope.capture`, `scope.capture_waveforms`, `scope.capture_multiple`, and `scope.fetch_waveform` includes SDS3000 temporary `CHDR`, `CFMT`, `CORD`, and complete `WFSU` state.
+4. After the core release, create one atomic adoption commit: raise the wheel and descriptor lower bounds together, review the upper bound, confirm `api_version`, run isolated compatibility tests, and mark the plugin adopted only after every check passes.
 5. Freeze a separate typed-scope state RFC covering channel/timebase/edge-trigger fields, core consumers, v1 precedence, and three-vendor mappings.
 6. Implement only frozen typed read-only state. Continue collecting three-vendor acquisition-state evidence without promising `scope.acquisition_run_state`.
 7. Review narrow scale, offset, and timebase patches in a separate RFC after safety evidence exists.

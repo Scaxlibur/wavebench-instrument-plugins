@@ -27,19 +27,44 @@ def test_rfc_is_explicitly_a_draft_and_milestones_are_aligned() -> None:
         "revision": "R1",
         "status": "accepted",
         "implementation": "M1-M7-implemented-unreleased",
+        "implementation_baseline": "a8e6b59",
         "release_required_for_plugin_adoption": True,
     }
     assert assessment["milestones"] == {
         "plugin": "M8-functional-complete",
-        "p0_safety_hardening": "pending",
+        "p0_safety_hardening": "migration-implemented-offline-tested",
         "rfc": "R1-draft-needs-revision",
         "core_implementation": "M1-M7-implemented-unreleased",
         "plugin_adoption": "blocked-until-core-release",
     }
-    assert assessment["scope"]["p0_safety_hardening_pending"] is True
-    assert assessment["scope"]["transport_session_api_frozen"] is True
-    assert assessment["scope"]["typed_scope_api_frozen"] is False
-    assert "public_api_frozen" not in assessment["scope"]
+    scope = assessment["scope"]
+    assert scope["p0_safety_hardening_pending"] is False
+    assert scope["p0_call_site_migration_complete"] is True
+    assert scope["p0_structured_exception_handling_complete"] is True
+    assert scope["p0_fault_injection_complete"] is True
+    assert scope["p0_runtime_adoption_pending"] is True
+    assert scope["migration_branch_release_blocked"] is True
+    assert scope["transport_session_api_frozen"] is True
+    assert scope["typed_scope_api_frozen"] is False
+    assert "public_api_frozen" not in scope
+
+    evidence = assessment["plugin_migration_evidence"]
+    assert evidence["status"] == "implemented-and-offline-tested-not-adopted"
+    assert evidence["core_baseline_commit"] == "a8e6b59"
+    assert evidence["plugin_implementation_commit"] == "480eaec"
+    assert "ReplayPolicy.NO_REPLAY" in evidence["replay_policy"]
+    assert evidence["operation_spec_mapping"] == {
+        "CHDR": ["scope.query_response_header"],
+        "CFMT": ["scope.waveform_format"],
+        "CORD": ["scope.waveform_byte_order"],
+        "WFSU": ["scope.waveform_points", "scope.waveform_transfer_window"],
+    }
+    assert evidence["session_authority"] == {
+        "plugin_can_authorize_recovery": False,
+        "plugin_can_transition_uncertain_to_healthy": False,
+        "owner": "WaveBench core SessionTransactionCoordinator",
+    }
+    assert evidence["verification"]["hardware_connected"] is False
 
 
 def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
@@ -146,8 +171,9 @@ def test_transport_spec_is_complete_and_typed_scope_spec_remains_required() -> N
 
     findings = {item["interface"]: item for item in assessment["existing_interface_findings"]}
     operation_spec = findings["OperationSpec.effect=acquire"]
-    assert operation_spec["decision"] == "core-audit-complete-plugin-verification-pending"
-    assert "core M7" in operation_spec["evidence"]
+    assert operation_spec["decision"] == "core-audit-and-plugin-mapping-verification-complete"
+    assert "a8e6b59" in operation_spec["evidence"]
+    assert "CHDR, CFMT, CORD, and WFSU" in operation_spec["evidence"]
 
 
 def test_active_proposals_are_typed_read_only_first_and_cross_vendor() -> None:
