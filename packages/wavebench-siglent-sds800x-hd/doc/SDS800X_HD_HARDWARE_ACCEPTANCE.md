@@ -13,6 +13,7 @@ TCPIP/VXI-11 实机验收。测试连接由一台 DG4202 CH1 同时驱动示波�
 - `scope.idn`
 - `scope.channel_coupling`
 - Stop、sequence OFF 下的 `scope.fetch_waveform(..., points="dmax", check_errors=False)`
+- 已配置高级测量槽位的 `scope.measurement_statistics`
 
 未测试截图、Autoset、capture、错误队列和 sequence 波形；另对 sequence ON 拒绝门禁做了
 负向验收。
@@ -134,6 +135,16 @@ SOURCE=C2, START=10, INTERVAL=2, POINT=1000, WIDTH=WORD, BYTEorder=MSB
 此时 `fetch_waveform` 依次完成 identity、trigger status 和 sequence state 查询，随后以
 `SDS800X HD waveform reads do not support sequence acquisition` 拒绝。该调用没有发送任何
 waveform transfer 写命令或 binary query。测试结束后 sequence、触发模式和运行状态均恢复。
+
+## 测量统计
+
+实机已有 P3 `PKPK / C1` 测量槽位。验收脚本临时将测量模式切到 `ADVanced` 并开启统计，
+driver 以零写入读取到：当前值 `5.0375 V`、均值 `5.0370833 V`、最小值 `5.03542 V`、
+最大值 `5.03958 V`、标准差 `0.001701 V` 和统计次数 `6`。
+
+历史缓冲验收将最大统计次数临时设为 `16`，取得 `5` 个值；返回的 `Count=5` 与解析值数
+一致。读取前已停止 acquisition，读取结束后恢复测量模式 `SIMPlc`、统计 OFF、最大次数 `0`
+和原运行态。
 
 ## 剩余退出门
 

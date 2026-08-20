@@ -9,8 +9,9 @@ TCPIP/VXI-11 acceptance run on an SDS804X HD. A DG4202 CH1 drove scope CH1 and C
 electrical node. Public evidence excludes instrument IPs, serial numbers, raw waveforms, and full
 SCPI logs.
 
-The run covered only declared capabilities: identity, CH1–CH4 coupling, and stopped,
-non-sequence `DMAX` waveform fetch with `check_errors=False`. Screenshot, Autoset, capture, error
+The run covered declared capabilities: identity, CH1–CH4 coupling, stopped non-sequence `DMAX`
+waveform fetch with `check_errors=False`, and statistics from a preconfigured advanced-measurement
+slot. Screenshot, Autoset, capture, error
 queue, and sequence waveforms were not tested; the sequence-ON rejection gate received separate
 negative acceptance.
 
@@ -110,6 +111,17 @@ instrument to Arm, so the harness stopped acquisition again to establish `Stop +
 `fetch_waveform` then queried identity, trigger status, and sequence state before rejecting the
 operation with `SDS800X HD waveform reads do not support sequence acquisition`. It sent no waveform
 transfer write or binary query. The harness restored sequence, trigger mode, and running state.
+
+## Measurement statistics
+
+The instrument already had P3 configured as `PKPK / C1`. The harness temporarily selected
+`ADVanced` measurement mode and enabled statistics. With no driver writes, the result reported
+`5.0375 V` current, `5.0370833 V` mean, `5.03542 V` minimum, `5.03958 V` maximum,
+`0.001701 V` standard deviation, and count `6`.
+
+History acceptance temporarily set the maximum count to `16` and read five values after stopping
+acquisition; `Count=5` matched the parsed value count. The harness restored `SIMPlc`, statistics
+OFF, maximum count `0`, and the original running state.
 
 ## Remaining gates
 

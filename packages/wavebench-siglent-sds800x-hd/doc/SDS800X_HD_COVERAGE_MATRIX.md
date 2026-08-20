@@ -31,12 +31,13 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 | 错误队列 | CN11G 未记录错误队列命令 | `scope.errors` | **未覆盖** | 不猜测 `SYSTem:ERRor?`；消费型查询也不适合核心普通 query 的自动重试 |
 | 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **SDS804X HD 多块实机已验收** | Stop、sequence OFF、CH1/CH2 `DMAX`、WORD/LSB、数值和成功/异常恢复通过；`10M` 记录按 `5M + 5M` 两块读取通过，USB 待补 |
 | Sequence 门禁 | `:ACQuire:SEQuence?` | `scope.fetch_waveform` 的前置条件 | **SDS804X HD 实机已验收** | `NORMAL` 触发模式下建立 Stop + sequence ON；driver 在任何 waveform 写入和 binary query 前拒绝 |
+| 测量统计 | `:MEASure:MODE?`、`ADVanced:P<n>?`、`TYPE?`、`STATistics?`、`SHIStory?` | `scope.measurement_statistics` | **SDS804X HD 实机已验收** | 只读既有槽位；P3 `PKPK` 的 6 项统计和停止态 5 项历史通过，driver 零写入 |
 | 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`*OPC?` | `scope.capture_waveform`、`scope.capture_waveforms` | **实机阻塞** | 手册未保证 `RUN` 后 `*OPC?` 等待真实触发完成；多通道必须一次 acquisition 后逐通道读取 |
 | 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | 无独立 capability | **手册已审计** | 不能误映射为公共 `ScopeAcquisitionStatus`；后者描述平均和分段采集状态 |
 | 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot` | **核心接口阻塞 / 实机阻塞** | 手册示例按原始图片字节读取，核心仅提供 definite-block query；命令也没有可靠的菜单开关 |
 | Autoset | `:AUToset` | `scope.autoscale` | **默认拒绝** | 同时修改触发、垂直和水平设置；没有错误队列和恢复闭环 |
 | 采集状态 | `ACQuire:TYPE?`、`SEQuence?`、`NUMACq?` 等 | `scope.acquisition_status` | **未覆盖** | 无法完整提供 `average_complete`、选件、容量和可用段数，不能拼造公共模型 |
-| Snapshot、测量、数字、历史与分析 | 多个通用 SDS 子系统 | 对应可选 Scope capability | **未覆盖** | 逐能力核对型号、选件、公共模型和恢复语义后再拆分 |
+| Snapshot、测量配置、数字、历史与分析 | 多个通用 SDS 子系统 | 对应可选 Scope capability | **未覆盖** | 逐能力核对型号、选件、公共模型和恢复语义后再拆分 |
 | Reset、系统和仪器文件系统 | `*RST`、系统设置、保存/调用、图片保存等 | 无基础 capability | **默认拒绝** | 可能改变全局状态、网络或持久存储，不纳入基础驱动 |
 
 ## 已确认的波形协议边界

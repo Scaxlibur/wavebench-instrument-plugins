@@ -2,16 +2,16 @@
 
 [English](README_EN.md)
 
-面向 SIGLENT SDS800X HD 系列示波器的外置 WaveBench 驱动包。`0.3.1` 在严格身份和模拟通道耦合查询之外，提供保守的 `DMAX` 已停止记录读取。首轮 SDS804X HD 真实仪器读取验收已完成；分块边界和其他写能力仍待后续专项验证。
+面向 SIGLENT SDS800X HD 系列示波器的外置 WaveBench 驱动包。`0.4.0` 提供严格身份、模拟通道耦合、保守的 `DMAX` 已停止记录读取，以及已配置测量槽位的只读统计查询。SDS804X HD 的单块、多块、sequence 拒绝和测量统计均已完成实机验收。
 
 ## 当前状态
 
-- Distribution：`wavebench-siglent-sds800x-hd` `0.3.1`
+- Distribution：`wavebench-siglent-sds800x-hd` `0.4.0`
 - Canonical driver ID：`siglent.sds800x-hd`
 - 仪器类型：`scope`
 - Backend：WaveBench 核心 `pyvisa` transport
 - Resource scheme：`tcpip`、`usb`
-- 已声明 capability：`scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`
+- 已声明 capability：`scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.measurement_statistics`
 - WaveBench：`>=0.8,<0.9`
 
 descriptor 导入不执行仪器 I/O；factory 只通过 `DriverContext.open_transport()` 获取一个核心 transport。driver 发送 `*IDN?`，严格核对四字段、厂商、支持型号和 14 字符 ASCII 序列号，并缓存稳定身份。读取 coupling 前按型号限制二通道或四通道范围，再发送 `:CHANnel<n>:COUPling?`；只接受 `AC`、`DC` 或 `GND`。波形读取使用核心 `query_bin_block()`，返回核心 `WaveformData` / `WaveformHeader`。`close()` 幂等释放 transport。
@@ -32,10 +32,13 @@ descriptor 导入不执行仪器 I/O；factory 只通过 `DriverContext.open_tra
 - `scope.idn`：返回经严格校验并在当前 driver 会话中缓存的原始 `*IDN?` 文本。
 - `scope.channel_coupling`：返回大写 `AC`、`DC` 或 `GND`；无效类型、型号不存在的通道和未知响应均在 driver 边界拒绝。
 - `scope.fetch_waveform`：读取已经停止的非 sequence 模拟通道记录；当前只支持 `points="dmax"`。
+- `scope.measurement_statistics`：只读查询已经配置并启用的高级测量槽位；不会创建槽位、开启统计或重置历史。
 
 直接调用 `scope.channel_coupling` 时会先读取身份，以免在二通道型号上向不存在的 CH3 或 CH4 发送命令。WaveBench `status` fallback 在同一会话中先调用 `idn()`，因此不会重复身份查询。
 
 波形读取不触发新的 acquisition，也不发送 `RUN`、`SINGLE` 或 `STOP`。driver 要求 `:TRIGger:STATus?` 返回 `Stop` 且 `:ACQuire:SEQuence?` 返回 `OFF`，随后保存 `SOURCE`、`START`、`INTERVAL`、`POINT`、`WIDTH` 和 `BYTEorder`。事务临时使用 `WORD`、`LSB`、`START 0`、`INTERVAL 1` 和 `POINT 0`，按 `MAXPoint?` 分块读取，成功或失败后均按依赖顺序恢复原 transfer 状态。
+
+测量统计要求调用方明确确认槽位已经配置。driver 还会回读高级测量模式、槽位开关和统计开关，只在三项均满足时查询当前值、均值、最小值、最大值、标准差和统计次数。历史缓冲区只在调用方明确确认 acquisition 已停止时读取；所有统计接口均为零写入。
 
 CN11G 没有记录错误队列命令，因此此插件不声明 `scope.errors`。WaveBench 服务在 `scope.check_errors=true` 时会要求该 capability；使用波形读取必须显式配置：
 
@@ -60,7 +63,7 @@ points = "dmax"
 - `scope.autoscale`
 - `scope.capture_waveform` / `scope.capture_waveforms`
 - `scope.screenshot`
-- 其他状态、测量、数学、数字通道和历史帧能力
+- 其他状态、测量配置、数学、数字通道和历史帧能力
 
 编程手册中的其他命令只有在完成格式审计、FakeTransport 测试和必要的受控实机验收后，才会进入 driver 和 descriptor。当前没有 raw SCPI 入口，也不推测其他 SIGLENT 系列的协议可以直接复用。`scope.fetch_waveform` 是读取现有记录，不等同于 `capture_waveform`。
 

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
+from math import isfinite
 
 from wavebench.errors import DataError
-from wavebench.instruments.models import WaveformData
+from wavebench.instruments.models import ScopeMeasurementStatistics, WaveformData
 from wavebench.transport.base import InstrumentTransport
 
 from .waveform import (
@@ -38,6 +40,60 @@ class _WaveformTransferState:
 
 def _normalize_identity_field(value: str) -> str:
     return " ".join(value.strip().upper().split())
+
+
+def _parse_optional_finite_float(value: str, *, field_name: str) -> float | None:
+    normalized = value.strip()
+    if normalized.upper() == "NAN":
+        return None
+    try:
+        result = float(normalized)
+    except ValueError as exc:
+        raise DataError(f"SDS800X HD {field_name} must be a number or NAN") from exc
+    if not isfinite(result):
+        raise DataError(f"SDS800X HD {field_name} must be finite or NAN")
+    return result
+
+
+def _parse_nonnegative_integer(value: str, *, field_name: str) -> int:
+    try:
+        result = Decimal(value.strip())
+    except InvalidOperation as exc:
+        raise DataError(f"SDS800X HD {field_name} must be an integer") from exc
+    if not result.is_finite() or result < 0 or result != result.to_integral_value():
+        raise DataError(f"SDS800X HD {field_name} must be a non-negative integer")
+    return int(result)
+
+
+def _parse_statistics_history(value: str) -> tuple[float, ...]:
+    fields = [item.strip() for item in value.strip().split(",")]
+    if fields and fields[-1] == "":
+        fields.pop()
+    if not fields or "=" not in fields[0]:
+        raise DataError("SDS800X HD measurement statistics history is missing Count")
+    name, count_text = fields[0].split("=", 1)
+    if name.strip().upper() != "COUNT":
+        raise DataError("SDS800X HD measurement statistics history is missing Count")
+    count = _parse_nonnegative_integer(
+        count_text,
+        field_name="measurement statistics history count",
+    )
+    if count > 1024:
+        raise DataError("SDS800X HD measurement statistics history exceeds 1024 values")
+    results = tuple(
+        _parse_optional_finite_float(
+            item,
+            field_name="measurement statistics history value",
+        )
+        for item in fields[1:]
+    )
+    if any(item is None for item in results):
+        raise DataError("SDS800X HD measurement statistics history values must be finite")
+    if len(results) != count:
+        raise DataError(
+            "SDS800X HD measurement statistics history count does not match its values"
+        )
+    return tuple(float(item) for item in results)
 
 
 @dataclass
@@ -100,6 +156,93 @@ class SDS800XHDScope:
                 "SDS800X HD channel coupling must be one of AC, DC, or GND"
             )
         return response
+
+    def get_measurement_statistics(
+        self,
+        slot: int,
+        *,
+        configured_slot: bool,
+        include_buffer: bool = False,
+        acquisition_stopped: bool = False,
+    ) -> ScopeMeasurementStatistics:
+        if type(slot) is not int or slot not in range(1, 13):
+            raise ValueError("SDS800X HD measurement slot must be an integer from 1 through 12")
+        if configured_slot is not True:
+            raise ValueError(
+                "reading an SDS800X HD measurement requires explicit confirmation "
+                "that the slot is already configured"
+            )
+        if type(include_buffer) is not bool or type(acquisition_stopped) is not bool:
+            raise ValueError(
+                "SDS800X HD measurement buffer flags must be boolean values"
+            )
+        if include_buffer and not acquisition_stopped:
+            raise ValueError(
+                "reading the SDS800X HD statistics history requires explicit "
+                "confirmation that acquisition is stopped"
+            )
+
+        prefix = f":MEASure:ADVanced:P{slot}"
+        measurement_mode = self._query_text(
+            ":MEASure:MODE?",
+            field_name="measurement mode",
+        )
+        if measurement_mode not in {"SIMPLC", "ADVANCED"}:
+            raise DataError("SDS800X HD measurement mode must be SIMPlc or ADVanced")
+        if measurement_mode != "ADVANCED":
+            raise DataError("SDS800X HD advanced measurement mode is not enabled")
+        slot_state = self._query_text(f"{prefix}?", field_name="measurement slot state")
+        if slot_state not in {"ON", "OFF"}:
+            raise DataError("SDS800X HD measurement slot state must be ON or OFF")
+        if slot_state != "ON":
+            raise DataError("SDS800X HD measurement slot is not enabled")
+        statistics_state = self._query_text(
+            ":MEASure:ADVanced:STATistics?",
+            field_name="measurement statistics state",
+        )
+        if statistics_state not in {"ON", "OFF"}:
+            raise DataError("SDS800X HD measurement statistics state must be ON or OFF")
+        if statistics_state != "ON":
+            raise DataError("SDS800X HD measurement statistics are not enabled")
+
+        category = self._query_text(
+            f"{prefix}:TYPE?",
+            field_name="measurement category",
+        )
+        fields = {
+            "actual": "CURRENT",
+            "average": "MEAN",
+            "minimum": "MINimum",
+            "maximum": "MAXimum",
+            "standard_deviation": "STDev",
+        }
+        values = {
+            name: _parse_optional_finite_float(
+                self.transport.query(f"{prefix}:STATistics? {selector}"),
+                field_name=f"measurement {name}",
+            )
+            for name, selector in fields.items()
+        }
+        waveform_count = _parse_nonnegative_integer(
+            self.transport.query(f"{prefix}:STATistics? COUNT"),
+            field_name="measurement waveform count",
+        )
+        buffered_values = None
+        if include_buffer:
+            buffered_values = _parse_statistics_history(
+                self.transport.query(f"{prefix}:SHIStory?")
+            )
+        return ScopeMeasurementStatistics(
+            slot=slot,
+            category=category,
+            actual=values["actual"],
+            average=values["average"],
+            standard_deviation=values["standard_deviation"],
+            minimum=values["minimum"],
+            maximum=values["maximum"],
+            waveform_count=waveform_count,
+            buffered_values=buffered_values,
+        )
 
     def _query_text(self, command: str, *, field_name: str) -> str:
         response = self.transport.query(command)

@@ -28,6 +28,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.idn",
             "scope.channel_coupling",
             "scope.fetch_waveform",
+            "scope.measurement_statistics",
         ),
         idn_patterns=(
             "SDS802X HD",
@@ -43,12 +44,12 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "SDS800X HD family driver with strict identity, analog-channel coupling, "
-            "and conservative stopped-record DMAX waveform reads."
+            "conservative stopped-record DMAX waveform reads, and read-only statistics."
         ),
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sds800x-hd",
-        version="0.3.1",
+        version="0.4.0",
         source="entry_point:siglent.sds800x-hd",
         scope_coupling_policy="fixed-high-impedance",
         config_fields=("connection.resource", "scope.driver", "waveform.*"),
