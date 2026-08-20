@@ -11,9 +11,9 @@ SCPI logs.
 
 The run covered declared capabilities: identity, CH1–CH4 coupling, stopped non-sequence `DMAX`
 waveform fetch with `check_errors=False`, single- and dual-channel capture, and statistics from a preconfigured advanced-measurement
-slot. Screenshot, Autoset, capture, error
-queue, and sequence waveforms were not tested; the sequence-ON rejection gate received separate
-negative acceptance.
+slot. Screenshot, Autoset, standalone acquisition control, error queue, and sequence waveforms were
+not tested; `capture_waveform(s)` received separate positive acceptance, and the sequence-ON
+rejection gate received separate negative acceptance.
 
 ## Instruments and baseline
 
@@ -155,9 +155,10 @@ removed after acceptance and did not enter the repository.
   capabilities remain disabled.
 - No undocumented error-queue query was sent. `scope.errors` remains undeclared.
 
-These cross-instrument gaps are recorded in the
-[generic Scope RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md); the driver does not add a
-private transport path or vendor-specific public method.
+These cross-instrument gaps are recorded in the `R1 Draft`
+[generic Scope RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md); core pre-review does not
+modify the main repository, and the driver does not add a private transport path or vendor-specific
+public method.
 
 ## Final state
 

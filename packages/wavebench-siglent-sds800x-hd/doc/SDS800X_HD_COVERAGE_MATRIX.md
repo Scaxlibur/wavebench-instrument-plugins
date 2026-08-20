@@ -21,6 +21,10 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 - **实机阻塞**：离线代码不足以证明响应 framing、状态迁移或硬件差异。
 - **默认拒绝**：命令会修改全局状态、写仪器存储或缺少可靠恢复边界。
 
+通用接口缺口目前对应 `R1 Draft` RFC。这里的「核心接口阻塞」表示当前核心合同不足，
+不是插件缺少一个可以私自补上的方法；RFC 预审不会改变主仓库，也不会扩大本插件的
+descriptor capability。
+
 ## 当前覆盖
 
 | 功能域 | 手册命令面 | WaveBench 映射 | 当前状态 | 边界与下一步 |
@@ -97,8 +101,8 @@ transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖
 - capture 使用 `DriverContext.opc_timeout_ms` 作为状态轮询 deadline，但不调用 `query_opc()`；
   `*OPC?` 不作为物理触发完成证据。
 - 截图、独立采集运行控制、类型化 trace source 和三态错误检查的跨仪器方案见
-  [scope 通用扩展接口 RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md)。该 RFC 为 Draft，
-  不代表主仓库已经提供对应 capability。
+  [scope 通用扩展接口 RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md)。该 RFC 为
+  `R1 Draft`，不代表主仓库已经提供对应 capability。
 
 ## 开发顺序
 

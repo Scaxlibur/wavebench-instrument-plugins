@@ -16,8 +16,8 @@ TCPIP/VXI-11 实机验收。测试连接由一台 DG4202 CH1 同时驱动示波�
 - `scope.capture_waveform` 和一次 acquisition 的 `scope.capture_waveforms`
 - 已配置高级测量槽位的 `scope.measurement_statistics`
 
-未测试截图、Autoset、capture、错误队列和 sequence 波形；另对 sequence ON 拒绝门禁做了
-负向验收。
+未测试截图、Autoset、独立采集控制、错误队列和 sequence 波形；`capture_waveform(s)` 已在
+本轮完成独立的正向验收，另对 sequence ON 拒绝门禁做了负向验收。
 
 ## 仪器与初始状态
 
@@ -175,9 +175,9 @@ CH1、CH2 各 `100000` 点。两通道原始 Vpp 为 `5.0354 V` 和 `5.0375 V`�
   `ScopeDerivedWaveformMetadata` 或 `ScopeFftStatus`，math/FFT capability 保持关闭。
 - 未发送任何未文档化错误队列命令。`scope.errors` 保持未声明。
 
-上述接口缺口按多个示波器插件的共同需求记录在
+上述接口缺口按多个示波器插件的共同需求记录在 `R1 Draft`
 [scope 通用扩展接口 RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md)，不在本 driver
-中增加私有 transport 或厂商专用公共方法。
+中增加私有 transport 或厂商专用公共方法；核心预审不会自动改变主仓库。
 
 ## 最终状态
 

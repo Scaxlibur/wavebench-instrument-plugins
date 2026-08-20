@@ -24,6 +24,10 @@ Evidence labels used here:
 - **Hardware blocked**: offline code cannot establish response framing, state transitions, or hardware-specific behavior.
 - **Rejected by default**: the operation changes global state, writes instrument storage, or lacks a reliable restore boundary.
 
+The cross-instrument gap is tracked in the `R1 Draft` RFC. **Core interface blocked** means that
+the current core contract is insufficient; it is not an invitation to add a private plugin method.
+The pre-review does not modify the main repository or expand this plugin's descriptor capabilities.
+
 ## Current coverage
 
 | Domain | Manual surface | WaveBench mapping | Status | Boundary and next step |
@@ -103,8 +107,8 @@ and reads only an already-stopped record.
   `query_opc()`; `*OPC?` is not treated as physical-trigger completion evidence.
 - Cross-instrument proposals for screenshot, standalone acquisition control, typed trace sources,
   and three-state error checking are in the
-  [generic Scope RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md). Its Draft status does not
-  imply that the core exposes those capabilities.
+  [generic Scope RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md). Its `R1 Draft` status
+  does not imply that the core exposes those capabilities.
 
 ## Development order
 

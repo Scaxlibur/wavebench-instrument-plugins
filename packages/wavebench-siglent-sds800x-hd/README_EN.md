@@ -86,9 +86,9 @@ The repository-level `.gitignore` excludes every file under `doc/vendor-local/` 
 1. Obtain redacted `*IDN?` samples from additional SDS800X HD models and verify identity plus two- and four-channel coupling responses.
 2. When USB hardware becomes available, verify binary blocks, WORD alignment, timebase values, and transfer-state restoration; real TCPIP multi-chunk reading is accepted.
 3. Consider `DEF/MAX` point modes only after explicit protocol or hardware evidence; do not guess keywords.
-4. Extend screenshot, standalone acquisition control, and math only after reviewing the
-   [generic Scope RFC](../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md); do not bypass the core with
-   private raw SCPI.
+4. Extend screenshot, standalone acquisition control, and math only after reviewing the `R1 Draft`
+   [generic Scope RFC](../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md) and freezing the core
+   contract; do not bypass the core with private raw SCPI.
 
 ## License
 
