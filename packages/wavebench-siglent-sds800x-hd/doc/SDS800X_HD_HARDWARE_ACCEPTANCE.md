@@ -175,7 +175,7 @@ CH1、CH2 各 `100000` 点。两通道原始 Vpp 为 `5.0354 V` 和 `5.0375 V`�
   `ScopeDerivedWaveformMetadata` 或 `ScopeFftStatus`，math/FFT capability 保持关闭。
 - 未发送任何未文档化错误队列命令。`scope.errors` 保持未声明。
 
-上述接口缺口按多个示波器插件的共同需求记录在 `R1.1 Draft`
+上述接口缺口按多个示波器插件的共同需求记录在 `R1.2 Draft`
 [scope 通用扩展接口 RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md)，不在本 driver
 中增加私有 transport 或厂商专用公共方法；核心预审不会自动改变主仓库。
 
