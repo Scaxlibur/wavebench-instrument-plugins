@@ -48,7 +48,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sds800x-hd",
-        version="0.3.0",
+        version="0.3.1",
         source="entry_point:siglent.sds800x-hd",
         scope_coupling_policy="fixed-high-impedance",
         config_fields=("connection.resource", "scope.driver", "waveform.*"),

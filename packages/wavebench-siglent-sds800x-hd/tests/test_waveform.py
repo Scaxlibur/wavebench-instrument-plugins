@@ -25,6 +25,7 @@ def _descriptor(
     points: int = 3,
     adc_bits: int = 8,
     source_channel: int = 2,
+    segment: int = 1,
     appended: bytes = b"",
 ) -> bytes:
     payload = bytearray(346)
@@ -52,13 +53,13 @@ def _descriptor(
     int32(116, points)
     int32(132, 0)
     int32(136, 1)
-    int32(144, 1)
+    int32(144, 0)
     int32(148, 1)
     float32(156, 0.2)
     float32(160, 0.1)
     float32(164, 25.0)
     int16(172, adc_bits)
-    int16(174, 1)
+    int16(174, segment)
     float32(176, 1e-9)
     float64(180, 2e-9)
     int16(324, 9)
@@ -99,6 +100,15 @@ def test_parse_big_endian_word_descriptor() -> None:
     assert preamble.sample_byte_order == "big"
 
 
+def test_parse_accepts_sds800x_hd_non_sequence_segment_sentinel() -> None:
+    preamble = parse_waveform_preamble(_descriptor(segment=-1))
+
+    assert preamble.read_frames == 0
+    assert preamble.sum_frames == 1
+    assert preamble.segment == -1
+    assert waveform_header_from_preamble(preamble).points == preamble.points
+
+
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
@@ -136,6 +146,7 @@ def test_parse_rejects_unknown_descriptor_byte_order() -> None:
         (324, "h", 39, "timebase index"),
         (326, "h", 3, "coupling code"),
         (328, "f", 0.0, "probe factor"),
+        (174, "h", -2, "segment"),
         (344, "h", 8, "analog source"),
     ],
 )
@@ -209,9 +220,9 @@ def test_waveform_header_uses_documented_ten_division_time_axis() -> None:
     [
         ({"start": 1}, "START 0"),
         ({"interval": 2}, "INTERVAL 1"),
-        ({"read_frames": 0, "sum_frames": 1}, "sequence"),
-        ({"read_frames": 1, "sum_frames": 0}, "sequence"),
-        ({"read_frames": 1, "sum_frames": 2}, "sequence"),
+        ({"read_frames": 1, "sum_frames": 1}, "non-sequence frame signature"),
+        ({"read_frames": 0, "sum_frames": 0}, "non-sequence frame signature"),
+        ({"read_frames": 0, "sum_frames": 1, "segment": 2}, "non-sequence frame signature"),
     ],
 )
 def test_waveform_header_rejects_unsupported_transfer_modes(changes, message: str) -> None:

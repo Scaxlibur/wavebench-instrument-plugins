@@ -185,8 +185,8 @@ def parse_waveform_preamble(
         raise DataError("SDS waveform preamble ADC width must be between 1 and 16 bits")
     if adc_bits > 8 and comm_type != 1:
         raise DataError("SDS waveform ADC widths above 8 bits require WORD transfer")
-    if segment < 0:
-        raise DataError("SDS waveform preamble segment must be >= 0")
+    if segment < -1:
+        raise DataError("SDS waveform preamble segment must be >= -1")
     if not np.isfinite(sample_interval_s) or sample_interval_s <= 0:
         raise DataError("SDS waveform preamble sample interval must be finite and > 0")
     if not np.isfinite(horizontal_delay_s):
@@ -260,8 +260,15 @@ def waveform_header_from_preamble(preamble: SDSWaveformPreamble) -> WaveformHead
         raise DataError("SDS waveform first version requires START 0")
     if preamble.interval != 1:
         raise DataError("SDS waveform first version requires INTERVAL 1")
-    if (preamble.read_frames, preamble.sum_frames) not in {(0, 0), (1, 1)}:
-        raise DataError("SDS waveform first version does not support sequence data")
+    if (
+        preamble.read_frames != 0
+        or preamble.sum_frames != 1
+        or preamble.segment not in {-1, 1}
+    ):
+        raise DataError(
+            "SDS waveform first version requires the non-sequence frame signature "
+            "read_frames=0, sum_frames=1, segment=-1 or 1"
+        )
 
     x_start = (
         preamble.horizontal_delay_s

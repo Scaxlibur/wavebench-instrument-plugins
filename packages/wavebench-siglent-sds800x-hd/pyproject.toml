@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-siglent-sds800x-hd"
-version = "0.3.0"
+version = "0.3.1"
 description = "SIGLENT SDS800X HD oscilloscope driver plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"

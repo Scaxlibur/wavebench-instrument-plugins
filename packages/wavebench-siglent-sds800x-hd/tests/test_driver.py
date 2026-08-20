@@ -57,7 +57,7 @@ def test_descriptor_is_executable_metadata_without_import_io() -> None:
     )
     assert item.scope_coupling_policy == "fixed-high-impedance"
     assert item.distribution == "wavebench-siglent-sds800x-hd"
-    assert item.version == "0.3.0"
+    assert item.version == "0.3.1"
     assert item.config_fields == (
         "connection.resource",
         "scope.driver",
