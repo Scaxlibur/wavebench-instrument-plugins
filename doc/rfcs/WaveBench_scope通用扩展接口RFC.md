@@ -1,7 +1,7 @@
 # WaveBench scope 通用扩展接口 RFC
 
 > 状态：`Draft`（核心预审后修订，未接受）
-> 修订：`R1.2`
+> 修订：`R1.3`（核心复审增补）
 > 证据仓库：WaveBench Instrument Plugins
 > 核心评审基线：WaveBench `0.8.22`，`origin/master@006c431`
 > 目标版本：未排期
@@ -11,7 +11,7 @@
 本文是供 WaveBench 核心团队预审的候选合同，不是已接受的公共 API。本文中的 `MUST`、
 `SHOULD` 和 `MAY` 只表示候选合同的规范强度，不表示当前核心已经实现。
 
-本修订吸收了对 `R1.1` 的复审意见，重点暂定四类此前仍有歧义的安全规则：
+本修订吸收了对 `R1.1` 和前一轮 `R1.2` 复审意见，重点暂定四类此前仍有歧义的安全规则：
 
 1. action-specific `OperationSpec`、binary budget、Service、访问策略、资源租约、会话健康和 artifact；
 2. `MESSAGE` binary 的边界、核心强制上限、超限、部分响应和失步处理；
@@ -28,6 +28,17 @@
 - **现状证据**：已有核心代码、插件离线测试或受控实机观察；
 - **候选合同**：核心接受后才能实现的公共接口；
 - **待决问题**：需要核心团队冻结的选择，未解决前不得开始插件迁移。
+
+### R1.3 本轮复审回应
+
+| 核心阻断项 | 本修订的合同处理 | 状态 |
+| --- | --- | --- |
+| 失败恢复没有 driver 边界 | acquisition/screenshot 均提供 typed snapshot、core-owned baseline、restore result 和 fresh-snapshot verify；恢复阶段、字段顺序、epoch 与异常优先级固定 | 候选合同已补齐，待核心实现 |
+| binary budget 与子授权冲突 | 选择单一 operation context；各阶段顺序授权且不嵌套，所有 binary phase 引用同一 ledger，error phase 不得创建或重置额度 | 候选合同已冻结方向，待核心确认 |
+| count modulus 不能识别回绕/复位 | 删除 modulus proof；`count_delta_with_epoch` 必须联合未变化 `counter_epoch` 和有效 `state_transition`，否则改用 identity/state proof | 首版收紧，待 fixture |
+| 旧 `scope.errors` 与 typed drain 混用 | `scope.error_drain_v1` 独占 `max_records+1`；旧 `scope.errors` 保持 `legacy_unstructured`，`terminated/query_count=null`，未来 typed direct drain 另立 operation | 兼容边界已分开，待核心确认 |
+
+本表只记录合同回应，不表示核心已接受或插件已迁移。
 
 ## 术语与分层
 
@@ -85,7 +96,7 @@ transport 只负责可靠地交付字节和结构化 I/O 状态；PNG、波形 p
 ## 插件信任边界
 
 当前 `DriverContext.open_transport()` 返回公共 Protocol，但运行时
-`GuardedAuditedTransport.inner` 仍可被受信任 Python 插件访问。因此 R1.2 只规定「公共合同
+`GuardedAuditedTransport.inner` 仍可被受信任 Python 插件访问。因此 R1.3 只规定「公共合同
 不提供 backend session，插件代码不得依赖它」，不声称存在安全隔离。真正的 opaque facade、
 进程隔离、运行时属性拒绝和负向沙箱测试应由单独的安全设计处理，不能借本 RFC 的措辞假装
 已经实现。
@@ -133,7 +144,7 @@ class OperationSpec:
 仪器读回并由核心 verifier 校验的状态，才能进入 session verification fields。插件不得直接
 调用 session state 的内部方法或写入 verified fields。
 
-R1.2 暂定四个独立 binary 限制：`binary_response_max_bytes` 限制每次 payload，
+R1.3 暂定四个独立 binary 限制：`binary_response_max_bytes` 限制每次 payload，
 `binary_operation_max_bytes` 限制一个 operation 内所有 binary payload 的累计值，
 `binary_query_max_count` 限制 query 次数，`binary_resynchronization_max_bytes` 限制超限或异常后为寻找
 已证明边界而额外丢弃的字节数。会产生 binary response 的 operation 中，前三者必须是
@@ -142,8 +153,8 @@ R1.2 暂定四个独立 binary 限制：`binary_response_max_bytes` 限制每次
 给出更小的对应限制。
 核心 Service 在 operation 开始时分别计算有效值，并向 guarded transport 安装 opaque、
 短生命周期的
-`BinaryQueryBudget`。transport 每次 binary query 都必须验证 budget 与 operation/correlation
-匹配；插件只能进一步收紧单次上限，不能提高或重置累计额度。没有 budget 的新
+`BinaryQueryBudget`。transport 每次 binary query 都必须验证 budget 与 operation context、phase、
+correlation 和 session epoch 匹配；插件只能进一步收紧单次上限，不能提高或重置累计额度。没有 budget 的新
 `query_binary()` 调用在发送前拒绝；旧 `query_bin_block()` 兼容入口使用核心固定有限上限。
 
 现有 `verification_fields` 只表示按 `restore_coverage` 恢复到 baseline 后必须闭合的字段，
@@ -156,7 +167,7 @@ R1.2 暂定四个独立 binary 限制：`binary_response_max_bytes` 限制每次
 `error_check_minimum` 为 `None` 时，该 operation 不接受 error-check override，也不触发
 错误队列 I/O；为三态值时，请求可以选择同等或更强的策略，但不能削弱静态最低值。
 完整解析规则见第六节。输入/输出 schema、取消、幂等性和并发策略仍可作为后续核心扩展，
-但在 R1.2 中不把任意 Python 回调塞入公共合同。前置条件、恢复覆盖、验证字段、
+但在 R1.3 中不把任意 Python 回调塞入公共合同。前置条件、恢复覆盖、验证字段、
 error policy 和 binary budget 必须可序列化、可审计。
 
 候选字段的 verifier 归属如下；「核心待实现」不是插件可绕过的授权：
@@ -183,16 +194,16 @@ error policy 和 binary budget 必须可序列化、可审计。
 
 ### 1.2 候选 operation 映射
 
-下表是 R1.2 的最小候选映射，字段完整不等于合同已经冻结。Service 和 CLI 项都是候选入口，
+下表是 R1.3 的最小候选映射，字段完整不等于合同已经冻结。Service 和 CLI 项都是候选入口，
 当前不存在，不能在插件侧自行模拟。所有 operation 的 `session_purpose` 为 `normal`；超时后的安全停止由核心另行签发
-有界 `recovery` transaction。R1.2 保守地为所有仪器 operation 使用 `exclusive` lease，因为
+有界 `recovery` transaction。R1.3 保守地为所有仪器 operation 使用 `exclusive` lease，因为
 当前 `ScopeService` 的 session lease 不会按 `OperationSpec.lease_mode` 动态切换。以后若开放
 共享只读 session，需要单独证明 backend、仪器和 transaction lock 的并发语义。
 
 | operation | capability | effect / lease | changed_fields | restore_coverage | required_verified_fields | verification_fields | postcondition / cleanup fields | risk_flags | timeout_source | binary response / operation / query / resync limits | error minimum | 最低 access | Service / CLI / artifact |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `scope.screenshot_profile` | `scope.screenshot_profile` | `stateful_read` / `exclusive` | `none` | `none` | `scope.identity` | `none` | — / — | `profile_query` | `connection.timeout_ms` | — | — | `read_only` | `ScopeService.screenshot_profile()` / `wavebench scope screenshot profile` / `screenshot.profile` |
-| `scope.screenshot_v2` | `scope.screenshot_v2` | `write` / `exclusive` | `scope.display_menu`, `scope.display_color`, `scope.error_queue`, `output.screenshot` | `screenshot-baseline-only` | `scope.identity` | `scope.display_menu`, `scope.display_color` | — / — | `front_panel_state`, `binary_response`, `temporary_display_setup` | `connection.timeout_ms` | `TBD / TBD / 1 / TBD`（未冻结数值前不可实现） | `disabled` | `read_write` | `ScopeService.screenshot_v2(request)` / `wavebench scope screenshot capture` / `screenshot`、`effective_request`、`media_type`、`dimensions`、`framing` |
+| `scope.screenshot_v2` | `scope.screenshot_v2` | `write` / `exclusive` | `scope.display_menu`, `scope.display_color`, `scope.error_queue`, `output.screenshot` | `screenshot-baseline-only` | `scope.identity` | `scope.display_menu`, `scope.display_color` | — / `scope.display_menu`, `scope.display_color` | `front_panel_state`, `binary_response`, `temporary_display_setup` | `connection.timeout_ms` | `TBD / TBD / 1 / TBD`（未冻结数值前不可实现） | `disabled` | `read_write` | `ScopeService.screenshot_v2(request)` / `wavebench scope screenshot capture` / `screenshot`、`effective_request`、`media_type`、`dimensions`、`framing` |
 | `scope.acquisition_run_state` | `scope.acquisition_run_state` | `stateful_read` / `exclusive` | `none` | `none` | `scope.identity` | `none` | — / — | `state_observation` | `connection.timeout_ms` | — | — | `read_only` | `ScopeService.acquisition_run_state()` / `wavebench scope acquisition status` / `acquisition.run_state` |
 | `scope.acquisition_start` | `scope.acquisition_control` + `scope.acquisition_run_state` | `write` / `exclusive` | `scope.run_state`, `scope.trigger`, `scope.acquisition`, `scope.error_queue` | `failure-cleanup-only` | `scope.identity` | `scope.trigger`, `scope.acquisition` | `scope.run_state`, `scope.trigger`, `scope.acquisition` / `scope.run_state`, `scope.trigger`, `scope.acquisition` | `trigger`, `acquisition_state`, `recovery_required` | `operation.deadline`（候选；当前核心 Service 尚不识别） | — | `disabled` | `read_write` | `ScopeService.start_acquisition(request)` / `wavebench scope acquisition start` / `acquisition.control`、`effective_trigger_mode`、`postcondition`、`cleanup` |
 | `scope.acquisition_single` | `scope.acquisition_control` + `scope.acquisition_run_state` | `acquire` / `exclusive` | `scope.run_state`, `scope.trigger`, `scope.acquisition`, `scope.error_queue` | `failure-cleanup-only` | `scope.identity` | `scope.trigger`, `scope.acquisition` | `scope.run_state`, `scope.trigger`, `scope.acquisition` / `scope.run_state`, `scope.trigger`, `scope.acquisition` | `trigger`, `acquisition_state`, `recovery_required` | `operation.deadline`（候选；当前核心 Service 尚不识别） | — | `disabled` | `read_write` | `ScopeService.acquire_single()` / `wavebench scope acquisition single` / `acquisition.control`、`postcondition`、`completion_proof`、`cleanup` |
@@ -245,15 +256,17 @@ session 不得回到 `healthy`。
 `scope.capture_waveforms` 和 `scope.capture_multiple` 的核心规格；新 RFC operation 不能因为
 换成 `ScopeTraceData` 就缩小既有 transfer 恢复/验证要求。
 
-现有 capture 可选嵌套旧 `scope.screenshot`。如果该 driver 会写菜单、颜色或其他显示状态，
+现有 capture 可选调用旧 `scope.screenshot`。如果该 driver 会写菜单、颜色或其他显示状态，
 核心必须二选一：把 `scope.display_menu`、`scope.display_color`、`output.screenshot` 纳入父
-capture 的 changed/verification 字段并执行 baseline/restore，或以核心授权的独立 screenshot
-子 operation 执行。不得继续在父 operation 的审计范围外隐式调用。旧
+capture 的 changed/verification 字段并执行 baseline/restore，或由核心注册一个静态声明完整
+字段闭包的 composite operation，在同一 operation context 内顺序执行截图阶段。不得在父
+operation 的 active authorization 内嵌套另一个 operation authorization，也不得在父 operation
+的审计范围外隐式调用。旧
 `scope.screenshot_png()` 不能因为 capability 可选就绕过这一要求。
 
 ### 1.3 输入、前置条件与输出
 
-为避免只有 operation 名称而没有可执行边界，R1.2 规定以下最小 schema；具体 Python 类型和
+为避免只有 operation 名称而没有可执行边界，R1.3 规定以下最小 schema；具体 Python 类型和
 序列化格式仍待核心冻结：
 
 | operation | 输入 | 主操作写入 / binary 前置条件 | 成功输出 |
@@ -297,7 +310,7 @@ class OperationResult:
 
 `OperationRequest.deadline` 使用单调时钟的绝对 deadline；artifact 只记录剩余时长或
 `deadline_source`，不记录进程时间戳。`correlation_id` 在一次 Service operation 及其
-recovery/verification 子事务中保持不变，便于把 cleanup 和错误检查归到同一操作。
+recovery/verification phase 中保持不变，便于把 cleanup 和错误检查归到同一操作。
 
 `operation_id` MUST 使用稳定的小写点分隔名称；版本变化通过 capability/core version gate
 处理，不在同一名称下改变输入或输出语义。异常至少区分：
@@ -323,10 +336,11 @@ correlation_id
 requested_arguments（去除敏感值）
 observed_state_before / observed_state_after
 session_health_before / session_health_after
+baseline.kind / baseline.session_epoch / baseline.fields / baseline.restore_order
 postcondition.status / postcondition.reason_code / postcondition.observed_fields
 completion_proof.proof / completion_proof.original_state / completion_proof.proof_baseline_state /
 completion_proof.proof_baseline_stage / completion_proof.observed_states（仅 SINGLE）
-cleanup.attempted / cleanup.succeeded / cleanup.error_code / cleanup.observed_fields
+cleanup.attempted / cleanup.restore / cleanup.verification / cleanup.error_code / cleanup.observed_fields
 error_check
 ```
 
@@ -336,6 +350,93 @@ error_check
 
 artifact 只记录 framing、长度、媒体类型、状态 token 和摘要，不记录图片、原始波形、真实
 resource、序列号或完整命令 payload。
+
+### 1.6 非嵌套 operation context 与阶段授权
+
+本轮增补选择「单个 operation context 下的顺序阶段授权」，不选择嵌套 session
+authorization。候选核心内部模型为：
+
+```python
+OperationPhase = Literal[
+    "preflight",
+    "error_before",
+    "main",
+    "success_restore",
+    "error_after",
+    "failure_cleanup",
+    "cleanup_verification",
+]
+
+@dataclass(frozen=True)
+class _CoreOperationContext:
+    context_id: str
+    operation_id: str
+    correlation_id: str
+    session_epoch: str
+    deadline: float
+    binary_budget_ledger_id: str | None
+```
+
+operation context 只是核心 coordinator 持有的生命周期和额度账本，不是 session
+authorization，创建它不会发送 I/O，也不会占用核心现有的 active authorization 槽位。
+核心在 access、capability、lease 和静态 profile 校验通过后，在第一次仪器 I/O 前创建一次
+context；同一公共 operation 不得创建第二个 context 来重置 deadline、correlation 或 binary
+budget。
+
+需要动态 I/O 授权的每个阶段使用一个独立、有界的 session authorization；`main` 阶段
+沿用该公共 operation 已有的 `normal` gate，不在其中再开子授权。候选 phase 与当前
+`SessionPurpose` 的映射固定为：`preflight`/`error_before`/`error_after`/`cleanup_verification`
+使用只读 `verification` 语义，`success_restore`/`failure_cleanup` 使用有界 `recovery` 语义，
+`main` 使用既有 `normal` operation gate，但该 gate 的授权记录仍必须绑定本 context 的
+`context_id`、epoch、字段和 deadline；不是重新开启一个脱离 context 的 normal operation。
+若核心为 phase 增加专用枚举，必须保持同样的 I/O 白名单和非嵌套约束；driver 永远不接收
+或构造 authorization token。
+
+上述阶段遵守以下硬约束：
+
+1. 开启新阶段前，上一阶段 authorization MUST 已关闭；任意时刻最多只有一个 active
+   authorization。阶段执行器不得从 active authorization 内再签发子 authorization。
+2. 每个 authorization 必须绑定 `context_id`、`session_epoch`、phase、字段白名单、
+   allowed I/O、剩余 deadline 和静态 `max_steps`；阶段切换不得改变 access/lease 结论。
+3. `BinaryQueryBudget` 的可变账本归 operation context 所有，不归某个阶段 authorization
+   所有。只有静态 phase contract 允许 binary query 时，guarded transport 才能在 active
+   authorization 中引用同一 `binary_budget_ledger_id`。创建、关闭或重试 phase 都不得
+   重建账本、增加额度或退回已消耗的 query count。
+4. session 进入 `uncertain/poisoned` 后，binary ledger 立即变为不可用，但已消耗计数保留到
+   operation artifact 完成。只有静态声明的 `failure_cleanup`/`cleanup_verification`
+   recovery 阶段可继续；它们不得使用 binary I/O。
+5. context 在成功结束、主失败及全部允许的 cleanup/verification 结束、取消且无可执行
+   recovery，或 session epoch 改变时进入 terminal。进入 terminal 后所有阶段 token 和 binary
+   ledger 失效，不得跨 operation 或跨 epoch 重用。
+
+阶段与授权、binary 的固定对应关系为：
+
+| phase | session authorization purpose | 允许的 I/O | binary ledger |
+| --- | --- | --- | --- |
+| `preflight` | `verification` | 只读状态/profile query | 不可用 |
+| `error_before` / `error_after` | `verification` | `scope.error_queue` 的文本 query | 只关联同一 context；禁止 binary 且不扣额度 |
+| `main` | 既有 normal operation gate | 由 `OperationSpec` 静态声明的 write/acquire/text/binary | 若允许 binary，只能引用同一 ledger |
+| `success_restore` / `failure_cleanup` | `recovery` | 有界文本 STOP、state restore write | 不可用 |
+| `cleanup_verification` | `verification` | 有界文本 query-back | 不可用 |
+
+因此 `error_before`/`error_after` 即使拥有独立的顺序 authorization，也不会获得新的
+binary 权限或额度；它们只携带同一 `context_id`/`binary_budget_ledger_id` 的审计关联，账本
+计数保持不变。阶段切换时核心先关闭当前授权，再签发下一阶段授权；若当前核心的
+`authorize()` 只能接受 `recovery`/`verification` purpose，则 `main` 继续使用既有 normal
+operation gate，其他 phase 按上表映射，不要求核心接受嵌套授权。
+
+首版操作的阶段顺序为：
+
+| operation 类型 | 成功顺序 | 主操作/after 失败顺序 |
+| --- | --- | --- |
+| acquisition start/single | `preflight -> error_before? -> main -> error_after? -> terminal` | 关闭当前 phase 后 `failure_cleanup -> cleanup_verification -> terminal` |
+| screenshot with state changes | `preflight -> error_before? -> main -> error_after? -> success_restore -> cleanup_verification -> terminal` | 关闭当前 phase 后 `failure_cleanup -> cleanup_verification -> terminal` |
+| fetch/trace vendor transaction | `preflight -> error_before? -> main -> error_after? -> terminal` | 关闭当前 phase 后执行该 operation 已声明的非嵌套 restore/verification phase，然后 terminal |
+
+`?` 表示 error policy 决定该阶段是否存在，不表示插件可自行跳过。before/after error
+executor 只是同一 context 中的独立顺序 phase，不是父/子 authorization。
+artifact MUST 记录每个 phase 的开始/结束、allowed I/O、实际 step 数、budget 前后摘要和跳过原因；
+不记录 opaque token 本身。
 
 ## 二、binary framing 与 message 语义
 
@@ -377,6 +478,8 @@ payload  := exactly the declared number of bytes
 ```python
 # 概念模型：这是核心内部状态，不是公共构造函数。
 class _CoreBinaryQueryBudget(Protocol):
+    ledger_id: str
+    context_id: str
     operation_id: str
     correlation_id: str
     per_response_max_bytes: int
@@ -411,8 +514,9 @@ def query_binary(
 上面的 `_CoreBinaryQueryBudget` 是描述核心内部授权状态的概念模型，不是插件可实例化的公共输入；
 文中简称 `BinaryQueryBudget`。核心只向 guarded transport 传递不可伪造的 opaque token，不把
 这些字段暴露给插件作为可修改对象。
-核心 coordinator 为一次 operation/correlation 创建一次 budget，在 operation 完成、失败、取消或
-session health 改变时立即失效；transport 不得接受跨 operation、跨 correlation 或过期的 budget。
+核心 coordinator 为一次 operation context 创建一次 budget ledger。session health 改变时立即
+禁止新 binary I/O，但 ledger 保留已消耗计数，直到第 1.6 节定义的 context terminal 时才失效；
+transport 不得接受跨 context、跨 operation/correlation、跨 session epoch 或过期的 budget。
 `per_response_max_bytes` 限制每次 response；`remaining_operation_bytes` 限制一次 operation
 中所有 binary response 的累计 payload；`remaining_query_count` 防止通过大量零长度响应绕过资源
 边界；`resynchronization_max_bytes` 限制失败后为证明同步而额外丢弃的字节。这些值都是核心
@@ -432,11 +536,12 @@ effective_resynchronization_max = min(spec resync, profile resync, connection re
 ```
 
 profile 或 connection 没有对应限制时只是不进一步收紧，不能取消 spec 的有限值。
-Service 在发送前向 guarded transport 安装与 operation/correlation 绑定的 opaque budget。没有 budget 的新
+Service 在第一个阶段授权前向 operation context 安装与 context/operation/correlation/epoch
+绑定的 opaque budget ledger。没有 ledger 或 active phase 不允许 binary I/O 的新
 `query_binary()` 调用必须在 `BEFORE_SEND` 以 `NOT_SENT` 拒绝。现有 `query_bin_block()` 保留
 为 definite block 兼容入口。它在 legacy operation 中使用核心固定的有限兼容上限；在已安装
-R1.2 budget 的新 operation 中必须消耗同一个 response/operation/query/resync budget，不得建立第二套
-兼容额度。新 operation 若无 R1.2 budget，通过 `query_bin_block()` 也必须在发送前拒绝。
+R1.3 budget 的新 operation 中必须消耗同一个 response/operation/query/resync budget，不得建立第二套
+兼容额度。新 operation 若无 R1.3 budget，通过 `query_bin_block()` 也必须在发送前拒绝。
 核心冻结 legacy 兼容上限时必须覆盖现有已接受 operation 的合法 payload，或给旧 operation 保留
 独立的有限 spec；不能在没有迁移说明的情况下静默降低既有波形读取上限。
 
@@ -446,7 +551,7 @@ spec 与 connection 的最小值。
 显式 connection 限制使用同一数值规则。上限比较和计数使用整数 bytes，不能用浮点近似
 或按样本点数替代。
 每个 core-validated profile variant 只能声明一个精确 transport trailing byte sequence；
-R1.2 暂定最长 16 bytes，不允许备选集合、正则、回调或「任意空白」。这避免空字符串
+R1.3 暂定最长 16 bytes，不允许备选集合、正则、回调或「任意空白」。这避免空字符串
 与非空 terminator 形成前缀歧义，导致 backend 在 declared payload 后继续阻塞或吞掉下一响应。
 MESSAGE 只允许空 transport trailing。核心把已验证的精确 sequence 放入 opaque budget，
 插件不得通过 `query_binary()` 参数临时放宽。
@@ -456,9 +561,10 @@ MESSAGE 只允许空 transport trailing。核心把已验证的精确 sequence �
 结构化错误映射。`BinaryQueryBudget` 的创建、消费和失效只能由核心 coordinator 完成；
 只给某个 backend 增加方法会绕过核心会话授权，不符合候选合同。
 
-budget 不作为 `query_binary()` 的插件参数。核心 coordinator 在当前 operation 的 session
-authorization 中安装 opaque token；`GuardedAuditedTransport.query_binary()` 从内部
-authorization context 取得并验证 token，再把已计算的有效上限传给 backend。插件只提交
+budget 不作为 `query_binary()` 的插件参数。核心 coordinator 在 operation context 中安装
+opaque ledger；每个允许 binary I/O 的非嵌套 phase authorization 只引用它的
+`ledger_id`。`GuardedAuditedTransport.query_binary()` 同时验证 active phase、context/epoch 和
+ledger 绑定，再把已计算的有效上限传给 backend。插件只提交
 `max_bytes <= per_response_max_bytes` 的收紧值；它无法看到、构造或替换 token。guarded
 transport 在同一 transaction lock 内计算
 `effective_query_max = min(max_bytes, per_response_max_bytes, remaining_operation_bytes)`；结果不为正整数或 token
@@ -468,8 +574,9 @@ transport 在同一 transaction lock 内计算
 扣减前 guarded transport 必须再验证 `len(result.data) <= effective_query_max`、下文的
 精确 consumed 等式和 transport trailing allowlist；backend 返回越界的「成功」结果必须转为
 合同违反并关闭/毒化 session，不得只扣成负额度后交给调用方。
-任何失败一旦已发送 query，都不退回预留的 query count。该授权
-注入、计数和失效方式及其负向测试必须在进入 `Proposed` 前冻结。
+任何失败一旦已发送 query，都不退回预留的 query count。阶段关闭、失败或切换也不退回
+任何额度。核心测试必须证明 `error_before -> main -> error_after` 三段使用同一 ledger，
+且尝试在新 phase 重建 ledger 会在任何 I/O 前拒绝。
 
 ### 2.4 message boundary 的能力证明
 
@@ -482,7 +589,7 @@ transport 在同一 transaction lock 内计算
 | TCP socket | 协议本身声明长度、EOM 或受控 message API | `recv()` 返回短块、idle timeout |
 | serial | 只有设备和 backend 共同声明可证明的 EOM 才能提供 | 暂时没有数据、换行或固定延迟 |
 
-R1.2 暂不批准任何现有 backend 声明 `binary.message_boundary`；上表是进入 conformance fixture
+R1.3 暂不批准任何现有 backend 声明 `binary.message_boundary`；上表是进入 conformance fixture
 前必须满足的条件，不是能力白名单。
 
 能力可在 open 时由 backend 静态类型和 resource 属性共同确定；若 backend 无法提供证明，
@@ -504,7 +611,7 @@ R1.2 暂不批准任何现有 backend 声明 `binary.message_boundary`；上表�
 3. timeout、部分响应、终止符恢复失败和 malformed header 必须映射到现有
    `TransportIOError` 的 `phase`、`response_progress`、`synchronization`、`attempts` 和
    `replay_policy` 字段；不得重试已经发送且同步未知的完整 query。
-4. R1.2 候选为现有 `TransportIOError` 增加可选的稳定 `reason_code`、非负非 bool
+4. R1.3 候选为现有 `TransportIOError` 增加可选的稳定 `reason_code`、非负非 bool
    `consumed_bytes` 和 `discarded_bytes`。binary `reason_code` 固定为
    `binary_framing_error`、`binary_limit_exceeded`、`binary_truncated`、`binary_timeout` 或
    `binary_transport_trailing_error`。它们进入现有脱敏 error envelope，不新建携带 payload 的公共异常。
@@ -512,7 +619,7 @@ R1.2 暂不批准任何现有 backend 声明 `binary.message_boundary`；上表�
    字段，不得在 retry 计数时丢失细分原因或字节证据。
    有界丢弃成功时 `synchronization=proven`，未证明时为 `unproven`，已确认失步或关闭时为
    `lost`；后两者分别使 session 至少进入 `uncertain` 或 `poisoned`。
-5. R1.2 的 `query_binary(command=...)` 不接受 `ReplayPolicy.READ_CONTINUATION_ONLY`，因为该
+5. R1.3 的 `query_binary(command=...)` 不接受 `ReplayPolicy.READ_CONTINUATION_ONLY`，因为该
    签名必然携带一个可能被发送的 command；必须在 `BEFORE_SEND` 阶段以 `NOT_SENT` 拒绝。
    未来若需要 continuation，应设计只接受 core-issued response token 的独立
    `read_binary_continuation(token, max_bytes=...)`，只消费同一响应且绝不重发 command。
@@ -581,6 +688,7 @@ query 的结果不得无条件拼接；样本格式、字节序和 preamble 解�
 ```python
 ScreenshotMenuMode = Literal["device", "include", "exclude"]
 ScreenshotColorMode = Literal["device", "color", "monochrome", "inverted"]
+ScopeScreenshotStateField = Literal["scope.display_menu", "scope.display_color"]
 
 @dataclass(frozen=True)
 class ScopeScreenshotRequest:
@@ -596,17 +704,47 @@ class ScopeScreenshotVariant:
     response_max_bytes: int
     operation_max_bytes: int
     resynchronization_max_bytes: int
+    changed_fields: tuple[ScopeScreenshotStateField, ...]
+    restore_order: tuple[ScopeScreenshotStateField, ...]
+    snapshot_max_steps: int
+    restore_max_steps: int
+    verify_max_steps: int
     query_max_count: Literal[1] = 1
     transport_trailing_hex: str = ""
     content_trailing_hex: str = ""
     width_px: tuple[int, int] | None = None
     height_px: tuple[int, int] | None = None
-    changed_fields: tuple[str, ...] = ()
 
 @dataclass(frozen=True)
 class ScopeScreenshotProfile:
     variants: tuple[ScopeScreenshotVariant, ...]
     source: Literal["descriptor", "queried", "combined"] = "descriptor"
+
+@dataclass(frozen=True)
+class ScopeScreenshotStateSnapshot:
+    captured_fields: tuple[ScopeScreenshotStateField, ...]
+    menu_state_token: str | None = None
+    color_state_token: str | None = None
+
+@dataclass(frozen=True)
+class ScopeScreenshotBaseline:
+    session_epoch: str
+    snapshot: ScopeScreenshotStateSnapshot
+    restore_order: tuple[ScopeScreenshotStateField, ...]
+
+@dataclass(frozen=True)
+class ScopeScreenshotRestoreResult:
+    status: Literal["completed", "failed", "not_attempted"]
+    attempted_fields: tuple[ScopeScreenshotStateField, ...]
+    restored_fields: tuple[ScopeScreenshotStateField, ...]
+    error_code: str | None = None
+
+@dataclass(frozen=True)
+class ScopeScreenshotVerification:
+    status: Literal["verified", "mismatch", "unavailable"]
+    verified_fields: tuple[ScopeScreenshotStateField, ...]
+    mismatched_fields: tuple[ScopeScreenshotStateField, ...]
+    error_code: str | None = None
 
 @dataclass(frozen=True)
 class ScopeScreenshot:
@@ -617,9 +755,30 @@ class ScopeScreenshot:
     requested: ScopeScreenshotRequest
     effective: ScopeScreenshotRequest
     framing: BinaryResponseFraming
+
+class ScopeScreenshotDriver(InstrumentDriver, Protocol):
+    def snapshot_screenshot_state(
+        self,
+        fields: tuple[ScopeScreenshotStateField, ...],
+    ) -> ScopeScreenshotStateSnapshot: ...
+    def capture_screenshot(
+        self,
+        request: ScopeScreenshotRequest,
+        *,
+        baseline: ScopeScreenshotBaseline | None,
+    ) -> ScopeScreenshot: ...
+    def restore_screenshot_state(
+        self,
+        baseline: ScopeScreenshotBaseline,
+    ) -> ScopeScreenshotRestoreResult: ...
+    def verify_screenshot_state_restored(
+        self,
+        fields: tuple[ScopeScreenshotStateField, ...],
+        baseline: ScopeScreenshotBaseline,
+    ) -> ScopeScreenshotStateSnapshot: ...
 ```
 
-`variants` MUST 非空，每个 request 只能出现一次；R1.2 首版只接受 `png` / `image/png`。
+`variants` MUST 非空，每个 request 只能出现一次；R1.3 首版只接受 `png` / `image/png`。
 两个 byte 上限 MUST 为正数，`resynchronization_max_bytes` MUST 为非 bool 非负整数；
 首版 screenshot 只允许一次
 binary response，因此 `query_max_count == 1` 且
@@ -630,6 +789,18 @@ binary response，因此 `query_max_count == 1` 且
 `device` 表示保留仪器当前行为，不等于 `include` 或 `exclude`。profile 可以是静态
 descriptor、仪器查询结果或两者交集；查询结果不得扩大 descriptor 未声明的安全上限，
 结果中的 `effective` 和 variant 必须一致。
+
+state restore 字段使用以下不变量：
+
+- `changed_fields` 唯一，只包含该 request tuple 实际会修改的 menu/color 字段；
+- `restore_order` 必须与 `changed_fields` 集合相同且无重复；顺序是 driver 恢复写入的唯一事实源；
+- `changed_fields` 为空时，三个 `*_max_steps` 必须全为 `0`；非空时，必须是
+  `1..32` 的非 bool 整数，且分别覆盖 snapshot query、restore write 和 verify query 的
+  最大实际 step 数；
+- snapshot 的 `captured_fields` 必须恰好等于 variant `changed_fields`；menu/color token 必须在
+  对应字段存在时非空，其他情况为 `None`。
+- core-owned `ScopeScreenshotBaseline.restore_order` 必须是已验证 variant 的精确顺序，driver
+  不得自行追加、删除或重排字段。
 
 `transport_trailing_hex` 和 `content_trailing_hex` 都使用小写、偶数长度的精确十六进制，
 每个解码后最长 16 bytes；前者只表示 definite-block framing 后的文档化 transport
@@ -647,9 +818,41 @@ handler 必须从已校验的 IHDR 得到尺寸，不能只相信 driver 自报�
 ### 3.2 状态副作用与旧接口
 
 若 menu/color 设置会写入前面板状态，`scope.screenshot_v2` 必须记录对应 changed fields、
-恢复覆盖和有效 request。operation 在任何写入前必须读取 menu/color baseline，写入后必须
-query-back；无论截图成功、媒体校验失败或 transport 失败，都按依赖顺序恢复并再次 query-back。
-恢复失败不覆盖主异常，但 session 不得保持 `healthy`，主截图结果也不得伪装为成功。
+恢复覆盖和有效 request。只要 variant `changed_fields` 非空，核心必须在任何写入前调用
+`snapshot_screenshot_state()`，校验返回值后构造 core-owned
+`ScopeScreenshotBaseline(session_epoch, snapshot, restore_order)`，并把同一 baseline 传入
+`capture_screenshot()`。driver 只能使用 baseline 中的已验证字段和顺序。
+若 `changed_fields` 为空，baseline 固定为 `None`，三个 state recovery 方法不得发生 I/O。
+
+无论截图成功、媒体校验失败或 transport 失败，只要 `changed_fields` 非空，核心都必须按
+variant `restore_order` 调用 `restore_screenshot_state(baseline)`，再在独立只读阶段调用
+`verify_screenshot_state_restored(changed_fields, baseline)`。restore result 只证明写入已完成；verify 方法必须
+返回新查询的 `ScopeScreenshotStateSnapshot`，由核心与 baseline snapshot 逐字段比较并生成
+`ScopeScreenshotVerification`。只有全部 changed fields 一致时才能报告恢复成功。主 driver 抛异常不会丢失
+core-owned baseline。恢复或验证失败不覆盖主异常，但 session 不得保持 `healthy`，
+主截图结果也不得伪装为成功。`changed_fields` 为空时，restore/verify 结果固定为
+`not_attempted`/`unavailable` 的无 I/O 记录，不调用这两个需要 baseline 的方法。
+
+`ScopeScreenshotRestoreResult.attempted_fields` 必须遵循 baseline 的 `restore_order` 前缀，
+`restored_fields` 只能是已尝试字段的有序子序列；`status="completed"` 只在所有 changed
+fields 均已写入时成立。restore/verify 抛出的 transport 或协议异常由核心规范化为
+`failed`/`unavailable` 结果，核心不得把该结果当作 query-back 证据。
+
+截图的执行顺序固定为：`preflight snapshot -> main capture -> error_after? ->
+success_restore restore -> cleanup_verification verify`。主 capture 抛异常、PNG 校验失败或
+`error_after` 失败时，主异常优先级最高，但仍必须转入 `failure_cleanup restore ->
+cleanup_verification verify`；没有
+changed fields 时整个 restore/verify 分支为零 I/O。核心只有在 restore result 完成且 verify
+逐字段匹配时，才把 screenshot operation 标为恢复成功。
+
+snapshot、restore 和 verify 分别只能在 `preflight`、`success_restore|failure_cleanup`
+和 `cleanup_verification` 阶段授权中调用；每个授权使用 variant 已验证的 step 上限。
+baseline epoch 不匹配、阶段不匹配或 driver 尝试超出 fields/step 时，必须在越界 I/O 前拒绝。
+
+这里的 snapshot → restore → verify 是可复用的 state-recovery 模式，不是 SDS800X HD 私有
+命令合同：不同仪器只需为各自的字段集合定义 typed snapshot/baseline 和 token 编解码，核心
+仍负责授权、字段比较、session health 与 artifact。后续 `CHDR`/`CORD`/`WFSU` 等 transfer
+状态若需要写入，也应复用同一模式，而不是再发明只返回布尔值的 driver helper。
 
 现有 `scope.screenshot` 仅在 profile 明确包含等价旧参数时适配；旧 driver 忽略
 `include_menu` 的行为不能由通用 adapter 静默继承。无法证明参数已生效时必须报告
@@ -691,21 +894,57 @@ ScopeTriggerMode = Literal[
 ScopeContinuousTriggerMode = Literal["auto", "normal", "roll"]
 ScopeSingleBaselineStage = Literal["configured_pre_arm", "original_atomic_arm"]
 ScopeSingleArmSemantics = Literal["configure_then_arm", "atomic_configure_and_arm"]
+ScopeAcquisitionSettingField = Literal["scope.trigger", "scope.acquisition"]
+ScopeAcquisitionRestoreField = Literal[
+    "scope.run_state",
+    "scope.trigger",
+    "scope.acquisition",
+]
+ScopeStateToken = str
 
 @dataclass(frozen=True)
 class ScopeAcquisitionControlProfile:
     supported_continuous_modes: tuple[ScopeContinuousTriggerMode, ...]
     single_arm_semantics: ScopeSingleArmSemantics
     arm_resets_acquisition_count: bool
-    acquisition_count_modulus: int | None = None
+    failure_restore_order: tuple[ScopeAcquisitionSettingField, ...]
+    snapshot_max_steps: int
+    restore_max_steps: int
+    verify_max_steps: int
     atomic_arm_preserves_count_mode_semantics: bool = False
+
+@dataclass(frozen=True)
+class ScopeAcquisitionControlSnapshot:
+    run_state: "ScopeAcquisitionRunState"
+    trigger_state_token: ScopeStateToken
+    acquisition_state_token: ScopeStateToken
+
+@dataclass(frozen=True)
+class ScopeAcquisitionControlBaseline:
+    session_epoch: str
+    snapshot: ScopeAcquisitionControlSnapshot
+    restore_order: tuple[ScopeAcquisitionRestoreField, ...]
+
+@dataclass(frozen=True)
+class ScopeBaselineRestoreResult:
+    status: Literal["completed", "failed", "not_attempted"]
+    attempted_fields: tuple[ScopeAcquisitionRestoreField, ...]
+    restored_fields: tuple[ScopeAcquisitionRestoreField, ...]
+    error_code: str | None = None
+
+@dataclass(frozen=True)
+class ScopeBaselineVerification:
+    status: Literal["verified", "mismatch", "unavailable"]
+    verified_fields: tuple[ScopeAcquisitionRestoreField, ...]
+    mismatched_fields: tuple[ScopeAcquisitionRestoreField, ...]
+    error_code: str | None = None
 
 @dataclass(frozen=True)
 class ScopeContinuousAcquisitionRequest:
     trigger_mode: ScopeContinuousTriggerMode
 
 ScopeCompletionProof = Literal[
-    "count_delta",
+    "count_delta_with_epoch",
     "identity_delta",
     "state_transition",
 ]
@@ -716,6 +955,7 @@ class ScopeAcquisitionRunState:
     trigger_mode: ScopeTriggerMode
     raw_state: str
     acquisition_count: int | None = None
+    counter_epoch: ScopeStateToken | None = None
     acquisition_identity: str | None = None
 
 @dataclass(frozen=True)
@@ -735,36 +975,69 @@ class ScopeAcquisitionCompletion:
 `ScopeAcquisitionControlProfile` 是 descriptor 静态事实，不是 driver 在 operation 中自报的
 动态结果。候选 `InstrumentDescriptor.scope_acquisition_control_profile` 字段在声明
 `scope.acquisition_control` capability 时 MUST 非空；核心 factory 在第一次仪器 I/O 前
-完成静态校验，并把已验证 profile 传给 Service preflight。R1.2 不允许仪器查询或
+完成静态校验，并把已验证 profile 传给 Service preflight。R1.3 不允许仪器查询或
 driver 返回值扩大 descriptor profile。
 
 profile 不变量为：
 
 - `supported_continuous_modes` 非空、唯一，且只包含 `auto/normal/roll`；
-- 两个 bool 字段必须是真正的 `bool`；`acquisition_count_modulus` 为 `None` 或不小于
-  `2` 的非 bool 整数；
+- 两个 bool 字段必须是真正的 `bool`；
+- `failure_restore_order` 必须恰好各包含一次 `scope.trigger` 和 `scope.acquisition`；
+  顺序是核心恢复授权与 driver 实现的唯一事实源；
+- 三个 `*_max_steps` 必须是 `1..64` 的非 bool 整数；snapshot/verify 各至少覆盖 run state、
+  trigger 和 acquisition 三次 query，`restore_max_steps` 至少覆盖 STOP 和两个设置恢复写入，
+  但不因此允许超出实际授权 step 数；
 - `single_arm_semantics="configure_then_arm"` 时
   `atomic_arm_preserves_count_mode_semantics` MUST 为 `false`；
 - `single_arm_semantics="atomic_configure_and_arm"` 时，只有
-  `atomic_arm_preserves_count_mode_semantics=true`、`arm_resets_acquisition_count=false` 且
-  `original_state.trigger_mode="single"` 同时成立，才允许 `count_delta`；
-- `arm_resets_acquisition_count=true` 时任何 arm 路径都不得使用 `count_delta`；只能使用
+  `atomic_arm_preserves_count_mode_semantics=true` 且 `arm_resets_acquisition_count=false` 时，
+  operation verifier 才可以在原始状态确为 `trigger_mode="single"` 时把 count 作为辅助证据；
+- `arm_resets_acquisition_count=true` 时任何 arm 路径都不得使用 `count_delta_with_epoch`；只能使用
   identity 或状态迁移证据。
+
+核心构造 `ScopeAcquisitionControlBaseline` 时必须把固定的
+`("scope.run_state", *profile.failure_restore_order)` 写入 `restore_order`；baseline 中的顺序
+与该展开结果不一致时在第一次 recovery I/O 前拒绝。`ScopeAcquisitionControlSnapshot` 的三个
+字段必须始终齐全，因此 STOP、trigger 和 acquisition 的恢复/验证边界不会依赖 driver 临时
+决定字段集合。
+
+`ScopeStateToken` MUST 是经 driver 规范化的、无换行、不含 resource/序列号的安全 token；不得把
+原始 SCPI、仪器地址或未脱敏响应放入 baseline。`session_epoch` 只用于防止跨连接恢复，
+不得跨 epoch 重用。`ScopeBaselineRestoreResult` 和 `ScopeBaselineVerification` 是核心可审计的结果，
+不是 driver 可以省略的布尔标记。
+
+`ScopeBaselineRestoreResult.attempted_fields` 必须是 baseline `restore_order` 的前缀，
+`restored_fields` 必须是其中的有序子序列且不得包含额外字段；`status="completed"` 仅在
+所有必需字段均已写入时成立，任何中途失败都必须为 `failed` 并保留已完成字段。
+driver 若在 restore/verify 中抛出 transport 或协议异常，核心必须把它规范化为对应的
+`failed`/`unavailable` cleanup 结果并保留异常证据；不得因为 Protocol 返回类型存在就假定
+调用一定返回。
+核心不得把 `restored_fields` 当作 query-back 证据，必须以随后返回的 snapshot 生成
+`ScopeBaselineVerification`。
 
 `raw_state` MUST 是短、可打印、无换行 token；无法无损映射时使用 `unknown`，不能把相近
 文字硬映射成 `stopped` 或 `complete`。`acquisition_count` 必须是非负、非 bool 整数；
+`counter_epoch`（若有）必须是 `1..64` 个 ASCII safe-token 字符，并在同一次 operation
+中保持可比较；
 `acquisition_identity` 只能是经 driver 校验的短 token，不能包含 resource 或序列号。
 `ScopeAcquisitionRunState` 只描述一次观察，不携带历史完成结论；completion proof 只存在于
 `ScopeAcquisitionCompletion`，防止普通状态查询伪装成某次 SINGLE 已完成。
 成功构造 `ScopeAcquisitionCompletion` 时，首先必须满足所有 proof 共享的终态不变量：
 `state.phase` 属于 `complete/stopped`、`observed_states` 非空且最后一项等于 `state`。
-然后再验证分支：`count_delta` 要求两个 count 都存在且满足本节比较规则，
+然后再验证分支：`count_delta_with_epoch` 仅可作为带联合证据的 proof，要求两个 count 都存在、两个
+`counter_epoch` 都存在且相等、满足本节比较规则，并且 `observed_states` 同时证明有效的
+状态迁移；它不再是仅凭模差或正向差值的独立完成证明；
 `identity_delta` 要求新旧 identity 都是 `1..64` 个 ASCII safe-token 字符且不同，
-`state_transition` 要求保留本节的最小观察序列。任一终态或证据不完整只能抛出
+`state_transition` 要求保留本节的最小观察序列，且不依赖 count；若该分支同时携带 count，
+仍必须提供未变化的 `counter_epoch`，否则核心必须忽略 count 并按纯状态迁移验证。任一终态或证据不完整只能抛出
 `completion_unproven`，不得返回一个携带「不可用」proof 的成功对象。
+`identity_delta` 也不能仅凭两个 token 不同就成立；核心必须同时有 descriptor 或 vendor
+fixture 证明该 identity 在当前 session epoch 内不会因复位/重启重用，否则只能使用完整
+`state_transition`，或拒绝完成证明。
 `baseline_count`/`completed_count` 非空时必须分别等于
 `proof_baseline_state.acquisition_count`/`state.acquisition_count`；identity 字段也必须与对应状态一致。
-不能在 completion 外额外填一组更有利的 token 来通过 verifier。
+`original_state` 必须等于 core-owned baseline 中的 `snapshot.run_state`。不能在 completion 外
+额外填一组更有利的 token 来通过 verifier。
 forced trigger 是瞬时 action/event，不是可 query-back 的持久 `ScopeTriggerMode`，因此不进入
 该枚举。执行强制触发时只在 operation artifact 记录 `trigger_action="force"` 及其完成证据，
 不能把仪器随后返回的 mode 伪造成 `forced`。
@@ -789,21 +1062,81 @@ forced trigger 是瞬时 action/event，不是可 query-back 的持久 `ScopeTri
 class ScopeAcquisitionRunStateDriver(InstrumentDriver, Protocol):
     def get_acquisition_run_state(self) -> ScopeAcquisitionRunState: ...
 
-class ScopeAcquisitionControlDriver(ScopeAcquisitionRunStateDriver, Protocol):
+class ScopeAcquisitionControlRecoveryDriver(InstrumentDriver, Protocol):
+    def snapshot_acquisition_control(self) -> ScopeAcquisitionControlSnapshot: ...
+    def restore_acquisition_control(
+        self,
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> ScopeBaselineRestoreResult: ...
+    def verify_acquisition_control_restored(
+        self,
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> ScopeAcquisitionControlSnapshot: ...
+
+class ScopeAcquisitionControlDriver(
+    ScopeAcquisitionRunStateDriver,
+    ScopeAcquisitionControlRecoveryDriver,
+    Protocol,
+):
     def start_continuous(
         self,
         *,
         trigger_mode: ScopeContinuousTriggerMode,
+        baseline: ScopeAcquisitionControlBaseline,
     ) -> ScopeAcquisitionRunState: ...
     def stop_acquisition(self) -> ScopeAcquisitionRunState: ...
-    def acquire_single(self, *, deadline: float) -> ScopeAcquisitionCompletion: ...
+    def acquire_single(
+        self,
+        *,
+        baseline: ScopeAcquisitionControlBaseline,
+        deadline: float,
+    ) -> ScopeAcquisitionCompletion: ...
 ```
+
+核心必须在主操作写入前调用 `snapshot_acquisition_control()`，校验返回值后自行
+构造 `ScopeAcquisitionControlBaseline(session_epoch, snapshot, ("scope.run_state", *failure_restore_order))`。
+driver 只看到已验证的
+baseline，不能构造或修改 core-owned `session_epoch`。`start_continuous()` 和
+`acquire_single()` MUST 使用核心传入的同一 baseline，不得在内部替换为无法审计的另一份
+baseline。因此，即使主 driver 方法抛出异常，核心仍保留恢复所需的类型化状态。
+
+`restore_acquisition_control()` 的固定语义是：先发送 STOP，再按
+`failure_restore_order` 恢复
+`scope.trigger` 和 `scope.acquisition`；不得恢复 snapshot 中的运行 phase。
+`ScopeBaselineRestoreResult.restored_fields` 只表示恢复写入已完成，不是 query-back 证据。
+核心必须随后使用独立只读阶段调用 `verify_acquisition_control_restored()`；成功需要
+driver 必须返回新查询的 `ScopeAcquisitionControlSnapshot`，不得直接返回布尔结论。
+核心 verifier 据此生成 `ScopeBaselineVerification`：`scope.run_state` 必须已为 `stopped`，
+且 trigger/acquisition token 与 baseline snapshot 精确相等。只有
+restore 和 verification 全部成功时 session 才能恢复 `healthy`。
+
+`start`/`single` 的失败执行顺序固定为：
+
+1. 在 `preflight` 保存并验证 baseline；关闭 preflight authorization 后执行 `main`。
+2. 若 driver 抛异常、deadline/cancel 触发，或主调用已返回但 `error_after` 判定失败，先保存
+   该主异常并禁止把它改写为 cleanup 结果。
+3. 在 session 为 `healthy/uncertain` 且 epoch 未变化时，关闭当前 authorization，依次开启
+   `failure_cleanup` 和 `cleanup_verification` phase；前者调用
+   `restore_acquisition_control(baseline)`，后者调用
+   `verify_acquisition_control_restored(baseline)` 并由核心比较 snapshot。
+4. restore 或 verification 任一步失败，最终结果仍保留第 2 步主异常（若无主异常则报告
+   recovery failure），session 保持 `uncertain/poisoned`；若 session 已 `poisoned`，两步均
+   记录 `not_attempted`，不得发送 STOP。
+
+成功的 `start`/`single` 不执行上述 baseline restore；它们分别验证声明的 postcondition，
+只在失败、取消、超时或 after-error cleanup 路径恢复调用前的 trigger/acquisition 设置。
+
+snapshot、restore、verify 三个方法分别只能在 `preflight`、`failure_cleanup` 和
+`cleanup_verification` 阶段授权中调用。`failure_cleanup` 允许文本 write，
+`cleanup_verification` 只允许文本 query；两者都不允许 binary I/O。任一方法在未授权阶段被调用，
+或 baseline epoch 与当前 session 不同，必须在发送前拒绝。
 
 `start_continuous()` 不保留一个未知或 `single` trigger mode。请求必须显式选择
 `auto`、`normal` 或 `roll`，并且该 mode 已在核心校验的
 `ScopeAcquisitionControlProfile.supported_continuous_modes` 中声明。
-driver 必须保存 trigger/acquisition baseline，写入目标 mode 并 query-back，然后才发送连续运行
-action。成功结果必须同时回读 `state.trigger_mode == request.trigger_mode` 和允许的运行 phase；
+核心必须先持有 `ScopeAcquisitionControlBaseline`，再把其 snapshot 传入 driver。driver 写入
+目标 mode 并 query-back，然后才发送连续运行 action。成功结果必须同时回读
+`state.trigger_mode == request.trigger_mode` 和允许的运行 phase；
 仅发送 RUN、保留 `single` 后再采一次，不得报告为 continuous success。
 
 `acquire_single()` 是等待完成的 acquire operation，不是 arm-only 写操作。它必须分开两种 baseline：
@@ -823,31 +1156,32 @@ profile 比对，不得信任 driver 自行选择更宽松的 stage。
 original 已为 `trigger_mode="single"`，且 `ScopeAcquisitionControlProfile` 同时声明
 `single_arm_semantics="atomic_configure_and_arm"`、
 `atomic_arm_preserves_count_mode_semantics=true` 和 `arm_resets_acquisition_count=false` 时，
-才能使用 `count_delta`；否则必须改用 identity delta 或可证明的 state transition。
+才能把 count 作为辅助证据；最终 proof 仍必须同时满足未变化的 `counter_epoch` 和有效
+`state_transition`。否则必须改用 identity delta 或完整的 state transition。
 
 真正 arm 后，Service/driver 在同一 deadline 内等待新 acquisition 完成。只有看到有效
-count/identity 变化，或看到 R1.2 暂定的最小状态序列后，才能成功返回 completion
+identity 变化，或看到 R1.3 暂定的最小状态序列后，才能成功返回 completion
 proof；调用前本来就是 `stopped` 不能单独作为完成条件。没有 completion proof 时
 返回 `completion_unproven`，不得返回成功 waveform。
 
-R1.2 暂定的最小 `state_transition` proof 为：SINGLE 写入并 query-back 后至少观察一次
+R1.3 暂定的最小 `state_transition` proof 为：SINGLE 写入并 query-back 后至少观察一次
 `arming`、`waiting` 或 `acquiring`；也可以观察 `ready`，但必须同时回读
 `trigger_mode="single"`，且 `(phase, trigger_mode)` 不得与 `proof_baseline_state` 相同。随后必须观察
 `complete` 或 `stopped`。如果仪器把
 写后第一个查询直接返回 `stopped`，且 count/identity 均不变或不可用，则 completion
 unproven。后续若跨厂商 fixture 证明该序列仍不通用，应保持 `[OPEN]`，不得由单个插件放宽。
 
-arm-only API 不属于 R1.2；未来如确有非阻塞需要，应新增 `scope.acquisition_arm_single`，其
+arm-only API 不属于 R1.3；未来如确有非阻塞需要，应新增 `scope.acquisition_arm_single`，其
 effect 为 `write`、成功输出只证明已 arm，不能复用 `scope.acquisition_single` 的成功合同。
 
-count 比较使用 `proof_baseline_state` 的同一 acquisition mode 基线。新 count 大于基线才构成
-`count_delta`；
-count 因 `ScopeAcquisitionControlProfile.arm_resets_acquisition_count=true` 而下降或归零时，不能使用
-`count_delta`；只能在同时满足有效状态迁移时选择 `state_transition`。计数器回绕只有在
-`ScopeAcquisitionControlProfile.acquisition_count_modulus` 非空时才能按模计算正向 delta；
-delta 必须位于 `1..modulus-1`，
-此时仍可使用 `count_delta`。mode 改变、仪器重启或前面板重置会使原 baseline 失效，
-必须改用新的 identity/state-transition 证据，不能沿用旧 count。
+count 比较使用 `proof_baseline_state` 的同一 acquisition mode 基线。新 count 大于基线只可作为
+`count_delta_with_epoch` 的辅助条件；它还必须满足 `counter_epoch` 非空且未变化，并与有效
+`state_transition` 联合，不能单独证明完成。`counter_epoch` 缺失、改变或无法证明连续时，
+必须改用 `identity_delta` 或完整的 `state_transition` proof。count 因
+`ScopeAcquisitionControlProfile.arm_resets_acquisition_count=true` 而下降或归零时，不能使用
+  `count_delta_with_epoch`。当前首版不接受 modulus，也不尝试用模差区分真实回绕、计数器复位或仪器重启；任何
+`completed_count <= baseline_count` 都使 count 辅助条件失效。mode 改变、仪器重启、前面板重置或
+疑似回绕会使原 baseline 失效，不能沿用旧 count。
 
 `stop_acquisition()` MUST 幂等：已经 `stopped` 时可直接成功，但仍应返回观察到的状态；非
 `stopped` 时必须写入并 query-back。一个 session 同时只允许一个 control operation，且控制
@@ -893,7 +1227,7 @@ artifact 应记录 `completed_channels`、`failed_channel`、`shared_acquisition
 ### 5.1 source、轴和 operation
 
 候选 source kind 增加 `spectrum`，用受限的 FFT operation 描述产生方式；这比把 FFT
-伪装成模拟 channel 更明确。R1.2 暂采用 `spectrum`，是否拆为独立 `fft` kind 仍列为
+伪装成模拟 channel 更明确。R1.3 暂采用 `spectrum`，是否拆为独立 `fft` kind 仍列为
 `[OPEN]`，但无论选择哪一种，频率轴都不能声明为时间轴。
 
 ```python
@@ -967,14 +1301,14 @@ class ScopeTraceData:
 - axis 的 `points >= 1`。`time`、`frequency` 和 `index` 的 `start`、`increment` 必须
   finite，`increment > 0`，计算出的最后一个坐标也必须 finite；`unknown` 的 `start` 和
   `increment` 必须为 `None`。
-- R1.2 的 `frequency` 轴仅接受 one-sided、严格递增、非负频率；DC 可从 `0 Hz` 开始。
+- R1.3 的 `frequency` 轴仅接受 one-sided、严格递增、非负频率；DC 可从 `0 Hz` 开始。
   负频率、中心化双边 FFT 和降序轴需要后续 axis profile，不能通过负 increment 偷渡。
 - `analog`、`math`、`reference` 和 `spectrum` 使用 finite、real、`float64` 值；核心应复制
   并设置只读，不能把 driver 的可变数组直接暴露给调用方。首版明确拒绝 complex dtype，
   FFT 的复数结果必须选择 magnitude 或 phase 语义后再进入模型。
 - `digital` 使用无符号整数 bitmask（首版上限 `uint16`），并在 metadata 中说明有效 bit
   与 `digital_channels` 的映射；`digital_channels` 必须非空、唯一且位于 `0..15`，bit N 对应
-  digital channel N。R1.2 首版的 fetchable digital source 只支持
+  digital channel N。R1.3 首版的 fetchable digital source 只支持
   `ScopeTraceRef(kind="digital", index=N)` 的单线语义：`digital_channels == (N,)`，
   每个样本只能是 `0` 或 `1 << N`。具名 bus/group 和多 bit 同步 bitmask 需要独立
   source kind/profile，在此之前只能保持 `fetchable=false` 或继续使用旧
@@ -986,14 +1320,14 @@ class ScopeTraceData:
   `dbm/absolute`、`db/relative`、`v|mv/linear` 沿用核心
   `MagnitudeUnit` / `MagnitudeSemantics` 规则；`1` 仅由新增的 digital-bitmask verifier
   校验，不能冒充现有 `MagnitudeUnit`。电流 `a`、相位 `degree` 和百分比 `percent` 需要先
-  扩展核心单位模型，不能在 R1.2 中以任意字符串或未经校验的新增 token 进入公共
+  扩展核心单位模型，不能在 R1.3 中以任意字符串或未经校验的新增 token 进入公共
   `ScopeTraceData`。无法证明时使用 `unknown/unknown`。
 - `digital_bitmask` 的 y unit 固定为 `1`，semantics 为 `unknown`；`spectrum` 的 dB/dBm
   结果必须明确 absolute/relative，不能只给一个 dB 字符串。`fft_phase` 在相位单位扩展
   被核心接受前只能作为设备私有 metadata（或以 `unknown` 单位返回），不得宣称跨仪器可比较。
 - `analog` 和 `digital` 的 `operation` MUST 为 `identity` 且 `inputs` 为空；`reference` 的
   `identity` 也必须没有 input，`reference_copy` 恰有一个 input；`fft_magnitude` 和
-  `fft_phase` 恰有一个 input。R1.2 不冻结通用
+  `fft_phase` 恰有一个 input。R1.3 不冻结通用
   `add`、`subtract`、`multiply`、`divide`、`differentiate` 或 `integrate`；这些运算及其
   输入计数、单位代数移入独立的 trace operation/unit-algebra RFC。
 - `math` 在 operation catalog 和单位语义冻结前只能使用 `device_other` 或 `unknown`；核心
@@ -1068,11 +1402,11 @@ class ErrorCheckSpec:
 ```
 
 候选 `ErrorCheckSpec` 包含 `policy`、`timing`、`max_records` 和 `on_instrument_error`；上面的
-默认值是 R1.2 建议，不是当前核心配置。`max_records` MUST 为非 bool 整数，范围固定为
+默认值是 R1.3 建议，不是当前核心配置。`max_records` MUST 为非 bool 整数，范围固定为
 `1..256`；`256` 是核心硬上限，仪器、插件和调用方只能收紧。首版只提供完整 drain：
 读到「无错误」终止 token 或达到上限；不提供会绕过检查的 `none`，也不提供无法证明队列
 完整性的 `one`。自动 clear 和 peek 都不进入首版合同。
-下表的 capability 对 R1.2 `core_v1` 路径专指 `scope.error_drain_v1`；只有旧
+下表的 capability 对 R1.3 `core_v1` 路径专指 `scope.error_drain_v1`；只有旧
 `scope.errors` 不构成「明确支持」。
 
 | 策略 | capability 明确支持 | capability 明确不支持 | capability 未知 |
@@ -1089,7 +1423,7 @@ class ErrorCheckSpec:
 这条规则保留 SDS800X HD 的 `check_errors=false` 行为。
 
 `on_instrument_error` 不是任意调用方可自由组合的容错开关。核心在解析策略后根据
-`OperationSpec.effect` 做静态校验：R1.2 只允许 `observe` 或 `stateful_read` operation 使用
+`OperationSpec.effect` 做静态校验：R1.3 只允许 `observe` 或 `stateful_read` operation 使用
 `record_and_continue`；`write` 和 `acquire` 只能使用 `fail`。recovery transaction 按第 4.3 节固定为
 `disabled`，不执行错误队列 I/O。因此
 错误检查不能把一个已经发生设备错误的写操作伪装成成功。
@@ -1099,7 +1433,7 @@ class ErrorCheckSpec:
 削弱 `OperationSpec` 的最低要求。未配置新字段时继续使用旧布尔映射，默认行为不改变。
 
 `if_supported` 的未知能力固定使用 `unknown_capability`，在任何 I/O 前拒绝，不得由插件选择性
-试探。`on_instrument_error="record_and_continue"` 在 R1.2 只允许用于 `observe` 或
+试探。`on_instrument_error="record_and_continue"` 在 R1.3 只允许用于 `observe` 或
 `stateful_read`；`write` 和 `acquire` 必须使用 `fail`，recovery operation 必须使用 `disabled`，
 核心在零 I/O 前拒绝不相容配置。`on_instrument_error` 只处理成功读出的设备错误记录；
 错误队列查询本身的 transport/session/protocol failure 始终中止当前 operation，不得被
@@ -1110,29 +1444,57 @@ factory 阶段固定：
 
 - `legacy_driver`：核心只做 capability gate，把旧 bool 交给 driver；核心不得再 drain 一次，
   该路径只适用于已有 operation，artifact 必须标记 `executor=legacy_driver` 和
-  `status=legacy_unstructured`，不得伪造 R1.2 `checks`；
+  `status=legacy_unstructured`，不得伪造 R1.3 `checks`；
 - `core_v1`：descriptor 必须声明 `scope.error_drain_v1`，factory 必须验证下文
   `ScopeErrorDrainDriver` Protocol。核心按 timing 调用唯一的 `drain_errors()`；新版主 operation
   driver 签名不带 bool，或兼容
   adapter 固定传 `check_errors=False`，driver MUST NOT 再查询队列。
 
 只声明旧 `scope.errors` 不能自动适配为 `scope.error_drain_v1`；`list[str]` 无法证明终止 token、
-查询次数或类型化记录。R1.2 新候选 operation 在有效策略不是 `disabled` 时只允许
+查询次数或类型化记录。R1.3 新候选 operation 在有效策略不是 `disabled` 时只允许
 `core_v1`；现有 operation 才可在版本门内继续使用 `legacy_driver`。迁移测试必须按 operation
 断言错误队列查询次数，避免 core 和 driver 双重 drain。现有公共
 `scope.errors` 本身是消耗性 `stateful_read`，其 `OperationSpec` 也必须增加
-`changed_fields=("scope.error_queue",)` 和 direct-drain artifact；其 `OperationRequest.error_check` 必须为
+`changed_fields=("scope.error_queue",)` 和 legacy artifact；其 `OperationRequest.error_check` 必须为
 `None`，不得在读错误队列前后递归套用 `ErrorCheckSpec`。其旧 `list[str]` 成功值保持兼容，
 若未来需要公开类型化 direct-drain 结果，应新增 operation，不得改变旧返回类型。
+旧 driver 即使在内部读到某个厂商终止 token，核心也不得由 `list[str]` 反推通用终止证据或
+真实 query 次数。
+
+现有 `scope.errors` 的候选兼容规格固定为：`effect="stateful_read"`、
+`changed_fields=("scope.error_queue",)`、`verification_fields=()`、
+`OperationRequest.error_check=None`，成功值仍为 `list[str]`。核心只记录
+`legacy_unstructured` operation-specific artifact；`terminated` 与 `query_count` 始终为
+`null`。该规格不继承 `scope.error_drain_v1` 的 phase、`max_records+1` 或 typed result。
+
+直接调用旧 `scope.errors` 时，operation-specific artifact 固定使用：
+
+```json
+{
+  "executor": "legacy_driver",
+  "capability": "scope.errors",
+  "status": "legacy_unstructured",
+  "requested_limit": 16,
+  "returned_record_count": 3,
+  "terminated": null,
+  "query_count": null
+}
+```
+
+`requested_limit` 只记录旧公共参数，`returned_record_count` 只记录返回列表长度；两者都不是
+完整 drain 证明。artifact 不复制旧原始字符串。`terminated` 和 `query_count` MUST 为
+`null`，不得由列表内容或长度猜测。
 
 `scope.error_drain_v1` 是内部受管子事务 capability，不是第九个公共 operation，不加入
-operation registry，不提供独立 Service/CLI 入口。只有核心 error-policy executor 可以从已通过
-access/capability/preflight 的父 operation 签发子 authorization。子事务继承父 operation 的
-correlation ID、exclusive lease、access 结论和剩余 deadline，语义为
+operation registry，不提供独立 Service/CLI 入口。「子事务」只表示其结果归属当前
+operation context，不表示嵌套 session authorization。核心 error-policy executor 必须在上一阶段
+authorization 已关闭后，为同一 context 签发独立的 `error_before` 或 `error_after`
+authorization。该阶段继承 context 的 correlation ID、session epoch、exclusive lease、
+access 结论和剩余 deadline，语义为
 `effect=stateful_read`、`changed_fields=("scope.error_queue",)`、只允许文本 query，
-`max_steps=max_records+1`。它不得超出父 deadline、改变 lease/access，也不得反过来生成独立
-operation artifact；结果只写入父 operation 的 `error_check.checks`。父 operation 在签发前若已失去
-healthy session 或剩余 deadline，子事务不得开始。
+`max_steps=max_records+1`。它不得超出 context deadline、改变 lease/access、创建 binary
+budget ledger，也不得生成独立 operation artifact；结果只写入当前 operation 的
+`error_check.checks`。签发前若 session 已非 healthy 或剩余 deadline 不足，该阶段不得开始。
 
 ### 6.2 错误记录与生命周期
 
@@ -1168,10 +1530,10 @@ class ErrorRecord:
 ```
 
 `drain_errors()` 是 `scope.error_drain_v1` 唯一允许的 driver 方法，不带 clear/peek 参数。
-core 为它签发的 authorization 只允许文本 `query` I/O，不允许 write、binary query 或嵌套
-operation。
+core 为它签发的非嵌套 `error_before|error_after` phase authorization 只允许文本
+`query` I/O，不允许 write、binary query 或再开启另一 authorization。
 driver 读到文档化的「无错误」token 时设 `terminated=true`，该 token 不进入 `records`。
-R1.2 首版规定每次 queue query 只解析一条错误记录或一个终止 token，不接受
+R1.3 首版规定每次 queue query 只解析一条错误记录或一个终止 token，不接受
 一次返回多条记录的无类型文本 batch。`query_count` 是真实仪器查询数，范围为
 `1..max_records+1`；核心 authorization 的
 `max_steps` 也必须固定为 `max_records+1`。最后一个额外 step 只用于证明终止；若它仍返回错误记录，
@@ -1201,13 +1563,14 @@ deadline 仍使用不序列化的单调时钟，两者不能混用。公开 `Err
 未经清洗的 raw 只可保存在受控本地诊断中，并通过脱敏 evidence ID 关联；不得进入公开
 artifact、异常消息或 `ErrorRecord`。
 
-R1.2 首版按完整 drain 读取，最多读取 `max_records`，不自动 clear，
-并区分空队列、队列不可用和查询本身失败。`scope.error_drain_v1` 及现有
-`scope.errors` 都是 consumptive drain：
+R1.3 的完整 drain 合同只适用于 `scope.error_drain_v1`：最多公开 `max_records` 条错误，
+不自动 clear，并区分空队列、队列不可用和查询本身失败。
 读取最多 `max_records` 条错误后，必须再执行第 `max_records+1` 次证明 query。
 该 query 返回「无错误」终止 token 才表示 drain 完整；若仍返回错误记录，必须按上文
 `overflow_record` 分支记录并以 `error_queue_incomplete` 失败，不能少发一次证明 query，
 也不能把截断列表当作完整检查。
+现有 `scope.errors(limit) -> list[str]` 不受本段 `max_records+1` 规则约束，也不得用于
+R1.3 `required/if_supported` 错误策略。
 
 before 阶段发现已有记录时，默认主 operation 不发送并报告
 `preexisting_instrument_error`；这些记录不归属于新的 `correlation_id`。只有在 operation
@@ -1232,7 +1595,7 @@ STOP、恢复 trigger/acquisition baseline 并 query-back；不得因为主 driv
 
 ### 6.3 固定 artifact 结构
 
-每个使用 R1.2 错误策略的 operation 至少写入：
+每个使用 R1.3 错误策略的 operation 至少写入：
 
 ```json
 {
@@ -1367,7 +1730,7 @@ scope.error_drain_v1
 | binary model | `#N` 精确语法、`#0` 拒绝、response/operation/query/resync budget、成功 metadata、尾部和 continuation | 需要新增 fake vectors |
 | backend | PyVISA/RsInstrument/TCP/serial 的 message 能力证明、终止设置恢复 | 只有 SDS raw PNG 一次实机观察 |
 | guarded transport | access、计数、healthy/uncertain/poisoned、超限后失步 | 需要失败恢复测试 |
-| plugin trust boundary | 公共 Protocol 不暴露 session；禁止插件依赖 `.inner` 的代码审计 | 当前不是沙箱；opaque facade 不在 R1.2 范围 |
+| plugin trust boundary | 公共 Protocol 不暴露 session；禁止插件依赖 `.inner` 的代码审计 | 当前不是沙箱；opaque facade 不在 R1.3 范围 |
 | screenshot | request tuple、PNG signature/IEND、媒体类型、尺寸、transport/content 尾部分层 | 仅 SDS raw PNG 探测 |
 | acquisition | allowed phase、完成式 SINGLE、baseline/observed states、终态 proof、成功 postcondition、失败 recovery | SDS vendor capture 已验收，公共控制未实现 |
 | trace | kind-specific 编号、fetchable、dtype、scaling、单线 digital、单位和 one-sided frequency 轴 | RTM2000 有部分证据，需第二族 fixture |
@@ -1384,7 +1747,7 @@ scope.error_drain_v1
   resync ceiling、精确 consumed 等式、`BinaryQueryResult` 和 transport trailing；
 - message：分片读取、EOM、超限后有界 drain/poison、termination 恢复失败和下一次 query；
 - acquisition：descriptor profile 缺失/非法、continuous mode 支持集、configure-then-arm 与
-  atomic-arm 两条 baseline 路径、count reset/modulus、每个 action 的 allowed/rejected phase、
+  atomic-arm 两条 baseline 路径、count reset、counter epoch 缺失或变化与异常回绕拒绝、每个 action 的 allowed/rejected phase、
   调用前已 stopped、count 不变、跳过 acquiring 的最小状态序列、外部前面板改状态、
   after instrument error cleanup 和 timeout 后 recovery STOP 失败；
 - transfer restore：`CHDR`/`CORD`/`WFSU` 或等价状态的逐字段 changed/verification、恢复失败和
@@ -1430,7 +1793,7 @@ scope.error_drain_v1
 - 为没有错误队列的仪器返回空列表；
 - 超过 `max_bytes` 后在 healthy session 中留下未消费响应。
 
-## 十一、R1.2 暂定安全结论与待决问题
+## 十一、R1.3 暂定安全结论与待决问题
 
 以下是 Draft 阶段暂定的安全不变量，不代表 schema、常量或核心实现已经接受：
 
@@ -1438,20 +1801,30 @@ scope.error_drain_v1
    各自 effect、postcondition、失败 cleanup 或最低 access。descriptor 的
    `ScopeAcquisitionControlProfile` 是 continuous mode、SINGLE arm 语义和 count 比较的唯一
    静态事实源；arm-only 需要独立 operation。
-2. binary response、operation-total、query-count 和 resynchronization 分别使用有限上限；核心通过 session authorization
-   context 签发短生命周期 `BinaryQueryBudget`，插件不能构造、提升或跨 operation 复用。
+2. binary response、operation-total、query-count 和 resynchronization 分别使用有限上限；核心通过单个
+   operation context 下的非嵌套阶段 authorization 引用同一 `BinaryQueryBudget` ledger，
+   插件不能构造、提升、重置或跨 context 复用。
 3. `query_binary()` 成功返回 `BinaryQueryResult`，显式携带 framing、长度、
    `transport_trailing_bytes` 和精确 consumed 等式，以及
    `synchronization=proven`；失败使用现有结构化 `TransportIOError`。
 4. `disabled` 错误策略始终零错误队列 I/O；`if_supported` 只跳过明确 unsupported，未知能力
-   fail-closed。`core_v1` 以 `scope.error_drain_v1` 和终止证据为门；一个 operation 只能由
+   fail-closed。`core_v1` 以 `scope.error_drain_v1` 和终止证据为门；旧 `scope.errors`
+   只保持 `legacy_unstructured` 语义，不得被升级为类型化 drain。一个 operation 只能由
    core 或 legacy driver 其中一方执行错误检查。
-5. R1.2 的可读取 trace 不包含通用算术，只支持已列出的 kind/axis/unit/operation 组合；
+5. R1.3 的可读取 trace 不包含通用算术，只支持已列出的 kind/axis/unit/operation 组合；
    one-sided FFT、编号基准和 scaling 不变量不能留给插件自行解释。
 6. `CHDR`/`CORD`/`WFSU` 或等价的 transfer 状态必须在核心规范化为逐项
    `changed_fields` + `verification_fields`；该要求覆盖 `scope.capture_multiple` 等现有别名。
-7. 旧 capture 内嵌 screenshot 必须进入父 operation 字段闭包或独立受管子 operation；截图
-   menu/color baseline、query-back 和成功/失败恢复不能继续隐式遗漏。
+7. 旧 capture 调用 screenshot 必须进入父 operation 字段闭包，或由同一 operation context
+   的静态 composite phase 覆盖；不得用嵌套 operation authorization 遗漏截图 menu/color
+   baseline、query-back 和成功/失败恢复。
+8. 所有可恢复的 stateful write 都必须通过 core-owned snapshot、有界 restore 和独立 verify
+   阶段闭合；主 driver 抛异常或 after error 不能让 baseline 丢失。
+9. 每个 operation 只能在同一 operation context 中顺序使用非嵌套 phase authorization；
+   error drain phase 不得创建或重置 binary budget ledger。
+10. 首版不使用 modulus 单独证明 SINGLE 完成；count 只能在未变化的 `counter_epoch` 和
+   有效 `state_transition` 联合时作为辅助证据，任何回绕、复位或非严格递增都必须转用
+   `identity_delta`/`state_transition`。旧 `scope.errors` 不提供 R1.3 终止证明。
 
 剩余待决问题：
 
@@ -1462,7 +1835,8 @@ scope.error_drain_v1
 4. `READ_CONTINUATION_ONLY` 的 core-issued continuation token 和返回模型如何授权。
 5. screenshot profile 使用 descriptor、查询结果还是两者交集；旧 screenshot adapter 的拒绝码。
 6. acquisition deadline 是否引入 `operation.deadline`，以及 poisoned session 的 recovery/reopen API。
-7. 暂定的 completion state-transition 序列能否通过第二个厂商 fixture，是否需要进一步收紧。
+7. 暂定的 completion state-transition 序列及 counter-epoch 联合条件能否通过第二个厂商
+   fixture，是否需要进一步收紧；更丰富的计数器世代语义仍待单独 RFC。
 8. `spectrum` 是否作为独立 `ScopeTraceKind`，以及单位校验复用哪些现有核心模型。
 9. binary operation/profile 的具体 response/total/query/resync 数值、连接配置键名和
    超限后 close/poison 的 backend 统一默认策略。
