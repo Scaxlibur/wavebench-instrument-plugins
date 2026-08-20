@@ -15,7 +15,10 @@
 
 - [WaveBench scope 通用扩展接口 RFC](WaveBench_scope通用扩展接口RFC.md)：`R1.3 Draft`，核心复审增补已添加
   snapshot/restore/verify、非嵌套 phase authorization、回绕拒绝和旧 `scope.errors` 隔离；仍不代表
-  核心已实现这些接口，四项合同仍待核心团队复审。
+  核心已实现这些接口，A1 的 P0/P1 验收门仍待核心团队冻结。
+- [R1.3 Acceptance Addendum A1](WaveBench_scope通用扩展接口RFC-R1.3-acceptance-addendum.md)：
+  列出 transfer recovery、capability/descriptor、常量、context nonce、父 capture 字段闭包和
+  trace 首轮排除项的公共注册前验收门。
 
 ## 后续文档拆分
 
@@ -26,4 +29,5 @@
 3. `trace`：依赖 binary transfer 字段闭包和 source/axis 模型；包含 analog、digital、reference、spectrum。
 4. `error-policy`：依赖非嵌套 phase authorization 和 artifact；包含 `scope.error_drain_v1` 与旧 `scope.errors` 迁移。
 
-在子 RFC 实际拆出前，不创建并行版本的规范文本；这不改变当前 Draft 状态或任何插件能力。
+Acceptance Addendum A1 是核心本轮明确要求的验收索引，不构成并行版本；其他子 RFC 在核心
+确认拆分边界前仍不创建。这不改变当前 Draft 状态或任何插件能力。
