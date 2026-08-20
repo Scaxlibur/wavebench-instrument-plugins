@@ -14,7 +14,8 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 
 当前证据标签：
 
-- **已实现 / 离线验证**：driver 和 FakeTransport 测试存在，尚无真实 SDS800X HD 证据。
+- **实机已验收**：当前外置插件、目标 SDS800X HD 实机和受控测试证据同时存在。
+- **已实现 / 离线验证**：该功能已有 driver 和 FakeTransport 测试，但尚无对应实机证据。
 - **手册已审计**：命令格式和返回语义已核对，但尚未公开 capability。
 - **核心接口阻塞**：厂商协议与 WaveBench 当前 transport 或公共模型不能完整对接。
 - **实机阻塞**：离线代码不足以证明响应 framing、状态迁移或硬件差异。
@@ -24,11 +25,11 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 
 | 功能域 | 手册命令面 | WaveBench 映射 | 当前状态 | 边界与下一步 |
 |---|---|---|---|---|
-| 身份 | `*IDN?` | `scope.idn` | **已实现 / 离线验证** | 严格四字段、厂商和型号校验仍需脱敏实机样本确认 |
-| 模拟通道耦合 | `:CHANnel<n>:COUPling?`，返回 `AC`、`DC` 或 `GND` | `scope.channel_coupling` | **已实现 / 离线验证** | 按二通道或四通道型号限制 `<n>`，未知响应直接拒绝；实机验收待补 |
+| 身份 | `*IDN?` | `scope.idn` | **SDS804X HD 实机已验收** | 四字段、厂商、型号、14 字符 ASCII 序列号和固件格式通过；其他型号待补 |
+| 模拟通道耦合 | `:CHANnel<n>:COUPling?`，返回 `AC`、`DC` 或 `GND` | `scope.channel_coupling` | **SDS804X HD 实机已验收** | CH1–CH4 均返回 DC；二通道型号和其他 coupling 状态待补 |
 | 输入阻抗 | 通用手册列出 `ONEMeg`、`FIFTy` | 无独立 capability | **默认拒绝** | SDS800X HD 专属产品资料说明固定 `1 MΩ`；不得把通用 `FIFTy` setter 外推到本系列 |
 | 错误队列 | CN11G 未记录错误队列命令 | `scope.errors` | **未覆盖** | 不猜测 `SYSTem:ERRor?`；消费型查询也不适合核心普通 query 的自动重试 |
-| 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **已实现 / 离线验证** | 仅支持 Stop、sequence OFF、模拟通道和 `DMAX`；分块、精确长度、失败恢复和核心服务已有离线测试，实机一致性待验 |
+| 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **SDS804X HD 单块实机已验收** | Stop、sequence OFF、CH1/CH2 `DMAX`、WORD/LSB、数值和成功/异常恢复通过；真实多块和 USB 待补 |
 | 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`*OPC?` | `scope.capture_waveform`、`scope.capture_waveforms` | **实机阻塞** | 手册未保证 `RUN` 后 `*OPC?` 等待真实触发完成；多通道必须一次 acquisition 后逐通道读取 |
 | 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | 无独立 capability | **手册已审计** | 不能误映射为公共 `ScopeAcquisitionStatus`；后者描述平均和分段采集状态 |
 | 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot` | **核心接口阻塞 / 实机阻塞** | 手册示例按原始图片字节读取，核心仅提供 definite-block query；命令也没有可靠的菜单开关 |
@@ -44,6 +45,11 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 IEEE block envelope 后的 payload 恰好为 346 bytes，并显式拒绝附加时间戳，而不是静默
 丢弃。`DATA?` 同样使用带声明长度的 binary block；核心 transport 按声明长度取 payload，
 插件不能对二进制数据使用 `rstrip()`。
+
+SDS804X HD 固件 `4.8.12.1.1.6.5` 的实机 preamble 进一步确认：非 sequence 记录返回
+`read_frames=0`、`sum_frames=1`、`segment=-1`。手册示例使用的 `segment=1` 形式也保留；
+其他帧组合继续拒绝。该固件的 WORD preamble 实测为 `100000` 点、`200000` bytes、
+`50.000000584 ns` sample interval，和解析公式一致。
 
 首版模拟波形换算使用手册字段：
 
@@ -92,8 +98,8 @@ transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖
 1. M1：严格身份解析和只读 `scope.channel_coupling`，完成离线测试。
 2. M2：346-byte preamble、数据换算和已停止模拟记录的 `scope.fetch_waveform` 已完成离线
    事务测试；真实硬件证据仍为空。
-3. M3：取得 TCPIP 与 USB 的脱敏二进制响应样本，确认分片、WORD 对齐、时基和 transfer
-   设置恢复。
+3. M3：已在一台 SDS804X HD 上完成 TCPIP WORD/LSB 读取、CH1/CH2 数值和 transfer 恢复的
+   首轮实机验收；更长记录的分片边界、USB 路径和其他型号仍待补。
 4. M4：单独验证触发状态迁移、OPC 等待和一次多通道 acquisition，再评估 capture capability。
 5. 截图、数字通道、FFT、sequence/history、Autoset 和写能力分别立项，不经 raw SCPI 绕过门禁。
 

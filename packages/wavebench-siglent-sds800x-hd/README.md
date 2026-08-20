@@ -2,11 +2,11 @@
 
 [English](README_EN.md)
 
-面向 SIGLENT SDS800X HD 系列示波器的外置 WaveBench 驱动包。`0.3.0` 在严格身份和模拟通道耦合查询之外，新增保守的 `DMAX` 已停止记录读取。该波形路径已完成离线事务测试，尚未经过真实仪器验收。
+面向 SIGLENT SDS800X HD 系列示波器的外置 WaveBench 驱动包。`0.3.1` 在严格身份和模拟通道耦合查询之外，提供保守的 `DMAX` 已停止记录读取。首轮 SDS804X HD 真实仪器读取验收已完成；分块边界和其他写能力仍待后续专项验证。
 
 ## 当前状态
 
-- Distribution：`wavebench-siglent-sds800x-hd` `0.3.0`
+- Distribution：`wavebench-siglent-sds800x-hd` `0.3.1`
 - Canonical driver ID：`siglent.sds800x-hd`
 - 仪器类型：`scope`
 - Backend：WaveBench 核心 `pyvisa` transport
@@ -23,9 +23,9 @@ descriptor 导入不执行仪器 I/O；factory 只通过 `DriverContext.open_tra
 - 两通道：`SDS802X HD`、`SDS812X HD`、`SDS822X HD`；
 - 四通道：`SDS804X HD`、`SDS814X HD`、`SDS824X HD`。
 
-型号覆盖、LAN/USB 接口和 SCPI 远控能力来自 [SIGLENT SDS800X HD 产品资料](https://www.siglent.com/int/products-overview/sds800x-hd/)。当前 `idn_patterns` 只使用公开型号字符串；严格 identity parser 依据 CN11G 的四字段格式，但在获得脱敏实机 `*IDN?` 样本前，不把型号空格、大小写和固件格式视为实机验收结论。
+型号覆盖、LAN/USB 接口和 SCPI 远控能力来自 [SIGLENT SDS800X HD 产品资料](https://www.siglent.com/int/products-overview/sds800x-hd/)。当前 `idn_patterns` 使用公开型号字符串；严格 identity parser 依据 CN11G 的四字段格式。SDS804X HD 已取得脱敏实机样本，其他五个型号的具体返回仍待补证。
 
-官方数据手册说明该系列模拟输入为固定 `1 MΩ`，没有内部 `50 Ω` 端接，因此 descriptor 暂声明 `fixed-high-impedance`。在把波形读取视为实机可用前，仍需使用目标硬件复核 coupling 查询、探头衰减和外部端接条件。
+官方数据手册说明该系列模拟输入为固定 `1 MΩ`，没有内部 `50 Ω` 端接，因此 descriptor 声明 `fixed-high-impedance`。SDS804X HD 已完成 coupling、`1×` 探头和高阻连接复核；其他型号仍待补证。
 
 ## 当前能力
 
@@ -72,14 +72,14 @@ points = "dmax"
 doc/vendor-local/
 ```
 
-当前转换因工具限制拆为三个目录。手册支持表将 SDS800X HD 的最低固件列为 `1.1.3.1`。官方入口为 [SDS800X HD Series Programming Guide](https://www.siglent.com/na/sds800x-hd-series-programming-guide/)，项目原创结论见[功能覆盖矩阵](doc/SDS800X_HD_COVERAGE_MATRIX.md)。
+当前转换因工具限制拆为三个目录。手册支持表将 SDS800X HD 的最低固件列为 `1.1.3.1`。官方入口为 [SDS800X HD Series Programming Guide](https://www.siglent.com/na/sds800x-hd-series-programming-guide/)，项目原创结论见[功能覆盖矩阵](doc/SDS800X_HD_COVERAGE_MATRIX.md)和[实机验收记录](doc/SDS800X_HD_HARDWARE_ACCEPTANCE.md)。
 
 `doc/vendor-local/` 中除说明文件外的内容由仓库级 `.gitignore` 排除，整个目录也被 sdist 构建规则排除。厂商 PDF 不会随 Git push 或公开 distribution 发布；项目原创的协议摘要、能力矩阵和验收记录应另写入 `doc/`。
 
 ## 下一阶段门禁
 
-1. 获取脱敏 `*IDN?` 样本，复核身份格式和二通道、四通道 coupling 返回。
-2. 使用 TCPIP 与 USB 脱敏样本核对 binary block、分片、WORD 对齐、时基和 transfer 状态恢复。
+1. 使用其他 SDS800X HD 型号获取脱敏 `*IDN?` 样本，复核身份格式和二通道、四通道 coupling 返回。
+2. 使用更长记录和 TCPIP/USB 脱敏样本核对 binary block、分片、WORD 对齐、时基和 transfer 状态恢复。
 3. 仅在取得明确协议或实机证据后评估 `DEF/MAX` 点数模式；不得猜测关键字。
 4. `*OPC?` 等待和一次多通道 acquisition 经实机确认后，再评估 capture 与其他写能力。
 
