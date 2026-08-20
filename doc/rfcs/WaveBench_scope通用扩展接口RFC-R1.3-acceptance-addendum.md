@@ -18,11 +18,11 @@
 
 ## 公共注册前的 P0 门
 
-1. `ScopeTraceTransferRecoveryDriver` 已实现，`fetch_trace` 在 transfer 状态可能变化时必须
+1. 核心必须实现 `ScopeTraceTransferRecoveryDriver`；`fetch_trace` 在 transfer 状态可能变化时必须
    使用带 `context_id`、epoch、nonce 的 `ScopeTraceTransferBaseline`，并用 descriptor profile
    的固定 restore order/step 上限完成逐字段 restore/verify；`CHDR`、`CORD`、`WFSU` 等字段
    不得只靠文字承诺。
-2. `ScopeDescriptorExtensions`、`SCOPE_CAPABILITY_METHODS` 和 required Protocol 已实现；
+2. 核心必须实现 `ScopeDescriptorExtensions`、`SCOPE_CAPABILITY_METHODS` 和 required Protocol；
    缺 profile 或方法时在零 I/O 阶段拒绝，方法存在但未声明 capability 时不自动暴露。
 3. 核心固定并测试以下常量：
 
