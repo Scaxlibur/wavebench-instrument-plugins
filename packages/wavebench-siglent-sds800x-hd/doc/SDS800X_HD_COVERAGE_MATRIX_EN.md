@@ -35,7 +35,7 @@ Evidence labels used here:
 | Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **SDS804X HD multi-chunk hardware accepted** | Stop, sequence OFF, CH1/CH2 `DMAX`, WORD/LSB, numeric results, and success/failure restoration passed; a `10M` record passed as `5M + 5M`, while USB remains pending |
 | Sequence gate | `:ACQuire:SEQuence?` | `scope.fetch_waveform` precondition | **SDS804X HD hardware accepted** | Established Stop + sequence ON in `NORMAL` trigger mode; the driver rejected before any waveform write or binary query |
 | Measurement statistics | `:MEASure:MODE?`, `ADVanced:P<n>?`, `TYPE?`, `STATistics?`, and `SHIStory?` | `scope.measurement_statistics` | **SDS804X HD hardware accepted** | Query-only access to an existing slot; all six P3 `PKPK` fields and five stopped-history values passed with no driver writes |
-| Single and multichannel capture | `TRIGger:MODE`, `RUN`, `STOP`, `STATus?`, and `*OPC?` | `scope.capture_waveform`, `scope.capture_waveforms` | **Hardware blocked** | The manual does not guarantee that `*OPC?` after `RUN` waits for a physical trigger; multichannel capture must read all channels after one acquisition |
+| Single and multichannel capture | `TRIGger:MODE`, `RUN`, `STOP`, `STATus?`, and `ACQuire:NUMACq?` | `scope.capture_waveform`, `scope.capture_waveforms` | **SDS804X HD hardware accepted** | SINGLE query-back, Stop polling, and acquisition count passed; CH1/CH2 use one acquisition without `*OPC?` |
 | Trigger run state | `:TRIGger:STATus?` returns `Arm`, `Ready`, `Auto`, `Trig'd`, `Stop`, or `Roll` | No standalone capability | **Manual reviewed** | It cannot be mapped to public `ScopeAcquisitionStatus`, which describes averaging and segmented acquisition |
 | Screenshot | `:PRINt? PNG,NORMal` or inverted form | `scope.screenshot` | **Core interface blocked / hardware blocked** | The example reads raw image bytes while the core exposes only definite-block queries; the command also has no reliable menu control |
 | Autoset | `:AUToset` | `scope.autoscale` | **Rejected by default** | Changes trigger, vertical, and horizontal state without an error queue or restore loop |
@@ -103,9 +103,9 @@ and reads only an already-stopped record.
 ## Development order
 
 1. M1: strict identity parsing and read-only `scope.channel_coupling`, with offline tests.
-2. M2: the 346-byte preamble, data conversion, and stopped analog-record `scope.fetch_waveform` transaction have offline coverage; hardware evidence remains absent.
+2. M2: the 346-byte preamble, data conversion, and stopped analog-record `scope.fetch_waveform` transaction have offline coverage; M3 supplied the hardware evidence.
 3. M3: TCPIP WORD/LSB readout, CH1/CH2 numeric checks, transfer-state restoration, a real `10M` multi-chunk read, and safe sequence-ON rejection are complete on one SDS804X HD; USB and additional models remain pending.
-4. M4: independently validate trigger transitions, OPC waiting, and one multichannel acquisition before considering capture capabilities.
+4. M4: SINGLE, Stop polling, acquisition count, and one CH1/CH2 acquisition are hardware accepted; capture capabilities are exposed.
 5. Track screenshot, digital channels, FFT, sequence/history, Autoset, and writes as separate work items; do not bypass gates with raw SCPI.
 
 ## SCPI used directly today

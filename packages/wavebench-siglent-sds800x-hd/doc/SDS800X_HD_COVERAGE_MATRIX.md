@@ -32,7 +32,7 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 | 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **SDS804X HD 多块实机已验收** | Stop、sequence OFF、CH1/CH2 `DMAX`、WORD/LSB、数值和成功/异常恢复通过；`10M` 记录按 `5M + 5M` 两块读取通过，USB 待补 |
 | Sequence 门禁 | `:ACQuire:SEQuence?` | `scope.fetch_waveform` 的前置条件 | **SDS804X HD 实机已验收** | `NORMAL` 触发模式下建立 Stop + sequence ON；driver 在任何 waveform 写入和 binary query 前拒绝 |
 | 测量统计 | `:MEASure:MODE?`、`ADVanced:P<n>?`、`TYPE?`、`STATistics?`、`SHIStory?` | `scope.measurement_statistics` | **SDS804X HD 实机已验收** | 只读既有槽位；P3 `PKPK` 的 6 项统计和停止态 5 项历史通过，driver 零写入 |
-| 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`*OPC?` | `scope.capture_waveform`、`scope.capture_waveforms` | **实机阻塞** | 手册未保证 `RUN` 后 `*OPC?` 等待真实触发完成；多通道必须一次 acquisition 后逐通道读取 |
+| 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`ACQuire:NUMACq?` | `scope.capture_waveform`、`scope.capture_waveforms` | **SDS804X HD 实机已验收** | SINGLE 模式回读、Stop 轮询和采集计数通过；CH1/CH2 只执行一次 acquisition，不依赖 `*OPC?` |
 | 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | 无独立 capability | **手册已审计** | 不能误映射为公共 `ScopeAcquisitionStatus`；后者描述平均和分段采集状态 |
 | 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot` | **核心接口阻塞 / 实机阻塞** | 手册示例按原始图片字节读取，核心仅提供 definite-block query；命令也没有可靠的菜单开关 |
 | Autoset | `:AUToset` | `scope.autoscale` | **默认拒绝** | 同时修改触发、垂直和水平设置；没有错误队列和恢复闭环 |
@@ -100,10 +100,10 @@ transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖
 
 1. M1：严格身份解析和只读 `scope.channel_coupling`，完成离线测试。
 2. M2：346-byte preamble、数据换算和已停止模拟记录的 `scope.fetch_waveform` 已完成离线
-   事务测试；真实硬件证据仍为空。
+   事务测试；M3 已补齐真实硬件证据。
 3. M3：已在一台 SDS804X HD 上完成 TCPIP WORD/LSB 读取、CH1/CH2 数值、transfer 恢复、
    `10M` 真实多块读取和 sequence ON 安全拒绝；USB 路径和其他型号仍待补。
-4. M4：单独验证触发状态迁移、OPC 等待和一次多通道 acquisition，再评估 capture capability。
+4. M4：SINGLE、Stop 轮询、采集计数和一次 CH1/CH2 acquisition 已完成实机验收；capture capability 已公开。
 5. 截图、数字通道、FFT、sequence/history、Autoset 和写能力分别立项，不经 raw SCPI 绕过门禁。
 
 ## 当前直接使用的 SCPI

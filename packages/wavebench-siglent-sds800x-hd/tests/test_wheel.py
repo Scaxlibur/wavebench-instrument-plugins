@@ -60,7 +60,7 @@ def test_wheel_install_discovery_reinstall_and_uninstall_without_instrument_io(
         ],
         cwd=tmp_path,
     )
-    plugin_wheel = next(wheelhouse.glob("wavebench_siglent_sds800x_hd-0.4.0-*.whl"))
+    plugin_wheel = next(wheelhouse.glob("wavebench_siglent_sds800x_hd-0.5.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"
@@ -97,11 +97,13 @@ assert [point.name for point in points] == ["siglent.sds800x-hd"]
 descriptor = points[0].load()()
 assert descriptor.driver_id == "siglent.sds800x-hd"
 assert descriptor.distribution == "wavebench-siglent-sds800x-hd"
-assert descriptor.version == "0.4.0"
+assert descriptor.version == "0.5.0"
 assert descriptor.capabilities == (
     "scope.idn",
     "scope.channel_coupling",
     "scope.fetch_waveform",
+    "scope.capture_waveform",
+    "scope.capture_waveforms",
     "scope.measurement_statistics",
 )
 assert callable(parse_waveform_preamble)

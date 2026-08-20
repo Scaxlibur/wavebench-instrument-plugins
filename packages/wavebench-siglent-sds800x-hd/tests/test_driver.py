@@ -54,11 +54,13 @@ def test_descriptor_is_executable_metadata_without_import_io() -> None:
         "scope.idn",
         "scope.channel_coupling",
         "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms",
         "scope.measurement_statistics",
     )
     assert item.scope_coupling_policy == "fixed-high-impedance"
     assert item.distribution == "wavebench-siglent-sds800x-hd"
-    assert item.version == "0.4.0"
+    assert item.version == "0.5.0"
     assert item.config_fields == (
         "connection.resource",
         "scope.driver",
@@ -92,6 +94,7 @@ def test_factory_opens_exactly_one_core_transport_without_querying() -> None:
 
     assert isinstance(driver, SDS800XHDScope)
     assert driver.transport is transport
+    assert driver.capture_timeout_s == 2.0
     assert opened == 1
     assert transport.queries == []
 

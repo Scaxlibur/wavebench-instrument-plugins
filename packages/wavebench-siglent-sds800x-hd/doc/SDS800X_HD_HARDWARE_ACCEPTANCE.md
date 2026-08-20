@@ -13,6 +13,7 @@ TCPIP/VXI-11 实机验收。测试连接由一台 DG4202 CH1 同时驱动示波�
 - `scope.idn`
 - `scope.channel_coupling`
 - Stop、sequence OFF 下的 `scope.fetch_waveform(..., points="dmax", check_errors=False)`
+- `scope.capture_waveform` 和一次 acquisition 的 `scope.capture_waveforms`
 - 已配置高级测量槽位的 `scope.measurement_statistics`
 
 未测试截图、Autoset、capture、错误队列和 sequence 波形；另对 sequence ON 拒绝门禁做了
@@ -145,6 +146,20 @@ driver 以零写入读取到：当前值 `5.0375 V`、均值 `5.0370833 V`、最
 历史缓冲验收将最大统计次数临时设为 `16`，取得 `5` 个值；返回的 `Count=5` 与解析值数
 一致。读取前已停止 acquisition，读取结束后恢复测量模式 `SIMPlc`、统计 OFF、最大次数 `0`
 和原运行态。
+
+## 单次与多通道采集
+
+`scope.capture_waveform(1)` 实机执行一次 SINGLE acquisition，经 Arm 到 Stop 后读取
+`100000` 点；原始 min/max Vpp 为 `5.0375 V`。该路径没有调用 `*OPC?`。
+
+`scope.capture_waveforms([1, 2])` 只发送一次 SINGLE 和一次 RUN，随后从同一停止记录读取
+CH1、CH2 各 `100000` 点。两通道原始 Vpp 为 `5.0354 V` 和 `5.0375 V`，相关系数为
+`0.9999971`；channel start 和 waveform callback 顺序均为 CH1、CH2。完成后触发模式和运行态
+恢复到测试前状态。
+
+使用真实 descriptor 和 `ScopeService.capture_waveforms([1, 2], ...)` 的受管入口再次通过，
+生成临时 metadata，记录 `triggered_single=true` 和完成通道 `[1, 2]`。临时波形包在验收结束
+后删除，没有进入仓库。
 
 ## 剩余退出门
 

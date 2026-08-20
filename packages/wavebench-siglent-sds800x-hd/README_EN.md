@@ -2,16 +2,16 @@
 
 [中文](README.md)
 
-An external WaveBench driver package for the SIGLENT SDS800X HD oscilloscope family. Version 0.4.0 provides strict identity, analog-channel coupling, conservative stopped-record `DMAX` reads, and read-only statistics for preconfigured measurement slots. Single- and multi-chunk reads, sequence rejection, and measurement statistics are hardware accepted on an SDS804X HD.
+An external WaveBench driver package for the SIGLENT SDS800X HD oscilloscope family. Version 0.5.0 provides strict identity, analog-channel coupling, stopped-record and single-acquisition `DMAX` reads, plus read-only statistics for preconfigured measurement slots. Single- and multi-chunk reads, single- and dual-channel capture, sequence rejection, and measurement statistics are hardware accepted on an SDS804X HD.
 
 ## Current status
 
-- Distribution: `wavebench-siglent-sds800x-hd` `0.4.0`
+- Distribution: `wavebench-siglent-sds800x-hd` `0.5.0`
 - Canonical driver ID: `siglent.sds800x-hd`
 - Instrument kind: `scope`
 - Backend: WaveBench core `pyvisa` transport
 - Resource schemes: `tcpip`, `usb`
-- Declared capabilities: `scope.idn`, `scope.channel_coupling`, `scope.fetch_waveform`, `scope.measurement_statistics`
+- Declared capabilities: `scope.idn`, `scope.channel_coupling`, `scope.fetch_waveform`, `scope.capture_waveform`, `scope.capture_waveforms`, `scope.measurement_statistics`
 - WaveBench: `>=0.8,<0.9`
 
 Descriptor import performs no instrument I/O. The factory obtains exactly one core transport through `DriverContext.open_transport()`. The driver validates the four `*IDN?` fields, manufacturer, supported model, and 14-character ASCII serial, then caches the stable identity. Before reading coupling, it applies the model-specific two- or four-channel limit and sends `:CHANnel<n>:COUPling?`; only `AC`, `DC`, and `GND` are accepted. Waveforms use the core `query_bin_block()` transport and return the core `WaveformData` / `WaveformHeader` models. `close()` releases the transport idempotently.
@@ -32,11 +32,14 @@ The official data sheet specifies fixed `1 MΩ` analog inputs with no internal `
 - `scope.idn` returns the validated original `*IDN?` text and caches it for the current driver session.
 - `scope.channel_coupling` returns uppercase `AC`, `DC`, or `GND`; invalid types, channels missing from a model, and unknown responses fail at the driver boundary.
 - `scope.fetch_waveform` reads an already-stopped, non-sequence analog record and currently supports only `points="dmax"`.
+- `scope.capture_waveform` / `scope.capture_waveforms` perform one SINGLE acquisition, wait for Stop, and read one or more analog channels; only `points="dmax"` is currently supported.
 - `scope.measurement_statistics` reads an already configured and enabled advanced-measurement slot without creating slots, enabling statistics, or resetting history.
 
 A direct coupling query reads identity first, preventing a CH3 or CH4 command on a two-channel model. The WaveBench status fallback already calls `idn()` first in the same session, so that path does not duplicate the identity query.
 
 Waveform fetch does not start a new acquisition and sends no `RUN`, `SINGLE`, or `STOP`. The driver requires `:TRIGger:STATus?` to return `Stop` and `:ACQuire:SEQuence?` to return `OFF`, then saves `SOURCE`, `START`, `INTERVAL`, `POINT`, `WIDTH`, and `BYTEorder`. The transaction temporarily selects `WORD`, `LSB`, `START 0`, `INTERVAL 1`, and `POINT 0`, reads chunks according to `MAXPoint?`, and restores the original transfer state in dependency order on both success and failure.
+
+Single capture writes and verifies `TRIGger:MODE SINGLE`, sends `TRIGger:RUN`, polls `TRIGger:STATus?` until Stop, and then requires `ACQuire:NUMACq? >= 1`. A timeout or ignored mode write sends `TRIGger:STOP`. Multichannel capture performs one acquisition and then reads every requested channel from the same stopped record. It does not use `*OPC?` as a substitute for physical trigger completion.
 
 Statistics calls require explicit confirmation that the slot is already configured. The driver also verifies advanced-measurement mode, the slot switch, and the statistics switch before reading current, mean, minimum, maximum, standard deviation, and count. History is read only after explicit confirmation that acquisition is stopped. All statistics paths are query-only.
 
@@ -57,13 +60,12 @@ Direct driver calls with `check_errors=True`, `points="def"`, or `points="max"` 
 
 ## Capabilities not exposed
 
-Version 0.4.0 does not declare:
+Version 0.5.0 does not declare:
 
 - `scope.errors`
 - `scope.autoscale`
-- `scope.capture_waveform` / `scope.capture_waveforms`
 - `scope.screenshot`
-- any other status, measurement-configuration, math, digital-channel, or history capability
+- standalone RUN/STOP/SINGLE control or any other status, measurement-configuration, math, digital-channel, or history capability
 
 Other commands from the programming guide enter the driver and descriptor only after format review, FakeTransport tests, and controlled hardware acceptance where required. The plugin has no raw-SCPI surface and does not assume that another SIGLENT family uses an identical protocol. `scope.fetch_waveform` reads an existing record; it is not equivalent to `capture_waveform`.
 
@@ -84,7 +86,7 @@ The repository-level `.gitignore` excludes every file under `doc/vendor-local/` 
 1. Obtain redacted `*IDN?` samples from additional SDS800X HD models and verify identity plus two- and four-channel coupling responses.
 2. When USB hardware becomes available, verify binary blocks, WORD alignment, timebase values, and transfer-state restoration; real TCPIP multi-chunk reading is accepted.
 3. Consider `DEF/MAX` point modes only after explicit protocol or hardware evidence; do not guess keywords.
-4. Verify `*OPC?` waiting and one multichannel acquisition before considering capture or other write capabilities.
+4. Extend screenshot, standalone acquisition control, and math only after reviewing reusable core interfaces; do not bypass the core with private raw SCPI.
 
 ## License
 

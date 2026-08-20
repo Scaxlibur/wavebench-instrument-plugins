@@ -6,7 +6,10 @@ from wavebench.instruments.api import InstrumentDescriptor
 def _open_driver(context):
     from .driver import SDS800XHDScope
 
-    return SDS800XHDScope(transport=context.open_transport())
+    return SDS800XHDScope(
+        transport=context.open_transport(),
+        capture_timeout_s=context.opc_timeout_ms / 1000.0,
+    )
 
 
 def descriptor() -> InstrumentDescriptor:
@@ -28,6 +31,8 @@ def descriptor() -> InstrumentDescriptor:
             "scope.idn",
             "scope.channel_coupling",
             "scope.fetch_waveform",
+            "scope.capture_waveform",
+            "scope.capture_waveforms",
             "scope.measurement_statistics",
         ),
         idn_patterns=(
@@ -44,12 +49,13 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "SDS800X HD family driver with strict identity, analog-channel coupling, "
-            "conservative stopped-record DMAX waveform reads, and read-only statistics."
+            "stopped-record and single-acquisition DMAX waveform reads, and read-only "
+            "statistics."
         ),
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sds800x-hd",
-        version="0.4.0",
+        version="0.5.0",
         source="entry_point:siglent.sds800x-hd",
         scope_coupling_policy="fixed-high-impedance",
         config_fields=("connection.resource", "scope.driver", "waveform.*"),

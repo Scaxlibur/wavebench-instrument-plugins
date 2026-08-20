@@ -10,7 +10,7 @@ electrical node. Public evidence excludes instrument IPs, serial numbers, raw wa
 SCPI logs.
 
 The run covered declared capabilities: identity, CH1–CH4 coupling, stopped non-sequence `DMAX`
-waveform fetch with `check_errors=False`, and statistics from a preconfigured advanced-measurement
+waveform fetch with `check_errors=False`, single- and dual-channel capture, and statistics from a preconfigured advanced-measurement
 slot. Screenshot, Autoset, capture, error
 queue, and sequence waveforms were not tested; the sequence-ON rejection gate received separate
 negative acceptance.
@@ -122,6 +122,21 @@ The instrument already had P3 configured as `PKPK / C1`. The harness temporarily
 History acceptance temporarily set the maximum count to `16` and read five values after stopping
 acquisition; `Count=5` matched the parsed value count. The harness restored `SIMPlc`, statistics
 OFF, maximum count `0`, and the original running state.
+
+## Single and multichannel capture
+
+`scope.capture_waveform(1)` performed one SINGLE acquisition, progressed from Arm to Stop, and
+returned `100000` points with `5.0375 V` raw min/max Vpp. The path issued no `*OPC?` query.
+
+`scope.capture_waveforms([1, 2])` sent one SINGLE and one RUN, then read `100000` points from each
+channel in the same stopped record. Raw Vpp was `5.0354 V` and `5.0375 V`, with correlation
+`0.9999971`; channel-start and waveform callbacks both ran in CH1, CH2 order. The harness restored
+the original trigger mode and running state.
+
+The managed path through the real descriptor and
+`ScopeService.capture_waveforms([1, 2], ...)` also passed. Its temporary metadata recorded
+`triggered_single=true` and completed channels `[1, 2]`; the temporary waveform package was
+removed after acceptance and did not enter the repository.
 
 ## Remaining gates
 

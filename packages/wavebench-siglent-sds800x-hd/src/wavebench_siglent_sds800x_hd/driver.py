@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from math import isfinite
+import time
 
-from wavebench.errors import DataError
+from wavebench.errors import DataError, OperationTimeout
 from wavebench.instruments.models import ScopeMeasurementStatistics, WaveformData
 from wavebench.transport.base import InstrumentTransport
 
@@ -99,6 +101,8 @@ def _parse_statistics_history(value: str) -> tuple[float, ...]:
 @dataclass
 class SDS800XHDScope:
     transport: InstrumentTransport
+    capture_timeout_s: float = 10.0
+    capture_poll_interval_s: float = 0.02
     _identity_response: str | None = field(default=None, init=False, repr=False)
     _model: str | None = field(default=None, init=False, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
@@ -364,12 +368,8 @@ class SDS800XHDScope:
             chunks.append(chunk)
         return b"".join(chunks)
 
-    def fetch_waveform(
-        self,
-        channel: int,
-        points: str = "dmax",
-        check_errors: bool = True,
-    ) -> WaveformData:
+    @staticmethod
+    def _validate_waveform_options(points: str, check_errors: bool) -> str:
         if not isinstance(points, str):
             raise DataError("SDS800X HD waveform points must be DEF, MAX, or DMAX")
         normalized_points = points.strip().upper()
@@ -384,6 +384,105 @@ class SDS800XHDScope:
                 "SDS800X HD waveform reads require check_errors=False because CN11G "
                 "documents no error-queue query"
             )
+        return normalized_points
+
+    def _require_non_sequence_acquisition(self) -> None:
+        sequence_state = self._query_text(
+            ":ACQuire:SEQuence?",
+            field_name="sequence acquisition state",
+        )
+        if sequence_state not in {"ON", "OFF"}:
+            raise DataError("SDS800X HD sequence acquisition state must be ON or OFF")
+        if sequence_state != "OFF":
+            raise DataError("SDS800X HD waveform reads do not support sequence acquisition")
+
+    @staticmethod
+    def _validate_capture_adjustments(
+        *,
+        time_range_s: float | None,
+        vertical_scale_v_per_div: float | None,
+    ) -> None:
+        for value, name in (
+            (time_range_s, "time range"),
+            (vertical_scale_v_per_div, "vertical scale"),
+        ):
+            if value is None:
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise DataError(f"SDS800X HD {name} must be a finite number")
+            if not isfinite(float(value)) or float(value) <= 0:
+                raise DataError(f"SDS800X HD {name} must be finite and > 0")
+
+    def _configure_capture_channels(
+        self,
+        *,
+        channels: list[int],
+        time_range_s: float | None,
+        vertical_scale_v_per_div: float | None,
+    ) -> None:
+        if time_range_s is not None:
+            self.transport.write(f":TIMebase:SCALe {float(time_range_s) / 10.0:.12g}")
+        for channel in channels:
+            self.transport.write(f":CHANnel{channel}:SWITch ON")
+            if vertical_scale_v_per_div is not None:
+                self.transport.write(
+                    f":CHANnel{channel}:SCALe {float(vertical_scale_v_per_div):.12g}"
+                )
+
+    def _stop_after_capture_failure(self, error: BaseException) -> None:
+        try:
+            self.transport.write(":TRIGger:STOP")
+        except Exception as stop_error:
+            error.add_note(
+                "SDS800X HD failed to stop acquisition after capture failure: "
+                f"{stop_error}"
+            )
+
+    def _run_single_acquisition(self) -> None:
+        if not isfinite(self.capture_timeout_s) or self.capture_timeout_s <= 0:
+            raise DataError("SDS800X HD capture timeout must be finite and > 0")
+        if not isfinite(self.capture_poll_interval_s) or self.capture_poll_interval_s < 0:
+            raise DataError("SDS800X HD capture poll interval must be finite and >= 0")
+
+        self.transport.write(":TRIGger:MODE SINGLE")
+        mode = self._query_text(":TRIGger:MODE?", field_name="trigger mode")
+        if mode != "SINGLE":
+            error = DataError("SDS800X HD did not enter SINGLE trigger mode")
+            self._stop_after_capture_failure(error)
+            raise error
+        self.transport.write(":TRIGger:RUN")
+        deadline = time.monotonic() + self.capture_timeout_s
+        while True:
+            state = self._query_text(":TRIGger:STATus?", field_name="trigger status")
+            if state not in _TRIGGER_STATES:
+                error = DataError("SDS800X HD returned an unsupported trigger status")
+                self._stop_after_capture_failure(error)
+                raise error
+            if state == "STOP":
+                break
+            if time.monotonic() >= deadline:
+                error = OperationTimeout(
+                    "SDS800X HD single acquisition timed out while waiting for Stop. "
+                    "Check the trigger source and level, or use scope fetch to read the "
+                    "current stopped record."
+                )
+                self._stop_after_capture_failure(error)
+                raise error
+            if self.capture_poll_interval_s > 0:
+                time.sleep(self.capture_poll_interval_s)
+        self._query_integer(
+            ":ACQuire:NUMACq?",
+            field_name="single acquisition count",
+            minimum=1,
+        )
+
+    def fetch_waveform(
+        self,
+        channel: int,
+        points: str = "dmax",
+        check_errors: bool = True,
+    ) -> WaveformData:
+        self._validate_waveform_options(points, check_errors)
         self._validate_channel(channel)
 
         trigger_state = self._query_text(
@@ -395,14 +494,7 @@ class SDS800XHDScope:
         if trigger_state != "STOP":
             raise DataError("SDS800X HD waveform reads require acquisition state Stop")
 
-        sequence_state = self._query_text(
-            ":ACQuire:SEQuence?",
-            field_name="sequence acquisition state",
-        )
-        if sequence_state not in {"ON", "OFF"}:
-            raise DataError("SDS800X HD sequence acquisition state must be ON or OFF")
-        if sequence_state != "OFF":
-            raise DataError("SDS800X HD waveform reads do not support sequence acquisition")
+        self._require_non_sequence_acquisition()
 
         state = self._read_waveform_transfer_state()
         primary_error: BaseException | None = None
@@ -451,6 +543,82 @@ class SDS800XHDScope:
                     "SDS800X HD waveform transfer state restoration also failed: "
                     f"{restore_error}"
                 )
+
+    def capture_waveform(
+        self,
+        channel: int,
+        points: str = "dmax",
+        check_errors: bool = True,
+        time_range_s: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+    ) -> WaveformData:
+        self._validate_waveform_options(points, check_errors)
+        self._validate_capture_adjustments(
+            time_range_s=time_range_s,
+            vertical_scale_v_per_div=vertical_scale_v_per_div,
+        )
+        self._validate_channel(channel)
+        self._require_non_sequence_acquisition()
+        self._configure_capture_channels(
+            channels=[channel],
+            time_range_s=time_range_s,
+            vertical_scale_v_per_div=vertical_scale_v_per_div,
+        )
+        self._run_single_acquisition()
+        return self.fetch_waveform(
+            channel=channel,
+            points=points,
+            check_errors=check_errors,
+        )
+
+    def capture_waveforms(
+        self,
+        channels: list[int],
+        points: str = "dmax",
+        check_errors: bool = True,
+        time_range_s: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+        on_channel_start: Callable[[int | None], None] | None = None,
+        on_waveform: Callable[[int, WaveformData], None] | None = None,
+    ) -> dict[int, WaveformData]:
+        self._validate_waveform_options(points, check_errors)
+        self._validate_capture_adjustments(
+            time_range_s=time_range_s,
+            vertical_scale_v_per_div=vertical_scale_v_per_div,
+        )
+        if not isinstance(channels, list) or not channels:
+            raise DataError("SDS800X HD capture channels must be a non-empty list")
+        if any(type(channel) is not int for channel in channels):
+            raise DataError("SDS800X HD capture channels must contain only integers")
+        if len(set(channels)) != len(channels):
+            raise DataError("SDS800X HD capture channels must be unique")
+        if on_channel_start is not None and not callable(on_channel_start):
+            raise DataError("SDS800X HD on_channel_start must be callable")
+        if on_waveform is not None and not callable(on_waveform):
+            raise DataError("SDS800X HD on_waveform must be callable")
+        for channel in channels:
+            self._validate_channel(channel)
+        self._require_non_sequence_acquisition()
+        self._configure_capture_channels(
+            channels=channels,
+            time_range_s=time_range_s,
+            vertical_scale_v_per_div=vertical_scale_v_per_div,
+        )
+        self._run_single_acquisition()
+
+        waveforms: dict[int, WaveformData] = {}
+        for channel in channels:
+            if on_channel_start is not None:
+                on_channel_start(channel)
+            waveform = self.fetch_waveform(
+                channel=channel,
+                points=points,
+                check_errors=check_errors,
+            )
+            waveforms[channel] = waveform
+            if on_waveform is not None:
+                on_waveform(channel, waveform)
+        return waveforms
 
     def close(self) -> None:
         if self._closed:

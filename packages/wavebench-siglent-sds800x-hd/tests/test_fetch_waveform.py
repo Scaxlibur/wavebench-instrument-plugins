@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from wavebench.errors import ConfigError, DataError
+from wavebench.errors import ConfigError, DataError, OperationTimeout
 from wavebench.instruments.models import WaveformData
 from wavebench.services.scope_service import ScopeService
 
@@ -81,13 +81,16 @@ class FakeTransport:
         *,
         responses: dict[str, str] | None = None,
         preamble: bytes | BaseException | None = None,
+        preambles: list[bytes | BaseException] | None = None,
         chunks: list[bytes | BaseException] | None = None,
         write_failures: dict[str, BaseException] | None = None,
     ) -> None:
         self.responses = {
             "*IDN?": DEFAULT_IDN,
             ":TRIGger:STATus?": "Stop",
+            ":TRIGger:MODE?": "SINGle",
             ":ACQuire:SEQuence?": "OFF",
+            ":ACQuire:NUMACq?": "1",
             ":WAVeform:MAXPoint?": "2",
             **_ORIGINAL_TRANSFER_STATE,
         }
@@ -95,6 +98,7 @@ class FakeTransport:
             self.responses.update(responses)
         raw = np.asarray([-25, 0, 25, -1, 0x0A00], dtype="<i2").tobytes()
         self.preamble = _preamble() if preamble is None else preamble
+        self.preambles = deque(preambles or [])
         self.chunks = deque(
             [raw[0:4], raw[4:8], raw[8:10]] if chunks is None else chunks
         )
@@ -119,7 +123,10 @@ class FakeTransport:
     def query_bin_block(self, command: str) -> bytes:
         self.operations.append(("binary", command))
         self.binary_queries.append(command)
-        result = self.preamble if command == ":WAVeform:PREamble?" else self.chunks.popleft()
+        if command == ":WAVeform:PREamble?":
+            result = self.preambles.popleft() if self.preambles else self.preamble
+        else:
+            result = self.chunks.popleft()
         if isinstance(result, BaseException):
             raise result
         return result
@@ -135,6 +142,147 @@ def test_fetch_waveform_signature_matches_core_contract() -> None:
     assert signature.parameters["points"].default == "dmax"
     assert signature.parameters["check_errors"].default is True
     assert signature.return_annotation == "WaveformData"
+
+
+def test_capture_signatures_match_core_contracts() -> None:
+    single = inspect.signature(SDS800XHDScope.capture_waveform)
+    multiple = inspect.signature(SDS800XHDScope.capture_waveforms)
+
+    assert list(single.parameters) == [
+        "self",
+        "channel",
+        "points",
+        "check_errors",
+        "time_range_s",
+        "vertical_scale_v_per_div",
+    ]
+    assert list(multiple.parameters) == [
+        "self",
+        "channels",
+        "points",
+        "check_errors",
+        "time_range_s",
+        "vertical_scale_v_per_div",
+        "on_channel_start",
+        "on_waveform",
+    ]
+    assert single.return_annotation == "WaveformData"
+    assert multiple.return_annotation == "dict[int, WaveformData]"
+
+
+def test_capture_waveform_runs_one_single_acquisition_before_fetch() -> None:
+    transport = FakeTransport()
+
+    waveform = SDS800XHDScope(transport).capture_waveform(
+        2,
+        check_errors=False,
+        time_range_s=0.005,
+        vertical_scale_v_per_div=1.0,
+    )
+
+    assert waveform.channel == 2
+    assert waveform.sample_count == 5
+    assert transport.writes.count(":TRIGger:MODE SINGLE") == 1
+    assert transport.writes.count(":TRIGger:RUN") == 1
+    assert ":TIMebase:SCALe 0.0005" in transport.writes
+    assert ":CHANnel2:SWITch ON" in transport.writes
+    assert ":CHANnel2:SCALe 1" in transport.writes
+    assert transport.operations.index(
+        ("query", ":ACQuire:NUMACq?")
+    ) < transport.operations.index(("binary", ":WAVeform:PREamble?"))
+
+
+def test_capture_waveforms_uses_one_acquisition_for_all_channels() -> None:
+    raw = np.asarray([-25, 0, 25, -1, 0x0A00], dtype="<i2").tobytes()
+    transport = FakeTransport(
+        preambles=[_preamble(channel=1), _preamble(channel=2)],
+        chunks=[raw[0:4], raw[4:8], raw[8:10]] * 2,
+    )
+    started: list[int | None] = []
+    completed: list[int] = []
+
+    waveforms = SDS800XHDScope(transport).capture_waveforms(
+        [1, 2],
+        check_errors=False,
+        on_channel_start=started.append,
+        on_waveform=lambda channel, _waveform: completed.append(channel),
+    )
+
+    assert list(waveforms) == [1, 2]
+    assert all(waveform.sample_count == 5 for waveform in waveforms.values())
+    assert started == [1, 2]
+    assert completed == [1, 2]
+    assert transport.writes.count(":TRIGger:MODE SINGLE") == 1
+    assert transport.writes.count(":TRIGger:RUN") == 1
+    assert transport.binary_queries.count(":WAVeform:PREamble?") == 2
+    assert transport.binary_queries.count(":WAVeform:DATA?") == 6
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"points": "MAX", "check_errors": False}, "currently support only DMAX"),
+        ({"check_errors": True}, "require check_errors=False"),
+        ({"check_errors": False, "time_range_s": 0}, "time range"),
+        ({"check_errors": False, "vertical_scale_v_per_div": float("inf")}, "vertical scale"),
+    ],
+)
+def test_capture_waveform_rejects_invalid_options_before_io(
+    kwargs: dict[str, object],
+    message: str,
+) -> None:
+    transport = FakeTransport()
+
+    with pytest.raises(DataError, match=message):
+        SDS800XHDScope(transport).capture_waveform(2, **kwargs)  # type: ignore[arg-type]
+
+    assert transport.operations == []
+
+
+def test_capture_rejects_sequence_mode_before_acquisition_writes() -> None:
+    transport = FakeTransport(responses={":ACQuire:SEQuence?": "ON"})
+
+    with pytest.raises(DataError, match="do not support sequence"):
+        SDS800XHDScope(transport).capture_waveform(2, check_errors=False)
+
+    assert transport.queries == ["*IDN?", ":ACQuire:SEQuence?"]
+    assert transport.writes == []
+    assert transport.binary_queries == []
+
+
+def test_capture_stops_when_single_mode_write_is_ignored() -> None:
+    transport = FakeTransport(responses={":TRIGger:MODE?": "AUTO"})
+
+    with pytest.raises(DataError, match="did not enter SINGLE"):
+        SDS800XHDScope(transport).capture_waveform(2, check_errors=False)
+
+    assert transport.writes[-1] == ":TRIGger:STOP"
+    assert ":TRIGger:RUN" not in transport.writes
+    assert transport.binary_queries == []
+
+
+def test_capture_timeout_stops_without_reading_waveform() -> None:
+    transport = FakeTransport(responses={":TRIGger:STATus?": "Arm"})
+    scope = SDS800XHDScope(
+        transport,
+        capture_timeout_s=1e-9,
+        capture_poll_interval_s=0,
+    )
+
+    with pytest.raises(OperationTimeout, match="timed out"):
+        scope.capture_waveform(2, check_errors=False)
+
+    assert transport.writes[-1] == ":TRIGger:STOP"
+    assert transport.binary_queries == []
+
+
+def test_capture_requires_positive_single_acquisition_count() -> None:
+    transport = FakeTransport(responses={":ACQuire:NUMACq?": "0"})
+
+    with pytest.raises(DataError, match="single acquisition count"):
+        SDS800XHDScope(transport).capture_waveform(2, check_errors=False)
+
+    assert transport.binary_queries == []
 
 
 def _scope_service(
