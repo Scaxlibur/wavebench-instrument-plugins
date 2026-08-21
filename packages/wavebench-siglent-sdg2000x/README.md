@@ -8,7 +8,7 @@
 
 版本 `0.2.0` 是 M2 严格只读基线，声明 `source.idn` 与 `source.status`。驱动支持编程手册记录的两种 `*IDN?` 返回格式，并通过 `OUTP?`、`BSWV?`、`SWWV?` 将 CH1/CH2 状态映射为 WaveBench `SourceStatus`。错误队列、输出控制、固定波、调制、Sweep、Burst、任意波上传和 Counter capability 尚未开放。
 
-当前状态读取已经通过编程手册审计和 fake transport 测试，尚未进行实机验收。未完成审计与离线验证的命令不写入 descriptor，也不伪装成可用 capability。
+`SDG2122X` 固件 `2.01.01.39R7T2` 已完成身份和 CH1/CH2 状态的零写入实机验收。该结论不外推到 `SDG2042X`、`SDG2082X` 或其它固件。未完成审计与离线验证的命令不写入 descriptor，也不伪装成可用 capability。
 
 ## 身份与兼容范围
 
@@ -29,7 +29,7 @@
 SDG_Series_Programming_Guide_E05C.pdf
 ```
 
-手册原文件不进入 Git 或发行包。公开的命令覆盖状态见 [SDG2000X 功能覆盖矩阵](doc/SDG2000X_COVERAGE_MATRIX.md)，分阶段开发门见 [SDG2000X 覆盖里程碑](doc/SDG2000X_COVERAGE_MILESTONES.md)。
+手册原文件不进入 Git 或发行包。公开的命令覆盖状态见 [SDG2000X 功能覆盖矩阵](doc/SDG2000X_COVERAGE_MATRIX.md)，分阶段开发门见 [SDG2000X 覆盖里程碑](doc/SDG2000X_COVERAGE_MILESTONES.md)，实机证据见 [SDG2000X 只读实机验收](doc/SDG2000X_READONLY_ACCEPTANCE.md)。
 
 ## 配置示例
 
@@ -76,3 +76,4 @@ python -m wavebench plugin package check packages/wavebench-siglent-sdg2000x
 - [SIGLENT SDG2000X 产品页](https://www.siglent.com/in/products-overview/sdg2000x/)
 - [SIGLENT Waveform Generator 文档下载页](https://siglentna.com/resources/documents/waveform-generators/)
 - [SDG2000X 协议审计](doc/SDG2000X_PROTOCOL_AUDIT.md)
+- [SDG2000X 只读实机验收](doc/SDG2000X_READONLY_ACCEPTANCE.md)

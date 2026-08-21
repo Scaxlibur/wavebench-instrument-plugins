@@ -4,15 +4,15 @@
 
 ## Current conclusion
 
-The current release completes the strict query-only M2 implementation. `source.idn` and `source.status` have offline protocol evidence, strict parsing, and zero-write tests. Hardware acceptance remains closed, and every other command domain remains disabled.
+The current release completes the strict query-only M2 implementation. `source.idn` and `source.status` have passed zero-write CH1/CH2 hardware acceptance on one `SDG2122X` running firmware `2.01.01.39R7T2`. Other models, other firmware revisions, and physical waveform agreement remain unaccepted. Every other command domain remains disabled.
 
 ## Coverage status
 
 | Command domain | WaveBench capability | Current status | Exit condition |
 | --- | --- | --- | --- |
-| Instrument identity | `source.idn` | Implemented for both documented response formats | Controlled hardware confirmation of model, firmware, and termination |
+| Instrument identity | `source.idn` | Passed on `SDG2122X` / `2.01.01.39R7T2`; other models remain unaccepted | Add redacted evidence per model and firmware |
 | System error queue | None | Disabled | Confirm the query, empty-queue semantics, and whether reads consume state |
-| Basic channel status | `source.status` | Implemented with the core `SourceStatus` model | Confirm CH1/CH2 responses and firmware differences on controlled hardware |
+| Basic channel status | `source.status` | Three matching CH1/CH2 rounds in one SDG2122X session, 19 queries and zero write requests | With outputs enabled, compare physical frequency, Vpp, and offset on the scope; accept other models individually |
 | Output control | None | Denied by default | Test pre-state, explicit OFF, readback, and failure recovery |
 | Fixed-wave configuration | None | Denied by default | Establish range, load, safety-limit, and transaction-restoration evidence |
 | Modulation, sweep, and burst | None | Disabled | Build a separate read-only profile for each domain before evaluating writes |
@@ -32,4 +32,5 @@ The current release completes the strict query-only M2 implementation. `source.i
 - [SIGLENT waveform-generator document downloads](https://siglentna.com/resources/documents/waveform-generators/)
 - Local guide: `doc/vendor-local/SDG_Series_Programming_Guide_E05C.pdf`, revision `PG02_E05C`
 - [Protocol audit](SDG2000X_PROTOCOL_AUDIT_EN.md)
+- [Read-only hardware acceptance](SDG2000X_READONLY_ACCEPTANCE_EN.md)
 - Current descriptor, driver, and fake-transport tests

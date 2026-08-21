@@ -25,7 +25,7 @@ The compatibility table marks `COMM_HEADER` as unavailable on SDG2000X. The driv
 | Command | Confirmed response | WaveBench mapping | Current decision |
 | --- | --- | --- | --- |
 | `*IDN?` | Manufacturer, model, serial, firmware; or the `*IDN,SDG,...` format | `source.idn` | Exposed |
-| `C<n>:OUTP?` | Output state, load, and polarity | `SourceStatus.output`; load and polarity are reserved for a later profile | Used by M2 |
+| `C<n>:OUTP?` | Output state, load, and polarity; SDG2122X hardware also returned `POWERON_STATE` | `SourceStatus.output`; all other fields are validated and reserved for a later profile | Used by M2 |
 | `C<n>:BSWV?` | Current basic-wave type and applicable unit-bearing parameters | Function, frequency, amplitude, offset, phase, duty cycle, and `apply_raw` in `SourceStatus` | Used by M2 |
 | `C<n>:SWWV?` | `STATE,OFF`, or the complete sweep parameters when enabled | `SourceStatus.frequency_mode` and `sweep_enabled` | Used by M2 |
 | `C<n>:MDWV?` | `STATE,OFF`, or modulation type and complete parameters | Future modulation profile | Audited, not exposed |
@@ -33,6 +33,10 @@ The compatibility table marks `COMM_HEADER` as unavailable on SDG2000X. The driv
 | `C<n>:SYNC?` | Sync state and source type | Future dedicated sync model | Audited, not exposed |
 
 `<n>` is restricted to `1` or `2`. The M2 read order is frozen as identity validation, `OUTP?`, `BSWV?`, and `SWWV?`; the operation must issue no writes.
+
+## Hardware-observed firmware extension
+
+An `SDG2122X` running firmware `2.01.01.39R7T2` returned `POWERON_STATE,ON|OFF` from `OUTP?` in addition to the E05C fields. The parser accepts only this closed enum and continues to require `LOAD` and `PLRT`. The field is not mapped into the core `SourceStatus` model and does not expand any capability. See the [read-only hardware acceptance](SDG2000X_READONLY_ACCEPTANCE_EN.md) for the complete boundary.
 
 ## Core interface mapping
 

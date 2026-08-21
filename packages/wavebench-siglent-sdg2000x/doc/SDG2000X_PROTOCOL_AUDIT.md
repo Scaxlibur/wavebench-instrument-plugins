@@ -25,7 +25,7 @@
 | 命令 | 已确认响应 | WaveBench 映射 | 当前决策 |
 | --- | --- | --- | --- |
 | `*IDN?` | 厂商、型号、序列号、固件；或 `*IDN,SDG,...` 格式 | `source.idn` | 已开放 |
-| `C<n>:OUTP?` | 输出状态、负载、极性 | `SourceStatus.output`；负载和极性留待独立 profile | M2 使用 |
+| `C<n>:OUTP?` | 输出状态、负载、极性；SDG2122X 实测额外包含 `POWERON_STATE` | `SourceStatus.output`；其余字段严格校验，留待独立 profile | M2 使用 |
 | `C<n>:BSWV?` | 当前基本波类型及其适用参数，数值携带单位 | `SourceStatus` 的函数、频率、幅度、偏置、相位、占空比和 `apply_raw` | M2 使用 |
 | `C<n>:SWWV?` | `STATE,OFF`，或启用时返回完整 Sweep 参数 | `SourceStatus.frequency_mode` 与 `sweep_enabled` | M2 使用 |
 | `C<n>:MDWV?` | `STATE,OFF`，或启用时返回调制类型与完整参数 | 后续调制 profile | 已审计，未开放 |
@@ -33,6 +33,10 @@
 | `C<n>:SYNC?` | 同步状态与源类型 | 后续专用同步模型 | 已审计，未开放 |
 
 其中 `<n>` 只能是 `1` 或 `2`。M2 读取顺序冻结为身份校验、`OUTP?`、`BSWV?`、`SWWV?`；整个操作不得发送写命令。
+
+## 固件实测扩展
+
+`SDG2122X` 固件 `2.01.01.39R7T2` 的 `OUTP?` 在 E05C 已记录字段之外返回 `POWERON_STATE,ON|OFF`。解析器只接受该封闭枚举，并继续要求 `LOAD` 与 `PLRT`。该字段不映射到核心 `SourceStatus`，也不据此扩张 capability。完整边界见[只读实机验收](SDG2000X_READONLY_ACCEPTANCE.md)。
 
 ## 主仓库接口映射
 

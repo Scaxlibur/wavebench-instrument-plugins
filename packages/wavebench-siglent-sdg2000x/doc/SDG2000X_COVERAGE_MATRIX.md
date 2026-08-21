@@ -4,15 +4,15 @@
 
 ## 当前结论
 
-当前版本已完成 M2 严格只读实现。`source.idn` 与 `source.status` 具备离线协议证据、严格解析和零写入测试；实机验收仍保持关闭，其余命令域继续保持关闭。
+当前版本已完成 M2 严格只读实现。`source.idn` 与 `source.status` 已在一台 `SDG2122X` 固件 `2.01.01.39R7T2` 上完成 CH1/CH2 零写入实机验收；其它型号、其它固件和物理波形一致性仍未验收，其余命令域继续保持关闭。
 
 ## 覆盖状态
 
 | 命令域 | WaveBench capability | 当前状态 | 放行条件 |
 | --- | --- | --- | --- |
-| 仪器身份 | `source.idn` | 已实现；支持编程手册记录的两种返回格式 | 受控实机确认型号、固件和终止符 |
+| 仪器身份 | `source.idn` | `SDG2122X` / `2.01.01.39R7T2` 实机通过；其它型号待验收 | 按型号与固件补充脱敏证据 |
 | 系统错误队列 | 无 | 未开放 | 确认查询命令、空队列语义和是否为消费型读取 |
-| 通道基础状态 | `source.status` | 已实现；返回核心 `SourceStatus` | 受控实机确认 CH1/CH2 响应和固件差异 |
+| 通道基础状态 | `source.status` | 同一 SDG2122X 会话三轮 CH1/CH2 一致，19 次查询、0 次写请求 | 输出开启后用示波器验证物理频率、Vpp 与偏置；其它型号逐台验收 |
 | 输出控制 | 无 | 默认拒绝 | 写前状态、显式 OFF、写后回读和失败恢复均有测试 |
 | 固定波配置 | 无 | 默认拒绝 | 参数范围、负载语义、安全限制和事务恢复均有证据 |
 | 调制、Sweep 与 Burst | 无 | 未开放 | 每个子域单独形成只读 profile，再评估写 capability |
@@ -32,4 +32,5 @@
 - [SIGLENT Waveform Generator 文档下载页](https://siglentna.com/resources/documents/waveform-generators/)
 - 本地编程手册：`doc/vendor-local/SDG_Series_Programming_Guide_E05C.pdf`，修订号 `PG02_E05C`
 - [协议审计](SDG2000X_PROTOCOL_AUDIT.md)
+- [只读实机验收](SDG2000X_READONLY_ACCEPTANCE.md)
 - 当前 descriptor、driver 和 fake transport 测试

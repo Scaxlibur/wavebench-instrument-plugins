@@ -8,7 +8,7 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 
 Version `0.2.0` is the strict query-only M2 baseline. It declares `source.idn` and `source.status`. The driver accepts both documented `*IDN?` formats and maps CH1/CH2 `OUTP?`, `BSWV?`, and `SWWV?` responses to the core `SourceStatus` model. Error-queue, output-control, fixed-wave, modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
 
-Status reads have completed programming-guide review and fake-transport testing but not hardware acceptance. No other command is added to the descriptor before its documentation and offline gates pass.
+An `SDG2122X` running firmware `2.01.01.39R7T2` has completed zero-write hardware acceptance for identity and CH1/CH2 status. The result does not extend to `SDG2042X`, `SDG2082X`, or other firmware revisions. No other command is added to the descriptor before its documentation and offline gates pass.
 
 ## Identity and compatibility
 
@@ -29,7 +29,7 @@ The vendor programming guide is stored under ignored [`doc/vendor-local/`](doc/v
 SDG_Series_Programming_Guide_E05C.pdf
 ```
 
-The original manual is excluded from Git and release artifacts. See the [SDG2000X coverage matrix](doc/SDG2000X_COVERAGE_MATRIX_EN.md) for public command status and the [SDG2000X coverage milestones](doc/SDG2000X_COVERAGE_MILESTONES_EN.md) for staged development gates.
+The original manual is excluded from Git and release artifacts. See the [SDG2000X coverage matrix](doc/SDG2000X_COVERAGE_MATRIX_EN.md) for public command status, the [SDG2000X coverage milestones](doc/SDG2000X_COVERAGE_MILESTONES_EN.md) for staged development gates, and the [read-only hardware acceptance](doc/SDG2000X_READONLY_ACCEPTANCE_EN.md) for evidence and limits.
 
 ## Safety boundary
 
@@ -58,3 +58,4 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SIGLENT SDG2000X product page](https://www.siglent.com/in/products-overview/sdg2000x/)
 - [SIGLENT waveform-generator document downloads](https://siglentna.com/resources/documents/waveform-generators/)
 - [SDG2000X protocol audit](doc/SDG2000X_PROTOCOL_AUDIT_EN.md)
+- [SDG2000X read-only hardware acceptance](doc/SDG2000X_READONLY_ACCEPTANCE_EN.md)
