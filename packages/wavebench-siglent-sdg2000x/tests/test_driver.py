@@ -152,7 +152,17 @@ class StatefulOutputTransport:
             r"C([12]):BSWV AMP,([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
             command,
         )
-        match = output_match or sweep_match or frequency_match or amplitude_match
+        function_match = re.fullmatch(
+            r"C([12]):BSWV WVTP,(SINE|SQUARE|RAMP|PULSE|NOISE|DC)",
+            command,
+        )
+        match = (
+            output_match
+            or sweep_match
+            or frequency_match
+            or amplitude_match
+            or function_match
+        )
         if match is None:
             raise AssertionError(f"unexpected SDG2000X write: {command}")
         channel = int(match.group(1))
@@ -169,8 +179,7 @@ class StatefulOutputTransport:
                     self.basics[channel],
                     count=1,
                 )
-            else:
-                assert amplitude_match is not None
+            elif amplitude_match is not None:
                 value_vpp = float(amplitude_match.group(2))
                 self.basics[channel] = re.sub(
                     r"AMP,[^,]+",
@@ -178,6 +187,42 @@ class StatefulOutputTransport:
                     self.basics[channel],
                     count=1,
                 )
+            else:
+                assert function_match is not None
+                wave_type = function_match.group(2)
+                current = self.basics[channel]
+
+                def value(name: str, default: str) -> str:
+                    found = re.search(rf"(?:^|,){name},([^,]+)", current)
+                    return found.group(1) if found is not None else default
+
+                common = (
+                    f"FRQ,{value('FRQ', '1KHZ')},AMP,{value('AMP', '1V')},"
+                    f"OFST,{value('OFST', '0V')}"
+                )
+                phase = value("PHSE", "0")
+                if wave_type == "SINE":
+                    body = f"WVTP,SINE,{common},PHSE,{phase}"
+                elif wave_type == "SQUARE":
+                    body = (
+                        f"WVTP,SQUARE,{common},PHSE,{phase},"
+                        f"DUTY,{value('DUTY', '50')}"
+                    )
+                elif wave_type == "RAMP":
+                    body = f"WVTP,RAMP,{common},PHSE,{phase},SYM,50"
+                elif wave_type == "PULSE":
+                    body = (
+                        f"WVTP,PULSE,{common},WIDTH,500US,RISE,8.4NS,"
+                        "FALL,8.4NS,DLY,0S,DUTY,50"
+                    )
+                elif wave_type == "NOISE":
+                    body = (
+                        "WVTP,NOISE,STDEV,1V,MEAN,0V,BANDSTATE,OFF,"
+                        "BANDWIDTH,120MHZ"
+                    )
+                else:
+                    body = f"WVTP,DC,OFST,{value('OFST', '0V')}"
+                self.basics[channel] = f"C{channel}:BSWV {body}"
         if self._consume(self.drift_write_counts, command):
             self.basics[channel] = (
                 f"C{channel}:BSWV WVTP,SINE,FRQ,1KHZ,AMP,2V,OFST,0V,PHSE,0"
@@ -246,13 +291,14 @@ def test_descriptor_declares_output_capable_external_source() -> None:
         "source.idn",
         "source.status",
         "source.set_frequency",
+        "source.set_function",
         "source.set_amplitude_vpp",
         "source.output",
     )
     assert item.backends == ("pyvisa",)
     assert item.wavebench_min_version == "0.8.0"
     assert item.wavebench_max_version == "0.9.0"
-    assert item.version == "0.5.0"
+    assert item.version == "0.6.0"
     assert item.config_fields == (
         "source.resource",
         "source.driver",
@@ -1076,6 +1122,230 @@ def test_set_amplitude_postwrite_failures_force_off_and_latch(failure: str) -> N
 
     with pytest.raises(InstrumentError, match="confirmed OFF"):
         driver.set_amplitude_vpp(1, 3.0, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == [command, "C1:OUTP OFF"]
+    assert driver.configuration_writes_blocked is True
+
+
+def test_set_function_matches_the_core_source_driver_signature() -> None:
+    signature = inspect.signature(SDG2000XSource.set_function)
+    parameters = tuple(signature.parameters.values())
+
+    assert tuple(parameter.name for parameter in parameters) == (
+        "self",
+        "channel",
+        "function",
+        "check_errors",
+    )
+    assert parameters[-1].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters[-1].default is True
+
+
+@pytest.mark.parametrize(
+    ("requested", "expected", "vendor"),
+    [
+        ("squ", "SQU", "SQUARE"),
+        ("square", "SQU", "SQUARE"),
+        ("ramp", "RAMP", "RAMP"),
+        ("tri", "RAMP", "RAMP"),
+        ("triangle", "RAMP", "RAMP"),
+        ("puls", "PULS", "PULSE"),
+        ("pulse", "PULS", "PULSE"),
+        ("nois", "NOIS", "NOISE"),
+        ("noise", "NOIS", "NOISE"),
+        ("dc", "DC", "DC"),
+    ],
+)
+def test_set_function_covers_every_public_alias(
+    requested: str,
+    expected: str,
+    vendor: str,
+) -> None:
+    transport = StatefulOutputTransport()
+
+    status = SDG2000XSource(transport).set_function(
+        1,
+        requested,
+        check_errors=False,
+    )
+
+    assert status.function == expected
+    assert status.output == "OFF"
+    assert transport.writes == [f"C1:BSWV WVTP,{vendor}"]
+
+
+@pytest.mark.parametrize("model", ["SDG2042X", "SDG2082X", "SDG2122X"])
+@pytest.mark.parametrize("channel", [1, 2])
+@pytest.mark.parametrize(
+    ("requested", "expected", "vendor"),
+    [
+        ("square", "SQU", "SQUARE"),
+        ("ramp", "RAMP", "RAMP"),
+        ("pulse", "PULS", "PULSE"),
+    ],
+)
+def test_set_function_preserves_live_output_for_bounded_periodic_waves(
+    model: str,
+    channel: int,
+    requested: str,
+    expected: str,
+    vendor: str,
+) -> None:
+    transport = StatefulOutputTransport(model=model)
+    transport.outputs[channel] = "ON"
+
+    status = SDG2000XSource(transport).set_function(
+        channel,
+        requested,
+        check_errors=False,
+    )
+
+    assert status.function == expected
+    assert status.output == "ON"
+    assert status.frequency_hz == 1_000.0
+    assert status.amplitude == 4.0
+    assert status.offset_v == 0.0
+    assert transport.writes == [f"C{channel}:BSWV WVTP,{vendor}"]
+
+
+@pytest.mark.parametrize("requested", ["sin", "sine", " SIN "])
+def test_set_function_is_idempotent_for_sine_aliases(requested: str) -> None:
+    transport = StatefulOutputTransport()
+
+    status = SDG2000XSource(transport).set_function(
+        1,
+        requested,
+        check_errors=False,
+    )
+
+    assert status.function == "SIN"
+    assert transport.writes == []
+    assert transport.queries == ["*IDN?", *_configuration_queries(1)]
+
+
+def test_set_function_can_leave_noise_for_a_safe_periodic_wave_while_off() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,NOISE,STDEV,1V,MEAN,0V,BANDSTATE,OFF,BANDWIDTH,120MHZ"
+    )
+
+    status = SDG2000XSource(transport).set_function(1, "sine", check_errors=False)
+
+    assert status.function == "SIN"
+    assert status.frequency_hz == 1_000.0
+    assert status.amplitude == 1.0
+    assert status.output == "OFF"
+
+
+@pytest.mark.parametrize("function", ["", "arb", "user", "harm", "sin;*rst", 1, None])
+def test_set_function_rejects_unknown_or_non_string_values_before_io(
+    function: object,
+) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="function must be one of"):
+        SDG2000XSource(transport).set_function(  # type: ignore[arg-type]
+            1,
+            function,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("channel", [0, 3, -1, True, "1"])
+def test_set_function_rejects_invalid_channels_before_io(channel: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="channel must be 1 or 2"):
+        SDG2000XSource(transport).set_function(  # type: ignore[arg-type]
+            channel,
+            "sine",
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("check_errors", [True, 1, "false", None])
+def test_set_function_rejects_unavailable_error_checks_before_io(
+    check_errors: object,
+) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="check_errors"):
+        SDG2000XSource(transport).set_function(  # type: ignore[arg-type]
+            1,
+            "square",
+            check_errors=check_errors,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("target", ["noise", "dc"])
+def test_set_function_requires_output_off_for_unbounded_targets(target: str) -> None:
+    transport = StatefulOutputTransport()
+    transport.outputs[1] = "ON"
+
+    with pytest.raises(DataError, match="require output OFF"):
+        SDG2000XSource(transport).set_function(1, target, check_errors=False)
+
+    assert transport.writes == []
+
+
+def test_set_function_enforces_target_frequency_limit_before_write() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SINE,FRQ,30MHZ,AMP,1V,OFST,0V,PHSE,0"
+    )
+
+    with pytest.raises(DataError, match="frequency exceeds"):
+        SDG2000XSource(transport).set_function(1, "square", check_errors=False)
+
+    assert transport.writes == []
+
+
+def test_set_function_rejects_sweep_and_advanced_modes_before_write() -> None:
+    sweep_transport = StatefulOutputTransport()
+    sweep_transport.sweeps[1] = "ON"
+    with pytest.raises(DataError, match="require FIX mode"):
+        SDG2000XSource(sweep_transport).set_function(1, "square", check_errors=False)
+    assert sweep_transport.writes == []
+
+    harmonic_transport = StatefulOutputTransport()
+    harmonic_transport.harmonic[1] = "ON"
+    with pytest.raises(DataError, match="advanced signal modes OFF"):
+        SDG2000XSource(harmonic_transport).set_function(
+            1,
+            "square",
+            check_errors=False,
+        )
+    assert harmonic_transport.writes == []
+
+
+@pytest.mark.parametrize("failure", ["ignored", "ambiguous", "readback", "drift", "advanced"])
+def test_set_function_postwrite_failures_force_off_and_latch(failure: str) -> None:
+    transport = StatefulOutputTransport()
+    command = "C1:BSWV WVTP,SQUARE"
+    if failure == "ignored":
+        transport.ignore_write_counts[command] = 1
+    elif failure == "ambiguous":
+        transport.fail_after_write_counts[command] = 1
+    elif failure == "readback":
+        transport.fail_readback_counts[command] = 1
+    elif failure == "drift":
+        transport.drift_write_counts[command] = 1
+    else:
+        transport.advanced_drift_write_counts[command] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_function(1, "square", check_errors=False)
 
     assert transport.outputs[1] == "OFF"
     assert transport.writes == [command, "C1:OUTP OFF"]

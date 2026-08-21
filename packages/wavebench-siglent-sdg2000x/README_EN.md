@@ -6,7 +6,7 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 
 ## Current development baseline
 
-Version `0.5.0` adds `source.set_frequency` and `source.set_amplitude_vpp` to the M3 baseline. Frequency writes enforce the 1 µHz floor and the model/function-specific upper limit. Amplitude writes accept 2 mVpp through 10 Vpp and jointly check the offset-adjusted absolute-voltage envelope. Complete safety context is read before and after each write; any post-write failure confirms output OFF and latches all configuration writes for the session. Function, duty-cycle, modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
+Version `0.6.0` adds `source.set_frequency`, `source.set_function`, and `source.set_amplitude_vpp` to the M3 baseline. Function writes support Sine, Square, Ramp, Pulse, Noise, and DC. Noise/DC may be configured only while output is OFF and remain blocked by the output-enable safety gate. Frequency and amplitude retain model/function limits and the 10 Vpp voltage envelope. Duty-cycle, modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
 
 An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptance for identity, CH1/CH2 status, and `source.output`. `source.set_frequency` separately passed a 2 kHz OFF-state write and a live 5 kHz ON-state write on CH2, with approximately 4.08 Vpp measured by the RTM2032. The original 1 kHz setting was restored and both outputs ended OFF. `SDG2042X` and `SDG2082X` expose the same documented command contract, but hardware evidence from the `SDG2122X` is not extrapolated to them.
 
@@ -47,7 +47,7 @@ access = "read_only"
 max_source_vpp = 10.0
 ```
 
-Change `access` to `read_write` before calling a frequency, amplitude, or output write capability. With `read_only`, identity and status remain available while the core denies writes. `check_errors = false` records that no error-queue capability has been accepted; the driver does not pretend to perform an error-queue check.
+Change `access` to `read_write` before calling a function, frequency, amplitude, or output write capability. With `read_only`, identity and status remain available while the core denies writes. `check_errors = false` records that no error-queue capability has been accepted; the driver does not pretend to perform an error-queue check.
 
 ## Safety boundary
 
@@ -57,8 +57,9 @@ Change `access` to `read_write` before calling a frequency, amplitude, or output
 - Before enabling, `source.output` requires FIX mode, sweep OFF, known Vpp amplitude and offset, every known composite-wave mode OFF, and core enforcement of `max_source_vpp`.
 - `source.set_frequency` enforces model/function limits. Automatic Sweep-to-FIX selection is allowed only while output is OFF.
 - `source.set_amplitude_vpp` accepts 2 mVpp through 10 Vpp and requires the amplitude-plus-offset envelope to remain within ±10 V.
+- `source.set_function` allows live switching among four bounded periodic waves. Noise/DC require output OFF and do not bypass output-enable safety.
 - Each target configuration is written once. Any post-write failure attempts OFF recovery and latches all configuration writes for the session.
-- Function, duty-cycle, and advanced command-domain writes remain disabled.
+- Duty-cycle and advanced command-domain writes remain disabled.
 - Hardware tests require separate authorization and prior confirmation of the resource, firmware, termination, output state, safety limit, and restoration procedure.
 
 ## Development checks

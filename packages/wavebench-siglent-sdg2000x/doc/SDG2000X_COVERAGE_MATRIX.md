@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-当前版本在 M3 输出控制基础上开放 `source.set_frequency` 与 `source.set_amplitude_vpp`。两项事务均覆盖三个登记型号、两通道、实时输出、写后漂移、歧义写入、OFF 恢复和会话锁止。频率写入的 SDG2122X CH2 实机证据不外推到其它通道或型号；幅度写入实机证据另行补充。
+当前版本在 M3 输出控制基础上开放 `source.set_frequency`、`source.set_function` 与 `source.set_amplitude_vpp`。三项事务均覆盖三个登记型号、两通道、写后漂移、歧义写入、OFF 恢复和会话锁止。有界周期波可实时切换；Noise/DC 只允许在输出 OFF 时配置，且不能经当前输出门禁开启。
 
 ## 覆盖状态
 
@@ -16,7 +16,8 @@
 | 输出控制 | `source.output` | 三个型号通过离线合同矩阵；SDG2122X CH1/CH2 各完成一次 ON→采样→OFF，未知写结果为 0 | 补充 SDG2042X 与 SDG2082X 实机证据 |
 | 固定波频率 | `source.set_frequency` | 三个型号通过离线合同矩阵；SDG2122X CH2 的 2 kHz OFF 写入与 5 kHz ON 写入通过 RTM2032 闭环 | 补充 SDG2122X CH1 及其它型号实机证据 |
 | 固定波幅度 | `source.set_amplitude_vpp` | 三个型号通过 2 mVpp 至 10 Vpp 离线合同矩阵；联合检查偏置包络 | 补充 SDG2122X 闭环和其它型号实机证据 |
-| 固定波函数与占空比 | 无 | 默认拒绝 | 参数范围、负载语义、安全限制和事务恢复均有证据 |
+| 固定波函数 | `source.set_function` | Sine、Square、Ramp、Pulse、Noise 与 DC 通过离线事务矩阵；Noise/DC 仅允许 OFF 配置 | 补充周期波闭环；Noise/DC 等待可复用安全模型 |
+| 方波占空比 | 无 | 默认拒绝 | 频率相关边界、事务恢复和实机波形均有证据 |
 | 调制、Sweep 与 Burst | 无 | 未开放 | 每个子域单独形成只读 profile，再评估写 capability |
 | 任意波形 | 无 | 默认拒绝 | 明确数据格式、易失内容、副作用、大小限制和恢复边界 |
 | Counter | 无 | 未开放 | 先建立不改变计数器状态的严格只读 profile |

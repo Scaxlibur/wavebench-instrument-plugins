@@ -36,7 +36,8 @@
 - [x] Expose `source.set_frequency` separately with model/function limits, complete safety snapshots, one-write readback, OFF recovery, and a session latch.
 - [x] Complete SDG2122X CH2 closed loops for a 2 kHz OFF-state write and a live 5 kHz ON-state write; restore 1 kHz and leave both outputs OFF.
 - [x] Expose `source.set_amplitude_vpp` separately with a 2 mVpp through 10 Vpp range and a joint offset-envelope check.
-- [ ] Develop function and duty-cycle write transactions as separate tasks.
+- [x] Expose `source.set_function` separately; allow live switching among four bounded periodic waves and require output OFF for Noise/DC.
+- [ ] Develop the duty-cycle write transaction separately.
 
 ## M4: Advanced command domains
 

@@ -74,6 +74,29 @@ _FUNCTION_MAX_FREQUENCY_HZ = {
     "PULS": 25.0e6,
     "USER": 20.0e6,
 }
+_FUNCTION_ALIASES = {
+    "SIN": "SIN",
+    "SINE": "SIN",
+    "SQU": "SQU",
+    "SQUARE": "SQU",
+    "RAMP": "RAMP",
+    "TRI": "RAMP",
+    "TRIANGLE": "RAMP",
+    "PULS": "PULS",
+    "PULSE": "PULS",
+    "NOIS": "NOIS",
+    "NOISE": "NOIS",
+    "DC": "DC",
+}
+_CORE_TO_VENDOR_FUNCTION = {
+    "SIN": "SINE",
+    "SQU": "SQUARE",
+    "RAMP": "RAMP",
+    "PULS": "PULSE",
+    "NOIS": "NOISE",
+    "DC": "DC",
+}
+_PERIODIC_FUNCTIONS = frozenset({"SIN", "SQU", "RAMP", "PULS"})
 
 
 @dataclass(frozen=True)
@@ -916,6 +939,112 @@ class SDG2000XSource:
                     raise InstrumentError(
                         "SDG2000X amplitude transaction changed non-amplitude channel state"
                     )
+                return after.status
+            except Exception as exc:
+                self._fail_configuration_transaction(channel, exc)
+                raise AssertionError("unreachable")
+
+    def set_function(
+        self,
+        channel: int,
+        function: str,
+        *,
+        check_errors: bool = True,
+    ) -> SourceStatus:
+        _validate_channel(channel)
+        if not isinstance(function, str):
+            raise DataError(
+                "SDG2000X function must be one of: sin, squ, ramp/triangle, "
+                "puls, nois, dc"
+            )
+        normalized = function.strip().upper()
+        try:
+            target = _FUNCTION_ALIASES[normalized]
+        except KeyError as exc:
+            raise DataError(
+                "SDG2000X function must be one of: sin, squ, ramp/triangle, "
+                "puls, nois, dc"
+            ) from exc
+        _validate_write_check_errors(check_errors, capability="source.set_function")
+
+        with self._io_lock:
+            self._ensure_configuration_writes_allowed()
+            model = self._ensure_identity()
+            before = self._read_configuration_snapshot(channel)
+            self._validate_advanced_modes_off(before.context)
+            if before.status.frequency_mode != "FIX":
+                raise DataError("SDG2000X function writes require FIX mode")
+            if target in {"NOIS", "DC"} and before.status.output != "OFF":
+                raise DataError("SDG2000X NOISE and DC function writes require output OFF")
+            if target in _PERIODIC_FUNCTIONS and before.status.frequency_hz is not None:
+                self._validate_frequency_range(
+                    model=model,
+                    function=target,
+                    value_hz=before.status.frequency_hz,
+                )
+            if before.status.output == "ON":
+                self._validate_output_enable_snapshot(
+                    before.status,
+                    before.output,
+                    before.context,
+                )
+            if before.status.function == target:
+                return before.status
+
+            try:
+                vendor_target = _CORE_TO_VENDOR_FUNCTION[target]
+                self.transport.write(f"C{channel}:BSWV WVTP,{vendor_target}")
+                after = self._read_configuration_snapshot(channel)
+                self._verify_configuration_closure(before=before, after=after)
+                if after.status.function != target:
+                    raise InstrumentError("SDG2000X function write readback mismatch")
+                if target in _PERIODIC_FUNCTIONS:
+                    self._validate_frequency_range(
+                        model=model,
+                        function=target,
+                        value_hz=after.status.frequency_hz or 0.0,
+                    )
+                    if (
+                        after.status.amplitude is None
+                        or after.status.amplitude_unit != "VPP"
+                        or after.status.amplitude > _MAX_USER_AMPLITUDE_VPP
+                        or after.status.offset_v is None
+                        or abs(after.status.offset_v) + after.status.amplitude / 2
+                        > _MAX_ABSOLUTE_OUTPUT_V
+                    ):
+                        raise InstrumentError(
+                            "SDG2000X function write produced an unsafe periodic-wave state"
+                        )
+                    if before.status.function in _PERIODIC_FUNCTIONS:
+                        common_fields_match = (
+                            _numeric_matches(
+                                after.status.frequency_hz,
+                                before.status.frequency_hz or 0.0,
+                            )
+                            and _numeric_matches(
+                                after.status.amplitude,
+                                before.status.amplitude or 0.0,
+                            )
+                            and _numeric_matches(
+                                after.status.offset_v,
+                                before.status.offset_v or 0.0,
+                            )
+                        )
+                        if not common_fields_match:
+                            raise InstrumentError(
+                                "SDG2000X function transaction changed a common waveform field"
+                            )
+                        phase_should_match = (
+                            before.status.phase_deg is not None
+                            and after.status.phase_deg is not None
+                        )
+                        if phase_should_match and not _numeric_matches(
+                            after.status.phase_deg,
+                            before.status.phase_deg or 0.0,
+                        ):
+                            raise InstrumentError(
+                                "SDG2000X function transaction changed common phase"
+                            )
                 return after.status
             except Exception as exc:
                 self._fail_configuration_transaction(channel, exc)
