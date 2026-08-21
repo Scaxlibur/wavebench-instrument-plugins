@@ -1,0 +1,72 @@
+{
+  "schema_version": "wavebench.scope-r13.sds800x-hd-evidence.v1",
+  "status": "redacted_hardware_observation",
+  "instrument": {
+    "family": "SDS800X HD",
+    "model": "SDS804X HD",
+    "firmware": "4.8.12.1.1.6.5",
+    "identity_sensitive_fields": "omitted"
+  },
+  "transport": {
+    "backend": "pyvisa",
+    "resource_class": "TCPIP_INSTR",
+    "endpoint": "omitted"
+  },
+  "transfer_restore": {
+    "vendor_fields": [
+      "SOURCE",
+      "START",
+      "INTERVAL",
+      "POINT",
+      "WIDTH",
+      "BYTEORDER"
+    ],
+    "success_readback": "matched",
+    "injected_post_transfer_failure_readback": "matched",
+    "r13_unproven_fields": [
+      "scope.run_state",
+      "scope.waveform_mode",
+      "scope.query_response_header"
+    ]
+  },
+  "waveform_multiblock": {
+    "record_points": 10000000,
+    "max_chunk_points": 5000000,
+    "chunk_points": [
+      5000000,
+      5000000
+    ],
+    "chunk_payload_bytes": [
+      10000000,
+      10000000
+    ],
+    "framing_header_retained": false,
+    "backend_query_binary_conformant": false
+  },
+  "screenshot": {
+    "response_bytes": 43628,
+    "canonical_png_bytes": 43627,
+    "content_trailing_bytes": 1,
+    "content_trailing_hex": "00",
+    "ieee_block_header_observed": false,
+    "message_boundary_backend_conformant": false,
+    "stateful_recovery_applicable": false
+  },
+  "acquisition": {
+    "single_mode_query_back": "matched",
+    "observed_phases": [
+      "arming",
+      "stopped"
+    ],
+    "completion_proof_candidate": "state_transition",
+    "count_role": "diagnostic_only",
+    "counter_epoch_observed": false
+  },
+  "retention": {
+    "image_content": false,
+    "waveform_content": false,
+    "complete_command_log": false,
+    "network_endpoint": false,
+    "instrument_identity": false
+  }
+}
