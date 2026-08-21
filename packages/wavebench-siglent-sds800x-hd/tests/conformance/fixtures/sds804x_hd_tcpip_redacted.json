@@ -1,0 +1,100 @@
+{
+  "schema_version": "wavebench.scope-r13.sds800x-hd-evidence.v2",
+  "status": "redacted_hardware_acceptance",
+  "instrument": {
+    "family": "SDS800X HD",
+    "model": "SDS804X HD",
+    "firmware": "4.8.12.1.1.6.5",
+    "identity_sensitive_fields": "omitted"
+  },
+  "transport": {
+    "backend": "pyvisa",
+    "resource_class": "TCPIP_INSTR",
+    "endpoint": "omitted"
+  },
+  "transfer_restore": {
+    "vendor_fields": [
+      "SOURCE",
+      "START",
+      "INTERVAL",
+      "POINT",
+      "WIDTH",
+      "BYTEORDER"
+    ],
+    "success_readback": "matched",
+    "injected_post_transfer_failure_readback": "matched",
+    "r13_unproven_fields": [
+      "scope.run_state",
+      "scope.waveform_mode",
+      "scope.query_response_header"
+    ]
+  },
+  "waveform_multiblock": {
+    "record_points": 10000000,
+    "max_chunk_points": 5000000,
+    "chunk_points": [
+      5000000,
+      5000000
+    ],
+    "chunk_payload_bytes": [
+      10000000,
+      10000000
+    ],
+    "framing_header_retained": false,
+    "backend_query_binary_conformant": false
+  },
+  "screenshot": {
+    "variants": {
+      "color": {
+        "canonical_png_bytes": 50360,
+        "width_px": 1024,
+        "height_px": 600
+      },
+      "inverted": {
+        "canonical_png_bytes": 52602,
+        "width_px": 1024,
+        "height_px": 600
+      }
+    },
+    "content_trailing_bytes": 1,
+    "content_trailing_hex": "0a",
+    "ieee_block_header_observed": false,
+    "message_boundary_backend_conformant": true,
+    "post_message_failure_next_query": "synchronized",
+    "stateful_recovery_applicable": false
+  },
+  "acquisition": {
+    "single_mode_query_back": "matched",
+    "observed_phases": [
+      "arming",
+      "stopped"
+    ],
+    "continuous_modes": [
+      "auto",
+      "normal"
+    ],
+    "completion_proof": "state_transition",
+    "count_role": "diagnostic_only",
+    "count_before_single_configure": 1,
+    "count_after_single_configure": 0,
+    "count_after_single_stop": 1,
+    "counter_epoch_observed": false,
+    "single_failure_cleanup": "verified",
+    "start_failure_cleanup": "verified",
+    "next_query_after_cleanup": "succeeded"
+  },
+  "final_restoration": {
+    "acquisition_tokens": "matched",
+    "run_stop_class": "matched",
+    "memory_configuration": "matched",
+    "channel_switches": "matched",
+    "waveform_transfer": "matched"
+  },
+  "retention": {
+    "image_content": false,
+    "waveform_content": false,
+    "complete_command_log": false,
+    "network_endpoint": false,
+    "instrument_identity": false
+  }
+}

@@ -1,0 +1,217 @@
+# SDS800X HD Hardware Acceptance
+
+[中文](SDS800X_HD_HARDWARE_ACCEPTANCE.md)
+
+## Scope
+
+On 2026-08-20, the current external plugin and WaveBench `0.8.22` completed a first
+TCPIP/VXI-11 acceptance run on an SDS804X HD. A DG4202 CH1 drove scope CH1 and CH2 on the same
+electrical node. Public evidence excludes instrument IPs, serial numbers, raw waveforms, and full
+SCPI logs.
+
+This file preserves the historical `0.8.22` acceptance result. WaveBench `0.8.23` now implements
+the public Scope R1.3 contract; new capability adoption is recorded separately without rewriting
+the observations below.
+
+The run covered declared capabilities: identity, CH1–CH4 coupling, stopped non-sequence `DMAX`
+waveform fetch with `check_errors=False`, single- and dual-channel capture, and statistics from a preconfigured advanced-measurement
+slot. Screenshot, Autoset, standalone acquisition control, error queue, and sequence waveforms were
+not tested; `capture_waveform(s)` received separate positive acceptance, and the sequence-ON
+rejection gate received separate negative acceptance.
+
+## Instruments and baseline
+
+| Instrument | Firmware | Baseline |
+|---|---|---|
+| SIGLENT SDS804X HD | `4.8.12.1.1.6.5` | Trigger `Trig'd`; sequence OFF; `500 us/div`; memory management AUTO; depth `100k` |
+| RIGOL DG4202 | `00.01.14` | CH1 ON; SIN; `1 kHz`; `5 Vpp`; `0 V` offset; FIX; sweep OFF; High-Z/INFINITY load semantics |
+
+The generator already provided a suitable signal, so the run sent it no configuration or output
+writes. Scope CH1–CH4 coupling all read back as DC. CH1 and CH2 used `1×` probe factors and
+`1 V/div` for waveform acceptance.
+
+## Identity and gates
+
+- The four-field IDN format, manufacturer, SDS804X HD model, 14-character ASCII serial, and
+  firmware field passed. The serial remains only in temporary local logs.
+- All four coupling queries returned `DC`.
+- A running-state `fetch_waveform` call failed after `TRIGger:STATus?` returned `Trig'd`, with no
+  waveform write or binary query.
+- The harness used documented `:TRIGger:STOP` before a read and `:TRIGger:RUN` afterward. The
+  driver itself sent no acquisition-control command.
+- A managed path using a real `WaveBenchConfig` and `ScopeService.fetch_waveform(1)` also passed,
+  returning the core `WaveformData` / `WaveformHeader`, `100000` points, and the same sample
+  interval. It performed one identity query, one preamble binary query, and one data binary query.
+
+## Real preamble difference
+
+The SDS804X HD non-sequence preamble returned:
+
+```text
+read_frames = 0
+sum_frames = 1
+segment = -1
+```
+
+The initial parser incorrectly required `segment >= 0`, so the first read failed before data
+transfer. Version `0.3.1` accepts this verified non-sequence signature and retains the manual's
+`segment=1` form while rejecting other frame combinations.
+
+The WORD preamble reported a 346-byte descriptor, WORD/LSB, `100000` points, `200000` data bytes,
+16 ADC bits, a `50.000000584 ns` sample interval, and `MAXPoint=5000000`.
+
+## CH1 and CH2 results
+
+Both channels returned `100000` finite samples with matching headers and strictly increasing time
+axes.
+
+| Metric | CH1 | CH2 |
+|---|---:|---:|
+| FFT peak | `999.999988 Hz` | `999.999988 Hz` |
+| Smoothed crossing frequency | `1000.0191 Hz` | `1000.0170 Hz` |
+| Fitted `1 kHz` sine Vpp | `5.0280 V` | `5.0100 V` |
+| Raw min/max Vpp | `5.1000 V` | `5.0292 V` |
+| Mean | `-45.2 mV` | `-38.6 mV` |
+| `1 kHz` fit correlation | `0.999932` | `0.999994` |
+
+Direct CH1/CH2 correlation was `0.999997`, and fitted Vpp differed by about `0.36%`. Frequency,
+amplitude, time-axis, and channel-consistency gates passed.
+
+A raw zero-crossing estimator misclassified quantization and noise crossings near zero as MHz
+content. Acceptance instead cross-checked an FFT, a 101-point smoothed crossing estimate, and a
+fixed-frequency least-squares sine fit.
+
+## Transfer restoration
+
+The test preset a valid alternate state:
+
+```text
+SOURCE=C2, START=10, INTERVAL=2, POINT=1000, WIDTH=WORD, BYTEorder=MSB
+```
+
+Both a successful CH1 read and a locally injected post-transfer `RuntimeError` restored all six
+fields exactly. The harness then restored and verified the pre-test
+`C1 / 0 / 1 / 0 / BYTE / LSB` state. Restoration did not hide the injected primary error.
+
+## Real multi-chunk read
+
+Supplementary acceptance found that this firmware silently ignores fixed-memory settings while
+the trigger mode is `AUTO`. After changing the trigger mode to `NORMAL`, documented
+`:ACQuire:MMANagement FMDepth` and `:ACQuire:MDEPth 10M` writes both passed query-back. The harness
+temporarily left only CH1 enabled, issued one documented forced trigger, and then stopped
+acquisition.
+
+The stopped record contained `10000000` points with `MAXPoint=5000000`. Hardware returned two
+real `DATA?` blocks: `START 0`, `5000000` points, `10000000` bytes; then `START 5000000`,
+`5000000` points, `10000000` bytes. The final `WaveformData`, preamble header, and concatenated
+length all reported `10000000` samples, so real multi-chunk concatenation is now accepted.
+
+## Sequence-ON rejection gate
+
+While trigger mode remained `AUTO`, a documented `:ACQuire:SEQuence ON` still queried back OFF,
+even after stopping. With trigger mode `NORMAL`, it queried back ON. Enabling sequence returned the
+instrument to Arm, so the harness stopped acquisition again to establish `Stop + sequence ON`.
+
+`fetch_waveform` then queried identity, trigger status, and sequence state before rejecting the
+operation with `SDS800X HD waveform reads do not support sequence acquisition`. It sent no waveform
+transfer write or binary query. The harness restored sequence, trigger mode, and running state.
+
+## Measurement statistics
+
+The instrument already had P3 configured as `PKPK / C1`. The harness temporarily selected
+`ADVanced` measurement mode and enabled statistics. With no driver writes, the result reported
+`5.0375 V` current, `5.0370833 V` mean, `5.03542 V` minimum, `5.03958 V` maximum,
+`0.001701 V` standard deviation, and count `6`.
+
+History acceptance temporarily set the maximum count to `16` and read five values after stopping
+acquisition; `Count=5` matched the parsed value count. The harness restored `SIMPlc`, statistics
+OFF, maximum count `0`, and the original running state.
+
+## Single and multichannel capture
+
+`scope.capture_waveform(1)` performed one SINGLE acquisition, progressed from Arm to Stop, and
+returned `100000` points with `5.0375 V` raw min/max Vpp. The path issued no `*OPC?` query.
+
+`scope.capture_waveforms([1, 2])` sent one SINGLE and one RUN, then read `100000` points from each
+channel in the same stopped record. Raw Vpp was `5.0354 V` and `5.0375 V`, with correlation
+`0.9999971`; channel-start and waveform callbacks both ran in CH1, CH2 order. The harness restored
+the original trigger mode and running state.
+
+The managed path through the real descriptor and
+`ScopeService.capture_waveforms([1, 2], ...)` also passed. Its temporary metadata recorded
+`triggered_single=true` and completed channels `[1, 2]`; the temporary waveform package was
+removed after acceptance and did not enter the repository.
+
+## Scope R1.3 capability acceptance
+
+On 2026-08-21, WaveBench `master@6cd2eb5` / `0.8.23` exercised screenshot and acquisition control
+through the production `0.6.0` descriptor over TCPIP/VXI-11. DG4202 CH1 remained ON, SIN,
+`1 kHz`, `5 Vpp`, `0 V` offset, FIX, and sweep OFF; the harness issued zero source writes.
+
+### Screenshot
+
+- `scope.screenshot_v2` completed through the core `query_binary()` MESSAGE/EOM path.
+- Normal and inverted output were both `1024×600` PNGs. Canonical PNG sizes in the final run
+  were `50360` and `52602` bytes; size varies with display content and is not a device constant.
+- Exactly one `0A` content-trailing byte followed IEND and remained charged to the binary budget.
+  Only the canonical PNG entered the public model.
+- After a real MESSAGE read, the harness injected an application-layer `DataError`. The next
+  `scope.acquisition_run_state` query succeeded and the session remained `healthy`.
+- The command changes no known persistent display state, so the profile uses
+  `changed_fields=()` rather than inventing an unreadable menu/color baseline.
+
+### Acquisition control
+
+- AUTO and NORMAL continuous start both read back `ARM`; subsequent STOP operations read back a
+  stopped phase.
+- After establishing acquisition count `1`, selecting SINGLE reset it to `0`, and the completed
+  acquisition reported `1`. Count remains diagnostic and never proves completion by itself.
+- The public SINGLE path observed `ready/acquiring/.../stopped` and used `state_transition` as its
+  only completion proof. It did not use `*OPC?`.
+- The harness injected invalid postconditions after real SINGLE and AUTO-start writes. Core cleanup
+  performed STOP, acquisition/trigger restoration, and fresh readback; both cleanup artifacts were
+  `verified`, and the following independent query succeeded.
+- Hardware showed a short STOP settling interval after trigger-mode restoration. The driver bounds
+  cleanup verification to at most 13 state queries followed by three baseline-token queries; it
+  remains fail-closed beyond the 16-step limit.
+
+### Signal and final restoration
+
+The legacy waveform path in the same run returned `100000` points on both CH1 and CH2. Both FFT
+peaks were `999.999988 Hz`; `1 kHz` sine-fit Vpp was `5.02080 V` and `5.01779 V`; cross-channel
+correlation was `0.9999122`. Raw min/max remains diagnostic because isolated spikes can distort it.
+
+Final readback confirmed restoration of acquisition/trigger tokens, running/stopped class, memory
+management and depth, CH1/CH2 switches, and all six waveform-transfer fields. Resources, serials,
+raw screenshots, raw waveforms, and complete command logs were not retained.
+
+## Remaining gates
+
+- USBTMC and additional SDS800X HD models remain pending and are intentionally outside this run.
+- Sequence waveform parsing remains unsupported; current evidence covers non-sequence reads and
+  safe rejection while sequence is ON.
+- `scope.fetch_trace` remains undeclared because the core `8388608`-point ceiling cannot represent
+  the accepted SDS `10M` complete record.
+
+## Initial read-only probes for then-unexposed capabilities
+
+- The screenshot query returned `43628` bytes. It began with the PNG signature rather than `#`;
+  IEND completed at byte `43627`, followed by one trailing byte. This confirms a non-IEEE raw
+  response. The probe retained no image content. The core transport and screenshot menu semantics
+  were insufficient at the time. The `0.8.23` MESSAGE/EOM acceptance above supersedes this
+  historical observation, and the screenshot capability is now exposed.
+- `FUNCtion1?` through `FUNCtion4?` all returned OFF. No math function was enabled or changed, and
+  this state cannot construct `ScopeDerivedWaveformMetadata` or `ScopeFftStatus`; math and FFT
+  capabilities remain disabled.
+- No undocumented error-queue query was sent. `scope.errors` remains undeclared.
+
+These cross-instrument interfaces are public in the WaveBench `0.8.23`
+[Scope R1.3 contract](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md).
+Core completion does not complete plugin adoption, and the driver does not add a private transport
+path or vendor-specific public method.
+
+## Final state
+
+DG4202 CH1 remained ON, SIN, `1 kHz`, `5 Vpp`, `0 V`, FIX, and sweep OFF. The SDS804X HD returned
+to running, sequence OFF, AUTO memory management, `100k` depth, `500 us/div`, and waveform transfer
+`C1 / 0 / 1 / 0 / BYTE / LSB`. Sensitive evidence remained outside the repository.
