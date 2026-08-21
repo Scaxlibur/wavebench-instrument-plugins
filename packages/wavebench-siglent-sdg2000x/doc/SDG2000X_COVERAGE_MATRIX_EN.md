@@ -23,7 +23,7 @@ The current release exposes all five basic Source write capabilities in the core
 | Modulation | No lossless capability yet | SDG2122X internal AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK pass protocol and A4 waveform tests | Declare after Source V2 supports disabled-state absence and vendor ranges; wire external sources |
 | Sweep | No lossless capability yet | SDG2122X LINE/LOG/STEP, UP/DOWN/UP_DOWN, and INT/MAN pass protocol and A4 waveform tests; EXT is readback-only | Declare after Source V2 supports absent fields; wire external trigger |
 | Burst | No lossless capability yet | SDG2122X finite INT/MAN pass protocol and A4 cycle/repetition tests; EXT/Gate are readback-only; INF failed physical acceptance | Declare after a discriminated Source V2 model; wire triggers and investigate INF |
-| Arbitrary waveforms | None | Denied by default | Define data format, volatile side effects, size limits, and restoration boundary |
+| Arbitrary waveforms | `source.arbitrary_probe` | SDG2122X CH1/CH2 fixed allowlist passed with zero writes; real catalog has 199 entries | A4-sample built-ins; keep upload denied by default |
 | Counter | None | Disabled | First establish a strict profile that does not change counter state |
 
 ## Denied by default

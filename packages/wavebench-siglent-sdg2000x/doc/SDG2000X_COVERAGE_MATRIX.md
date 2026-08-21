@@ -23,7 +23,7 @@
 | 调制 | 无损 capability 暂缺 | SDG2122X 内部 AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK 均通过协议与 A4 波形 | Source V2 支持关闭态缺省与厂商范围后再声明；外部源需接线 |
 | Sweep | 无损 capability 暂缺 | SDG2122X LINE/LOG/STEP、UP/DOWN/UP_DOWN 与 INT/MAN 通过协议和 A4 波形；EXT 仅回读 | Source V2 支持字段缺省后再声明；补外部触发线 |
 | Burst | 无损 capability 暂缺 | SDG2122X 有限 INT/MAN 通过协议和 A4 周期数/重复周期；EXT/Gate 仅回读；INF 物理判据未通过 | Source V2 支持模式判别联合后再声明；补触发接线并调查 INF |
-| 任意波形 | 无 | 默认拒绝 | 明确数据格式、易失内容、副作用、大小限制和恢复边界 |
+| 任意波形 | `source.arbitrary_probe` | SDG2122X CH1/CH2 固定白名单零写入通过；目录实测 199 项 | 逐项抽样内置波形 A4；上传继续默认拒绝 |
 | Counter | 无 | 未开放 | 先建立不改变计数器状态的严格只读 profile |
 
 ## 默认拒绝项

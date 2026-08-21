@@ -47,6 +47,7 @@
 - [x] Sweep LINE/LOG/STEP、UP/DOWN/UP_DOWN、INT/MAN 完成 SDG2122X 协议与 A4 波形验收；EXT 与 Trigger Out 未接线。
 - [x] Burst 有限 INT/MAN 完成 SDG2122X 协议与 A4 周期数验收；EXT/Gate 仅回读，INF 物理判据未通过。
 - [x] Pulse WIDTH/DUTY/RISE/FALL 完成 SDG2122X 协议与 A4 波形验收；DLY 仅 A3，hold 无权威查询字段。
+- [x] `source.arbitrary_probe` 完成 SDG2122X CH1/CH2 核心 Service 零写入验收；内置目录实测 199 项。
 - [ ] 调制、Sweep、Burst、任意波和 Counter 各自立项，不合并成万能 SCPI 接口。
 - [ ] trigger 和任意波上传必须单独说明不可逆或易失副作用。
 - [ ] 只有公共 WaveBench model 与 Service 消费路径已经明确时才声明 capability。

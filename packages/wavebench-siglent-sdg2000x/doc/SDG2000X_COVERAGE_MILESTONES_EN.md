@@ -47,6 +47,7 @@
 - [x] Complete SDG2122X Sweep protocol and A4 waveform acceptance for LINE/LOG/STEP, UP/DOWN/UP_DOWN, and INT/MAN; EXT and Trigger Out remain unwired.
 - [x] Complete SDG2122X finite INT/MAN Burst protocol and A4 cycle-count acceptance; EXT/Gate remain readback-only and INF failed physical acceptance.
 - [x] Complete SDG2122X Pulse WIDTH/DUTY/RISE/FALL protocol and A4 waveform acceptance; DLY remains A3 and hold has no authoritative query field.
+- [x] Complete core-Service zero-write `source.arbitrary_probe` acceptance on SDG2122X CH1/CH2; the real built-in catalog contains 199 entries.
 - [ ] Treat modulation, sweep, burst, arbitrary-wave, and counter work as separate tasks rather than a raw-SCPI interface.
 - [ ] Document irreversible or volatile effects for triggers and arbitrary-wave upload.
 - [ ] Declare a capability only after its public WaveBench model and service consumer are defined.
