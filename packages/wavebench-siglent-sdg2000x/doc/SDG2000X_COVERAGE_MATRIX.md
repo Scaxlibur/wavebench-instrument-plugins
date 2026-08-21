@@ -18,6 +18,7 @@
 | 固定波幅度 | `source.set_amplitude_vpp` | 三个型号通过离线矩阵；SDG2122X CH2 的 2/3 Vpp OFF/ON 写入通过闭环 | 补充 CH1 和其它型号实机证据 |
 | 固定波函数 | `source.set_function` | 四种周期波在 SDG2122X CH2 实时闭环通过；Noise/DC 仅完成 OFF 配置回读 | Noise/DC 等待可复用安全模型；补充其它型号 |
 | 方波占空比 | `source.set_square_duty_cycle` | 20%/80% 在 SDG2122X CH2 实测高电平占比 0.200/0.800 | 补充频率相关点、CH1 和其它型号 |
+| Pulse 参数 | 无损 capability 暂缺 | SDG2122X 25%/65% 占空比、20/40 µs 边沿通过 A4；DLY 仅 A3 | Source V2 支持未知 hold 后再声明；补独立延迟参考 |
 | 谐波 | 无损 capability 暂缺 | SDG2122X H2–H16 槽位通过；H2/H3 幅度、H2 相位和 ALL/EVEN/ODD 通过 A4 频谱 | 采用 Source V2 变长/selected-only 模型后再声明 capability |
 | 调制 | 无损 capability 暂缺 | SDG2122X 内部 AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK 均通过协议与 A4 波形 | Source V2 支持关闭态缺省与厂商范围后再声明；外部源需接线 |
 | Sweep | 无损 capability 暂缺 | SDG2122X LINE/LOG/STEP、UP/DOWN/UP_DOWN 与 INT/MAN 通过协议和 A4 波形；EXT 仅回读 | Source V2 支持字段缺省后再声明；补外部触发线 |

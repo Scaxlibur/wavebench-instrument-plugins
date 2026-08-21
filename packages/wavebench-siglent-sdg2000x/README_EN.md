@@ -91,3 +91,4 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X modulation protocol and waveform acceptance](doc/SDG2000X_MODULATION_ACCEPTANCE_EN.md)
 - [SDG2000X sweep protocol and waveform acceptance](doc/SDG2000X_SWEEP_ACCEPTANCE_EN.md)
 - [SDG2000X Burst protocol and waveform acceptance](doc/SDG2000X_BURST_ACCEPTANCE_EN.md)
+- [SDG2000X Pulse protocol and waveform acceptance](doc/SDG2000X_PULSE_ACCEPTANCE_EN.md)
