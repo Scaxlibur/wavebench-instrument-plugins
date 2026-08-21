@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import isfinite
 import re
 from threading import RLock
 
-from wavebench.errors import DataError
+from wavebench.errors import DataError, InstrumentError
 from wavebench.instruments.models import SourceStatus
 from wavebench.transport.base import InstrumentTransport
 
@@ -75,6 +75,16 @@ class _BasicWaveStatus:
 def _validate_channel(channel: int) -> None:
     if isinstance(channel, bool) or channel not in (1, 2):
         raise DataError("SDG2000X channel must be 1 or 2")
+
+
+def _validate_output_check_errors(check_errors: bool) -> None:
+    if type(check_errors) is not bool:
+        raise DataError("SDG2000X check_errors must be a boolean")
+    if check_errors:
+        raise DataError(
+            "SDG2000X source.output requires check_errors=false because the "
+            "programming guide does not define an accepted error-queue query"
+        )
 
 
 def _response_text(response: str, *, command: str) -> str:
@@ -358,6 +368,7 @@ class SDG2000XSource:
     transport: InstrumentTransport
     _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _identity_model: str | None = field(default=None, init=False, repr=False)
+    _output_writes_blocked: bool = field(default=False, init=False, repr=False)
 
     def _ensure_identity(self) -> str:
         if self._identity_model is None:
@@ -400,6 +411,83 @@ class SDG2000XSource:
                 apply_raw=apply_raw,
                 square_duty_cycle_percent=basic.square_duty_cycle_percent,
             )
+
+    @property
+    def output_writes_blocked(self) -> bool:
+        with self._io_lock:
+            return self._output_writes_blocked
+
+    @staticmethod
+    def _validate_output_enable_snapshot(status: SourceStatus) -> None:
+        if status.frequency_mode != "FIX" or status.sweep_enabled != "OFF":
+            raise DataError("SDG2000X output enable requires fixed-frequency mode with sweep OFF")
+        if status.amplitude is None or status.amplitude_unit != "VPP":
+            raise DataError("SDG2000X output enable requires a verified Vpp amplitude")
+        if status.offset_v is None:
+            raise DataError("SDG2000X output enable requires a verified voltage offset")
+
+    def _force_output_off(self, channel: int) -> None:
+        self.transport.write(f"C{channel}:OUTP OFF")
+        output = _parse_output(
+            self.transport.query(f"C{channel}:OUTP?"),
+            channel=channel,
+        )
+        if output != "OFF":
+            raise InstrumentError("SDG2000X output failed to converge to OFF")
+
+    def set_output(
+        self,
+        channel: int,
+        enabled: bool,
+        *,
+        check_errors: bool = True,
+    ) -> SourceStatus:
+        _validate_channel(channel)
+        if type(enabled) is not bool:
+            raise DataError("SDG2000X output enabled must be a boolean")
+        _validate_output_check_errors(check_errors)
+
+        with self._io_lock:
+            self._ensure_identity()
+            if self._output_writes_blocked:
+                if enabled:
+                    raise InstrumentError(
+                        "SDG2000X output writes are blocked after a failed transaction; "
+                        "reopen the instrument session and verify state"
+                    )
+                self._force_output_off(channel)
+                return self.get_status(channel)
+
+            previous = self.get_status(channel)
+            target = "ON" if enabled else "OFF"
+            if previous.output == target:
+                return previous
+            if enabled:
+                self._validate_output_enable_snapshot(previous)
+
+            try:
+                self.transport.write(f"C{channel}:OUTP {target}")
+                status = self.get_status(channel)
+                if status.output != target:
+                    raise InstrumentError("SDG2000X output write readback mismatch")
+                if replace(status, output=previous.output) != previous:
+                    raise InstrumentError(
+                        "SDG2000X output transaction changed non-output channel state"
+                    )
+                return status
+            except Exception as exc:
+                self._output_writes_blocked = True
+                try:
+                    self._force_output_off(channel)
+                except Exception as recovery_exc:
+                    raise InstrumentError(
+                        "SDG2000X output transaction failed and OFF recovery could not be "
+                        "verified; output state is uncertain and output writes are blocked"
+                    ) from recovery_exc
+                raise InstrumentError(
+                    "SDG2000X output transaction failed; output is confirmed OFF and output "
+                    "writes are blocked until the session is reopened"
+                ) from exc
 
     def close(self) -> None:
         with self._io_lock:

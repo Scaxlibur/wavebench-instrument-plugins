@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import inspect
+import re
+from types import SimpleNamespace
+from unittest.mock import patch
+
 import pytest
 
-from wavebench.errors import DataError
+from wavebench.errors import ConfigError, DataError, InstrumentError
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import SourceStatus
 from wavebench.logging import CommandLogger
+from wavebench.services.source_service import SourceService
 
 from wavebench_siglent_sdg2000x import descriptor
 from wavebench_siglent_sdg2000x.driver import SDG2000XSource, parse_idn_model
@@ -42,6 +48,81 @@ class FakeTransport:
         self.closed = True
 
 
+class StatefulOutputTransport:
+    def __init__(self, *, model: str = "SDG2122X") -> None:
+        self.model = model
+        self.outputs = {1: "OFF", 2: "OFF"}
+        self.basics = {
+            channel: (
+                f"C{channel}:BSWV WVTP,SINE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0"
+            )
+            for channel in (1, 2)
+        }
+        self.sweeps = {1: "OFF", 2: "OFF"}
+        self.queries: list[str] = []
+        self.writes: list[str] = []
+        self.fail_query_counts: dict[str, int] = {}
+        self.fail_before_write_counts: dict[str, int] = {}
+        self.fail_after_write_counts: dict[str, int] = {}
+        self.fail_readback_counts: dict[str, int] = {}
+        self.ignore_write_counts: dict[str, int] = {}
+        self.drift_write_counts: dict[str, int] = {}
+        self.closed = False
+
+    @staticmethod
+    def _consume(values: dict[str, int], command: str) -> bool:
+        remaining = values.get(command, 0)
+        if remaining <= 0:
+            return False
+        values[command] = remaining - 1
+        return True
+
+    def query(self, command: str) -> str:
+        self.queries.append(command)
+        if self._consume(self.fail_query_counts, command):
+            raise InstrumentError("injected SDG2000X query failure")
+        if command == "*IDN?":
+            return f"Siglent Technologies,{self.model},<serial>,<firmware>"
+        match = re.fullmatch(r"C([12]):(OUTP|BSWV|SWWV)\?", command)
+        if match is None:
+            raise AssertionError(f"unexpected SDG2000X query: {command}")
+        channel = int(match.group(1))
+        header = match.group(2)
+        if header == "OUTP":
+            return (
+                f"C{channel}:OUTP {self.outputs[channel]},LOAD,HZ,"
+                "POWERON_STATE,OFF,PLRT,NOR"
+            )
+        if header == "BSWV":
+            return self.basics[channel]
+        if self.sweeps[channel] == "ON":
+            return f"C{channel}:SWWV STATE,ON,TIME,1S"
+        return f"C{channel}:SWWV STATE,OFF"
+
+    def write(self, command: str) -> None:
+        self.writes.append(command)
+        if self._consume(self.fail_before_write_counts, command):
+            raise InstrumentError("injected SDG2000X write failure before fake apply")
+        match = re.fullmatch(r"C([12]):OUTP (ON|OFF)", command)
+        if match is None:
+            raise AssertionError(f"unexpected SDG2000X write: {command}")
+        channel = int(match.group(1))
+        if not self._consume(self.ignore_write_counts, command):
+            self.outputs[channel] = match.group(2)
+        if self._consume(self.drift_write_counts, command):
+            self.basics[channel] = (
+                f"C{channel}:BSWV WVTP,SINE,FRQ,1KHZ,AMP,2V,OFST,0V,PHSE,0"
+            )
+        if self._consume(self.fail_readback_counts, command):
+            query = f"C{channel}:OUTP?"
+            self.fail_query_counts[query] = self.fail_query_counts.get(query, 0) + 1
+        if self._consume(self.fail_after_write_counts, command):
+            raise InstrumentError("injected ambiguous SDG2000X write failure")
+
+    def close(self) -> None:
+        self.closed = True
+
+
 def _status_responses(
     *,
     channel: int,
@@ -57,7 +138,7 @@ def _status_responses(
     }
 
 
-def test_descriptor_declares_query_only_external_source() -> None:
+def test_descriptor_declares_output_capable_external_source() -> None:
     item = descriptor()
 
     assert item.driver_id == "siglent.sdg2000x"
@@ -65,11 +146,16 @@ def test_descriptor_declares_query_only_external_source() -> None:
     assert item.kind == "source"
     assert item.models == ("SDG2042X", "SDG2082X", "SDG2122X")
     assert item.aliases == ()
-    assert item.capabilities == ("source.idn", "source.status")
+    assert item.capabilities == ("source.idn", "source.status", "source.output")
     assert item.backends == ("pyvisa",)
     assert item.wavebench_min_version == "0.8.0"
     assert item.wavebench_max_version == "0.9.0"
-    assert item.version == "0.2.0"
+    assert item.version == "0.3.0"
+    assert item.config_fields == (
+        "source.resource",
+        "source.driver",
+        "safety_limits.max_source_vpp",
+    )
 
 
 def test_factory_opens_one_core_transport_and_satisfies_capabilities() -> None:
@@ -399,3 +485,287 @@ def test_close_is_forwarded() -> None:
     SDG2000XSource(transport).close()
 
     assert transport.closed is True
+
+
+def test_set_output_matches_the_core_source_driver_signature() -> None:
+    signature = inspect.signature(SDG2000XSource.set_output)
+    parameters = tuple(signature.parameters.values())
+
+    assert tuple(parameter.name for parameter in parameters) == (
+        "self",
+        "channel",
+        "enabled",
+        "check_errors",
+    )
+    assert parameters[-1].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters[-1].default is True
+
+
+@pytest.mark.parametrize("model", ["SDG2042X", "SDG2082X", "SDG2122X"])
+def test_set_output_is_enabled_for_every_registered_model(model: str) -> None:
+    transport = StatefulOutputTransport(model=model)
+
+    status = SDG2000XSource(transport).set_output(1, True, check_errors=False)
+
+    assert status.output == "ON"
+    assert transport.outputs == {1: "ON", 2: "OFF"}
+    assert transport.writes == ["C1:OUTP ON"]
+
+
+@pytest.mark.parametrize(
+    ("channel", "initial", "enabled", "target"),
+    [
+        (1, "OFF", True, "ON"),
+        (1, "ON", False, "OFF"),
+        (2, "OFF", True, "ON"),
+        (2, "ON", False, "OFF"),
+    ],
+)
+def test_set_output_covers_both_channels_and_both_transitions(
+    channel: int,
+    initial: str,
+    enabled: bool,
+    target: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.outputs[channel] = initial
+
+    status = SDG2000XSource(transport).set_output(
+        channel,
+        enabled,
+        check_errors=False,
+    )
+
+    assert status.channel == channel
+    assert status.output == target
+    assert transport.outputs[channel] == target
+    assert transport.writes == [f"C{channel}:OUTP {target}"]
+    assert transport.queries == [
+        "*IDN?",
+        f"C{channel}:OUTP?",
+        f"C{channel}:BSWV?",
+        f"C{channel}:SWWV?",
+        f"C{channel}:OUTP?",
+        f"C{channel}:BSWV?",
+        f"C{channel}:SWWV?",
+    ]
+
+
+@pytest.mark.parametrize(("initial", "enabled"), [("OFF", False), ("ON", True)])
+def test_set_output_is_idempotent_without_a_write(initial: str, enabled: bool) -> None:
+    transport = StatefulOutputTransport()
+    transport.outputs[1] = initial
+
+    status = SDG2000XSource(transport).set_output(1, enabled, check_errors=False)
+
+    assert status.output == initial
+    assert transport.writes == []
+    assert transport.queries == ["*IDN?", "C1:OUTP?", "C1:BSWV?", "C1:SWWV?"]
+
+
+@pytest.mark.parametrize("channel", [0, 3, -1, True, "1"])
+def test_set_output_rejects_invalid_channels_before_io(channel: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="channel must be 1 or 2"):
+        SDG2000XSource(transport).set_output(  # type: ignore[arg-type]
+            channel,
+            True,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("enabled", [0, 1, "ON", None])
+def test_set_output_rejects_non_boolean_state_before_io(enabled: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="enabled must be a boolean"):
+        SDG2000XSource(transport).set_output(  # type: ignore[arg-type]
+            1,
+            enabled,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("check_errors", [True, 1, "false", None])
+def test_set_output_rejects_unavailable_or_invalid_error_checks_before_io(
+    check_errors: object,
+) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="check_errors"):
+        SDG2000XSource(transport).set_output(  # type: ignore[arg-type]
+            1,
+            True,
+            check_errors=check_errors,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("unsafe_state", ["sweep", "dc"])
+def test_output_enable_rejects_an_unbounded_snapshot_before_write(
+    unsafe_state: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    if unsafe_state == "sweep":
+        transport.sweeps[1] = "ON"
+    else:
+        transport.basics[1] = "C1:BSWV WVTP,DC,OFST,0V"
+
+    with pytest.raises(DataError, match="requires"):
+        SDG2000XSource(transport).set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == []
+
+
+def test_output_readback_mismatch_forces_off_and_latches() -> None:
+    transport = StatefulOutputTransport()
+    transport.ignore_write_counts["C1:OUTP ON"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+    assert driver.output_writes_blocked is True
+
+    io_counts = (len(transport.queries), len(transport.writes))
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.set_output(1, True, check_errors=False)
+    assert (len(transport.queries), len(transport.writes)) == io_counts
+
+    assert driver.set_output(1, False, check_errors=False).output == "OFF"
+    assert transport.writes[-1] == "C1:OUTP OFF"
+
+
+def test_output_ambiguous_write_forces_off_and_latches() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_after_write_counts["C1:OUTP ON"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+    assert driver.output_writes_blocked is True
+
+
+def test_output_readback_failure_forces_off_and_latches() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_readback_counts["C1:OUTP ON"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+    assert driver.output_writes_blocked is True
+
+
+def test_output_non_output_drift_forces_off_and_latches() -> None:
+    transport = StatefulOutputTransport()
+    transport.drift_write_counts["C1:OUTP ON"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+    assert driver.output_writes_blocked is True
+
+
+def test_output_disable_failure_uses_one_off_recovery_and_latches() -> None:
+    transport = StatefulOutputTransport()
+    transport.outputs[2] = "ON"
+    transport.ignore_write_counts["C2:OUTP OFF"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_output(2, False, check_errors=False)
+
+    assert transport.outputs[2] == "OFF"
+    assert transport.writes == ["C2:OUTP OFF", "C2:OUTP OFF"]
+    assert driver.output_writes_blocked is True
+
+
+def test_output_recovery_failure_reports_uncertain_state_and_latches() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_after_write_counts["C1:OUTP ON"] = 1
+    transport.fail_before_write_counts["C1:OUTP OFF"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="state is uncertain"):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "ON"
+    assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+    assert driver.output_writes_blocked is True
+
+    io_counts = (len(transport.queries), len(transport.writes))
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.set_output(1, True, check_errors=False)
+    assert (len(transport.queries), len(transport.writes)) == io_counts
+
+
+def test_prewrite_snapshot_failure_does_not_write_or_latch() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_query_counts["C1:BSWV?"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="query failure"):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.writes == []
+    assert driver.output_writes_blocked is False
+
+
+def _source_service(driver: SDG2000XSource, *, max_source_vpp: float) -> SourceService:
+    config = SimpleNamespace(
+        source=SimpleNamespace(
+            resource="TCPIP::192.0.2.40::INSTR",
+            driver="siglent.sdg2000x",
+            default_channel=1,
+            check_errors=False,
+        ),
+        safety_limits=SimpleNamespace(max_source_vpp=max_source_vpp),
+    )
+    return SourceService(config=config, logger=CommandLogger(), session=driver)
+
+
+def test_core_source_service_allows_output_at_the_10_vpp_boundary() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = "C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,10V,OFST,0V,PHSE,0"
+    service = _source_service(SDG2000XSource(transport), max_source_vpp=10.0)
+
+    with patch.object(service, "_require"):
+        status = service.set_output(channel=1, enabled=True)
+
+    assert status.output == "ON"
+    assert transport.writes == ["C1:OUTP ON"]
+
+
+def test_core_source_service_rejects_output_above_10_vpp_before_write() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,10.0001V,OFST,0V,PHSE,0"
+    )
+    service = _source_service(SDG2000XSource(transport), max_source_vpp=10.0)
+
+    with patch.object(service, "_require"), pytest.raises(ConfigError, match="max_source_vpp"):
+        service.set_output(channel=1, enabled=True)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == []
