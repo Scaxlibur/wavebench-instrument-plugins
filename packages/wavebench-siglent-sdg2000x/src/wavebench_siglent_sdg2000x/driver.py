@@ -600,7 +600,12 @@ class SDG2000XSource:
             output,
         )
 
-    def _read_output_safety_context(self, channel: int) -> _OutputSafetyContext:
+    def _read_output_safety_context(
+        self,
+        channel: int,
+        *,
+        function: str,
+    ) -> _OutputSafetyContext:
         modulation_enabled = _parse_named_state(
             self.transport.query(f"C{channel}:MDWV?"),
             channel=channel,
@@ -613,12 +618,14 @@ class SDG2000XSource:
             header="BTWV",
             state_name="STATE",
         )
-        harmonic_enabled = _parse_named_state(
-            self.transport.query(f"C{channel}:HARM?"),
-            channel=channel,
-            header="HARM",
-            state_name="HARMSTATE",
-        )
+        harmonic_enabled = False
+        if function == "SIN":
+            harmonic_enabled = _parse_named_state(
+                self.transport.query(f"C{channel}:HARM?"),
+                channel=channel,
+                header="HARM",
+                state_name="HARMSTATE",
+            )
         combine_enabled = _parse_combine_state(
             self.transport.query(f"C{channel}:CMBN?"),
             channel=channel,
@@ -648,7 +655,10 @@ class SDG2000XSource:
         return _ConfigurationSnapshot(
             status=status,
             output=output,
-            context=self._read_output_safety_context(channel),
+            context=self._read_output_safety_context(
+                channel,
+                function=status.function,
+            ),
         )
 
     def get_status(self, channel: int) -> SourceStatus:
@@ -1074,7 +1084,10 @@ class SDG2000XSource:
             target = "ON" if enabled else "OFF"
             previous_context = None
             if enabled:
-                previous_context = self._read_output_safety_context(channel)
+                previous_context = self._read_output_safety_context(
+                    channel,
+                    function=previous.function,
+                )
                 self._validate_output_enable_snapshot(
                     previous,
                     previous_output,
@@ -1097,7 +1110,10 @@ class SDG2000XSource:
                         "SDG2000X output transaction changed load, polarity, or power-on state"
                     )
                 if enabled:
-                    context = self._read_output_safety_context(channel)
+                    context = self._read_output_safety_context(
+                        channel,
+                        function=status.function,
+                    )
                     self._validate_output_enable_snapshot(status, output, context)
                     if context != previous_context:
                         raise InstrumentError(

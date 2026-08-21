@@ -1209,6 +1209,37 @@ def test_set_function_preserves_live_output_for_bounded_periodic_waves(
     assert transport.writes == [f"C{channel}:BSWV WVTP,{vendor}"]
 
 
+def test_non_sine_transactions_do_not_send_the_inapplicable_harmonic_query() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    transport.fail_query_counts["C1:HARM?"] = 1
+
+    status = SDG2000XSource(transport).set_frequency(1, 2_000.0, check_errors=False)
+
+    assert status.function == "SQU"
+    assert status.frequency_hz == 2_000.0
+    assert "C1:HARM?" not in transport.queries
+    assert transport.fail_query_counts["C1:HARM?"] == 1
+
+
+def test_switching_back_to_sine_detects_a_reactivated_harmonic_state() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    transport.harmonic[1] = "ON"
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_function(1, "sine", check_errors=False)
+
+    assert transport.queries.count("C1:HARM?") == 1
+    assert transport.writes == ["C1:BSWV WVTP,SINE", "C1:OUTP OFF"]
+    assert driver.configuration_writes_blocked is True
+
+
 @pytest.mark.parametrize("requested", ["sin", "sine", " SIN "])
 def test_set_function_is_idempotent_for_sine_aliases(requested: str) -> None:
     transport = StatefulOutputTransport()
