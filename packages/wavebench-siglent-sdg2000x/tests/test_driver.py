@@ -67,6 +67,7 @@ class StatefulOutputTransport:
         self.noise_add = {1: "OFF", 2: "OFF"}
         self.coupling = {
             "TRACE": "OFF",
+            "TRDUCH": "OFF",
             "FCOUP": "OFF",
             "PCOUP": "OFF",
             "ACOUP": "OFF",
@@ -702,6 +703,7 @@ def test_output_enable_rejects_an_unbounded_snapshot_before_write(
         "combine",
         "noise_add",
         "TRACE",
+        "TRDUCH",
         "FCOUP",
         "PCOUP",
         "ACOUP",
@@ -711,7 +713,7 @@ def test_output_enable_rejects_every_advanced_signal_mode_before_write(
     unsafe_mode: str,
 ) -> None:
     transport = StatefulOutputTransport()
-    if unsafe_mode in {"TRACE", "FCOUP", "PCOUP", "ACOUP"}:
+    if unsafe_mode in {"TRACE", "TRDUCH", "FCOUP", "PCOUP", "ACOUP"}:
         transport.coupling[unsafe_mode] = "ON"
     else:
         getattr(transport, unsafe_mode)[1] = "ON"

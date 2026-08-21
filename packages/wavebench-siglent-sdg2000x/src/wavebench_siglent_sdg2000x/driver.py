@@ -88,6 +88,7 @@ class _OutputSafetyContext:
     combine_enabled: bool
     noise_add_enabled: bool
     coupling_trace_enabled: bool
+    coupling_tracking_direction_enabled: bool
     coupling_frequency_enabled: bool
     coupling_phase_enabled: bool
     coupling_amplitude_enabled: bool
@@ -317,7 +318,7 @@ def _parse_combine_state(response: str, *, channel: int) -> bool:
     return _parse_on_off(values[0], command=command, field_name="combine state")
 
 
-def _parse_coupling_states(response: str) -> tuple[bool, bool, bool, bool]:
+def _parse_coupling_states(response: str) -> tuple[bool, bool, bool, bool, bool]:
     command = "COUP?"
     value = _response_text(response, command=command)
     match = re.fullmatch(r"COUP\s+(.+)", value, flags=re.IGNORECASE)
@@ -329,6 +330,7 @@ def _parse_coupling_states(response: str) -> tuple[bool, bool, bool, bool]:
         known=frozenset(
             {
                 "TRACE",
+                "TRDUCH",
                 "STATE",
                 "BSCH",
                 "FCOUP",
@@ -347,14 +349,28 @@ def _parse_coupling_states(response: str) -> tuple[bool, bool, bool, bool]:
         raise DataError(
             "SDG2000X response for COUP? must include TRACE, FCOUP, PCOUP, and ACOUP"
         )
-    return tuple(
+    parsed = tuple(
         _parse_on_off(
             parameters[name],
             command=command,
             field_name=name.lower(),
         )
         for name in required
-    )  # type: ignore[return-value]
+    )
+    tracking_direction_enabled = False
+    if "TRDUCH" in parameters:
+        tracking_direction_enabled = _parse_on_off(
+            parameters["TRDUCH"],
+            command=command,
+            field_name="trduch",
+        )
+    return (
+        parsed[0],
+        tracking_direction_enabled,
+        parsed[1],
+        parsed[2],
+        parsed[3],
+    )
 
 
 def _parse_basic_wave(response: str, *, channel: int) -> tuple[str, _BasicWaveStatus]:
@@ -558,9 +574,10 @@ class SDG2000XSource:
             combine_enabled=combine_enabled,
             noise_add_enabled=noise_add_enabled,
             coupling_trace_enabled=coupling[0],
-            coupling_frequency_enabled=coupling[1],
-            coupling_phase_enabled=coupling[2],
-            coupling_amplitude_enabled=coupling[3],
+            coupling_tracking_direction_enabled=coupling[1],
+            coupling_frequency_enabled=coupling[2],
+            coupling_phase_enabled=coupling[3],
+            coupling_amplitude_enabled=coupling[4],
         )
 
     def get_status(self, channel: int) -> SourceStatus:
@@ -598,6 +615,10 @@ class SDG2000XSource:
                 ("combine", context.combine_enabled),
                 ("noise-add", context.noise_add_enabled),
                 ("coupling-trace", context.coupling_trace_enabled),
+                (
+                    "coupling-tracking-direction",
+                    context.coupling_tracking_direction_enabled,
+                ),
                 ("frequency-coupling", context.coupling_frequency_enabled),
                 ("phase-coupling", context.coupling_phase_enabled),
                 ("amplitude-coupling", context.coupling_amplitude_enabled),
