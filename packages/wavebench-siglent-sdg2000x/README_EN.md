@@ -8,7 +8,7 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 
 Version `0.8.0` covers the core's current basic Source write surface: `source.set_frequency`, `source.set_function`, `source.set_amplitude_vpp`, `source.set_square_duty_cycle`, and `source.output`, plus read-only `source.arbitrary_probe`. Arbitrary probing sends only a fixed query allowlist and never uploads, deletes, or overwrites a waveform. Square duty cycle accepts the datasheet's global 0.001% through 99.999% range and uses independent readback to reject values clamped at the current frequency. Noise/DC may be configured only while output is OFF and remain blocked by output-enable safety. Modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
 
-An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptance for identity, CH1/CH2 status, and `source.output`. CH2 separately completed frequency, amplitude, periodic-function, and square-duty loops. The maximum measured output was 4.24 Vpp; the source ended restored to Sine / 1 kHz / 4 Vpp with both outputs OFF. Noise/DC completed OFF-state configuration readback only. `SDG2042X` and `SDG2082X` expose the same documented contract, but SDG2122X hardware evidence is not extrapolated to them.
+An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptance for all eight published capabilities. All five basic write capabilities passed core `SourceService` closed loops on CH1 and CH2. Harmonic, modulation, Sweep, Burst, Pulse, Noise/DC, TARB, all 199 built-ins, Combine, phase/invert, tracking/coupling/copy, and auxiliary global state also completed protocol or A4 acceptance wherever the available wiring allowed it. The maximum measured output was 4.24 Vpp. A final independent read-only session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, all composite modes other than restored original Harmonic states disabled, and no RTM2032 overload. Plugin source now has 100% statement and branch coverage. Under the user's authorization, `SDG2042X` and `SDG2082X` are released by the same documented contract and offline model matrix; SDG2122X A4 evidence is still not extrapolated to them.
 
 ## Identity and compatibility
 
@@ -29,7 +29,7 @@ The vendor programming guide is stored under ignored [`doc/vendor-local/`](doc/v
 SDG_Series_Programming_Guide_E05C.pdf
 ```
 
-The original manual is excluded from Git and release artifacts. See the [SDG2000X coverage matrix](doc/SDG2000X_COVERAGE_MATRIX_EN.md) for public command status, the [SDG2000X coverage milestones](doc/SDG2000X_COVERAGE_MILESTONES_EN.md) for staged development gates, the [read-only hardware acceptance](doc/SDG2000X_READONLY_ACCEPTANCE_EN.md), the [output-control hardware acceptance](doc/SDG2000X_OUTPUT_ACCEPTANCE_EN.md), the [frequency-write hardware acceptance](doc/SDG2000X_FREQUENCY_ACCEPTANCE_EN.md), and the [basic-write hardware acceptance](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md).
+The original manual is excluded from Git and release artifacts. See the [SDG2000X coverage matrix](doc/SDG2000X_COVERAGE_MATRIX_EN.md) for command-domain status and the [SDG2000X coverage milestones](doc/SDG2000X_COVERAGE_MILESTONES_EN.md) for staged gates. Final dual-channel evidence for the basic public surface is in [public Source API acceptance](doc/SDG2000X_PUBLIC_DUAL_CHANNEL_ACCEPTANCE_EN.md); the remaining domain-specific evidence is listed under “Public references.”
 
 ## Configuration example
 
@@ -60,7 +60,7 @@ Change `access` to `read_write` before calling a basic Source write capability. 
 - `source.set_function` allows live switching among four bounded periodic waves. Noise/DC require output OFF and do not bypass output-enable safety.
 - `source.set_square_duty_cycle` applies only to FIX-mode square waves. Frequency-dependent clamping must fail readback closed.
 - Each target configuration is written once. Any post-write failure attempts OFF recovery and latches all configuration writes for the session.
-- Advanced command-domain writes remain disabled.
+- Advanced command domains have separate hardware evidence, but write capabilities remain disabled until the core has lossless models; no raw-SCPI endpoint is exposed.
 - Hardware tests require separate authorization and prior confirmation of the resource, firmware, termination, output state, safety limit, and restoration procedure.
 
 ## Development checks
@@ -94,3 +94,9 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X Pulse protocol and waveform acceptance](doc/SDG2000X_PULSE_ACCEPTANCE_EN.md)
 - [SDG2000X read-only arbitrary probe acceptance](doc/SDG2000X_ARBITRARY_PROBE_ACCEPTANCE_EN.md)
 - [SDG2000X full built-in arbitrary catalog acceptance](doc/SDG2000X_BUILTIN_ARB_ACCEPTANCE_EN.md)
+- [SDG2000X special-waveform protocol and hardware acceptance](doc/SDG2000X_SPECIAL_WAVEFORM_ACCEPTANCE_EN.md)
+- [SDG2000X dual-channel waveform Combine acceptance](doc/SDG2000X_COMBINE_ACCEPTANCE_EN.md)
+- [SDG2000X phase mode, equal-phase, and invert acceptance](doc/SDG2000X_PHASE_INVERT_ACCEPTANCE_EN.md)
+- [SDG2000X tracking, coupling, copy, and dual-trigger acceptance](doc/SDG2000X_CHANNEL_INTERACTION_ACCEPTANCE_EN.md)
+- [SDG2000X auxiliary and global-state read-only acceptance](doc/SDG2000X_AUXILIARY_READONLY_ACCEPTANCE_EN.md)
+- [SDG2000X public Source API dual-channel acceptance](doc/SDG2000X_PUBLIC_DUAL_CHANNEL_ACCEPTANCE_EN.md)

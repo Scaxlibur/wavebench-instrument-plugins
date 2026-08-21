@@ -8,7 +8,7 @@
 
 版本 `0.8.0` 已覆盖主仓库现有基础 Source 写接口：`source.set_frequency`、`source.set_function`、`source.set_amplitude_vpp`、`source.set_square_duty_cycle` 与 `source.output`，并提供只读 `source.arbitrary_probe`。任意波探测只发送固定白名单查询，不上传、不删除、不覆盖波形。方波占空比接受数据手册的 0.001% 至 99.999% 全局范围，并依靠独立回读拒绝当前频率下被仪器钳位的值。Noise/DC 只允许在输出 OFF 时配置，并仍由输出安全门禁拒绝开启。调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
 
-`SDG2122X` 固件 `2.01.01.39R7T2` 已完成身份、CH1/CH2 状态与 `source.output` 实机验收。CH2 另完成频率、幅度、周期波函数和方波占空比闭环；最大实测 4.24 Vpp，最终恢复 Sine / 1 kHz / 4 Vpp 且两路 OFF。Noise/DC 仅完成 OFF 配置回读。`SDG2042X` 与 `SDG2082X` 按同一手册命令合同放行，但实机结论不从 `SDG2122X` 外推。
+`SDG2122X` 固件 `2.01.01.39R7T2` 已完成全部 8 项公开 capability 的实机验收。五项基础写能力均通过核心 `SourceService` 在 CH1/CH2 闭环；Harmonic、调制、Sweep、Burst、Pulse、Noise/DC、TARB、199 项内置任意波、Combine、相位/反相、跟踪/耦合/复制和辅助全局状态也已按可用接线完成协议或 A4 验收。最大实测 4.24 Vpp。独立最终只读会话确认两路 Sine / 1 kHz / 4 Vpp / OFF，除 Harmonic 按原状态恢复外，其余复合模式关闭，RTM2032 无过载。插件源码达到 100% statement 与 branch 覆盖率。按用户授权，`SDG2042X` 与 `SDG2082X` 依据同一手册合同和离线型号矩阵放行；A4 结论仍不从 `SDG2122X` 外推。
 
 ## 身份与兼容范围
 
@@ -29,7 +29,7 @@
 SDG_Series_Programming_Guide_E05C.pdf
 ```
 
-手册原文件不进入 Git 或发行包。公开的命令覆盖状态见 [SDG2000X 功能覆盖矩阵](doc/SDG2000X_COVERAGE_MATRIX.md)，分阶段开发门见 [SDG2000X 覆盖里程碑](doc/SDG2000X_COVERAGE_MILESTONES.md)，实机证据见 [SDG2000X 只读实机验收](doc/SDG2000X_READONLY_ACCEPTANCE.md)、[SDG2000X 输出控制实机验收](doc/SDG2000X_OUTPUT_ACCEPTANCE.md)、[SDG2000X 频率写入实机验收](doc/SDG2000X_FREQUENCY_ACCEPTANCE.md)与 [SDG2000X 基础写入实机验收](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE.md)。
+手册原文件不进入 Git 或发行包。公开的命令覆盖状态见 [SDG2000X 功能覆盖矩阵](doc/SDG2000X_COVERAGE_MATRIX.md)，分阶段开发门见 [SDG2000X 覆盖里程碑](doc/SDG2000X_COVERAGE_MILESTONES.md)。基础公共接口的最终双通道证据见 [公共 Source 接口双通道验收](doc/SDG2000X_PUBLIC_DUAL_CHANNEL_ACCEPTANCE.md)，其它分域证据列于文末「公开资料」。
 
 ## 配置示例
 
@@ -60,7 +60,7 @@ max_source_vpp = 10.0
 - `source.set_function` 允许四种有界周期波实时切换；Noise/DC 必须在输出 OFF 时配置，且不会绕过输出安全门禁。
 - `source.set_square_duty_cycle` 仅适用于 FIX 模式方波；频率相关钳位必须导致回读失败关闭。
 - 目标配置只写入一次；任何写后异常都会尝试 OFF 恢复并锁止本会话的全部配置写入。
-- 高级命令域写入仍未开放。
+- 高级命令域已完成分域实机验收，但在核心缺少无损模型时继续不开放写 capability，也不提供 raw SCPI。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、输出状态、安全上限和恢复方式。
 
 ## 开发验证
@@ -94,3 +94,9 @@ python -m wavebench plugin package check packages/wavebench-siglent-sdg2000x
 - [SDG2000X Pulse 协议与波形验收](doc/SDG2000X_PULSE_ACCEPTANCE.md)
 - [SDG2000X 任意波只读探测验收](doc/SDG2000X_ARBITRARY_PROBE_ACCEPTANCE.md)
 - [SDG2000X 内置任意波全目录验收](doc/SDG2000X_BUILTIN_ARB_ACCEPTANCE.md)
+- [SDG2000X 特殊波形协议与实机验收](doc/SDG2000X_SPECIAL_WAVEFORM_ACCEPTANCE.md)
+- [SDG2000X 双通道波形合成验收](doc/SDG2000X_COMBINE_ACCEPTANCE.md)
+- [SDG2000X 相位模式、等相位与反相验收](doc/SDG2000X_PHASE_INVERT_ACCEPTANCE.md)
+- [SDG2000X 通道跟踪、耦合、复制与双通道触发验收](doc/SDG2000X_CHANNEL_INTERACTION_ACCEPTANCE.md)
+- [SDG2000X 辅助与全局状态只读验收](doc/SDG2000X_AUXILIARY_READONLY_ACCEPTANCE.md)
+- [SDG2000X 公共 Source 接口双通道验收](doc/SDG2000X_PUBLIC_DUAL_CHANNEL_ACCEPTANCE.md)

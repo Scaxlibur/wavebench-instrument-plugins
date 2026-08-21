@@ -16,7 +16,7 @@ Both channels covered output-OFF configuration, output ON, live frequency/amplit
 - Scope: `RTM2032`, firmware `06.010`.
 - Wiring: source CH1 to scope CH1 and source CH2 to scope CH2, both high impedance.
 
-Earlier harmonic acceptance had correctly restored the original Harmonic ON state on both channels. The first preflight was therefore rejected by the plugin's advanced-mode gate before any basic-configuration write; both outputs stayed OFF. The formal pass saved and disabled Harmonic outside the public-operation audit interval, then restored the original enable states after all public API operations.
+Earlier harmonic acceptance had correctly restored Harmonic ON on CH1. The first preflight was therefore rejected by the plugin's advanced-mode gate before any basic-configuration write; both outputs stayed OFF. The formal pass separately saved and disabled Harmonic on both channels outside the public-operation audit interval, then restored each original enable state after all public API operations.
 
 Every functional call passed through the declared descriptor, `SourceService`, `SourceStateGuard`, plugin driver, and core transport audit. No public raw-SCPI bypass was used.
 

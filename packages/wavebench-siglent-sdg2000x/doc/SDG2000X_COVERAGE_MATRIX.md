@@ -4,33 +4,42 @@
 
 ## 当前结论
 
-当前版本已开放主仓库现有五项基础 Source 写 capability。频率、函数、幅度、方波占空比和输出事务均覆盖三个登记型号、两通道、写后漂移、歧义写入、OFF 恢复和会话锁止。`SDG2122X` CH2 已完成周期波闭环；Noise/DC 仅完成 OFF 配置回读。高级模式继续分域开发，不提供 raw SCPI 旁路。
+当前版本声明 8 项 capability：身份、状态、五项基础写能力和任意波只读探测。全部 capability 已在 `SDG2122X` 上通过核心消费路径实机验收；五项写能力完成 CH1/CH2 A4 闭环。三个登记型号均通过离线协议矩阵，按授权依据共同手册合同放行。
+
+高级命令域已完成尽可能全面的分域协议/A4 验收，但核心缺少无损状态模型时继续不声明写 capability，也不提供 raw SCPI。插件源码覆盖率为 620/620 statements、244/244 branches，均为 100%。该数字只代表代码路径覆盖，不替代未接外部端口和未持有型号的物理证据。
 
 ## 覆盖状态
 
 | 命令域 | WaveBench capability | 当前状态 | 放行条件 |
 | --- | --- | --- | --- |
-| 仪器身份 | `source.idn` | `SDG2122X` / `2.01.01.39R7T2` 实机通过；其它型号待验收 | 按型号与固件补充脱敏证据 |
+| 仪器身份 | `source.idn` | `SDG2122X` / `2.01.01.39R7T2` 实机通过；其它登记型号按共同协议放行 | 新型号或协议变体仍需脱敏证据 |
 | 系统错误队列 | 无 | 未开放 | 确认查询命令、空队列语义和是否为消费型读取 |
-| 通道基础状态 | `source.status` | SDG2122X 三轮只读结果一致；CH1/CH2 输出后均完成频率、Vpp 与均值物理交叉验收 | 其它型号与固件逐台验收 |
-| 输出控制 | `source.output` | 三个型号通过离线合同矩阵；SDG2122X CH1/CH2 各完成一次 ON→采样→OFF，未知写结果为 0 | 补充 SDG2042X 与 SDG2082X 实机证据 |
-| 固定波频率 | `source.set_frequency` | 三个型号通过离线合同矩阵；SDG2122X CH2 的 2 kHz OFF 写入与 5 kHz ON 写入通过 RTM2032 闭环 | 补充 SDG2122X CH1 及其它型号实机证据 |
-| 固定波幅度 | `source.set_amplitude_vpp` | 三个型号通过离线矩阵；SDG2122X CH2 的 2/3 Vpp OFF/ON 写入通过闭环 | 补充 CH1 和其它型号实机证据 |
-| 固定波函数 | `source.set_function` | 四种周期波在 SDG2122X CH2 实时闭环通过；Noise/DC 仅完成 OFF 配置回读 | Noise/DC 等待可复用安全模型；补充其它型号 |
-| 方波占空比 | `source.set_square_duty_cycle` | 20%/80% 在 SDG2122X CH2 实测高电平占比 0.200/0.800 | 补充频率相关点、CH1 和其它型号 |
+| 通道基础状态 | `source.status` | SDG2122X 多轮只读稳定；CH1/CH2 均完成频率、Vpp、均值和最终独立零写审计 | 新固件响应变体需单独验收 |
+| 输出控制 | `source.output` | 三个型号通过离线合同；SDG2122X CH1/CH2 通过核心 Service ON→A4→OFF，未知写结果为 0 | 其它型号 A4 仅在有样机时补充 |
+| 固定波频率 | `source.set_frequency` | SDG2122X CH1/CH2 均覆盖 OFF 写入和 ON 状态实时写入；按型号/函数边界离线全覆盖 | 其它型号 A4 仅在有样机时补充 |
+| 固定波幅度 | `source.set_amplitude_vpp` | SDG2122X CH1/CH2 均覆盖 OFF 与 ON 实时写入；2 mVpp–10 Vpp、偏置包络和漂移分支 100% 覆盖 | 其它型号 A4 仅在有样机时补充 |
+| 固定波函数 | `source.set_function` | Sine/Square/Ramp 在 CH1/CH2 经核心闭环；Pulse 在 CH2 闭环；Noise/DC 只允许 OFF 配置 | Noise/DC 等待可复用安全模型 |
+| 方波占空比 | `source.set_square_duty_cycle` | CH2 20%/80% 实测 0.200/0.800；最终 CH1 30%、CH2 70% 实测 0.287/0.6949 | 高频频率相关钳位仍由严格回读 fail closed |
 | Pulse 参数 | 无损 capability 暂缺 | SDG2122X 25%/65% 占空比、20/40 µs 边沿通过 A4；DLY 仅 A3 | Source V2 支持未知 hold 后再声明；补独立延迟参考 |
 | 谐波 | 无损 capability 暂缺 | SDG2122X H2–H16 槽位通过；H2/H3 幅度、H2 相位和 ALL/EVEN/ODD 通过 A4 频谱 | 采用 Source V2 变长/selected-only 模型后再声明 capability |
 | 调制 | 无损 capability 暂缺 | SDG2122X 内部 AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK 均通过协议与 A4 波形 | Source V2 支持关闭态缺省与厂商范围后再声明；外部源需接线 |
 | Sweep | 无损 capability 暂缺 | SDG2122X LINE/LOG/STEP、UP/DOWN/UP_DOWN 与 INT/MAN 通过协议和 A4 波形；EXT 仅回读 | Source V2 支持字段缺省后再声明；补外部触发线 |
-| Burst | 无损 capability 暂缺 | SDG2122X 有限 INT/MAN 通过协议和 A4 周期数/重复周期；EXT/Gate 仅回读；INF 物理判据未通过 | Source V2 支持模式判别联合后再声明；补触发接线并调查 INF |
-| 任意波形 | `source.arbitrary_probe` | 双通道零写入探测通过；SDG2122X 内置目录 199/199 完成选择、回读与 A4 冒烟 | 上传继续默认拒绝；补 TARB 与其它型号 |
-| Counter | 无 | 未开放 | 先建立不改变计数器状态的严格只读 profile |
+| Burst | 无损 capability 暂缺 | 有限 INT/MAN 通过周期数/重复周期 A4；`TRDUCH` CH2→双路通过；EXT/Gate 仅回读；INF 未形成连续载波 | 补外部触发/门控接线；Source V2 采用判别联合 |
+| Noise / DC / TARB | 无损 capability 暂缺 | Noise 与 -1/0/+1 V DC 通过 A4；20 MHz 下限钳位 A3；TARB 1 MSa/s 非平坦输出通过；Noise Add 在样机上稳定保持 OFF | 使用非周期 amplitude facet；Noise Add 需其它固件复核 |
+| 任意波形 | `source.arbitrary_probe` | 双通道核心零写探测通过；内置目录 199/199 选择、回读与 A4；TARB 另有 A4 | 上传、删除和用户目录继续默认拒绝 |
+| Combine | 无损 capability 暂缺 | CH1←CH2 与 CH2←CH1 双向异频 A4；源通道输出继电器无需开启 | 建模参与通道、最坏包络和互斥状态后再声明 |
+| 相位模式 / Invert | 无损 capability 暂缺 | `EQPHASE` 后差 0.27°；CH1/CH2 反相约 179.9°；实机 token 为 `PHASE-LOCKED` | 拆分单字段 polarity/phase facet 后再声明 |
+| 跟踪 / 耦合 / 复制 | 无损 capability 暂缺 | TRACE、F/P/A ratio/deviation、CH1→CH2 PACP 均有 A4；反向 PACP 有 A3 | Source V2 表达条件字段、动作和跨通道事务 |
+| Sync / Counter / 时钟 / Cascade | 无 | 18 查询零写轮次通过；Sync 与 Counter OFF、ROSC INT、Cascade OFF；未接端口不宣称 A4 | 补 Sync、Counter、外部参考和第二台源的专用接线 |
+| 代码路径 | 不适用 | 348 项插件测试；620/620 statements、244/244 branches，100% | 新增代码必须维持语义覆盖，不以空断言刷数值 |
 
 ## 默认拒绝项
 
 - 不发送 `*RST` 或其它全局预置命令。
-- 输出开启只能经 `source.output` 和核心 `max_source_vpp` 上限执行；频率与幅度只经对应公开 capability 修改，不发送 trigger、Burst 或任意波形写入。
+- 面向用户的输出开启只能经 `source.output` 和核心 `max_source_vpp` 上限执行；高级实机脚本不是公共 raw 接口。
 - 不提供 raw SCPI 入口。
+- 不上传、不删除、不覆盖用户任意波或状态文件。
+- 不为覆盖率切换外部参考、保护、Counter、Cascade 或未知负载的辅助输出。
 - 不把产品页列出的功能直接等同于已实现 capability。
 
 ## 事实源
@@ -43,4 +52,18 @@
 - [输出控制实机验收](SDG2000X_OUTPUT_ACCEPTANCE.md)
 - [频率写入实机验收](SDG2000X_FREQUENCY_ACCEPTANCE.md)
 - [基础写入实机验收](SDG2000X_BASIC_WRITE_ACCEPTANCE.md)
+- [谐波协议与频谱验收](SDG2000X_HARMONIC_ACCEPTANCE.md)
+- [调制协议与波形验收](SDG2000X_MODULATION_ACCEPTANCE.md)
+- [Sweep 协议与波形验收](SDG2000X_SWEEP_ACCEPTANCE.md)
+- [Burst 协议与波形验收](SDG2000X_BURST_ACCEPTANCE.md)
+- [Pulse 协议与波形验收](SDG2000X_PULSE_ACCEPTANCE.md)
+- [任意波只读探测验收](SDG2000X_ARBITRARY_PROBE_ACCEPTANCE.md)
+- [内置任意波全目录验收](SDG2000X_BUILTIN_ARB_ACCEPTANCE.md)
+- [公共 Source 接口双通道验收](SDG2000X_PUBLIC_DUAL_CHANNEL_ACCEPTANCE.md)
+- [特殊波形协议与实机验收](SDG2000X_SPECIAL_WAVEFORM_ACCEPTANCE.md)
+- [双通道波形合成验收](SDG2000X_COMBINE_ACCEPTANCE.md)
+- [相位模式、等相位与反相验收](SDG2000X_PHASE_INVERT_ACCEPTANCE.md)
+- [通道跟踪、耦合、复制与双通道触发验收](SDG2000X_CHANNEL_INTERACTION_ACCEPTANCE.md)
+- [辅助与全局状态只读验收](SDG2000X_AUXILIARY_READONLY_ACCEPTANCE.md)
+- [Source V2 通用 RFC](RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY.md)
 - 当前 descriptor、driver 和 fake transport 测试

@@ -30,7 +30,10 @@
 | `C<n>:SWWV?` | `STATE,OFF`，或启用时返回完整 Sweep 参数 | `SourceStatus.frequency_mode` 与 `sweep_enabled` | M2 使用 |
 | `C<n>:MDWV?` | `STATE,OFF`，或启用时返回调制类型与完整参数 | 后续调制 profile | 已审计，未开放 |
 | `C<n>:BTWV?` | `STATE,OFF`，或启用时返回 Burst 与载波参数 | 后续 Burst profile | 已审计，未开放 |
-| `C<n>:SYNC?` | 同步状态与源类型 | 后续专用同步模型 | 已审计，未开放 |
+| `C<n>:SYNC?` | 同步状态与源类型 | 后续专用同步模型 | 双通道 A3 通过，未开放 |
+| `C<n>:ARWV?`、`C<n>:SRATE?`、`STL? BUILDIN` | 当前任意波选择、DDS/TARB 状态与内置目录 | `source.arbitrary_probe` 固定白名单 | 已开放，只读且不访问用户目录 |
+| `C<n>:HARM?`、`C<n>:CMBN?`、`C<n>:NOISE_ADD?`、`COUP?` | 状态依赖的高级输出上下文 | 基础写与 Output 安全门禁 | 内部使用；无独立写 capability |
+| `FCNT?`、`ROSC?`、`MODE?`、`VOLTPRT?`、`CASCADE?` | Counter、时钟、相位模式、保护和多机状态 | 后续独立全局 facet | A3 零写通过，未开放 |
 
 其中 `<n>` 只能是 `1` 或 `2`。M2 读取顺序冻结为身份校验、`OUTP?`、`BSWV?`、`SWWV?`；整个操作不得发送写命令。
 
@@ -56,7 +59,7 @@ E05C 的 Basic Wave Command 定义 `WVTP`、`FRQ`、`AMP` 与 `DUTY` 写入。�
 
 ## 主仓库接口映射
 
-当前声明 `source.status`、四项基础配置写入与 `source.output`，均返回主仓库公开的 `wavebench.instruments.SourceStatus`。字段映射如下：
+当前 descriptor 声明 `source.idn`、`source.status`、四项基础配置写入、`source.output` 与 `source.arbitrary_probe`。状态和基础写返回主仓库公开的 `wavebench.instruments.SourceStatus`；任意波探测返回 `ArbitraryQueryProbeResult` 列表。状态字段映射如下：
 
 Harmonic Command 仅在基础波形为 SINE 时可用。驱动因此采用状态依赖查询：非 SINE 快照不发送 `HARM?`；切回 SINE 时重新查询，以捕获可能重新生效的遗留谐波状态。该行为已由实机超时负向证据和故障测试确认。
 
@@ -80,6 +83,7 @@ Harmonic Command 仅在基础波形为 SINE 时可用。驱动因此采用状态
 - `source.errors`：E05C 命令表未定义错误队列查询、空队列响应或消费语义。
 - `source.channel_profile`：主仓库模型要求同步极性、marker 状态和 pulse hold 等完整字段；当前命令集没有无歧义的一对一映射。
 - 尚未开放的写 capability：Sweep、Burst、trigger 和任意波写入。
+- 调制、谐波、Pulse、Combine、Coupling、Sync、Counter、时钟与 Cascade 只有分域证据，不因开发验收而暴露 raw 写入口。
 - raw SCPI：不提供绕过 capability、transport 守卫和参数校验的入口。
 
 ## 离线验收标准
@@ -89,4 +93,5 @@ Harmonic Command 仅在基础波形为 SINE 时可用。驱动因此采用状态
 - descriptor 声明的 capability 必须通过主仓库 `validate_declared_capabilities`。
 - fake transport 覆盖 CH1/CH2、ON/OFF、幂等、三个型号身份、回读不符、状态漂移、歧义写入、OFF 恢复、恢复失败和会话锁止。
 - 核心 `SourceService` 安全测试要求 10 Vpp 边界允许、10.0001 Vpp 在零写入条件下拒绝。
-- wheel 隔离安装、entry point 发现、sdist 厂商资料排除和仓库全量测试必须通过。
+- SDG 插件源码达到 620/620 statements、244/244 branches；348 项插件测试通过。
+- wheel 隔离安装、entry point 发现、sdist 厂商资料排除和仓库全量 `895 passed, 2 skipped` 通过。

@@ -39,6 +39,7 @@
 - [x] `source.set_function` 已单独开放；四种有界周期波允许实时切换，Noise/DC 只允许输出 OFF 配置。
 - [x] `source.set_square_duty_cycle` 已单独开放；只接受 FIX 模式方波和 0.001% 至 99.999%，钳位值由独立回读拒绝。
 - [x] `SDG2122X` CH2 已完成频率、幅度、四种周期波函数和 20%/80% 方波占空比闭环；最终恢复 Sine / 1 kHz / 4 Vpp 且两路 OFF。
+- [x] 五项基础写能力最终均通过核心 `SourceService` 的 CH1/CH2 A4 闭环；23 次写入全部完成，未知结果为 0。
 
 ## M4：高级命令域
 
@@ -49,10 +50,24 @@
 - [x] Pulse WIDTH/DUTY/RISE/FALL 完成 SDG2122X 协议与 A4 波形验收；DLY 仅 A3，hold 无权威查询字段。
 - [x] `source.arbitrary_probe` 完成 SDG2122X CH1/CH2 核心 Service 零写入验收；内置目录实测 199 项。
 - [x] SDG2122X 内置任意波目录 199/199 完成 DDS 选择、回读与 A4 非平坦输出冒烟验收；未发送上传或文件写入。
-- [ ] 调制、Sweep、Burst、任意波和 Counter 各自立项，不合并成万能 SCPI 接口。
-- [ ] trigger 和任意波上传必须单独说明不可逆或易失副作用。
-- [ ] 只有公共 WaveBench model 与 Service 消费路径已经明确时才声明 capability。
+- [x] Noise、-1/0/+1 V DC 与 TARB 1 MSa/s 完成 A4；Noise Add 在当前固件上完成稳定负向验收。
+- [x] Combine 双向异频合成、`EQPHASE`、CH1/CH2 Invert 完成 A4。
+- [x] TRACE、F/P/A coupling、双向 PACP 完成协议验收；主要方向完成 A4；`TRDUCH` CH2→双路 Burst 完成重复 A4。
+- [x] Sync、Counter、参考时钟、保护、系统设置与 Cascade 完成 18 查询、0 写入的 A3 验收。
+- [x] 调制、Sweep、Burst、任意波和 Counter 保持独立分域，不合并成万能 SCPI 接口。
+- [x] Trigger、任意波上传、参考时钟与全局状态的易失/外部副作用已明确记录；不执行用户波形上传或文件写入。
+- [x] 只有公共 WaveBench model 与 Service 消费路径已明确时才声明 capability；其余结果保留为证据和通用 RFC 输入。
+
+## M5：覆盖率与发行收尾
+
+- [x] SDG 插件测试达到 348 项；源码 620/620 statements、244/244 branches，均为 100%。
+- [x] 响应结构、数值边界、复合模式门禁、写后漂移、恢复不收敛和会话锁止均有语义测试。
+- [x] 仓库全量 `895 passed, 2 skipped`；Ruff、插件 package check 与 `pip check` 通过。
+- [x] 独立最终只读会话确认信号源 27 查询、示波器 54 查询、双方 0 写入；两路输出 OFF，RTM2032 AUTO 且无过载。
+- [x] `SDG2042X` 与 `SDG2082X` 按共同手册协议和离线型号矩阵放行；不伪造其它型号 A4 证据。
 
 ## 实机门禁
 
-任何实机任务开始前必须记录：目标型号、固件、脱敏 resource、初始输出状态、允许命令、禁止命令、成功标准和恢复步骤。2026 年 8 月 21 日的 M3 验收明确限制最大 10 Vpp，实际使用 4 Vpp；每路仅执行一次 ON 和一次 OFF，并以独立新会话确认两路最终 OFF。
+任何实机任务开始前必须记录：目标型号、固件、脱敏 resource、初始输出状态、允许命令、禁止命令、成功标准和恢复步骤。2026 年 8 月 21 日的完整验收限制最大 10 Vpp，并在 9 Vpp 设置主动停止线；最大实测 4.24 Vpp。最终独立新会话确认两路 Sine / 1 kHz / 4 Vpp / OFF，除 Harmonic 按原状态恢复外，其余复合模式关闭。
+
+未接线的 Sync、Counter、外部 Trigger/Gate、外部参考与多机 Cascade 只保留 A3 或明确未验收，不以软件覆盖率替代电气证据。

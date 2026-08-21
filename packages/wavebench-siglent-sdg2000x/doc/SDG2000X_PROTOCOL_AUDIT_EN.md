@@ -30,7 +30,10 @@ The compatibility table marks `COMM_HEADER` as unavailable on SDG2000X. The driv
 | `C<n>:SWWV?` | `STATE,OFF`, or the complete sweep parameters when enabled | `SourceStatus.frequency_mode` and `sweep_enabled` | Used by M2 |
 | `C<n>:MDWV?` | `STATE,OFF`, or modulation type and complete parameters | Future modulation profile | Audited, not exposed |
 | `C<n>:BTWV?` | `STATE,OFF`, or burst and carrier parameters | Future burst profile | Audited, not exposed |
-| `C<n>:SYNC?` | Sync state and source type | Future dedicated sync model | Audited, not exposed |
+| `C<n>:SYNC?` | Sync state and source type | Future dedicated sync model | Dual-channel A3 passed; not exposed |
+| `C<n>:ARWV?`, `C<n>:SRATE?`, `STL? BUILDIN` | Current selection, DDS/TARB state, and built-in catalog | Fixed `source.arbitrary_probe` allowlist | Exposed read-only; user catalog is not queried |
+| `C<n>:HARM?`, `C<n>:CMBN?`, `C<n>:NOISE_ADD?`, `COUP?` | State-dependent advanced-output context | Basic-write and Output safety gates | Used internally; no independent write capability |
+| `FCNT?`, `ROSC?`, `MODE?`, `VOLTPRT?`, `CASCADE?` | Counter, clock, phase mode, protection, and multi-device state | Future independent global facets | Zero-write A3 passed; not exposed |
 
 `<n>` is restricted to `1` or `2`. The M2 read order is frozen as identity validation, `OUTP?`, `BSWV?`, and `SWWV?`; the operation must issue no writes.
 
@@ -56,7 +59,7 @@ An `SDG2122X` running firmware `2.01.01.39R7T2` returned `POWERON_STATE,ON|OFF` 
 
 ## Core interface mapping
 
-The current descriptor declares `source.status`, all four basic configuration writes, and `source.output`; all return the public core model `wavebench.instruments.SourceStatus`.
+The current descriptor declares `source.idn`, `source.status`, all four basic configuration writes, `source.output`, and `source.arbitrary_probe`. Status and basic writes return the public `wavebench.instruments.SourceStatus`; arbitrary probing returns a list of `ArbitraryQueryProbeResult`. Status fields map as follows.
 
 Harmonic Command is available only when the basic wave is SINE. The driver therefore uses state-dependent querying: non-SINE snapshots omit `HARM?`, while returning to SINE queries it again to detect a stored harmonic state that may become active. Hardware timeout evidence and injected-fault tests cover this behavior.
 
@@ -80,6 +83,7 @@ Harmonic Command is available only when the basic wave is SINE. The driver there
 - `source.errors`: the E05C command table defines no error-queue query, empty-queue response, or consuming-read semantics.
 - `source.channel_profile`: the core model requires a complete sync polarity, marker state, pulse hold, and other fields without an unambiguous one-to-one mapping in the audited command set.
 - Remaining write capabilities: sweep, burst, trigger, and arbitrary-wave writes remain disabled.
+- Modulation, harmonic, Pulse, Combine, Coupling, Sync, Counter, clock, and Cascade have domain evidence only; development acceptance does not create a raw write endpoint.
 - Raw SCPI: no escape hatch bypasses capabilities, transport guards, or parameter validation.
 
 ## Offline acceptance
@@ -89,4 +93,5 @@ Harmonic Command is available only when the basic wave is SINE. The driver there
 - Declared capabilities pass the core `validate_declared_capabilities` check.
 - Fake transports cover CH1/CH2, ON/OFF, idempotency, all three model identities, readback mismatch, state drift, ambiguous writes, OFF recovery, failed recovery, and session latching.
 - Core `SourceService` safety tests allow the 10 Vpp boundary and reject 10.0001 Vpp without a write.
-- Isolated wheel installation, entry-point discovery, vendor-manual exclusion from sdist, and the full repository test suite pass.
+- Plugin source reaches 620/620 statements and 244/244 branches; all 348 plugin tests pass.
+- Isolated wheel installation, entry-point discovery, vendor-manual exclusion from sdist, and the repository-wide `895 passed, 2 skipped` pass.
