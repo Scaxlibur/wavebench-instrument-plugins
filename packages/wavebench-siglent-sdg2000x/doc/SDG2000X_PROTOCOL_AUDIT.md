@@ -34,13 +34,27 @@
 
 其中 `<n>` 只能是 `1` 或 `2`。M2 读取顺序冻结为身份校验、`OUTP?`、`BSWV?`、`SWWV?`；整个操作不得发送写命令。
 
+## 已开放的写事务
+
+E05C 的 Output Command 定义 `C<n>:OUTP ON|OFF`。M3 将该命令映射为主仓库 `source.output`，不暴露通用原始 SCPI 入口。
+
+事务边界如下：
+
+- `set_output(channel, enabled, *, check_errors=True) -> SourceStatus` 与核心 `SourceDriver` 接口一致。
+- 由于手册未定义错误队列，`check_errors` 必须显式为 `false`；其它值在任何 I/O 前拒绝。
+- ON 之前必须完整读取 `SourceStatus`，并确认 FIX、Sweep OFF、Vpp 幅度和偏置均已知。Vpp 上限由核心 `SourceService` 检查。
+- 幂等调用不写入。其它调用只发送一次目标命令，随后重新读取完整状态，并确认非输出字段不变。
+- 任何写后失败都锁止本会话后续 ON，并执行一次 OFF 恢复与 `OUTP?` 回读。恢复失败时报告输出状态不确定；锁止状态下仍允许紧急 OFF。
+
+三个已登记型号均按同一手册命令合同放行 `source.output`。fake transport 已覆盖三种身份；实机证据目前仅来自 `SDG2122X` 固件 `2.01.01.39R7T2`。完整证据见[输出控制实机验收](SDG2000X_OUTPUT_ACCEPTANCE.md)。
+
 ## 固件实测扩展
 
 `SDG2122X` 固件 `2.01.01.39R7T2` 的 `OUTP?` 在 E05C 已记录字段之外返回 `POWERON_STATE,ON|OFF`。解析器只接受该封闭枚举，并继续要求 `LOAD` 与 `PLRT`。该字段不映射到核心 `SourceStatus`，也不据此扩张 capability。完整边界见[只读实机验收](SDG2000X_READONLY_ACCEPTANCE.md)。
 
 ## 主仓库接口映射
 
-M2 只声明 `source.status`，并返回主仓库公开的 `wavebench.instruments.SourceStatus`。字段映射如下：
+M3 声明 `source.status` 与 `source.output`，两条路径都返回主仓库公开的 `wavebench.instruments.SourceStatus`。字段映射如下：
 
 | `SourceStatus` 字段 | SDG2000X 来源 |
 | --- | --- |
@@ -61,7 +75,7 @@ M2 只声明 `source.status`，并返回主仓库公开的 `wavebench.instrument
 
 - `source.errors`：E05C 命令表未定义错误队列查询、空队列响应或消费语义。
 - `source.channel_profile`：主仓库模型要求同步极性、marker 状态和 pulse hold 等完整字段；当前命令集没有无歧义的一对一映射。
-- 所有写 capability：本阶段不发送输出、固定波、Sweep、Burst、trigger 或任意波写命令。
+- 除 `source.output` 外的写 capability：频率、函数、幅度、占空比、Sweep、Burst、trigger 和任意波写入仍未开放。
 - raw SCPI：不提供绕过 capability、transport 守卫和参数校验的入口。
 
 ## 离线验收标准
@@ -69,4 +83,6 @@ M2 只声明 `source.status`，并返回主仓库公开的 `wavebench.instrument
 - fake transport 覆盖 CH1 与 CH2，且完整状态读取的写命令列表始终为空。
 - 数值单位必须显式解析；非有限值、未知单位、错误通道头、缺失必需字段和重复字段均抛出 `DataError`。
 - descriptor 声明的 capability 必须通过主仓库 `validate_declared_capabilities`。
+- fake transport 覆盖 CH1/CH2、ON/OFF、幂等、三个型号身份、回读不符、状态漂移、歧义写入、OFF 恢复、恢复失败和会话锁止。
+- 核心 `SourceService` 安全测试要求 10 Vpp 边界允许、10.0001 Vpp 在零写入条件下拒绝。
 - wheel 隔离安装、entry point 发现、sdist 厂商资料排除和仓库全量测试必须通过。

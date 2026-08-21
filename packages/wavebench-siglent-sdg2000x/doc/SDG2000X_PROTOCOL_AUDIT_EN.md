@@ -34,13 +34,27 @@ The compatibility table marks `COMM_HEADER` as unavailable on SDG2000X. The driv
 
 `<n>` is restricted to `1` or `2`. The M2 read order is frozen as identity validation, `OUTP?`, `BSWV?`, and `SWWV?`; the operation must issue no writes.
 
+## Exposed write transaction
+
+The E05C Output Command defines `C<n>:OUTP ON|OFF`. M3 maps that command to the core `source.output` capability without exposing a generic raw-SCPI escape hatch.
+
+The transaction boundary is:
+
+- `set_output(channel, enabled, *, check_errors=True) -> SourceStatus` matches the core `SourceDriver` interface.
+- Because the guide defines no error queue, `check_errors` must explicitly be `false`. Any other value is rejected before I/O.
+- Before ON, the driver reads a complete `SourceStatus` and requires FIX mode, sweep OFF, and known Vpp amplitude and offset. The core `SourceService` enforces the Vpp safety limit.
+- Idempotent calls do not write. Other calls send the target command once, reread complete status, and require every non-output field to remain unchanged.
+- Any post-write failure latches further ON writes for the session and performs one OFF recovery plus `OUTP?` readback. Failed recovery reports uncertain output state. Emergency OFF remains available while latched.
+
+All three registered models expose `source.output` under the same documented contract. Fake transports cover all three identities. Current hardware evidence applies only to `SDG2122X` firmware `2.01.01.39R7T2`; see the [output-control hardware acceptance](SDG2000X_OUTPUT_ACCEPTANCE_EN.md).
+
 ## Hardware-observed firmware extension
 
 An `SDG2122X` running firmware `2.01.01.39R7T2` returned `POWERON_STATE,ON|OFF` from `OUTP?` in addition to the E05C fields. The parser accepts only this closed enum and continues to require `LOAD` and `PLRT`. The field is not mapped into the core `SourceStatus` model and does not expand any capability. See the [read-only hardware acceptance](SDG2000X_READONLY_ACCEPTANCE_EN.md) for the complete boundary.
 
 ## Core interface mapping
 
-M2 declares only `source.status` and returns the public core model `wavebench.instruments.SourceStatus`.
+M3 declares `source.status` and `source.output`; both return the public core model `wavebench.instruments.SourceStatus`.
 
 | `SourceStatus` field | SDG2000X source |
 | --- | --- |
@@ -61,7 +75,7 @@ M2 declares only `source.status` and returns the public core model `wavebench.in
 
 - `source.errors`: the E05C command table defines no error-queue query, empty-queue response, or consuming-read semantics.
 - `source.channel_profile`: the core model requires a complete sync polarity, marker state, pulse hold, and other fields without an unambiguous one-to-one mapping in the audited command set.
-- All write capabilities: this phase sends no output, fixed-wave, sweep, burst, trigger, or arbitrary-wave writes.
+- Write capabilities other than `source.output`: frequency, function, amplitude, duty-cycle, sweep, burst, trigger, and arbitrary-wave writes remain disabled.
 - Raw SCPI: no escape hatch bypasses capabilities, transport guards, or parameter validation.
 
 ## Offline acceptance
@@ -69,4 +83,6 @@ M2 declares only `source.status` and returns the public core model `wavebench.in
 - Fake transports cover CH1 and CH2, and complete status reads always leave the write list empty.
 - Numeric units are parsed explicitly. Non-finite values, unknown units, wrong channel headers, missing required fields, and duplicate fields raise `DataError`.
 - Declared capabilities pass the core `validate_declared_capabilities` check.
+- Fake transports cover CH1/CH2, ON/OFF, idempotency, all three model identities, readback mismatch, state drift, ambiguous writes, OFF recovery, failed recovery, and session latching.
+- Core `SourceService` safety tests allow the 10 Vpp boundary and reject 10.0001 Vpp without a write.
 - Isolated wheel installation, entry-point discovery, vendor-manual exclusion from sdist, and the full repository test suite pass.

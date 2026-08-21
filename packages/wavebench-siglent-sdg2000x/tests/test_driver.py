@@ -42,7 +42,7 @@ class FakeTransport:
 
     def write(self, command: str) -> None:
         self.writes.append(command)
-        raise AssertionError("query-only SDG2000X driver must not write")
+        raise AssertionError("read-only SDG2000X operation must not write")
 
     def close(self) -> None:
         self.closed = True

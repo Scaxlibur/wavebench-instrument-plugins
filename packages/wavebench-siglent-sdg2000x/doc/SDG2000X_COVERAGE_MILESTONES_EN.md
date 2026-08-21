@@ -24,14 +24,16 @@
 - [x] Parse units, enums, channel targets, and relationships fail-closed.
 - [x] Prove complete status reads perform zero writes under a fake-transport guard.
 - [x] Complete three stable CH1/CH2 rounds on one `SDG2122X`; the transport audit recorded zero write requests and the conclusion is not extrapolated.
-- [ ] With outputs enabled, cross-check physical frequency, Vpp, and offset on the oscilloscope.
+- [x] With outputs enabled, cross-check CH1/CH2 physical frequency, Vpp, and mean voltage on the RTM2032.
 
 ## M3: Basic write transactions
 
-- [ ] Evaluate frequency, function, amplitude, duty-cycle, and output capabilities separately.
-- [ ] Read restorable pre-state and confirm output OFF where required.
-- [ ] Send each write once and verify it through an independent query.
-- [ ] Latch further writes after ambiguity and report uncertain state when restoration fails.
+- [x] Evaluate and expose `source.output` separately; keep frequency, function, amplitude, and duty-cycle work separate.
+- [x] Read complete pre-state. Enabling requires FIX, sweep OFF, and known Vpp amplitude and offset.
+- [x] Send the target write once and verify it through an independent complete status query.
+- [x] Latch further ON writes after a post-write failure, recover OFF, and report uncertain state when recovery fails.
+- [x] Complete 4 Vpp high-impedance closed-loop acceptance on SDG2122X CH1/CH2 and leave both outputs OFF.
+- [ ] Develop frequency, function, amplitude, and duty-cycle write transactions as separate tasks.
 
 ## M4: Advanced command domains
 
@@ -41,4 +43,4 @@
 
 ## Hardware gate
 
-Before hardware access, record the target model, firmware, redacted resource, initial output state, allowed commands, denied commands, success criteria, and restoration steps. The 2026-08-21 acceptance allowed identity and status queries only, and both outputs remained OFF. Output enable and oscilloscope capture still require separate authorization.
+Before hardware access, record the target model, firmware, redacted resource, initial output state, allowed commands, denied commands, success criteria, and restoration steps. The 2026-08-21 M3 acceptance set a 10 Vpp maximum and used 4 Vpp. Each channel received one ON and one OFF write, followed by independent new-session confirmation that both outputs were OFF.
