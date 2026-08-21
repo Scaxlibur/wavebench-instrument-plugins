@@ -130,7 +130,12 @@ class StatefulOutputTransport:
         if header == "BTWV":
             return f"C{channel}:BTWV STATE,{self.burst[channel]}"
         if header == "HARM":
-            return f"C{channel}:HARM HARMSTATE,{self.harmonic[channel]}"
+            if self.harmonic[channel] == "OFF":
+                return f"C{channel}:HARM HARMSTATE,OFF"
+            return (
+                f"C{channel}:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,"
+                "HARMAMP,0.25V,HARMDBC,-24.0824dBc,HARMPHASE,0"
+            )
         if header == "CMBN":
             return f"C{channel}:CMBN {self.combine[channel]}"
         return (
@@ -1768,6 +1773,50 @@ def test_output_enable_rejects_every_advanced_signal_mode_before_write(
 
     assert transport.outputs[1] == "OFF"
     assert transport.writes == []
+
+
+def test_output_enable_accepts_a_complete_disabled_harmonic_response() -> None:
+    transport = StatefulOutputTransport()
+    transport.query_overrides["C1:HARM?"] = (
+        "C1:HARM HARMSTATE,OFF,HARMTYPE,ALL,HARMORDER,16,HARMAMP,0V,"
+        "HARMDBC,-80dBc,HARMPHASE,360"
+    )
+
+    status = SDG2000XSource(transport).set_output(1, True, check_errors=False)
+
+    assert status.output == "ON"
+    assert transport.writes == ["C1:OUTP ON"]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        "C1:HARM HARMSTATE,OFF,HARMTYPE,EVEN",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,USER,HARMORDER,2,HARMAMP,0V,HARMDBC,-80dBc,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,1.5,HARMAMP,0V,HARMDBC,-80dBc,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,17,HARMAMP,0V,HARMDBC,-80dBc,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,HARMAMP,-1V,HARMDBC,-80dBc,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,HARMAMP,21V,HARMDBC,-80dBc,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,HARMAMP,1A,HARMDBC,-80dBc,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,HARMAMP,0V,HARMDBC,1dBc,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,HARMAMP,0V,HARMDBC,-201dBc,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,HARMAMP,0V,HARMDBC,-80dB,HARMPHASE,0",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,HARMAMP,0V,HARMDBC,-80dBc,HARMPHASE,361",
+        "C1:HARM HARMSTATE,ON,HARMTYPE,EVEN,HARMORDER,2,HARMAMP,0V,HARMDBC,-80dBc,HARMPHASE,0,EXTRA,1",
+    ],
+)
+def test_output_enable_strictly_validates_selected_harmonic_response(
+    response: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.query_overrides["C1:HARM?"] = response
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(DataError):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.writes == []
+    assert driver.configuration_writes_blocked is False
 
 
 def test_output_enable_rejects_terminated_load_before_write() -> None:

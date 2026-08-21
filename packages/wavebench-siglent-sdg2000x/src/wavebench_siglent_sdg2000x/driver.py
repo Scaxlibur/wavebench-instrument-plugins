@@ -135,6 +135,16 @@ class _OutputSafetyContext:
 
 
 @dataclass(frozen=True)
+class _SelectedHarmonicStatus:
+    enabled: bool
+    preset: str | None
+    order: int | None
+    amplitude_vpp: float | None
+    amplitude_dbc: float | None
+    phase_deg: float | None
+
+
+@dataclass(frozen=True)
 class _ConfigurationSnapshot:
     status: SourceStatus
     output: _OutputStatus
@@ -383,6 +393,83 @@ def _parse_combine_state(response: str, *, channel: int) -> bool:
     return _parse_on_off(values[0], command=command, field_name="combine state")
 
 
+def _parse_harmonic_status(response: str, *, channel: int) -> _SelectedHarmonicStatus:
+    command = f"C{channel}:HARM?"
+    _, body = _response_body(response, channel=channel, header="HARM")
+    parameters = _parameter_pairs(
+        _tokens(body, command=command),
+        command=command,
+        known=frozenset(
+            {
+                "HARMSTATE",
+                "HARMTYPE",
+                "HARMORDER",
+                "HARMAMP",
+                "HARMDBC",
+                "HARMPHASE",
+            }
+        ),
+    )
+    enabled = _parse_on_off(
+        _required_parameter(parameters, "HARMSTATE", command=command),
+        command=command,
+        field_name="harmonic state",
+    )
+    details = {"HARMTYPE", "HARMORDER", "HARMAMP", "HARMDBC", "HARMPHASE"}
+    if not enabled and set(parameters) == {"HARMSTATE"}:
+        return _SelectedHarmonicStatus(False, None, None, None, None, None)
+    if set(parameters) != {"HARMSTATE", *details}:
+        raise DataError(
+            f"SDG2000X response for {command} must contain either disabled state only "
+            "or one complete selected harmonic"
+        )
+
+    preset = parameters["HARMTYPE"].upper()
+    if preset not in {"EVEN", "ODD", "ALL"}:
+        raise DataError(f"unexpected SDG2000X harmonic type for {command}: {preset!r}")
+    order_value = _plain_number(
+        parameters["HARMORDER"],
+        command=command,
+        field_name="harmonic order",
+    )
+    if not order_value.is_integer() or not 1 <= order_value <= 16:
+        raise DataError(f"SDG2000X harmonic order for {command} must be from 1 to 16")
+    amplitude_vpp = _voltage(
+        parameters["HARMAMP"],
+        command=command,
+        field_name="harmonic amplitude",
+        allow_vpp=True,
+    )
+    if not 0 <= amplitude_vpp <= 20:
+        raise DataError(f"SDG2000X harmonic amplitude for {command} is out of range")
+    amplitude_dbc = _quantity(
+        parameters["HARMDBC"],
+        command=command,
+        field_name="harmonic relative amplitude",
+        unit_factors={"DBC": 1.0},
+    )
+    if not -200 <= amplitude_dbc <= 0:
+        raise DataError(
+            f"SDG2000X harmonic relative amplitude for {command} is out of range"
+        )
+    phase_deg = _plain_number(
+        parameters["HARMPHASE"],
+        command=command,
+        field_name="harmonic phase",
+        allow_degrees=True,
+    )
+    if not 0 <= phase_deg <= 360:
+        raise DataError(f"SDG2000X harmonic phase for {command} is out of range")
+    return _SelectedHarmonicStatus(
+        enabled=enabled,
+        preset=preset,
+        order=int(order_value),
+        amplitude_vpp=amplitude_vpp,
+        amplitude_dbc=amplitude_dbc,
+        phase_deg=phase_deg,
+    )
+
+
 def _parse_coupling_states(response: str) -> tuple[bool, bool, bool, bool, bool]:
     command = "COUP?"
     value = _response_text(response, command=command)
@@ -622,12 +709,10 @@ class SDG2000XSource:
         )
         harmonic_enabled = False
         if function == "SIN":
-            harmonic_enabled = _parse_named_state(
+            harmonic_enabled = _parse_harmonic_status(
                 self.transport.query(f"C{channel}:HARM?"),
                 channel=channel,
-                header="HARM",
-                state_name="HARMSTATE",
-            )
+            ).enabled
         combine_enabled = _parse_combine_state(
             self.transport.query(f"C{channel}:CMBN?"),
             channel=channel,
