@@ -37,7 +37,7 @@
 - [x] Complete SDG2122X CH2 closed loops for a 2 kHz OFF-state write and a live 5 kHz ON-state write; restore 1 kHz and leave both outputs OFF.
 - [x] Expose `source.set_amplitude_vpp` separately with a 2 mVpp through 10 Vpp range and a joint offset-envelope check.
 - [x] Expose `source.set_function` separately; allow live switching among four bounded periodic waves and require output OFF for Noise/DC.
-- [ ] Develop the duty-cycle write transaction separately.
+- [x] Expose `source.set_square_duty_cycle` separately for FIX-mode square waves from 0.001% through 99.999%; reject clamped values through independent readback.
 
 ## M4: Advanced command domains
 

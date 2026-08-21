@@ -38,7 +38,7 @@ The compatibility table marks `COMM_HEADER` as unavailable on SDG2000X. The driv
 
 The E05C Output Command defines `C<n>:OUTP ON|OFF`. M3 maps that command to the core `source.output` capability without exposing a generic raw-SCPI escape hatch.
 
-The E05C Basic Wave Command defines `WVTP`, `FRQ`, and `AMP` writes. They map to `source.set_function`, `source.set_frequency`, and `source.set_amplitude_vpp`. Function is limited to Sine, Square, Ramp, Pulse, Noise, and DC; Noise/DC require output OFF. Frequency uses the 1 µHz floor plus model/function-specific upper limits. Amplitude accepts 2 mVpp through 10 Vpp and checks the offset-adjusted absolute-voltage envelope. Fixed-mode updates issue one target write. Automatic Sweep-to-FIX selection is allowed only while output is OFF.
+The E05C Basic Wave Command defines `WVTP`, `FRQ`, `AMP`, and `DUTY` writes. They map to `source.set_function`, `source.set_frequency`, `source.set_amplitude_vpp`, and `source.set_square_duty_cycle`. Function is limited to Sine, Square, Ramp, Pulse, Noise, and DC; Noise/DC require output OFF. Frequency uses model/function limits, amplitude accepts 2 mVpp through 10 Vpp, and duty cycle applies only to FIX-mode square waves.
 
 The transaction boundary is:
 
@@ -56,7 +56,7 @@ An `SDG2122X` running firmware `2.01.01.39R7T2` returned `POWERON_STATE,ON|OFF` 
 
 ## Core interface mapping
 
-The current descriptor declares `source.status`, `source.set_frequency`, `source.set_function`, `source.set_amplitude_vpp`, and `source.output`; all return the public core model `wavebench.instruments.SourceStatus`.
+The current descriptor declares `source.status`, all four basic configuration writes, and `source.output`; all return the public core model `wavebench.instruments.SourceStatus`.
 
 | `SourceStatus` field | SDG2000X source |
 | --- | --- |
@@ -77,7 +77,7 @@ The current descriptor declares `source.status`, `source.set_frequency`, `source
 
 - `source.errors`: the E05C command table defines no error-queue query, empty-queue response, or consuming-read semantics.
 - `source.channel_profile`: the core model requires a complete sync polarity, marker state, pulse hold, and other fields without an unambiguous one-to-one mapping in the audited command set.
-- Remaining write capabilities: duty-cycle, sweep, burst, trigger, and arbitrary-wave writes remain disabled.
+- Remaining write capabilities: sweep, burst, trigger, and arbitrary-wave writes remain disabled.
 - Raw SCPI: no escape hatch bypasses capabilities, transport guards, or parameter validation.
 
 ## Offline acceptance

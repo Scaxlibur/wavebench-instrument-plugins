@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-当前版本在 M3 输出控制基础上开放 `source.set_frequency`、`source.set_function` 与 `source.set_amplitude_vpp`。三项事务均覆盖三个登记型号、两通道、写后漂移、歧义写入、OFF 恢复和会话锁止。有界周期波可实时切换；Noise/DC 只允许在输出 OFF 时配置，且不能经当前输出门禁开启。
+当前版本已开放主仓库现有五项基础 Source 写 capability。频率、函数、幅度、方波占空比和输出事务均覆盖三个登记型号、两通道、写后漂移、歧义写入、OFF 恢复和会话锁止。高级模式继续分域开发，不提供 raw SCPI 旁路。
 
 ## 覆盖状态
 
@@ -17,7 +17,7 @@
 | 固定波频率 | `source.set_frequency` | 三个型号通过离线合同矩阵；SDG2122X CH2 的 2 kHz OFF 写入与 5 kHz ON 写入通过 RTM2032 闭环 | 补充 SDG2122X CH1 及其它型号实机证据 |
 | 固定波幅度 | `source.set_amplitude_vpp` | 三个型号通过 2 mVpp 至 10 Vpp 离线合同矩阵；联合检查偏置包络 | 补充 SDG2122X 闭环和其它型号实机证据 |
 | 固定波函数 | `source.set_function` | Sine、Square、Ramp、Pulse、Noise 与 DC 通过离线事务矩阵；Noise/DC 仅允许 OFF 配置 | 补充周期波闭环；Noise/DC 等待可复用安全模型 |
-| 方波占空比 | 无 | 默认拒绝 | 频率相关边界、事务恢复和实机波形均有证据 |
+| 方波占空比 | `source.set_square_duty_cycle` | 0.001% 至 99.999% 全局边界、FIX/SQUARE 门禁和故障矩阵通过 | 补充频率相关实机点和波形占空比闭环 |
 | 调制、Sweep 与 Burst | 无 | 未开放 | 每个子域单独形成只读 profile，再评估写 capability |
 | 任意波形 | 无 | 默认拒绝 | 明确数据格式、易失内容、副作用、大小限制和恢复边界 |
 | Counter | 无 | 未开放 | 先建立不改变计数器状态的严格只读 profile |

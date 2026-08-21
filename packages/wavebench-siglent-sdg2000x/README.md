@@ -6,7 +6,7 @@
 
 ## 当前开发基线
 
-版本 `0.6.0` 在 M3 基线上增加 `source.set_frequency`、`source.set_function` 与 `source.set_amplitude_vpp`。函数写入支持 Sine、Square、Ramp、Pulse、Noise 与 DC；Noise/DC 只允许在输出 OFF 时配置，并仍由输出安全门禁拒绝开启。频率与幅度分别受型号/波形边界和 10 Vpp 电压包络约束。占空比、调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
+版本 `0.7.0` 已覆盖主仓库现有基础 Source 写接口：`source.set_frequency`、`source.set_function`、`source.set_amplitude_vpp`、`source.set_square_duty_cycle` 与 `source.output`。方波占空比接受数据手册的 0.001% 至 99.999% 全局范围，并依靠独立回读拒绝当前频率下被仪器钳位的值。Noise/DC 只允许在输出 OFF 时配置，并仍由输出安全门禁拒绝开启。调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
 
 `SDG2122X` 固件 `2.01.01.39R7T2` 已完成身份、CH1/CH2 状态与 `source.output` 实机验收。`source.set_frequency` 另在 CH2 完成 2 kHz 输出 OFF 写入和 5 kHz 输出 ON 实时写入闭环，RTM2032 测得约 4.08 Vpp；验收结束后恢复 1 kHz，两路均为 OFF。`SDG2042X` 与 `SDG2082X` 按同一手册命令合同放行，但实机结论不从 `SDG2122X` 外推。
 
@@ -47,7 +47,7 @@ access = "read_only"
 max_source_vpp = 10.0
 ```
 
-将 `access` 改为 `read_write` 后才能调用函数、频率、幅度或输出写 capability；保留 `read_only` 时，身份和通道状态仍可查询，写操作会由核心拒绝。`check_errors = false` 表示错误队列尚未形成已认证 capability；驱动不会伪装错误队列检查。
+将 `access` 改为 `read_write` 后才能调用基础 Source 写 capability；保留 `read_only` 时，身份和通道状态仍可查询，写操作会由核心拒绝。`check_errors = false` 表示错误队列尚未形成已认证 capability；驱动不会伪装错误队列检查。
 
 ## 安全边界
 
@@ -58,8 +58,9 @@ max_source_vpp = 10.0
 - `source.set_frequency` 检查型号与当前波形上限；Sweep 自动切回 FIX 只允许在输出 OFF 时执行。
 - `source.set_amplitude_vpp` 只接受 2 mVpp 至 10 Vpp，并要求幅度与偏置不越过 ±10 V 包络。
 - `source.set_function` 允许四种有界周期波实时切换；Noise/DC 必须在输出 OFF 时配置，且不会绕过输出安全门禁。
+- `source.set_square_duty_cycle` 仅适用于 FIX 模式方波；频率相关钳位必须导致回读失败关闭。
 - 目标配置只写入一次；任何写后异常都会尝试 OFF 恢复并锁止本会话的全部配置写入。
-- 占空比和高级命令域写入仍未开放。
+- 高级命令域写入仍未开放。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、输出状态、安全上限和恢复方式。
 
 ## 开发验证

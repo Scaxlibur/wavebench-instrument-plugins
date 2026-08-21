@@ -4,7 +4,7 @@
 
 ## Current conclusion
 
-The current release adds `source.set_frequency`, `source.set_function`, and `source.set_amplitude_vpp` to the M3 output-control baseline. All three transactions cover every registered model, both channels, post-write drift, ambiguous writes, OFF recovery, and the session latch. Bounded periodic waves permit live switching. Noise/DC may be configured only while output is OFF and cannot pass the current output-enable gate.
+The current release exposes all five basic Source write capabilities in the core. Frequency, function, amplitude, square duty cycle, and output transactions cover every registered model, both channels, post-write drift, ambiguous writes, OFF recovery, and the session latch. Advanced modes remain separate domains with no raw-SCPI bypass.
 
 ## Coverage status
 
@@ -17,7 +17,7 @@ The current release adds `source.set_frequency`, `source.set_function`, and `sou
 | Fixed-wave frequency | `source.set_frequency` | All three models pass the offline contract matrix; SDG2122X CH2 passed 2 kHz OFF-state and 5 kHz live ON-state RTM2032 loops | Add SDG2122X CH1 and other-model hardware evidence |
 | Fixed-wave amplitude | `source.set_amplitude_vpp` | All three models pass the 2 mVpp through 10 Vpp offline contract matrix with offset-envelope checks | Add SDG2122X closed-loop and other-model hardware evidence |
 | Fixed-wave function | `source.set_function` | Sine, Square, Ramp, Pulse, Noise, and DC pass the offline transaction matrix; Noise/DC are OFF-only | Add periodic-wave loops; wait for a reusable Noise/DC safety model |
-| Square-wave duty cycle | None | Denied by default | Establish frequency-dependent limits, transaction recovery, and hardware-waveform evidence |
+| Square-wave duty cycle | `source.set_square_duty_cycle` | Global 0.001% through 99.999% limits, FIX/SQUARE gates, and the fault matrix pass | Add frequency-dependent hardware points and waveform-duty loops |
 | Modulation, sweep, and burst | None | Disabled | Build a separate read-only profile for each domain before evaluating writes |
 | Arbitrary waveforms | None | Denied by default | Define data format, volatile side effects, size limits, and restoration boundary |
 | Counter | None | Disabled | First establish a strict profile that does not change counter state |

@@ -37,7 +37,7 @@
 - [x] `SDG2122X` CH2 已完成 2 kHz 输出 OFF 写入和 5 kHz 输出 ON 实时写入闭环，最终恢复 1 kHz 且两路 OFF。
 - [x] `source.set_amplitude_vpp` 已单独开放；限制为 2 mVpp 至 10 Vpp，并联合检查偏置包络。
 - [x] `source.set_function` 已单独开放；四种有界周期波允许实时切换，Noise/DC 只允许输出 OFF 配置。
-- [ ] 占空比写事务另行立项。
+- [x] `source.set_square_duty_cycle` 已单独开放；只接受 FIX 模式方波和 0.001% 至 99.999%，钳位值由独立回读拒绝。
 
 ## M4：高级命令域
 

@@ -156,12 +156,17 @@ class StatefulOutputTransport:
             r"C([12]):BSWV WVTP,(SINE|SQUARE|RAMP|PULSE|NOISE|DC)",
             command,
         )
+        duty_match = re.fullmatch(
+            r"C([12]):BSWV DUTY,([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
+            command,
+        )
         match = (
             output_match
             or sweep_match
             or frequency_match
             or amplitude_match
             or function_match
+            or duty_match
         )
         if match is None:
             raise AssertionError(f"unexpected SDG2000X write: {command}")
@@ -187,8 +192,7 @@ class StatefulOutputTransport:
                     self.basics[channel],
                     count=1,
                 )
-            else:
-                assert function_match is not None
+            elif function_match is not None:
                 wave_type = function_match.group(2)
                 current = self.basics[channel]
 
@@ -223,6 +227,15 @@ class StatefulOutputTransport:
                 else:
                     body = f"WVTP,DC,OFST,{value('OFST', '0V')}"
                 self.basics[channel] = f"C{channel}:BSWV {body}"
+            else:
+                assert duty_match is not None
+                duty_percent = float(duty_match.group(2))
+                self.basics[channel] = re.sub(
+                    r"DUTY,[^,]+",
+                    f"DUTY,{duty_percent:.12g}",
+                    self.basics[channel],
+                    count=1,
+                )
         if self._consume(self.drift_write_counts, command):
             self.basics[channel] = (
                 f"C{channel}:BSWV WVTP,SINE,FRQ,1KHZ,AMP,2V,OFST,0V,PHSE,0"
@@ -293,12 +306,13 @@ def test_descriptor_declares_output_capable_external_source() -> None:
         "source.set_frequency",
         "source.set_function",
         "source.set_amplitude_vpp",
+        "source.set_square_duty_cycle",
         "source.output",
     )
     assert item.backends == ("pyvisa",)
     assert item.wavebench_min_version == "0.8.0"
     assert item.wavebench_max_version == "0.9.0"
-    assert item.version == "0.6.0"
+    assert item.version == "0.7.0"
     assert item.config_fields == (
         "source.resource",
         "source.driver",
@@ -1377,6 +1391,207 @@ def test_set_function_postwrite_failures_force_off_and_latch(failure: str) -> No
 
     with pytest.raises(InstrumentError, match="confirmed OFF"):
         driver.set_function(1, "square", check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == [command, "C1:OUTP OFF"]
+    assert driver.configuration_writes_blocked is True
+
+
+def test_set_square_duty_matches_the_core_source_driver_signature() -> None:
+    signature = inspect.signature(SDG2000XSource.set_square_duty_cycle)
+    parameters = tuple(signature.parameters.values())
+
+    assert tuple(parameter.name for parameter in parameters) == (
+        "self",
+        "channel",
+        "duty_percent",
+        "check_errors",
+    )
+    assert parameters[-1].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters[-1].default is True
+
+
+@pytest.mark.parametrize("model", ["SDG2042X", "SDG2082X", "SDG2122X"])
+@pytest.mark.parametrize("channel", [1, 2])
+@pytest.mark.parametrize("output", ["OFF", "ON"])
+def test_set_square_duty_covers_models_channels_and_live_output(
+    model: str,
+    channel: int,
+    output: str,
+) -> None:
+    transport = StatefulOutputTransport(model=model)
+    transport.outputs[channel] = output
+    transport.basics[channel] = (
+        f"C{channel}:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,"
+        "PHSE,0,DUTY,50"
+    )
+
+    status = SDG2000XSource(transport).set_square_duty_cycle(
+        channel,
+        25.0,
+        check_errors=False,
+    )
+
+    assert status.function == "SQU"
+    assert status.square_duty_cycle_percent == 25.0
+    assert status.output == output
+    assert transport.writes == [f"C{channel}:BSWV DUTY,25"]
+    assert f"C{channel}:HARM?" not in transport.queries
+
+
+@pytest.mark.parametrize("duty_percent", [0.001, 99.999])
+def test_set_square_duty_accepts_documented_global_boundaries(
+    duty_percent: float,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+
+    status = SDG2000XSource(transport).set_square_duty_cycle(
+        1,
+        duty_percent,
+        check_errors=False,
+    )
+
+    assert status.square_duty_cycle_percent == duty_percent
+
+
+def test_set_square_duty_is_idempotent_with_full_safety_snapshot() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+
+    status = SDG2000XSource(transport).set_square_duty_cycle(
+        1,
+        50.0000004,
+        check_errors=False,
+    )
+
+    assert status.square_duty_cycle_percent == 50.0
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        True,
+        "50",
+        None,
+        float("nan"),
+        float("inf"),
+        0.0,
+        -1.0,
+        0.0009,
+        100.0,
+        99.9991,
+    ],
+)
+def test_set_square_duty_rejects_invalid_values_before_io(value: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError):
+        SDG2000XSource(transport).set_square_duty_cycle(  # type: ignore[arg-type]
+            1,
+            value,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("channel", [0, 3, -1, True, "1"])
+def test_set_square_duty_rejects_invalid_channels_before_io(channel: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="channel must be 1 or 2"):
+        SDG2000XSource(transport).set_square_duty_cycle(  # type: ignore[arg-type]
+            channel,
+            50.0,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("check_errors", [True, 1, "false", None])
+def test_set_square_duty_rejects_unavailable_error_checks_before_io(
+    check_errors: object,
+) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="check_errors"):
+        SDG2000XSource(transport).set_square_duty_cycle(  # type: ignore[arg-type]
+            1,
+            50.0,
+            check_errors=check_errors,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+def test_set_square_duty_requires_square_fix_mode_and_advanced_modes_off() -> None:
+    sine_transport = StatefulOutputTransport()
+    with pytest.raises(DataError, match="require the SQUARE function"):
+        SDG2000XSource(sine_transport).set_square_duty_cycle(
+            1,
+            25.0,
+            check_errors=False,
+        )
+    assert sine_transport.writes == []
+
+    sweep_transport = StatefulOutputTransport()
+    sweep_transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    sweep_transport.sweeps[1] = "ON"
+    with pytest.raises(DataError, match="require FIX mode"):
+        SDG2000XSource(sweep_transport).set_square_duty_cycle(
+            1,
+            25.0,
+            check_errors=False,
+        )
+    assert sweep_transport.writes == []
+
+    advanced_transport = StatefulOutputTransport()
+    advanced_transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    advanced_transport.burst[1] = "ON"
+    with pytest.raises(DataError, match="advanced signal modes OFF"):
+        SDG2000XSource(advanced_transport).set_square_duty_cycle(
+            1,
+            25.0,
+            check_errors=False,
+        )
+    assert advanced_transport.writes == []
+
+
+@pytest.mark.parametrize("failure", ["ignored", "ambiguous", "readback", "drift", "advanced"])
+def test_set_square_duty_postwrite_failures_force_off_and_latch(failure: str) -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    command = "C1:BSWV DUTY,25"
+    if failure == "ignored":
+        transport.ignore_write_counts[command] = 1
+    elif failure == "ambiguous":
+        transport.fail_after_write_counts[command] = 1
+    elif failure == "readback":
+        transport.fail_readback_counts[command] = 1
+    elif failure == "drift":
+        transport.drift_write_counts[command] = 1
+    else:
+        transport.advanced_drift_write_counts[command] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_square_duty_cycle(1, 25.0, check_errors=False)
 
     assert transport.outputs[1] == "OFF"
     assert transport.writes == [command, "C1:OUTP OFF"]

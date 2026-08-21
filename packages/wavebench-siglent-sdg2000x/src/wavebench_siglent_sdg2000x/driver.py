@@ -63,6 +63,8 @@ _MIN_FREQUENCY_HZ = 1.0e-6
 _MIN_AMPLITUDE_VPP = 2.0e-3
 _MAX_USER_AMPLITUDE_VPP = 10.0
 _MAX_ABSOLUTE_OUTPUT_V = 10.0
+_MIN_DUTY_PERCENT = 0.001
+_MAX_DUTY_PERCENT = 99.999
 _MODEL_SINE_MAX_FREQUENCY_HZ = {
     "SDG2042X": 40.0e6,
     "SDG2082X": 80.0e6,
@@ -1055,6 +1057,62 @@ class SDG2000XSource:
                             raise InstrumentError(
                                 "SDG2000X function transaction changed common phase"
                             )
+                return after.status
+            except Exception as exc:
+                self._fail_configuration_transaction(channel, exc)
+                raise AssertionError("unreachable")
+
+    def set_square_duty_cycle(
+        self,
+        channel: int,
+        duty_percent: float,
+        *,
+        check_errors: bool = True,
+    ) -> SourceStatus:
+        _validate_channel(channel)
+        duty_percent = _finite_number(duty_percent, field_name="duty cycle percent")
+        if not _MIN_DUTY_PERCENT <= duty_percent <= _MAX_DUTY_PERCENT:
+            raise DataError("SDG2000X duty cycle must be from 0.001% to 99.999%")
+        _validate_write_check_errors(
+            check_errors,
+            capability="source.set_square_duty_cycle",
+        )
+
+        with self._io_lock:
+            self._ensure_configuration_writes_allowed()
+            self._ensure_identity()
+            before = self._read_configuration_snapshot(channel)
+            self._validate_basic_configuration_snapshot(before)
+            if before.status.frequency_mode != "FIX":
+                raise DataError("SDG2000X duty-cycle writes require FIX mode")
+            if before.status.function != "SQU":
+                raise DataError("SDG2000X duty-cycle writes require the SQUARE function")
+            if before.status.square_duty_cycle_percent is None:
+                raise DataError("SDG2000X square duty-cycle readback is unavailable")
+            if _numeric_matches(
+                before.status.square_duty_cycle_percent,
+                duty_percent,
+            ):
+                return before.status
+
+            try:
+                self.transport.write(f"C{channel}:BSWV DUTY,{duty_percent:.12g}")
+                after = self._read_configuration_snapshot(channel)
+                self._verify_configuration_closure(before=before, after=after)
+                if not _numeric_matches(
+                    after.status.square_duty_cycle_percent,
+                    duty_percent,
+                ):
+                    raise InstrumentError("SDG2000X duty-cycle write readback mismatch")
+                expected = replace(
+                    before.status,
+                    square_duty_cycle_percent=after.status.square_duty_cycle_percent,
+                    apply_raw=after.status.apply_raw,
+                )
+                if after.status != expected:
+                    raise InstrumentError(
+                        "SDG2000X duty-cycle transaction changed non-duty channel state"
+                    )
                 return after.status
             except Exception as exc:
                 self._fail_configuration_transaction(channel, exc)
