@@ -1,6 +1,6 @@
 {
-  "schema_version": "wavebench.scope-r13.sds800x-hd-evidence.v1",
-  "status": "redacted_hardware_observation",
+  "schema_version": "wavebench.scope-r13.sds800x-hd-evidence.v2",
+  "status": "redacted_hardware_acceptance",
   "instrument": {
     "family": "SDS800X HD",
     "model": "SDS804X HD",
@@ -44,12 +44,23 @@
     "backend_query_binary_conformant": false
   },
   "screenshot": {
-    "response_bytes": 43628,
-    "canonical_png_bytes": 43627,
+    "variants": {
+      "color": {
+        "canonical_png_bytes": 50360,
+        "width_px": 1024,
+        "height_px": 600
+      },
+      "inverted": {
+        "canonical_png_bytes": 52602,
+        "width_px": 1024,
+        "height_px": 600
+      }
+    },
     "content_trailing_bytes": 1,
-    "content_trailing_hex": "00",
+    "content_trailing_hex": "0a",
     "ieee_block_header_observed": false,
-    "message_boundary_backend_conformant": false,
+    "message_boundary_backend_conformant": true,
+    "post_message_failure_next_query": "synchronized",
     "stateful_recovery_applicable": false
   },
   "acquisition": {
@@ -58,9 +69,26 @@
       "arming",
       "stopped"
     ],
-    "completion_proof_candidate": "state_transition",
+    "continuous_modes": [
+      "auto",
+      "normal"
+    ],
+    "completion_proof": "state_transition",
     "count_role": "diagnostic_only",
-    "counter_epoch_observed": false
+    "count_before_single_configure": 1,
+    "count_after_single_configure": 0,
+    "count_after_single_stop": 1,
+    "counter_epoch_observed": false,
+    "single_failure_cleanup": "verified",
+    "start_failure_cleanup": "verified",
+    "next_query_after_cleanup": "succeeded"
+  },
+  "final_restoration": {
+    "acquisition_tokens": "matched",
+    "run_stop_class": "matched",
+    "memory_configuration": "matched",
+    "channel_switches": "matched",
+    "waveform_transfer": "matched"
   },
   "retention": {
     "image_content": false,

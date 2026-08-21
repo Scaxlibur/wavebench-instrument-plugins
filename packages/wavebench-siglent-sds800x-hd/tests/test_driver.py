@@ -12,6 +12,10 @@ from wavebench.services.scope_service import ScopeService
 
 from wavebench_siglent_sds800x_hd import descriptor
 from wavebench_siglent_sds800x_hd.driver import SDS800XHDScope
+from wavebench_siglent_sds800x_hd.profiles import (
+    SDS800X_HD_ACQUISITION_CONTROL_PROFILE,
+    SDS800X_HD_SCREENSHOT_PROFILE,
+)
 
 
 DEFAULT_IDN = "SIGLENT TECHNOLOGIES,SDS824X HD,SDS8FAKE000001,1.1.3.1"
@@ -57,10 +61,22 @@ def test_descriptor_is_executable_metadata_without_import_io() -> None:
         "scope.capture_waveform",
         "scope.capture_waveforms",
         "scope.measurement_statistics",
+        "scope.screenshot_profile",
+        "scope.screenshot_v2",
+        "scope.acquisition_run_state",
+        "scope.acquisition_control",
     )
     assert item.scope_coupling_policy == "fixed-high-impedance"
     assert item.distribution == "wavebench-siglent-sds800x-hd"
-    assert item.version == "0.5.0"
+    assert item.version == "0.6.0"
+    assert item.wavebench_min_version == "0.8.23"
+    assert item.scope_extensions is not None
+    assert item.scope_extensions.screenshot_profile is SDS800X_HD_SCREENSHOT_PROFILE
+    assert (
+        item.scope_extensions.acquisition_control_profile
+        is SDS800X_HD_ACQUISITION_CONTROL_PROFILE
+    )
+    assert item.scope_extensions.trace_profile is None
     assert item.config_fields == (
         "connection.resource",
         "scope.driver",
@@ -99,13 +115,13 @@ def test_factory_opens_exactly_one_core_transport_without_querying() -> None:
     assert transport.queries == []
 
 
-def test_idn_is_validated_cached_and_close_is_idempotent() -> None:
+def test_idn_is_freshly_validated_and_close_is_idempotent() -> None:
     transport = FakeTransport()
     driver = SDS800XHDScope(transport)
 
     assert driver.idn() == DEFAULT_IDN
     assert driver.idn() == DEFAULT_IDN
-    assert transport.queries == ["*IDN?"]
+    assert transport.queries == ["*IDN?", "*IDN?"]
 
     driver.close()
     driver.close()

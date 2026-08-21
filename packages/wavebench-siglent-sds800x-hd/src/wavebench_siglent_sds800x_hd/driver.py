@@ -7,8 +7,26 @@ from math import isfinite
 import time
 
 from wavebench.errors import DataError, OperationTimeout
-from wavebench.instruments.models import ScopeMeasurementStatistics, WaveformData
+from wavebench.instruments import (
+    ScopeAcquisitionCompletion,
+    ScopeAcquisitionControlBaseline,
+    ScopeAcquisitionControlSnapshot,
+    ScopeAcquisitionRunState,
+    ScopeBaselineRestoreResult,
+    ScopeContinuousTriggerMode,
+    ScopeMeasurementStatistics,
+    ScopeScreenshot,
+    ScopeScreenshotBaseline,
+    ScopeScreenshotProfile,
+    ScopeScreenshotRequest,
+    ScopeScreenshotRestoreResult,
+    ScopeScreenshotStateSnapshot,
+    WaveformData,
+)
+from wavebench.transport import BinaryResponseFraming
 from wavebench.transport.base import InstrumentTransport
+
+from .profiles import SDS800X_HD_SCREENSHOT_PROFILE
 
 from .waveform import (
     build_analog_waveform,
@@ -28,6 +46,8 @@ _MODEL_CHANNEL_COUNTS = {
 _SUPPORTED_COUPLINGS = {"AC", "DC", "GND"}
 _SUPPORTED_POINTS = {"DEF", "MAX", "DMAX"}
 _TRIGGER_STATES = {"ARM", "READY", "AUTO", "TRIG'D", "STOP", "ROLL"}
+_TRIGGER_MODES = {"SINGLE", "NORMAL", "AUTO", "FTRIG"}
+_ACQUISITION_MODES = {"YT", "XY", "ROLL"}
 
 
 @dataclass(frozen=True)
@@ -98,6 +118,44 @@ def _parse_statistics_history(value: str) -> tuple[float, ...]:
     return tuple(float(item) for item in results)
 
 
+def _canonical_png_with_dimensions(
+    payload: bytes,
+    *,
+    content_trailing: bytes,
+) -> tuple[bytes, int, int]:
+    if not isinstance(payload, bytes) or not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise DataError("SDS800X HD screenshot response is not a PNG")
+    offset = 8
+    width: int | None = None
+    height: int | None = None
+    while offset < len(payload):
+        if len(payload) - offset < 12:
+            raise DataError("SDS800X HD screenshot contains a truncated PNG chunk")
+        length = int.from_bytes(payload[offset : offset + 4], "big")
+        kind = payload[offset + 4 : offset + 8]
+        end = offset + 12 + length
+        if end > len(payload):
+            raise DataError("SDS800X HD screenshot PNG chunk exceeds the response")
+        if kind == b"IHDR":
+            if offset != 8 or length != 13:
+                raise DataError("SDS800X HD screenshot has an invalid PNG IHDR")
+            width = int.from_bytes(payload[offset + 8 : offset + 12], "big")
+            height = int.from_bytes(payload[offset + 12 : offset + 16], "big")
+        if kind == b"IEND":
+            if length != 0 or width is None or height is None:
+                raise DataError("SDS800X HD screenshot has an invalid PNG IEND")
+            trailing = payload[end:]
+            if trailing != content_trailing:
+                observed = trailing[:16].hex() or "<empty>"
+                raise DataError(
+                    "SDS800X HD screenshot content trailing differs from profile: "
+                    f"observed_bytes={len(trailing)}, observed_prefix_hex={observed}"
+                )
+            return payload[:end], width, height
+        offset = end
+    raise DataError("SDS800X HD screenshot is missing PNG IEND")
+
+
 @dataclass
 class SDS800XHDScope:
     transport: InstrumentTransport
@@ -107,10 +165,7 @@ class SDS800XHDScope:
     _model: str | None = field(default=None, init=False, repr=False)
     _closed: bool = field(default=False, init=False, repr=False)
 
-    def _ensure_identity(self) -> tuple[str, str]:
-        if self._identity_response is not None and self._model is not None:
-            return self._identity_response, self._model
-
+    def _query_identity(self) -> tuple[str, str]:
         response = self.transport.query("*IDN?").strip()
         if not response:
             raise DataError("SDS800X HD returned an empty response for *IDN?")
@@ -134,8 +189,13 @@ class SDS800XHDScope:
         self._model = model
         return response, model
 
+    def _ensure_identity(self) -> tuple[str, str]:
+        if self._identity_response is not None and self._model is not None:
+            return self._identity_response, self._model
+        return self._query_identity()
+
     def idn(self) -> str:
-        response, _ = self._ensure_identity()
+        response, _ = self._query_identity()
         return response
 
     def _validate_channel(self, channel: int) -> None:
@@ -160,6 +220,289 @@ class SDS800XHDScope:
                 "SDS800X HD channel coupling must be one of AC, DC, or GND"
             )
         return response
+
+    def get_screenshot_profile(self) -> ScopeScreenshotProfile:
+        return SDS800X_HD_SCREENSHOT_PROFILE
+
+    def snapshot_screenshot_state(
+        self,
+        fields: tuple[str, ...],
+    ) -> ScopeScreenshotStateSnapshot:
+        if fields:
+            raise DataError("SDS800X HD screenshot does not change persistent display state")
+        return ScopeScreenshotStateSnapshot(captured_fields=())
+
+    def capture_screenshot(
+        self,
+        request: ScopeScreenshotRequest,
+        *,
+        baseline: ScopeScreenshotBaseline | None,
+    ) -> ScopeScreenshot:
+        if not isinstance(request, ScopeScreenshotRequest):
+            raise DataError("SDS800X HD screenshot request has an invalid type")
+        if baseline is not None:
+            raise DataError("SDS800X HD stateless screenshot requires no baseline")
+        SDS800X_HD_SCREENSHOT_PROFILE.select(request)
+        color = {
+            "color": "NORMal",
+            "inverted": "INVerted",
+        }.get(request.color_mode)
+        if color is None:
+            raise DataError("SDS800X HD screenshot color mode is unsupported")
+        result = self.transport.query_binary(
+            f":PRINt? PNG,{color}",
+            framing=BinaryResponseFraming.MESSAGE,
+            max_bytes=262_144,
+        )
+        if result.framing is not BinaryResponseFraming.MESSAGE:
+            raise DataError("SDS800X HD screenshot response framing is not MESSAGE")
+        canonical, width, height = _canonical_png_with_dimensions(
+            result.data,
+            content_trailing=b"\x0a",
+        )
+        return ScopeScreenshot(
+            data=canonical,
+            media_type="image/png",
+            width_px=width,
+            height_px=height,
+            requested=request,
+            effective=request,
+            framing=result.framing,
+        )
+
+    def restore_screenshot_state(
+        self,
+        baseline: ScopeScreenshotBaseline,
+    ) -> ScopeScreenshotRestoreResult:
+        if baseline.snapshot.captured_fields or baseline.restore_order:
+            raise DataError("SDS800X HD screenshot baseline must be stateless")
+        return ScopeScreenshotRestoreResult("not_attempted", (), ())
+
+    def verify_screenshot_state_restored(
+        self,
+        fields: tuple[str, ...],
+        baseline: ScopeScreenshotBaseline,
+    ) -> ScopeScreenshotStateSnapshot:
+        if fields or baseline.snapshot.captured_fields:
+            raise DataError("SDS800X HD screenshot verification must be stateless")
+        return ScopeScreenshotStateSnapshot(captured_fields=())
+
+    def _acquisition_run_state_from_tokens(
+        self,
+        raw_state: str,
+        *,
+        trigger_mode_token: str | None = None,
+        acquisition_count: int | None = None,
+    ) -> ScopeAcquisitionRunState:
+        if raw_state not in _TRIGGER_STATES:
+            raise DataError("SDS800X HD returned an unsupported trigger status")
+        if trigger_mode_token is not None and trigger_mode_token not in _TRIGGER_MODES:
+            raise DataError("SDS800X HD returned an unsupported trigger mode")
+        phase = {
+            "STOP": "stopped",
+            "READY": "ready",
+            "ARM": "arming",
+            "AUTO": "acquiring",
+            "TRIG'D": "acquiring",
+            "ROLL": "rolling",
+        }[raw_state]
+        trigger_mode = {
+            "AUTO": "auto",
+            "NORMAL": "normal",
+            "SINGLE": "single",
+            "FTRIG": "unknown",
+        }.get(trigger_mode_token, "unknown")
+        if raw_state == "AUTO":
+            trigger_mode = "auto"
+        if raw_state == "ROLL":
+            trigger_mode = "roll"
+        return ScopeAcquisitionRunState(
+            phase=phase,
+            trigger_mode=trigger_mode,
+            raw_state=raw_state,
+            acquisition_count=acquisition_count,
+        )
+
+    def get_acquisition_run_state(self) -> ScopeAcquisitionRunState:
+        raw_state = self._query_text(":TRIGger:STATus?", field_name="trigger status")
+        return self._acquisition_run_state_from_tokens(raw_state)
+
+    def snapshot_acquisition_control(self) -> ScopeAcquisitionControlSnapshot:
+        raw_state = self._query_text(":TRIGger:STATus?", field_name="trigger status")
+        return self._acquisition_control_snapshot_from_raw_state(raw_state)
+
+    def _acquisition_control_snapshot_from_raw_state(
+        self,
+        raw_state: str,
+    ) -> ScopeAcquisitionControlSnapshot:
+        trigger_mode_token = self._query_text(
+            ":TRIGger:MODE?",
+            field_name="trigger mode",
+        )
+        count = self._query_integer(
+            ":ACQuire:NUMACq?",
+            field_name="acquisition count",
+            minimum=0,
+        )
+        acquisition_mode = self._query_text(
+            ":ACQuire:MODE?",
+            field_name="acquisition mode",
+        )
+        if acquisition_mode not in _ACQUISITION_MODES:
+            raise DataError("SDS800X HD returned an unsupported acquisition mode")
+        run_state = self._acquisition_run_state_from_tokens(
+            raw_state,
+            trigger_mode_token=trigger_mode_token,
+            acquisition_count=count,
+        )
+        return ScopeAcquisitionControlSnapshot(
+            run_state=run_state,
+            trigger_state_token=trigger_mode_token,
+            acquisition_state_token=acquisition_mode,
+        )
+
+    def start_continuous(
+        self,
+        *,
+        trigger_mode: ScopeContinuousTriggerMode,
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> ScopeAcquisitionRunState:
+        if trigger_mode not in {"auto", "normal"}:
+            raise DataError("SDS800X HD continuous trigger mode must be auto or normal")
+        command_mode = trigger_mode.upper()
+        self.transport.write(f":TRIGger:MODE {command_mode}")
+        applied = self._query_text(":TRIGger:MODE?", field_name="trigger mode")
+        if applied != command_mode:
+            raise DataError("SDS800X HD continuous trigger mode write was ignored")
+        self.transport.write(":TRIGger:RUN")
+        raw_state = self._query_text(":TRIGger:STATus?", field_name="trigger status")
+        return self._acquisition_run_state_from_tokens(
+            raw_state,
+            trigger_mode_token=applied,
+        )
+
+    def stop_acquisition(self) -> ScopeAcquisitionRunState:
+        self.transport.write(":TRIGger:STOP")
+        return self.get_acquisition_run_state()
+
+    def acquire_single(
+        self,
+        *,
+        baseline: ScopeAcquisitionControlBaseline,
+        deadline: float,
+    ) -> ScopeAcquisitionCompletion:
+        if isinstance(deadline, bool) or not isinstance(deadline, (int, float)):
+            raise DataError("SDS800X HD acquisition deadline must be monotonic time")
+        if not isfinite(float(deadline)) or float(deadline) <= time.monotonic():
+            raise OperationTimeout("SDS800X HD acquisition deadline is exhausted")
+
+        self.transport.write(":TRIGger:MODE SINGLE")
+        applied = self._query_text(":TRIGger:MODE?", field_name="trigger mode")
+        if applied != "SINGLE":
+            raise DataError("SDS800X HD did not enter SINGLE trigger mode")
+        proof_raw_state = self._query_text(
+            ":TRIGger:STATus?",
+            field_name="trigger status",
+        )
+        proof_baseline = self._acquisition_run_state_from_tokens(
+            proof_raw_state,
+            trigger_mode_token="SINGLE",
+        )
+        self.transport.write(":TRIGger:RUN")
+
+        observed: list[ScopeAcquisitionRunState] = []
+        while True:
+            if time.monotonic() >= float(deadline):
+                raise OperationTimeout(
+                    "SDS800X HD single acquisition timed out while waiting for Stop"
+                )
+            raw_state = self._query_text(
+                ":TRIGger:STATus?",
+                field_name="trigger status",
+            )
+            state = self._acquisition_run_state_from_tokens(
+                raw_state,
+                trigger_mode_token="SINGLE",
+            )
+            observed.append(state)
+            if state.phase == "stopped":
+                break
+            if time.monotonic() >= float(deadline):
+                raise OperationTimeout(
+                    "SDS800X HD single acquisition timed out while waiting for Stop"
+                )
+            if self.capture_poll_interval_s > 0:
+                time.sleep(self.capture_poll_interval_s)
+
+        return ScopeAcquisitionCompletion(
+            state=observed[-1],
+            original_state=baseline.snapshot.run_state,
+            proof_baseline_state=proof_baseline,
+            proof_baseline_stage="configured_pre_arm",
+            proof="state_transition",
+            observed_states=tuple(observed),
+        )
+
+    def restore_acquisition_control(
+        self,
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> ScopeBaselineRestoreResult:
+        trigger_token = baseline.snapshot.trigger_state_token
+        acquisition_token = baseline.snapshot.acquisition_state_token
+        if trigger_token not in _TRIGGER_MODES:
+            raise DataError("SDS800X HD acquisition baseline trigger token is invalid")
+        if acquisition_token not in _ACQUISITION_MODES:
+            raise DataError("SDS800X HD acquisition baseline mode token is invalid")
+
+        attempted: list[str] = []
+        restored: list[str] = []
+        for field_name in baseline.restore_order:
+            attempted.append(field_name)
+            try:
+                if field_name == "scope.run_state":
+                    self.transport.write(":TRIGger:STOP")
+                elif field_name == "scope.acquisition":
+                    self.transport.write(f":ACQuire:MODE {acquisition_token}")
+                elif field_name == "scope.trigger":
+                    self.transport.write(f":TRIGger:MODE {trigger_token}")
+                    # On SDS800X HD, changing the trigger mode can leave the
+                    # run state ready even when STOP was sent first.  Reassert
+                    # the core-required stopped cleanup postcondition after
+                    # the final setting write.
+                    self.transport.write(":TRIGger:STOP")
+                else:
+                    raise DataError(
+                        f"SDS800X HD acquisition restore field is unsupported: {field_name}"
+                    )
+            except Exception:
+                return ScopeBaselineRestoreResult(
+                    status="failed",
+                    attempted_fields=tuple(attempted),
+                    restored_fields=tuple(restored),
+                    error_code="restore_write_failed",
+                )
+            restored.append(field_name)
+        return ScopeBaselineRestoreResult(
+            status="completed",
+            attempted_fields=tuple(attempted),
+            restored_fields=tuple(restored),
+        )
+
+    def verify_acquisition_control_restored(
+        self,
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> ScopeAcquisitionControlSnapshot:
+        raw_state = ""
+        for attempt in range(13):
+            raw_state = self._query_text(
+                ":TRIGger:STATus?",
+                field_name="trigger status",
+            )
+            if raw_state == "STOP":
+                break
+            if attempt < 12 and self.capture_poll_interval_s > 0:
+                time.sleep(self.capture_poll_interval_s)
+        return self._acquisition_control_snapshot_from_raw_state(raw_state)
 
     def get_measurement_statistics(
         self,

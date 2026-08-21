@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-siglent-sds800x-hd"
-version = "0.5.0"
+version = "0.6.0"
 description = "SIGLENT SDS800X HD oscilloscope driver plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["wavebench>=0.8,<0.9"]
+dependencies = ["wavebench>=0.8.23,<0.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "ruff>=0.8.0"]

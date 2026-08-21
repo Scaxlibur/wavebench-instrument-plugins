@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from wavebench.instruments.api import InstrumentDescriptor
+from wavebench.instruments import InstrumentDescriptor, ScopeDescriptorExtensions
+
+from .profiles import (
+    SDS800X_HD_ACQUISITION_CONTROL_PROFILE,
+    SDS800X_HD_SCREENSHOT_PROFILE,
+)
 
 
 def _open_driver(context):
@@ -34,6 +39,10 @@ def descriptor() -> InstrumentDescriptor:
             "scope.capture_waveform",
             "scope.capture_waveforms",
             "scope.measurement_statistics",
+            "scope.screenshot_profile",
+            "scope.screenshot_v2",
+            "scope.acquisition_run_state",
+            "scope.acquisition_control",
         ),
         idn_patterns=(
             "SDS802X HD",
@@ -50,14 +59,18 @@ def descriptor() -> InstrumentDescriptor:
         summary=(
             "SDS800X HD family driver with strict identity, analog-channel coupling, "
             "stopped-record and single-acquisition DMAX waveform reads, and read-only "
-            "statistics."
+            "statistics, message-framed PNG screenshots, and standalone acquisition control."
         ),
-        wavebench_min_version="0.8.0",
+        wavebench_min_version="0.8.23",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sds800x-hd",
-        version="0.5.0",
+        version="0.6.0",
         source="entry_point:siglent.sds800x-hd",
         scope_coupling_policy="fixed-high-impedance",
         config_fields=("connection.resource", "scope.driver", "waveform.*"),
         resource_schemes=("tcpip", "usb"),
+        scope_extensions=ScopeDescriptorExtensions(
+            screenshot_profile=SDS800X_HD_SCREENSHOT_PROFILE,
+            acquisition_control_profile=SDS800X_HD_ACQUISITION_CONTROL_PROFILE,
+        ),
     )

@@ -4,8 +4,8 @@ from collections import deque
 import zlib
 
 from wavebench.errors import DataError
-from wavebench.instruments.api import InstrumentDescriptor
-from wavebench.instruments.scope_extensions import (
+from wavebench.instruments import (
+    InstrumentDescriptor,
     ScopeAcquisitionCompletion,
     ScopeAcquisitionControlBaseline,
     ScopeAcquisitionControlProfile,
@@ -21,8 +21,8 @@ from wavebench.instruments.scope_extensions import (
     ScopeScreenshotStateSnapshot,
     ScopeScreenshotVariant,
 )
-from wavebench.services.scope_extension_service import ExperimentalScopeExtensionService
-from wavebench.transport.contracts import (
+from wavebench.services import ScopeExtensionService
+from wavebench.transport import (
     BinaryQueryResult,
     BinaryResponseFraming,
     ReplayPolicy,
@@ -54,10 +54,12 @@ class SDSR13ControlBackend:
     def __init__(self) -> None:
         self.trigger_status = "Stop"
         self.trigger_mode = "NORMAL"
-        self.acquisition_mode = "SAMPLING"
+        self.acquisition_mode = "YT"
         self.acquisition_count = 0
         self.status_after_run: deque[str] = deque()
-        self.screenshot_payload = png() + b"\x00"
+        self.status_sequence_on_run: tuple[str, ...] = ("Arm", "Stop")
+        self.status_sequence_on_stop: tuple[str, ...] = ("Stop",)
+        self.screenshot_payload = png() + b"\x0a"
         self.queries: list[str] = []
         self.writes: list[str] = []
         self.binary_queries: list[str] = []
@@ -74,7 +76,7 @@ class SDSR13ControlBackend:
     ) -> str:
         self.queries.append(command)
         if command == "*IDN?":
-            return "SIGLENT TECHNOLOGIES,SDS804X HD,REDACTED,4.8.12.1.1.6.5"
+            return "SIGLENT TECHNOLOGIES,SDS804X HD,SDS8FAKE000001,4.8.12.1.1.6.5"
         if command == ":TRIGger:STATus?":
             if self.status_after_run:
                 self.trigger_status = self.status_after_run.popleft()
@@ -137,10 +139,10 @@ class SDSR13ControlBackend:
         self.writes.append(command)
         if command == ":TRIGger:STOP":
             self.trigger_status = "Stop"
-            self.status_after_run.clear()
+            self.status_after_run = deque(self.status_sequence_on_stop)
         elif command == ":TRIGger:RUN":
             self.trigger_status = "Arm"
-            self.status_after_run = deque(("Arm", "Stop"))
+            self.status_after_run = deque(self.status_sequence_on_run)
         elif command.startswith(":TRIGger:MODE "):
             self.trigger_mode = command.rsplit(" ", maxsplit=1)[1].upper()
         elif command.startswith(":ACQuire:MODE "):
@@ -156,7 +158,7 @@ class SDSR13ControlBackend:
 
 
 class SDSR13ControlDriver:
-    """Test-only SDS screenshot and acquisition adapter for the Draft contracts."""
+    """Test-only SDS adapter for the public R1.3 screenshot/acquisition contracts."""
 
     def __init__(self, transport: GuardedAuditedTransport) -> None:
         self.transport = transport
@@ -177,7 +179,7 @@ class SDSR13ControlDriver:
                     snapshot_max_steps=0,
                     restore_max_steps=0,
                     verify_max_steps=0,
-                    content_trailing_hex="00",
+                    content_trailing_hex="0a",
                     width_px=(2, 2),
                     height_px=(3, 3),
                 ),
@@ -228,7 +230,7 @@ class SDSR13ControlDriver:
             framing=BinaryResponseFraming.MESSAGE,
             max_bytes=262_144,
         )
-        if not result.data.endswith(b"\x00"):
+        if not result.data.endswith(b"\x0a"):
             raise DataError("SDS screenshot content trailing differs from profile")
         canonical = result.data[:-1]
         return ScopeScreenshot(
@@ -393,7 +395,7 @@ class SDSR13ControlDriver:
 
 
 def make_control_service() -> tuple[
-    ExperimentalScopeExtensionService,
+    ScopeExtensionService,
     SDSR13ControlDriver,
     GuardedAuditedTransport,
     SDSR13ControlBackend,
@@ -420,16 +422,16 @@ def make_control_service() -> tuple[
         option_specs=(),
         permissions=("instrument.io",),
         factory=lambda context: driver,
+        wavebench_min_version="0.8.23",
         scope_extensions=ScopeDescriptorExtensions(
             screenshot_profile=driver.screenshot_profile,
             acquisition_control_profile=driver.acquisition_profile,
         ),
     )
-    service = ExperimentalScopeExtensionService(
+    service = ScopeExtensionService(
         driver=driver,
         descriptor=descriptor,
         session_state=transport.session_state,
         connection_timeout_ms=1_000,
-        enabled=True,
     )
     return service, driver, transport, backend

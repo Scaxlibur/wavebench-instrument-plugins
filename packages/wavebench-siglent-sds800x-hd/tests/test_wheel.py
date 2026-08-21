@@ -60,7 +60,7 @@ def test_wheel_install_discovery_reinstall_and_uninstall_without_instrument_io(
         ],
         cwd=tmp_path,
     )
-    plugin_wheel = next(wheelhouse.glob("wavebench_siglent_sds800x_hd-0.5.0-*.whl"))
+    plugin_wheel = next(wheelhouse.glob("wavebench_siglent_sds800x_hd-0.6.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
     python = venv_dir / "bin" / "python"
@@ -97,7 +97,8 @@ assert [point.name for point in points] == ["siglent.sds800x-hd"]
 descriptor = points[0].load()()
 assert descriptor.driver_id == "siglent.sds800x-hd"
 assert descriptor.distribution == "wavebench-siglent-sds800x-hd"
-assert descriptor.version == "0.5.0"
+assert descriptor.version == "0.6.0"
+assert descriptor.wavebench_min_version == "0.8.23"
 assert descriptor.capabilities == (
     "scope.idn",
     "scope.channel_coupling",
@@ -105,7 +106,13 @@ assert descriptor.capabilities == (
     "scope.capture_waveform",
     "scope.capture_waveforms",
     "scope.measurement_statistics",
+    "scope.screenshot_profile",
+    "scope.screenshot_v2",
+    "scope.acquisition_run_state",
+    "scope.acquisition_control",
 )
+assert descriptor.scope_extensions.screenshot_profile.source == "descriptor"
+assert descriptor.scope_extensions.acquisition_control_profile.verify_max_steps == 16
 assert callable(parse_waveform_preamble)
 """
     _run([str(python), "-c", discovery_script], cwd=tmp_path)

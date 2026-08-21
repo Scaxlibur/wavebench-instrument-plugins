@@ -8,12 +8,12 @@ import pytest
 
 
 pytest.importorskip(
-    "wavebench.services.scope_extension_service",
-    reason="WaveBench scope R1.3 internal infrastructure is unavailable",
+    "wavebench.instruments.scope_extensions",
+    reason="WaveBench scope R1.3 public contract is unavailable",
 )
 
 from wavebench.errors import DataError, TransportIOError
-from wavebench.instruments.scope_extensions import ScopeTraceData, ScopeTraceRef
+from wavebench.instruments import ScopeTraceData, ScopeTraceRef
 from wavebench.transport.binary import parse_definite_block_response
 from wavebench.transport.session import SessionHealth
 
@@ -94,13 +94,16 @@ def test_sds_restore_gap_does_not_hide_primary_and_poison_is_fail_closed() -> No
     assert diagnostics["trace_cleanup"]["verification"]["status"] == "mismatch"
 
 
-def test_redacted_hardware_evidence_does_not_overclaim_backend_conformance() -> None:
+def test_redacted_hardware_evidence_separates_new_screenshot_from_legacy_waveform() -> None:
     path = Path(__file__).parent / "fixtures" / "sds804x_hd_tcpip_redacted.json"
     evidence = json.loads(path.read_text(encoding="utf-8"))
 
     assert evidence["instrument"]["firmware"] == "4.8.12.1.1.6.5"
     assert evidence["waveform_multiblock"]["chunk_points"] == [5_000_000, 5_000_000]
-    assert evidence["screenshot"]["message_boundary_backend_conformant"] is False
+    assert evidence["waveform_multiblock"]["backend_query_binary_conformant"] is False
+    assert evidence["screenshot"]["message_boundary_backend_conformant"] is True
+    assert evidence["screenshot"]["post_message_failure_next_query"] == "synchronized"
+    assert evidence["acquisition"]["single_failure_cleanup"] == "verified"
     assert evidence["acquisition"]["count_role"] == "diagnostic_only"
     serialized = json.dumps(evidence, ensure_ascii=False).lower()
     for forbidden in ("serial_number", "ip_address", "raw_waveform", "raw_png"):

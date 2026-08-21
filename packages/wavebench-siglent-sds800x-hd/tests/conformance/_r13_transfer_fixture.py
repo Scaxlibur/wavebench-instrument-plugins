@@ -6,8 +6,8 @@ from typing import Any
 import numpy as np
 
 from wavebench.errors import DataError
-from wavebench.instruments.api import InstrumentDescriptor
-from wavebench.instruments.scope_extensions import (
+from wavebench.instruments import (
+    InstrumentDescriptor,
     ScopeAxisMetadata,
     ScopeDescriptorExtensions,
     ScopeTraceData,
@@ -18,9 +18,9 @@ from wavebench.instruments.scope_extensions import (
     ScopeTraceTransferRestoreResult,
     ScopeTraceTransferStateSnapshot,
 )
-from wavebench.services.scope_extension_service import ExperimentalScopeExtensionService
+from wavebench.services import ScopeExtensionService
 from wavebench.transport.binary import parse_definite_block_response
-from wavebench.transport.contracts import (
+from wavebench.transport import (
     BinaryQueryResult,
     BinaryResponseFraming,
     ReplayPolicy,
@@ -370,7 +370,7 @@ class SDSR13TraceDriver:
 
 
 def make_trace_service() -> tuple[
-    ExperimentalScopeExtensionService,
+    ScopeExtensionService,
     SDSR13TraceDriver,
     GuardedAuditedTransport,
     SDSR13TraceBackend,
@@ -391,13 +391,13 @@ def make_trace_service() -> tuple[
         option_specs=(),
         permissions=("instrument.io",),
         factory=lambda context: driver,
+        wavebench_min_version="0.8.23",
         scope_extensions=ScopeDescriptorExtensions(trace_profile=driver.trace_profile),
     )
-    service = ExperimentalScopeExtensionService(
+    service = ScopeExtensionService(
         driver=driver,
         descriptor=descriptor,
         session_state=transport.session_state,
         connection_timeout_ms=1_000,
-        enabled=True,
     )
     return service, driver, transport, backend
