@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from math import isfinite
+from math import isclose, isfinite
 import re
 from threading import RLock
 
@@ -59,6 +59,20 @@ _QUANTITY_PATTERN = re.compile(
     r"^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?)([A-Za-z%µμ°]*)$"
 )
 _MAX_RESPONSE_CHARACTERS = 16_384
+_MIN_FREQUENCY_HZ = 1.0e-6
+_MAX_USER_AMPLITUDE_VPP = 10.0
+_MAX_ABSOLUTE_OUTPUT_V = 10.0
+_MODEL_SINE_MAX_FREQUENCY_HZ = {
+    "SDG2042X": 40.0e6,
+    "SDG2082X": 80.0e6,
+    "SDG2122X": 120.0e6,
+}
+_FUNCTION_MAX_FREQUENCY_HZ = {
+    "SQU": 25.0e6,
+    "RAMP": 1.0e6,
+    "PULS": 25.0e6,
+    "USER": 20.0e6,
+}
 
 
 @dataclass(frozen=True)
@@ -94,19 +108,44 @@ class _OutputSafetyContext:
     coupling_amplitude_enabled: bool
 
 
+@dataclass(frozen=True)
+class _ConfigurationSnapshot:
+    status: SourceStatus
+    output: _OutputStatus
+    context: _OutputSafetyContext
+
+
 def _validate_channel(channel: int) -> None:
     if isinstance(channel, bool) or channel not in (1, 2):
         raise DataError("SDG2000X channel must be 1 or 2")
 
 
-def _validate_output_check_errors(check_errors: bool) -> None:
+def _validate_write_check_errors(check_errors: bool, *, capability: str) -> None:
     if type(check_errors) is not bool:
         raise DataError("SDG2000X check_errors must be a boolean")
     if check_errors:
         raise DataError(
-            "SDG2000X source.output requires check_errors=false because the "
+            f"SDG2000X {capability} requires check_errors=false because the "
             "programming guide does not define an accepted error-queue query"
         )
+
+
+def _finite_number(value: object, *, field_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise DataError(f"SDG2000X {field_name} must be a finite number")
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise DataError(f"SDG2000X {field_name} must be a finite number")
+    return parsed
+
+
+def _numeric_matches(actual: float | None, expected: float) -> bool:
+    return actual is not None and isclose(
+        actual,
+        expected,
+        rel_tol=1.0e-6,
+        abs_tol=1.0e-6,
+    )
 
 
 def _response_text(response: str, *, command: str) -> str:
@@ -492,7 +531,7 @@ class SDG2000XSource:
     transport: InstrumentTransport
     _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _identity_model: str | None = field(default=None, init=False, repr=False)
-    _output_writes_blocked: bool = field(default=False, init=False, repr=False)
+    _configuration_writes_blocked: bool = field(default=False, init=False, repr=False)
 
     def _ensure_identity(self) -> str:
         if self._identity_model is None:
@@ -580,6 +619,14 @@ class SDG2000XSource:
             coupling_amplitude_enabled=coupling[4],
         )
 
+    def _read_configuration_snapshot(self, channel: int) -> _ConfigurationSnapshot:
+        status, output = self._read_status(channel)
+        return _ConfigurationSnapshot(
+            status=status,
+            output=output,
+            context=self._read_output_safety_context(channel),
+        )
+
     def get_status(self, channel: int) -> SourceStatus:
         _validate_channel(channel)
         with self._io_lock:
@@ -588,25 +635,23 @@ class SDG2000XSource:
     @property
     def output_writes_blocked(self) -> bool:
         with self._io_lock:
-            return self._output_writes_blocked
+            return self._configuration_writes_blocked
+
+    @property
+    def configuration_writes_blocked(self) -> bool:
+        with self._io_lock:
+            return self._configuration_writes_blocked
+
+    def _ensure_configuration_writes_allowed(self) -> None:
+        if self._configuration_writes_blocked:
+            raise InstrumentError(
+                "SDG2000X configuration writes are blocked after a failed transaction; "
+                "reopen the instrument session and verify state"
+            )
 
     @staticmethod
-    def _validate_output_enable_snapshot(
-        status: SourceStatus,
-        output: _OutputStatus,
-        context: _OutputSafetyContext,
-    ) -> None:
-        if status.frequency_mode != "FIX" or status.sweep_enabled != "OFF":
-            raise DataError("SDG2000X output enable requires fixed-frequency mode with sweep OFF")
-        if status.amplitude is None or status.amplitude_unit != "VPP":
-            raise DataError("SDG2000X output enable requires a verified Vpp amplitude")
-        if status.offset_v is None:
-            raise DataError("SDG2000X output enable requires a verified voltage offset")
-        if output.load_ohm is not None:
-            raise DataError(
-                "SDG2000X output enable requires a verified high-impedance load setting"
-            )
-        active = tuple(
+    def _active_advanced_modes(context: _OutputSafetyContext) -> tuple[str, ...]:
+        return tuple(
             name
             for name, enabled in (
                 ("modulation", context.modulation_enabled),
@@ -625,11 +670,108 @@ class SDG2000XSource:
             )
             if enabled
         )
+
+    @classmethod
+    def _validate_advanced_modes_off(cls, context: _OutputSafetyContext) -> None:
+        active = cls._active_advanced_modes(context)
+        if active:
+            raise DataError(
+                "SDG2000X configuration writes require advanced signal modes OFF; "
+                "active modes: " + ", ".join(active)
+            )
+
+    @staticmethod
+    def _validate_output_enable_snapshot(
+        status: SourceStatus,
+        output: _OutputStatus,
+        context: _OutputSafetyContext,
+    ) -> None:
+        if status.frequency_mode != "FIX" or status.sweep_enabled != "OFF":
+            raise DataError("SDG2000X output enable requires fixed-frequency mode with sweep OFF")
+        if status.amplitude is None or status.amplitude_unit != "VPP":
+            raise DataError("SDG2000X output enable requires a verified Vpp amplitude")
+        if status.offset_v is None:
+            raise DataError("SDG2000X output enable requires a verified voltage offset")
+        if status.amplitude > _MAX_USER_AMPLITUDE_VPP:
+            raise DataError("SDG2000X output enable exceeds the 10 Vpp hard safety limit")
+        if abs(status.offset_v) + status.amplitude / 2 > _MAX_ABSOLUTE_OUTPUT_V:
+            raise DataError(
+                "SDG2000X output enable exceeds the verified absolute voltage envelope"
+            )
+        if output.load_ohm is not None:
+            raise DataError(
+                "SDG2000X output enable requires a verified high-impedance load setting"
+            )
+        active = SDG2000XSource._active_advanced_modes(context)
         if active:
             raise DataError(
                 "SDG2000X output enable requires advanced signal modes OFF; active modes: "
                 + ", ".join(active)
             )
+
+    @staticmethod
+    def _validate_frequency_range(*, model: str, function: str, value_hz: float) -> None:
+        if value_hz < _MIN_FREQUENCY_HZ:
+            raise DataError("SDG2000X frequency must be at least 1 uHz")
+        if function == "SIN":
+            maximum = _MODEL_SINE_MAX_FREQUENCY_HZ[model]
+        else:
+            try:
+                maximum = _FUNCTION_MAX_FREQUENCY_HZ[function]
+            except KeyError as exc:
+                raise DataError(
+                    f"SDG2000X frequency is not applicable to function {function}"
+                ) from exc
+        if value_hz > maximum:
+            raise DataError(
+                f"SDG2000X frequency exceeds the {maximum:.12g} Hz limit for "
+                f"{model} function {function}"
+            )
+
+    @classmethod
+    def _validate_basic_configuration_snapshot(
+        cls,
+        snapshot: _ConfigurationSnapshot,
+    ) -> None:
+        cls._validate_advanced_modes_off(snapshot.context)
+        if snapshot.status.output == "ON":
+            cls._validate_output_enable_snapshot(
+                snapshot.status,
+                snapshot.output,
+                snapshot.context,
+            )
+
+    @classmethod
+    def _verify_configuration_closure(
+        cls,
+        *,
+        before: _ConfigurationSnapshot,
+        after: _ConfigurationSnapshot,
+    ) -> None:
+        cls._validate_basic_configuration_snapshot(after)
+        if after.output != before.output:
+            raise InstrumentError(
+                "SDG2000X configuration transaction changed output, load, polarity, "
+                "or power-on state"
+            )
+        if after.context != before.context:
+            raise InstrumentError(
+                "SDG2000X configuration transaction changed advanced signal state"
+            )
+
+    def _fail_configuration_transaction(self, channel: int, exc: Exception) -> None:
+        self._configuration_writes_blocked = True
+        try:
+            self._force_output_off(channel)
+        except Exception as recovery_exc:
+            raise InstrumentError(
+                "SDG2000X configuration transaction failed and OFF recovery could not be "
+                "verified; output state is uncertain and configuration writes are blocked"
+            ) from recovery_exc
+        raise InstrumentError(
+            "SDG2000X configuration transaction failed; output is confirmed OFF and "
+            "configuration writes are blocked until the session is reopened"
+        ) from exc
 
     def _force_output_off(self, channel: int) -> None:
         self.transport.write(f"C{channel}:OUTP OFF")
@@ -639,6 +781,88 @@ class SDG2000XSource:
         )
         if output.state != "OFF":
             raise InstrumentError("SDG2000X output failed to converge to OFF")
+
+    def set_frequency(
+        self,
+        channel: int,
+        value_hz: float,
+        *,
+        ensure_fix_mode: bool = True,
+        check_errors: bool = True,
+    ) -> SourceStatus:
+        _validate_channel(channel)
+        value_hz = _finite_number(value_hz, field_name="frequency")
+        if type(ensure_fix_mode) is not bool:
+            raise DataError("SDG2000X ensure_fix_mode must be a boolean")
+        _validate_write_check_errors(check_errors, capability="source.set_frequency")
+
+        with self._io_lock:
+            self._ensure_configuration_writes_allowed()
+            model = self._ensure_identity()
+            before = self._read_configuration_snapshot(channel)
+            if before.status.frequency_mode != "FIX":
+                self._validate_advanced_modes_off(before.context)
+                if not ensure_fix_mode:
+                    raise DataError(
+                        "SDG2000X frequency writes require FIX mode when automatic mode "
+                        "selection is disabled"
+                    )
+                if before.status.output != "OFF":
+                    raise DataError(
+                        "SDG2000X automatic FIX-mode selection requires output OFF"
+                    )
+            else:
+                self._validate_basic_configuration_snapshot(before)
+
+            self._validate_frequency_range(
+                model=model,
+                function=before.status.function,
+                value_hz=value_hz,
+            )
+            if (
+                before.status.frequency_mode == "FIX"
+                and _numeric_matches(before.status.frequency_hz, value_hz)
+            ):
+                return before.status
+
+            current = before
+            try:
+                if current.status.frequency_mode != "FIX":
+                    self.transport.write(f"C{channel}:SWWV STATE,OFF")
+                    fixed = self._read_configuration_snapshot(channel)
+                    self._verify_configuration_closure(before=before, after=fixed)
+                    expected_fixed = replace(
+                        before.status,
+                        frequency_mode="FIX",
+                        sweep_enabled="OFF",
+                        apply_raw=fixed.status.apply_raw,
+                    )
+                    if fixed.status != expected_fixed:
+                        raise InstrumentError(
+                            "SDG2000X FIX-mode selection changed non-mode channel state"
+                        )
+                    current = fixed
+                    if _numeric_matches(current.status.frequency_hz, value_hz):
+                        return current.status
+
+                self.transport.write(f"C{channel}:BSWV FRQ,{value_hz:.12g}")
+                after = self._read_configuration_snapshot(channel)
+                self._verify_configuration_closure(before=current, after=after)
+                if not _numeric_matches(after.status.frequency_hz, value_hz):
+                    raise InstrumentError("SDG2000X frequency write readback mismatch")
+                expected = replace(
+                    current.status,
+                    frequency_hz=after.status.frequency_hz,
+                    apply_raw=after.status.apply_raw,
+                )
+                if after.status != expected:
+                    raise InstrumentError(
+                        "SDG2000X frequency transaction changed non-frequency channel state"
+                    )
+                return after.status
+            except Exception as exc:
+                self._fail_configuration_transaction(channel, exc)
+                raise AssertionError("unreachable")
 
     def set_output(
         self,
@@ -650,18 +874,15 @@ class SDG2000XSource:
         _validate_channel(channel)
         if type(enabled) is not bool:
             raise DataError("SDG2000X output enabled must be a boolean")
-        _validate_output_check_errors(check_errors)
+        _validate_write_check_errors(check_errors, capability="source.output")
 
         with self._io_lock:
-            self._ensure_identity()
-            if self._output_writes_blocked:
+            if self._configuration_writes_blocked:
                 if enabled:
-                    raise InstrumentError(
-                        "SDG2000X output writes are blocked after a failed transaction; "
-                        "reopen the instrument session and verify state"
-                    )
+                    self._ensure_configuration_writes_allowed()
                 self._force_output_off(channel)
                 return self.get_status(channel)
+            self._ensure_identity()
 
             previous, previous_output = self._read_status(channel)
             target = "ON" if enabled else "OFF"
@@ -698,18 +919,8 @@ class SDG2000XSource:
                         )
                 return status
             except Exception as exc:
-                self._output_writes_blocked = True
-                try:
-                    self._force_output_off(channel)
-                except Exception as recovery_exc:
-                    raise InstrumentError(
-                        "SDG2000X output transaction failed and OFF recovery could not be "
-                        "verified; output state is uncertain and output writes are blocked"
-                    ) from recovery_exc
-                raise InstrumentError(
-                    "SDG2000X output transaction failed; output is confirmed OFF and output "
-                    "writes are blocked until the session is reopened"
-                ) from exc
+                self._fail_configuration_transaction(channel, exc)
+                raise AssertionError("unreachable")
 
     def close(self) -> None:
         with self._io_lock:

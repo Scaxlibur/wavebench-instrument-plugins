@@ -38,6 +38,8 @@
 
 E05C 的 Output Command 定义 `C<n>:OUTP ON|OFF`。M3 将该命令映射为主仓库 `source.output`，不暴露通用原始 SCPI 入口。
 
+E05C 的 Basic Wave Command 定义 `C<n>:BSWV FRQ,<value>`。版本 `0.4.0` 将该命令映射为主仓库 `source.set_frequency`，并按型号与当前波形限制 1 µHz 至对应频率上限。固定模式下只发送一次频率写入；Sweep→FIX 自动切换只允许在输出 OFF 时执行。写前与写后均查询完整复合波安全上下文，任何写后异常都会确认 OFF 并锁止当前会话的全部配置写入。
+
 事务边界如下：
 
 - `set_output(channel, enabled, *, check_errors=True) -> SourceStatus` 与核心 `SourceDriver` 接口一致。
@@ -54,7 +56,7 @@ E05C 的 Output Command 定义 `C<n>:OUTP ON|OFF`。M3 将该命令映射为主�
 
 ## 主仓库接口映射
 
-M3 声明 `source.status` 与 `source.output`，两条路径都返回主仓库公开的 `wavebench.instruments.SourceStatus`。字段映射如下：
+当前声明 `source.status`、`source.set_frequency` 与 `source.output`，三条路径都返回主仓库公开的 `wavebench.instruments.SourceStatus`。字段映射如下：
 
 | `SourceStatus` 字段 | SDG2000X 来源 |
 | --- | --- |
@@ -75,7 +77,7 @@ M3 声明 `source.status` 与 `source.output`，两条路径都返回主仓库�
 
 - `source.errors`：E05C 命令表未定义错误队列查询、空队列响应或消费语义。
 - `source.channel_profile`：主仓库模型要求同步极性、marker 状态和 pulse hold 等完整字段；当前命令集没有无歧义的一对一映射。
-- 除 `source.output` 外的写 capability：频率、函数、幅度、占空比、Sweep、Burst、trigger 和任意波写入仍未开放。
+- 尚未开放的写 capability：函数、幅度、占空比、Sweep、Burst、trigger 和任意波写入。
 - raw SCPI：不提供绕过 capability、transport 守卫和参数校验的入口。
 
 ## 离线验收标准

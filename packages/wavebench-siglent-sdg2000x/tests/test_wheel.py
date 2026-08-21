@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.3.0"
+PACKAGE_VERSION = "0.4.0"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -161,8 +161,13 @@ assert [point.name for point in points] == ["siglent.sdg2000x"]
 item = points[0].load()()
 assert item.driver_id == "siglent.sdg2000x"
 assert item.distribution == "wavebench-siglent-sdg2000x"
-assert item.version == "0.3.0"
-assert item.capabilities == ("source.idn", "source.status", "source.output")
+assert item.version == "0.4.0"
+assert item.capabilities == (
+    "source.idn",
+    "source.status",
+    "source.set_frequency",
+    "source.output",
+)
 resolved = build_instrument_registry().resolve(
     "siglent.sdg2000x", expected_kind="source"
 )

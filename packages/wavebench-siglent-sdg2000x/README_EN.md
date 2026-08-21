@@ -6,7 +6,7 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 
 ## Current development baseline
 
-Version `0.3.0` is the M3 `source.output` baseline. It declares `source.idn`, `source.status`, and `source.output`. The driver accepts both documented `*IDN?` formats and maps CH1/CH2 `OUTP?`, `BSWV?`, and `SWWV?` responses to the core `SourceStatus` model. Output control uses a complete pre-write snapshot, one target write, independent readback, fail-safe OFF recovery, and a session latch. Error-queue, fixed-wave configuration, modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
+Version `0.4.0` adds `source.set_frequency` to the M3 baseline and declares `source.idn`, `source.status`, `source.set_frequency`, and `source.output`. Frequency writes enforce the 1 µHz floor and the model/function-specific upper limit. Complete safety context is read before and after each write; any post-write failure confirms output OFF and latches all configuration writes for the session. Function, amplitude, duty-cycle, modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
 
 An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptance for identity, CH1/CH2 status, and `source.output`. Both channels retained their 1 kHz, 4 Vpp, 0 V offset sine configuration, passed closed-loop measurement through high-impedance RTM2032 inputs, and ended OFF. `SDG2042X` and `SDG2082X` expose `source.output` under the same documented command contract, but hardware evidence from the `SDG2122X` is not extrapolated to them.
 
@@ -47,16 +47,17 @@ access = "read_only"
 max_source_vpp = 10.0
 ```
 
-Change `access` to `read_write` before calling `source.output`. With `read_only`, identity and status remain available while the core denies writes. `check_errors = false` records that no error-queue capability has been accepted; the driver does not pretend to perform an error-queue check during `source.output`.
+Change `access` to `read_write` before calling `source.set_frequency` or `source.output`. With `read_only`, identity and status remain available while the core denies writes. `check_errors = false` records that no error-queue capability has been accepted; the driver does not pretend to perform an error-queue check.
 
 ## Safety boundary
 
 - Descriptor import creates no transport and performs no instrument I/O.
 - The factory opens only the core-provided transport from `DriverContext`.
 - Default tests use a fake transport and neither scan resources nor connect to instruments.
-- Before enabling, `source.output` requires FIX mode, sweep OFF, known Vpp amplitude and offset, and core enforcement of `max_source_vpp`.
-- The target state is written once. Any post-write failure attempts OFF recovery and latches further ON writes for the session.
-- Frequency, function, amplitude, duty-cycle, and advanced command-domain writes remain disabled.
+- Before enabling, `source.output` requires FIX mode, sweep OFF, known Vpp amplitude and offset, every known composite-wave mode OFF, and core enforcement of `max_source_vpp`.
+- `source.set_frequency` enforces model/function limits. Automatic Sweep-to-FIX selection is allowed only while output is OFF.
+- Each target configuration is written once. Any post-write failure attempts OFF recovery and latches all configuration writes for the session.
+- Function, amplitude, duty-cycle, and advanced command-domain writes remain disabled.
 - Hardware tests require separate authorization and prior confirmation of the resource, firmware, termination, output state, safety limit, and restoration procedure.
 
 ## Development checks

@@ -34,9 +34,11 @@ The compatibility table marks `COMM_HEADER` as unavailable on SDG2000X. The driv
 
 `<n>` is restricted to `1` or `2`. The M2 read order is frozen as identity validation, `OUTP?`, `BSWV?`, and `SWWV?`; the operation must issue no writes.
 
-## Exposed write transaction
+## Exposed write transactions
 
 The E05C Output Command defines `C<n>:OUTP ON|OFF`. M3 maps that command to the core `source.output` capability without exposing a generic raw-SCPI escape hatch.
+
+The E05C Basic Wave Command defines `C<n>:BSWV FRQ,<value>`. Version `0.4.0` maps it to the core `source.set_frequency` capability and enforces the 1 µHz floor plus model/function-specific upper limits. Fixed-mode updates issue one frequency write. Automatic Sweep-to-FIX selection is allowed only while output is OFF. Complete composite-wave safety context is queried before and after each write; any post-write failure confirms OFF and latches every configuration write for the session.
 
 The transaction boundary is:
 
@@ -54,7 +56,7 @@ An `SDG2122X` running firmware `2.01.01.39R7T2` returned `POWERON_STATE,ON|OFF` 
 
 ## Core interface mapping
 
-M3 declares `source.status` and `source.output`; both return the public core model `wavebench.instruments.SourceStatus`.
+The current descriptor declares `source.status`, `source.set_frequency`, and `source.output`; all three return the public core model `wavebench.instruments.SourceStatus`.
 
 | `SourceStatus` field | SDG2000X source |
 | --- | --- |
@@ -75,7 +77,7 @@ M3 declares `source.status` and `source.output`; both return the public core mod
 
 - `source.errors`: the E05C command table defines no error-queue query, empty-queue response, or consuming-read semantics.
 - `source.channel_profile`: the core model requires a complete sync polarity, marker state, pulse hold, and other fields without an unambiguous one-to-one mapping in the audited command set.
-- Write capabilities other than `source.output`: frequency, function, amplitude, duty-cycle, sweep, burst, trigger, and arbitrary-wave writes remain disabled.
+- Remaining write capabilities: function, amplitude, duty-cycle, sweep, burst, trigger, and arbitrary-wave writes remain disabled.
 - Raw SCPI: no escape hatch bypasses capabilities, transport guards, or parameter validation.
 
 ## Offline acceptance

@@ -4,7 +4,7 @@
 
 ## Current conclusion
 
-The current release completes the M3 `source.output` implementation. `source.idn`, `source.status`, and `source.output` have passed CH1/CH2 hardware acceptance on one `SDG2122X` running firmware `2.01.01.39R7T2`. Both 1 kHz, 4 Vpp, 0 V offset sine paths passed closed-loop measurement through high-impedance RTM2032 inputs and ended OFF. `SDG2042X` and `SDG2082X` expose output control under the documented command contract but have no hardware evidence yet.
+The current release adds `source.set_frequency` to the M3 output-control baseline. Offline tests cover all three registered models, both channels, fixed-wave frequency limits, safe Sweep-to-FIX selection, post-write drift, ambiguous writes, OFF recovery, and the session latch. Hardware evidence for `source.set_frequency` is recorded separately and is not extrapolated from the tested `SDG2122X` to other models.
 
 ## Coverage status
 
@@ -14,7 +14,8 @@ The current release completes the M3 `source.output` implementation. `source.idn
 | System error queue | None | Disabled | Confirm the query, empty-queue semantics, and whether reads consume state |
 | Basic channel status | `source.status` | Three matching read-only rounds on SDG2122X; CH1/CH2 physical frequency, Vpp, and mean voltage also passed cross-check after output enable | Accept other models and firmware revisions individually |
 | Output control | `source.output` | All three models pass the offline contract matrix; SDG2122X CH1/CH2 each completed one ON, fetch, and OFF sequence with zero unknown writes | Add SDG2042X and SDG2082X hardware evidence |
-| Fixed-wave configuration | None | Denied by default | Establish range, load, safety-limit, and transaction-restoration evidence |
+| Fixed-wave frequency | `source.set_frequency` | All three models pass the offline contract matrix; sine, square, ramp, pulse, and arbitrary waveforms use separate limits | Add dual-channel SDG2122X closed-loop evidence; test other models individually |
+| Fixed-wave function, amplitude, and duty cycle | None | Denied by default | Establish range, load, safety-limit, and transaction-restoration evidence |
 | Modulation, sweep, and burst | None | Disabled | Build a separate read-only profile for each domain before evaluating writes |
 | Arbitrary waveforms | None | Denied by default | Define data format, volatile side effects, size limits, and restoration boundary |
 | Counter | None | Disabled | First establish a strict profile that does not change counter state |
@@ -22,7 +23,7 @@ The current release completes the M3 `source.output` implementation. `source.idn
 ## Denied by default
 
 - Do not send `*RST` or another global preset command.
-- Enable outputs only through `source.output` with a core `max_source_vpp` limit. Do not issue trigger, burst, sweep, or arbitrary-wave writes.
+- Enable outputs only through `source.output` with a core `max_source_vpp` limit. Change frequency only through `source.set_frequency`; do not issue trigger, burst, or arbitrary-wave writes.
 - Do not expose raw SCPI.
 - Do not equate a product-page feature with an implemented capability.
 

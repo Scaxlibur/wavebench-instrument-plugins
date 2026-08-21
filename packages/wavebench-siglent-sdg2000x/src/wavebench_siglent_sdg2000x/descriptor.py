@@ -17,7 +17,12 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="SIGLENT Technologies",
         models=("SDG2042X", "SDG2082X", "SDG2122X"),
         aliases=(),
-        capabilities=("source.idn", "source.status", "source.output"),
+        capabilities=(
+            "source.idn",
+            "source.status",
+            "source.set_frequency",
+            "source.output",
+        ),
         idn_patterns=("Siglent Technologies,SDG2", "*IDN,SDG,SDG2"),
         backends=("pyvisa",),
         option_specs=(),
@@ -30,7 +35,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sdg2000x",
-        version="0.3.0",
+        version="0.4.0",
         source="entry_point:siglent.sdg2000x",
         config_fields=(
             "source.resource",

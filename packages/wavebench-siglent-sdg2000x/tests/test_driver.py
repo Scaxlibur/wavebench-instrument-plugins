@@ -142,12 +142,30 @@ class StatefulOutputTransport:
         self.writes.append(command)
         if self._consume(self.fail_before_write_counts, command):
             raise InstrumentError("injected SDG2000X write failure before fake apply")
-        match = re.fullmatch(r"C([12]):OUTP (ON|OFF)", command)
+        output_match = re.fullmatch(r"C([12]):OUTP (ON|OFF)", command)
+        sweep_match = re.fullmatch(r"C([12]):SWWV STATE,OFF", command)
+        frequency_match = re.fullmatch(
+            r"C([12]):BSWV FRQ,([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
+            command,
+        )
+        match = output_match or sweep_match or frequency_match
         if match is None:
             raise AssertionError(f"unexpected SDG2000X write: {command}")
         channel = int(match.group(1))
         if not self._consume(self.ignore_write_counts, command):
-            self.outputs[channel] = match.group(2)
+            if output_match is not None:
+                self.outputs[channel] = output_match.group(2)
+            elif sweep_match is not None:
+                self.sweeps[channel] = "OFF"
+            else:
+                assert frequency_match is not None
+                value_hz = float(frequency_match.group(2))
+                self.basics[channel] = re.sub(
+                    r"FRQ,[^,]+",
+                    f"FRQ,{value_hz:.12g}HZ",
+                    self.basics[channel],
+                    count=1,
+                )
         if self._consume(self.drift_write_counts, command):
             self.basics[channel] = (
                 f"C{channel}:BSWV WVTP,SINE,FRQ,1KHZ,AMP,2V,OFST,0V,PHSE,0"
@@ -155,7 +173,12 @@ class StatefulOutputTransport:
         if self._consume(self.advanced_drift_write_counts, command):
             self.combine[channel] = "ON"
         if self._consume(self.fail_readback_counts, command):
-            query = f"C{channel}:OUTP?"
+            if output_match is not None:
+                query = f"C{channel}:OUTP?"
+            elif sweep_match is not None:
+                query = f"C{channel}:SWWV?"
+            else:
+                query = f"C{channel}:BSWV?"
             self.fail_query_counts[query] = self.fail_query_counts.get(query, 0) + 1
         if self._consume(self.fail_after_write_counts, command):
             raise InstrumentError("injected ambiguous SDG2000X write failure")
@@ -190,6 +213,15 @@ def _output_safety_queries(channel: int) -> list[str]:
     ]
 
 
+def _configuration_queries(channel: int) -> list[str]:
+    return [
+        f"C{channel}:OUTP?",
+        f"C{channel}:BSWV?",
+        f"C{channel}:SWWV?",
+        *_output_safety_queries(channel),
+    ]
+
+
 def test_descriptor_declares_output_capable_external_source() -> None:
     item = descriptor()
 
@@ -198,11 +230,16 @@ def test_descriptor_declares_output_capable_external_source() -> None:
     assert item.kind == "source"
     assert item.models == ("SDG2042X", "SDG2082X", "SDG2122X")
     assert item.aliases == ()
-    assert item.capabilities == ("source.idn", "source.status", "source.output")
+    assert item.capabilities == (
+        "source.idn",
+        "source.status",
+        "source.set_frequency",
+        "source.output",
+    )
     assert item.backends == ("pyvisa",)
     assert item.wavebench_min_version == "0.8.0"
     assert item.wavebench_max_version == "0.9.0"
-    assert item.version == "0.3.0"
+    assert item.version == "0.4.0"
     assert item.config_fields == (
         "source.resource",
         "source.driver",
@@ -551,6 +588,292 @@ def test_set_output_matches_the_core_source_driver_signature() -> None:
     )
     assert parameters[-1].kind is inspect.Parameter.KEYWORD_ONLY
     assert parameters[-1].default is True
+
+
+def test_set_frequency_matches_the_core_source_driver_signature() -> None:
+    signature = inspect.signature(SDG2000XSource.set_frequency)
+    parameters = tuple(signature.parameters.values())
+
+    assert tuple(parameter.name for parameter in parameters) == (
+        "self",
+        "channel",
+        "value_hz",
+        "ensure_fix_mode",
+        "check_errors",
+    )
+    assert parameters[-2].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters[-2].default is True
+    assert parameters[-1].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters[-1].default is True
+
+
+@pytest.mark.parametrize("model", ["SDG2042X", "SDG2082X", "SDG2122X"])
+@pytest.mark.parametrize("channel", [1, 2])
+@pytest.mark.parametrize("output", ["OFF", "ON"])
+def test_set_frequency_covers_models_channels_and_live_output(
+    model: str,
+    channel: int,
+    output: str,
+) -> None:
+    transport = StatefulOutputTransport(model=model)
+    transport.outputs[channel] = output
+
+    status = SDG2000XSource(transport).set_frequency(
+        channel,
+        2_500.0,
+        check_errors=False,
+    )
+
+    assert status.frequency_hz == 2_500.0
+    assert status.output == output
+    assert transport.writes == [f"C{channel}:BSWV FRQ,2500"]
+    assert transport.queries == [
+        "*IDN?",
+        *_configuration_queries(channel),
+        *_configuration_queries(channel),
+    ]
+
+
+def test_set_frequency_is_idempotent_with_full_safety_snapshot() -> None:
+    transport = StatefulOutputTransport()
+
+    status = SDG2000XSource(transport).set_frequency(
+        1,
+        1_000.0004,
+        check_errors=False,
+    )
+
+    assert status.frequency_hz == 1_000.0
+    assert transport.writes == []
+    assert transport.queries == ["*IDN?", *_configuration_queries(1)]
+
+
+@pytest.mark.parametrize("ensure_fix_mode", [False, True])
+def test_set_frequency_handles_sweep_mode_only_with_safe_automatic_selection(
+    ensure_fix_mode: bool,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.sweeps[1] = "ON"
+    driver = SDG2000XSource(transport)
+
+    if not ensure_fix_mode:
+        with pytest.raises(DataError, match="require FIX mode"):
+            driver.set_frequency(
+                1,
+                2_000.0,
+                ensure_fix_mode=False,
+                check_errors=False,
+            )
+        assert transport.writes == []
+        return
+
+    status = driver.set_frequency(
+        1,
+        2_000.0,
+        ensure_fix_mode=True,
+        check_errors=False,
+    )
+
+    assert status.frequency_mode == "FIX"
+    assert status.sweep_enabled == "OFF"
+    assert status.frequency_hz == 2_000.0
+    assert transport.writes == ["C1:SWWV STATE,OFF", "C1:BSWV FRQ,2000"]
+
+
+def test_set_frequency_rejects_live_automatic_sweep_mode_selection() -> None:
+    transport = StatefulOutputTransport()
+    transport.outputs[1] = "ON"
+    transport.sweeps[1] = "ON"
+
+    with pytest.raises(DataError, match="requires output OFF"):
+        SDG2000XSource(transport).set_frequency(1, 2_000.0, check_errors=False)
+
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("channel", [0, 3, -1, True, "1"])
+def test_set_frequency_rejects_invalid_channels_before_io(channel: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="channel must be 1 or 2"):
+        SDG2000XSource(transport).set_frequency(  # type: ignore[arg-type]
+            channel,
+            1_000.0,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("value", [True, "1000", None, float("nan"), float("inf")])
+def test_set_frequency_rejects_non_finite_numbers_before_io(value: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="finite number"):
+        SDG2000XSource(transport).set_frequency(  # type: ignore[arg-type]
+            1,
+            value,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("ensure_fix_mode", [0, 1, "true", None])
+def test_set_frequency_rejects_invalid_fix_mode_flag_before_io(
+    ensure_fix_mode: object,
+) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="ensure_fix_mode"):
+        SDG2000XSource(transport).set_frequency(  # type: ignore[arg-type]
+            1,
+            1_000.0,
+            ensure_fix_mode=ensure_fix_mode,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("check_errors", [True, 1, "false", None])
+def test_set_frequency_rejects_unavailable_error_checks_before_io(
+    check_errors: object,
+) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="check_errors"):
+        SDG2000XSource(transport).set_frequency(  # type: ignore[arg-type]
+            1,
+            1_000.0,
+            check_errors=check_errors,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("model", "basic", "value_hz"),
+    [
+        ("SDG2042X", "WVTP,SINE,FRQ,1KHZ,AMP,1V,OFST,0V,PHSE,0", 40e6 + 1),
+        ("SDG2082X", "WVTP,SINE,FRQ,1KHZ,AMP,1V,OFST,0V,PHSE,0", 80e6 + 1),
+        ("SDG2122X", "WVTP,SINE,FRQ,1KHZ,AMP,1V,OFST,0V,PHSE,0", 120e6 + 1),
+        ("SDG2122X", "WVTP,SQUARE,FRQ,1KHZ,AMP,1V,OFST,0V,PHSE,0,DUTY,50", 25e6 + 1),
+        ("SDG2122X", "WVTP,RAMP,FRQ,1KHZ,AMP,1V,OFST,0V,PHSE,0", 1e6 + 1),
+        ("SDG2122X", "WVTP,PULSE,FRQ,1KHZ,AMP,1V,OFST,0V", 25e6 + 1),
+        ("SDG2122X", "WVTP,ARB,FRQ,1KHZ,AMP,1V,OFST,0V,PHSE,0", 20e6 + 1),
+    ],
+)
+def test_set_frequency_enforces_model_and_function_limits_before_write(
+    model: str,
+    basic: str,
+    value_hz: float,
+) -> None:
+    transport = StatefulOutputTransport(model=model)
+    transport.basics[1] = f"C1:BSWV {basic}"
+
+    with pytest.raises(DataError, match="frequency exceeds"):
+        SDG2000XSource(transport).set_frequency(1, value_hz, check_errors=False)
+
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("value_hz", [0.0, -1.0, 0.9e-6])
+def test_set_frequency_enforces_the_one_microhertz_floor(value_hz: float) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="at least 1 uHz"):
+        SDG2000XSource(transport).set_frequency(1, value_hz, check_errors=False)
+
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    "basic",
+    [
+        "C1:BSWV WVTP,NOISE,STDEV,1V,MEAN,0V,BANDSTATE,OFF,BANDWIDTH,120MHZ",
+        "C1:BSWV WVTP,DC,OFST,0V",
+    ],
+)
+def test_set_frequency_rejects_inapplicable_functions(basic: str) -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = basic
+
+    with pytest.raises(DataError, match="not applicable"):
+        SDG2000XSource(transport).set_frequency(1, 1_000.0, check_errors=False)
+
+    assert transport.writes == []
+
+
+def test_set_frequency_rejects_advanced_mode_before_write_without_latching() -> None:
+    transport = StatefulOutputTransport()
+    transport.harmonic[1] = "ON"
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(DataError, match="advanced signal modes OFF"):
+        driver.set_frequency(1, 2_000.0, check_errors=False)
+
+    assert transport.writes == []
+    assert driver.configuration_writes_blocked is False
+
+
+def test_set_frequency_postwrite_mismatch_forces_off_and_latches_all_writes() -> None:
+    transport = StatefulOutputTransport()
+    transport.ignore_write_counts["C1:BSWV FRQ,2000"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_frequency(1, 2_000.0, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:BSWV FRQ,2000", "C1:OUTP OFF"]
+    assert driver.configuration_writes_blocked is True
+    assert driver.output_writes_blocked is True
+
+    io_counts = (len(transport.queries), len(transport.writes))
+    with pytest.raises(InstrumentError, match="configuration writes are blocked"):
+        driver.set_frequency(1, 3_000.0, check_errors=False)
+    with pytest.raises(InstrumentError, match="configuration writes are blocked"):
+        driver.set_output(1, True, check_errors=False)
+    assert (len(transport.queries), len(transport.writes)) == io_counts
+
+
+@pytest.mark.parametrize("failure", ["ambiguous", "readback", "drift", "advanced"])
+def test_set_frequency_all_postwrite_failures_force_off_and_latch(failure: str) -> None:
+    transport = StatefulOutputTransport()
+    command = "C1:BSWV FRQ,2000"
+    if failure == "ambiguous":
+        transport.fail_after_write_counts[command] = 1
+    elif failure == "readback":
+        transport.fail_readback_counts[command] = 1
+    elif failure == "drift":
+        transport.drift_write_counts[command] = 1
+    else:
+        transport.advanced_drift_write_counts[command] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_frequency(1, 2_000.0, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == [command, "C1:OUTP OFF"]
+    assert driver.configuration_writes_blocked is True
+
+
+def test_set_frequency_recovery_failure_reports_uncertain_output() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_after_write_counts["C1:BSWV FRQ,2000"] = 1
+    transport.fail_before_write_counts["C1:OUTP OFF"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="state is uncertain"):
+        driver.set_frequency(1, 2_000.0, check_errors=False)
+
+    assert driver.configuration_writes_blocked is True
 
 
 @pytest.mark.parametrize("model", ["SDG2042X", "SDG2082X", "SDG2122X"])

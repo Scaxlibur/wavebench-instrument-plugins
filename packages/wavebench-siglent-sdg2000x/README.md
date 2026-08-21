@@ -6,7 +6,7 @@
 
 ## 当前开发基线
 
-版本 `0.3.0` 是 M3 `source.output` 基线，声明 `source.idn`、`source.status` 与 `source.output`。驱动支持编程手册记录的两种 `*IDN?` 返回格式，并通过 `OUTP?`、`BSWV?`、`SWWV?` 将 CH1/CH2 状态映射为 WaveBench `SourceStatus`。输出控制采用写前完整快照、单次写入、独立回读、异常 OFF 恢复和会话锁止。错误队列、固定波配置、调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
+版本 `0.4.0` 在 M3 基线上增加 `source.set_frequency`，当前声明 `source.idn`、`source.status`、`source.set_frequency` 与 `source.output`。频率写入按型号和波形检查 1 µHz 至对应上限；写前、写后均读取完整安全上下文，写后异常会确认输出 OFF 并锁止当前会话的全部配置写入。函数、幅度、占空比、调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
 
 `SDG2122X` 固件 `2.01.01.39R7T2` 已完成身份、CH1/CH2 状态与 `source.output` 实机验收。两路保留 1 kHz、4 Vpp、0 V 偏置正弦配置，分别通过 RTM2032 高阻输入闭环测量，验收结束时均为 OFF。`SDG2042X` 与 `SDG2082X` 按同一手册命令合同放行 `source.output`，但实机结论不从 `SDG2122X` 外推。
 
@@ -47,16 +47,17 @@ access = "read_only"
 max_source_vpp = 10.0
 ```
 
-将 `access` 改为 `read_write` 后才能调用 `source.output`；保留 `read_only` 时，身份和通道状态仍可查询，写操作会由核心拒绝。`check_errors = false` 表示错误队列尚未形成已认证 capability；驱动不会在 `source.output` 中伪装错误队列检查。
+将 `access` 改为 `read_write` 后才能调用 `source.set_frequency` 或 `source.output`；保留 `read_only` 时，身份和通道状态仍可查询，写操作会由核心拒绝。`check_errors = false` 表示错误队列尚未形成已认证 capability；驱动不会伪装错误队列检查。
 
 ## 安全边界
 
 - descriptor 导入不创建 transport，也不访问仪器。
 - factory 只通过 `DriverContext` 打开当前配置的 transport。
 - 默认测试只使用 fake transport，不扫描资源、不连接仪器。
-- `source.output` 开启前必须读取 FIX、Sweep OFF、Vpp 幅度和偏置，并由核心检查 `max_source_vpp`。
-- 目标状态只写入一次；任何写后异常都会尝试 OFF 恢复并锁止本会话的后续 ON。
-- 频率、函数、幅度、占空比和高级命令域写入仍未开放。
+- `source.output` 开启前必须读取 FIX、Sweep OFF、Vpp 幅度、偏置和所有已知复合波模式，并由核心检查 `max_source_vpp`。
+- `source.set_frequency` 检查型号与当前波形上限；Sweep 自动切回 FIX 只允许在输出 OFF 时执行。
+- 目标配置只写入一次；任何写后异常都会尝试 OFF 恢复并锁止本会话的全部配置写入。
+- 函数、幅度、占空比和高级命令域写入仍未开放。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、输出状态、安全上限和恢复方式。
 
 ## 开发验证

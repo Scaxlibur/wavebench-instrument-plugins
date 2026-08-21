@@ -33,7 +33,8 @@
 - [x] Send the target write once and verify it through an independent complete status query.
 - [x] Latch further ON writes after a post-write failure, recover OFF, and report uncertain state when recovery fails.
 - [x] Complete 4 Vpp high-impedance closed-loop acceptance on SDG2122X CH1/CH2 and leave both outputs OFF.
-- [ ] Develop frequency, function, amplitude, and duty-cycle write transactions as separate tasks.
+- [x] Expose `source.set_frequency` separately with model/function limits, complete safety snapshots, one-write readback, OFF recovery, and a session latch.
+- [ ] Develop function, amplitude, and duty-cycle write transactions as separate tasks.
 
 ## M4: Advanced command domains
 
