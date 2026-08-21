@@ -90,3 +90,4 @@ python -m wavebench plugin package check packages/wavebench-siglent-sdg2000x
 - [SDG2000X 谐波协议与频谱验收](doc/SDG2000X_HARMONIC_ACCEPTANCE.md)
 - [SDG2000X 调制协议与波形验收](doc/SDG2000X_MODULATION_ACCEPTANCE.md)
 - [SDG2000X 扫频协议与波形验收](doc/SDG2000X_SWEEP_ACCEPTANCE.md)
+- [SDG2000X Burst 协议与波形验收](doc/SDG2000X_BURST_ACCEPTANCE.md)
