@@ -43,6 +43,7 @@
 ## M4：高级命令域
 
 - [x] 谐波 H2–H16 槽位、H2/H3 幅度、H2 相位及 ALL/EVEN/ODD 完成 SDG2122X A4 频谱验收；现有核心模型不可无损映射，暂不声明 capability。
+- [x] 内部 AM、DSB-AM、FM、PM、PWM、ASK、FSK、PSK 完成 SDG2122X 输出 OFF 协议轮询与 A4 波形验收；外部源未接线。
 - [ ] 调制、Sweep、Burst、任意波和 Counter 各自立项，不合并成万能 SCPI 接口。
 - [ ] trigger 和任意波上传必须单独说明不可逆或易失副作用。
 - [ ] 只有公共 WaveBench model 与 Service 消费路径已经明确时才声明 capability。

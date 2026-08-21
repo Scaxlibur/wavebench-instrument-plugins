@@ -88,3 +88,4 @@ python -m wavebench plugin package check packages/wavebench-siglent-sdg2000x
 - [SDG2000X 基础写入实机验收](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE.md)
 - [Source V2 能力、状态与复合输出安全 RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY.md)
 - [SDG2000X 谐波协议与频谱验收](doc/SDG2000X_HARMONIC_ACCEPTANCE.md)
+- [SDG2000X 调制协议与波形验收](doc/SDG2000X_MODULATION_ACCEPTANCE.md)
