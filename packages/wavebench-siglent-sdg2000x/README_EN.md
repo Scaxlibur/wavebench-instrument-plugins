@@ -86,3 +86,4 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X output-control hardware acceptance](doc/SDG2000X_OUTPUT_ACCEPTANCE_EN.md)
 - [SDG2000X frequency-write hardware acceptance](doc/SDG2000X_FREQUENCY_ACCEPTANCE_EN.md)
 - [SDG2000X basic-write hardware acceptance](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
+- [Source V2 capability, state, and composite-output safety RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY_EN.md)
