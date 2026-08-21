@@ -60,6 +60,7 @@ _QUANTITY_PATTERN = re.compile(
 )
 _MAX_RESPONSE_CHARACTERS = 16_384
 _MIN_FREQUENCY_HZ = 1.0e-6
+_MIN_AMPLITUDE_VPP = 2.0e-3
 _MAX_USER_AMPLITUDE_VPP = 10.0
 _MAX_ABSOLUTE_OUTPUT_V = 10.0
 _MODEL_SINE_MAX_FREQUENCY_HZ = {
@@ -858,6 +859,62 @@ class SDG2000XSource:
                 if after.status != expected:
                     raise InstrumentError(
                         "SDG2000X frequency transaction changed non-frequency channel state"
+                    )
+                return after.status
+            except Exception as exc:
+                self._fail_configuration_transaction(channel, exc)
+                raise AssertionError("unreachable")
+
+    def set_amplitude_vpp(
+        self,
+        channel: int,
+        value_vpp: float,
+        *,
+        check_errors: bool = True,
+    ) -> SourceStatus:
+        _validate_channel(channel)
+        value_vpp = _finite_number(value_vpp, field_name="amplitude")
+        if not _MIN_AMPLITUDE_VPP <= value_vpp <= _MAX_USER_AMPLITUDE_VPP:
+            raise DataError("SDG2000X amplitude must be from 0.002 Vpp to 10 Vpp")
+        _validate_write_check_errors(check_errors, capability="source.set_amplitude_vpp")
+
+        with self._io_lock:
+            self._ensure_configuration_writes_allowed()
+            self._ensure_identity()
+            before = self._read_configuration_snapshot(channel)
+            self._validate_basic_configuration_snapshot(before)
+            if before.status.frequency_mode != "FIX":
+                raise DataError("SDG2000X amplitude writes require FIX mode")
+            if before.status.amplitude is None or before.status.amplitude_unit != "VPP":
+                raise DataError(
+                    f"SDG2000X amplitude is not applicable to function {before.status.function}"
+                )
+            if before.status.offset_v is None:
+                raise DataError("SDG2000X amplitude writes require a verified voltage offset")
+            if abs(before.status.offset_v) + value_vpp / 2 > _MAX_ABSOLUTE_OUTPUT_V:
+                raise DataError(
+                    "SDG2000X amplitude and offset exceed the absolute voltage envelope"
+                )
+            if _numeric_matches(before.status.amplitude, value_vpp):
+                return before.status
+
+            try:
+                self.transport.write(f"C{channel}:BSWV AMP,{value_vpp:.12g}")
+                after = self._read_configuration_snapshot(channel)
+                self._verify_configuration_closure(before=before, after=after)
+                if after.status.amplitude_unit != "VPP" or not _numeric_matches(
+                    after.status.amplitude,
+                    value_vpp,
+                ):
+                    raise InstrumentError("SDG2000X amplitude write readback mismatch")
+                expected = replace(
+                    before.status,
+                    amplitude=after.status.amplitude,
+                    apply_raw=after.status.apply_raw,
+                )
+                if after.status != expected:
+                    raise InstrumentError(
+                        "SDG2000X amplitude transaction changed non-amplitude channel state"
                     )
                 return after.status
             except Exception as exc:

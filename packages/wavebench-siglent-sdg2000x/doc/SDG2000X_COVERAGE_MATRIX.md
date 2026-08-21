@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-当前版本在 M3 输出控制基础上开放 `source.set_frequency`。离线测试覆盖三个登记型号、两通道、固定波形频率边界、Sweep→FIX 安全切换、写后漂移、歧义写入、OFF 恢复和会话锁止。`SDG2122X` CH2 已完成输出 OFF 写入与输出 ON 实时写入闭环验收；该证据不外推到 CH1 或其它型号。
+当前版本在 M3 输出控制基础上开放 `source.set_frequency` 与 `source.set_amplitude_vpp`。两项事务均覆盖三个登记型号、两通道、实时输出、写后漂移、歧义写入、OFF 恢复和会话锁止。频率写入的 SDG2122X CH2 实机证据不外推到其它通道或型号；幅度写入实机证据另行补充。
 
 ## 覆盖状态
 
@@ -15,7 +15,8 @@
 | 通道基础状态 | `source.status` | SDG2122X 三轮只读结果一致；CH1/CH2 输出后均完成频率、Vpp 与均值物理交叉验收 | 其它型号与固件逐台验收 |
 | 输出控制 | `source.output` | 三个型号通过离线合同矩阵；SDG2122X CH1/CH2 各完成一次 ON→采样→OFF，未知写结果为 0 | 补充 SDG2042X 与 SDG2082X 实机证据 |
 | 固定波频率 | `source.set_frequency` | 三个型号通过离线合同矩阵；SDG2122X CH2 的 2 kHz OFF 写入与 5 kHz ON 写入通过 RTM2032 闭环 | 补充 SDG2122X CH1 及其它型号实机证据 |
-| 固定波函数、幅度与占空比 | 无 | 默认拒绝 | 参数范围、负载语义、安全限制和事务恢复均有证据 |
+| 固定波幅度 | `source.set_amplitude_vpp` | 三个型号通过 2 mVpp 至 10 Vpp 离线合同矩阵；联合检查偏置包络 | 补充 SDG2122X 闭环和其它型号实机证据 |
+| 固定波函数与占空比 | 无 | 默认拒绝 | 参数范围、负载语义、安全限制和事务恢复均有证据 |
 | 调制、Sweep 与 Burst | 无 | 未开放 | 每个子域单独形成只读 profile，再评估写 capability |
 | 任意波形 | 无 | 默认拒绝 | 明确数据格式、易失内容、副作用、大小限制和恢复边界 |
 | Counter | 无 | 未开放 | 先建立不改变计数器状态的严格只读 profile |
@@ -23,7 +24,7 @@
 ## 默认拒绝项
 
 - 不发送 `*RST` 或其它全局预置命令。
-- 输出开启只能经 `source.output` 和核心 `max_source_vpp` 上限执行；频率只经 `source.set_frequency` 修改，不发送 trigger、Burst 或任意波形写入。
+- 输出开启只能经 `source.output` 和核心 `max_source_vpp` 上限执行；频率与幅度只经对应公开 capability 修改，不发送 trigger、Burst 或任意波形写入。
 - 不提供 raw SCPI 入口。
 - 不把产品页列出的功能直接等同于已实现 capability。
 

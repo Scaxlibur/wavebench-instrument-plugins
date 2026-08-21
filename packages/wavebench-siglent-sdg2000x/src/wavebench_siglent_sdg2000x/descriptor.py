@@ -21,6 +21,7 @@ def descriptor() -> InstrumentDescriptor:
             "source.idn",
             "source.status",
             "source.set_frequency",
+            "source.set_amplitude_vpp",
             "source.output",
         ),
         idn_patterns=("Siglent Technologies,SDG2", "*IDN,SDG,SDG2"),
@@ -35,7 +36,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sdg2000x",
-        version="0.4.0",
+        version="0.5.0",
         source="entry_point:siglent.sdg2000x",
         config_fields=(
             "source.resource",

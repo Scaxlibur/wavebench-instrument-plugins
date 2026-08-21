@@ -148,7 +148,11 @@ class StatefulOutputTransport:
             r"C([12]):BSWV FRQ,([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
             command,
         )
-        match = output_match or sweep_match or frequency_match
+        amplitude_match = re.fullmatch(
+            r"C([12]):BSWV AMP,([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
+            command,
+        )
+        match = output_match or sweep_match or frequency_match or amplitude_match
         if match is None:
             raise AssertionError(f"unexpected SDG2000X write: {command}")
         channel = int(match.group(1))
@@ -157,12 +161,20 @@ class StatefulOutputTransport:
                 self.outputs[channel] = output_match.group(2)
             elif sweep_match is not None:
                 self.sweeps[channel] = "OFF"
-            else:
-                assert frequency_match is not None
+            elif frequency_match is not None:
                 value_hz = float(frequency_match.group(2))
                 self.basics[channel] = re.sub(
                     r"FRQ,[^,]+",
                     f"FRQ,{value_hz:.12g}HZ",
+                    self.basics[channel],
+                    count=1,
+                )
+            else:
+                assert amplitude_match is not None
+                value_vpp = float(amplitude_match.group(2))
+                self.basics[channel] = re.sub(
+                    r"AMP,[^,]+",
+                    f"AMP,{value_vpp:.12g}V",
                     self.basics[channel],
                     count=1,
                 )
@@ -234,12 +246,13 @@ def test_descriptor_declares_output_capable_external_source() -> None:
         "source.idn",
         "source.status",
         "source.set_frequency",
+        "source.set_amplitude_vpp",
         "source.output",
     )
     assert item.backends == ("pyvisa",)
     assert item.wavebench_min_version == "0.8.0"
     assert item.wavebench_max_version == "0.9.0"
-    assert item.version == "0.4.0"
+    assert item.version == "0.5.0"
     assert item.config_fields == (
         "source.resource",
         "source.driver",
@@ -873,6 +886,199 @@ def test_set_frequency_recovery_failure_reports_uncertain_output() -> None:
     with pytest.raises(InstrumentError, match="state is uncertain"):
         driver.set_frequency(1, 2_000.0, check_errors=False)
 
+    assert driver.configuration_writes_blocked is True
+
+
+def test_set_amplitude_matches_the_core_source_driver_signature() -> None:
+    signature = inspect.signature(SDG2000XSource.set_amplitude_vpp)
+    parameters = tuple(signature.parameters.values())
+
+    assert tuple(parameter.name for parameter in parameters) == (
+        "self",
+        "channel",
+        "value_vpp",
+        "check_errors",
+    )
+    assert parameters[-1].kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameters[-1].default is True
+
+
+@pytest.mark.parametrize("model", ["SDG2042X", "SDG2082X", "SDG2122X"])
+@pytest.mark.parametrize("channel", [1, 2])
+@pytest.mark.parametrize("output", ["OFF", "ON"])
+def test_set_amplitude_covers_models_channels_and_live_output(
+    model: str,
+    channel: int,
+    output: str,
+) -> None:
+    transport = StatefulOutputTransport(model=model)
+    transport.outputs[channel] = output
+
+    status = SDG2000XSource(transport).set_amplitude_vpp(
+        channel,
+        2.5,
+        check_errors=False,
+    )
+
+    assert status.amplitude == 2.5
+    assert status.amplitude_unit == "VPP"
+    assert status.output == output
+    assert transport.writes == [f"C{channel}:BSWV AMP,2.5"]
+    assert transport.queries == [
+        "*IDN?",
+        *_configuration_queries(channel),
+        *_configuration_queries(channel),
+    ]
+
+
+def test_set_amplitude_is_idempotent_with_full_safety_snapshot() -> None:
+    transport = StatefulOutputTransport()
+
+    status = SDG2000XSource(transport).set_amplitude_vpp(
+        1,
+        4.0000004,
+        check_errors=False,
+    )
+
+    assert status.amplitude == 4.0
+    assert transport.writes == []
+    assert transport.queries == ["*IDN?", *_configuration_queries(1)]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        True,
+        "1",
+        None,
+        float("nan"),
+        float("inf"),
+        0.0,
+        -1.0,
+        0.0019,
+        10.0001,
+    ],
+)
+def test_set_amplitude_rejects_invalid_values_before_io(value: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError):
+        SDG2000XSource(transport).set_amplitude_vpp(  # type: ignore[arg-type]
+            1,
+            value,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("channel", [0, 3, -1, True, "1"])
+def test_set_amplitude_rejects_invalid_channels_before_io(channel: object) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="channel must be 1 or 2"):
+        SDG2000XSource(transport).set_amplitude_vpp(  # type: ignore[arg-type]
+            channel,
+            1.0,
+            check_errors=False,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("check_errors", [True, 1, "false", None])
+def test_set_amplitude_rejects_unavailable_error_checks_before_io(
+    check_errors: object,
+) -> None:
+    transport = StatefulOutputTransport()
+
+    with pytest.raises(DataError, match="check_errors"):
+        SDG2000XSource(transport).set_amplitude_vpp(  # type: ignore[arg-type]
+            1,
+            1.0,
+            check_errors=check_errors,
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    "basic",
+    [
+        "C1:BSWV WVTP,NOISE,STDEV,1V,MEAN,0V,BANDSTATE,OFF,BANDWIDTH,120MHZ",
+        "C1:BSWV WVTP,DC,OFST,0V",
+    ],
+)
+def test_set_amplitude_rejects_inapplicable_functions(basic: str) -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = basic
+
+    with pytest.raises(DataError, match="not applicable"):
+        SDG2000XSource(transport).set_amplitude_vpp(1, 1.0, check_errors=False)
+
+    assert transport.writes == []
+
+
+def test_set_amplitude_rejects_sweep_and_unsafe_voltage_envelope() -> None:
+    sweep_transport = StatefulOutputTransport()
+    sweep_transport.sweeps[1] = "ON"
+    with pytest.raises(DataError, match="require FIX mode"):
+        SDG2000XSource(sweep_transport).set_amplitude_vpp(
+            1,
+            1.0,
+            check_errors=False,
+        )
+    assert sweep_transport.writes == []
+
+    offset_transport = StatefulOutputTransport()
+    offset_transport.basics[1] = (
+        "C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,1V,OFST,9.5V,PHSE,0"
+    )
+    with pytest.raises(DataError, match="absolute voltage envelope"):
+        SDG2000XSource(offset_transport).set_amplitude_vpp(
+            1,
+            2.0,
+            check_errors=False,
+        )
+    assert offset_transport.writes == []
+
+
+def test_set_amplitude_prewrite_query_failure_does_not_latch() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_query_counts["C1:HARM?"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="query failure"):
+        driver.set_amplitude_vpp(1, 2.0, check_errors=False)
+
+    assert transport.writes == []
+    assert driver.configuration_writes_blocked is False
+
+
+@pytest.mark.parametrize("failure", ["ignored", "ambiguous", "readback", "drift", "advanced"])
+def test_set_amplitude_postwrite_failures_force_off_and_latch(failure: str) -> None:
+    transport = StatefulOutputTransport()
+    command = "C1:BSWV AMP,3"
+    if failure == "ignored":
+        transport.ignore_write_counts[command] = 1
+    elif failure == "ambiguous":
+        transport.fail_after_write_counts[command] = 1
+    elif failure == "readback":
+        transport.fail_readback_counts[command] = 1
+    elif failure == "drift":
+        transport.drift_write_counts[command] = 1
+    else:
+        transport.advanced_drift_write_counts[command] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_amplitude_vpp(1, 3.0, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == [command, "C1:OUTP OFF"]
     assert driver.configuration_writes_blocked is True
 
 
