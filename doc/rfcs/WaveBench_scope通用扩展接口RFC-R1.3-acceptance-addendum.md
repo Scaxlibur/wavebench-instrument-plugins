@@ -1,8 +1,12 @@
 # WaveBench scope 通用扩展接口 RFC：R1.3 Acceptance Addendum A1
 
-> 状态：`Draft`（核心复审后补充，未接受）
+> 状态：插件侧验收门存档；核心 `0.8.23` 离线 A1 已通过
 > 适用正文：[WaveBench scope 通用扩展接口 RFC](WaveBench_scope通用扩展接口RFC.md)
 > 目的：冻结从内部基础设施到公共 capability 注册之间的验收门
+
+> 当前验收结果以核心仓库的
+> [Accepted A1](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC-R1.3-acceptance-addendum.md)
+> 为准。本文保留公共注册前的原始门禁，供插件迁移审计使用。
 
 本文件是总 RFC 第十二节的可单独审阅索引，不是第二套并行合同。字段、Protocol、数值和
 失败语义以总 RFC 为唯一事实源；本文件只列出本轮核心复审要求的验收顺序。

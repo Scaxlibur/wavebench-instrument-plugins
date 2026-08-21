@@ -14,7 +14,7 @@ An external WaveBench driver package for the SIGLENT SDS800X HD oscilloscope fam
 - Declared capabilities: `scope.idn`, `scope.channel_coupling`, `scope.fetch_waveform`, `scope.capture_waveform`, `scope.capture_waveforms`, `scope.measurement_statistics`
 - WaveBench: `>=0.8,<0.9`
 
-Descriptor import performs no instrument I/O. The factory obtains exactly one core transport through `DriverContext.open_transport()`. The driver validates the four `*IDN?` fields, manufacturer, supported model, and 14-character ASCII serial, then caches the stable identity. Before reading coupling, it applies the model-specific two- or four-channel limit and sends `:CHANnel<n>:COUPling?`; only `AC`, `DC`, and `GND` are accepted. Waveforms use the core `query_bin_block()` transport and return the core `WaveformData` / `WaveformHeader` models. `close()` releases the transport idempotently.
+Descriptor import performs no instrument I/O. The factory obtains exactly one core transport through `DriverContext.open_transport()`. Every explicit `idn()` call sends `*IDN?` and validates all four fields, the manufacturer, supported model, and 14-character ASCII serial; parsed model data is reused within the same operation. Before reading coupling, the driver applies the model-specific two- or four-channel limit and sends `:CHANnel<n>:COUPling?`; only `AC`, `DC`, and `GND` are accepted. Waveforms use the core `query_bin_block()` transport and return the core `WaveformData` / `WaveformHeader` models. `close()` releases the transport idempotently.
 
 ## Product scope
 
@@ -29,7 +29,7 @@ The official data sheet specifies fixed `1 MΩ` analog inputs with no internal `
 
 ## Current capabilities
 
-- `scope.idn` returns the validated original `*IDN?` text and caches it for the current driver session.
+- `scope.idn` returns a freshly queried and validated original `*IDN?` response for each operation.
 - `scope.channel_coupling` returns uppercase `AC`, `DC`, or `GND`; invalid types, channels missing from a model, and unknown responses fail at the driver boundary.
 - `scope.fetch_waveform` reads an already-stopped, non-sequence analog record and currently supports only `points="dmax"`.
 - `scope.capture_waveform` / `scope.capture_waveforms` perform one SINGLE acquisition, wait for Stop, and read one or more analog channels; only `points="dmax"` is currently supported.
@@ -86,9 +86,11 @@ The repository-level `.gitignore` excludes every file under `doc/vendor-local/` 
 1. Obtain redacted `*IDN?` samples from additional SDS800X HD models and verify identity plus two- and four-channel coupling responses.
 2. When USB hardware becomes available, verify binary blocks, WORD alignment, timebase values, and transfer-state restoration; real TCPIP multi-chunk reading is accepted.
 3. Consider `DEF/MAX` point modes only after explicit protocol or hardware evidence; do not guess keywords.
-4. Extend screenshot, standalone acquisition control, and math only after reviewing the `R1.3 Draft`
-   [generic Scope RFC](../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md) and freezing the core
-   contract; do not bypass the core with private raw SCPI.
+4. WaveBench `0.8.23` implements the
+   [public Scope R1.3 contract](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md).
+   Opt into screenshot, standalone acquisition control, or typed trace only after the production
+   driver, descriptor profile, and hardware recovery evidence are complete. Math/FFT remains in a
+   later trace-extension contract. Do not bypass the core with private raw SCPI.
 
 ## License
 

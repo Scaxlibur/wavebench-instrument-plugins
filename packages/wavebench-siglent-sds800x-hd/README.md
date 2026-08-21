@@ -14,7 +14,7 @@
 - 已声明 capability：`scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`、`scope.measurement_statistics`
 - WaveBench：`>=0.8,<0.9`
 
-descriptor 导入不执行仪器 I/O；factory 只通过 `DriverContext.open_transport()` 获取一个核心 transport。driver 发送 `*IDN?`，严格核对四字段、厂商、支持型号和 14 字符 ASCII 序列号，并缓存稳定身份。读取 coupling 前按型号限制二通道或四通道范围，再发送 `:CHANnel<n>:COUPling?`；只接受 `AC`、`DC` 或 `GND`。波形读取使用核心 `query_bin_block()`，返回核心 `WaveformData` / `WaveformHeader`。`close()` 幂等释放 transport。
+descriptor 导入不执行仪器 I/O；factory 只通过 `DriverContext.open_transport()` 获取一个核心 transport。driver 每次显式 `idn()` 都发送 `*IDN?` 并严格核对四字段、厂商、支持型号和 14 字符 ASCII 序列号；同一 operation 内复用已解析型号。读取 coupling 前按型号限制二通道或四通道范围，再发送 `:CHANnel<n>:COUPling?`；只接受 `AC`、`DC` 或 `GND`。波形读取使用核心 `query_bin_block()`，返回核心 `WaveformData` / `WaveformHeader`。`close()` 幂等释放 transport。
 
 ## 产品范围
 
@@ -29,7 +29,7 @@ descriptor 导入不执行仪器 I/O；factory 只通过 `DriverContext.open_tra
 
 ## 当前能力
 
-- `scope.idn`：返回经严格校验并在当前 driver 会话中缓存的原始 `*IDN?` 文本。
+- `scope.idn`：每次返回本 operation 内 fresh query 并严格校验的原始 `*IDN?` 文本。
 - `scope.channel_coupling`：返回大写 `AC`、`DC` 或 `GND`；无效类型、型号不存在的通道和未知响应均在 driver 边界拒绝。
 - `scope.fetch_waveform`：读取已经停止的非 sequence 模拟通道记录；当前只支持 `points="dmax"`。
 - `scope.capture_waveform` / `scope.capture_waveforms`：执行一次 SINGLE acquisition，轮询到 Stop 后读取一个或多个模拟通道；当前只支持 `points="dmax"`。
@@ -86,9 +86,10 @@ doc/vendor-local/
 1. 使用其他 SDS800X HD 型号获取脱敏 `*IDN?` 样本，复核身份格式和二通道、四通道 coupling 返回。
 2. 后续取得 USB 条件时，复核 binary block、WORD 对齐、时基和 transfer 状态恢复；TCPIP 真实多块已验收。
 3. 仅在取得明确协议或实机证据后评估 `DEF/MAX` 点数模式；不得猜测关键字。
-4. 截图、独立采集控制和数学能力等待 `R1.3 Draft`
-   [scope 通用扩展接口 RFC](../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md) 评审和核心合同
-   冻结后再扩展；不通过私有 raw SCPI 绕过核心。
+4. 核心 `0.8.23` 已实现
+   [Scope R1.3 公共合同](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)。
+   截图、独立采集控制和 typed trace 仅在正式 driver、descriptor profile 和实机恢复证据完成后
+   opt-in；math/FFT 仍等待后续 trace 扩展合同。不通过私有 raw SCPI 绕过核心。
 
 ## 许可证
 

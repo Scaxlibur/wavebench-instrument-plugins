@@ -8,6 +8,9 @@
 TCPIP/VXI-11 实机验收。测试连接由一台 DG4202 CH1 同时驱动示波器 CH1 和 CH2；公开
 记录不包含仪器 IP、序列号、原始波形或完整 SCPI 日志。
 
+本文件保留 `0.8.22` 时的历史验收结果。核心 `0.8.23` 已实现 Scope R1.3 公共合同；新增
+capability 的采用结果将单独追加，不反向改写本轮观察值。
+
 本轮只验收已经声明的能力：
 
 - `scope.idn`
@@ -170,14 +173,15 @@ CH1、CH2 各 `100000` 点。两通道原始 Vpp 为 `5.0354 V` 和 `5.0375 V`�
 
 - 截图查询返回 `43628` 字节，首 8 字节为 PNG signature，不以 `#` 开头。解析到 IEND 时为
   `43627` 字节，随后还有 1 个尾字节。该结果确认响应不是 IEEE definite block；探测未保存
-  图片内容。当前核心 transport 和 screenshot 菜单参数均不足，因此 capability 保持关闭。
+  图片内容。当时核心 transport 和 screenshot 菜单参数不足；核心 `0.8.23` 已补接口，但本
+  capability 在完成新 backend 实机验收前仍保持关闭。
 - `FUNCtion1?` 至 `FUNCtion4?` 均返回 OFF。未开启或修改数学函数；现有状态不足以构造核心
   `ScopeDerivedWaveformMetadata` 或 `ScopeFftStatus`，math/FFT capability 保持关闭。
 - 未发送任何未文档化错误队列命令。`scope.errors` 保持未声明。
 
-上述接口缺口按多个示波器插件的共同需求记录在 `R1.3 Draft`
-[scope 通用扩展接口 RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md)，不在本 driver
-中增加私有 transport 或厂商专用公共方法；核心预审不会自动改变主仓库。
+上述跨仪器接口已进入核心 `0.8.23` 的
+[Scope R1.3 公共合同](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)。
+核心完成不等于插件完成；本 driver 不增加私有 transport 或厂商专用公共方法。
 
 ## 最终状态
 

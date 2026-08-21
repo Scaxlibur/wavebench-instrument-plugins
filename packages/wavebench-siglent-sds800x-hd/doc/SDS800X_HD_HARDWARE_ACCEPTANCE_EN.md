@@ -9,6 +9,10 @@ TCPIP/VXI-11 acceptance run on an SDS804X HD. A DG4202 CH1 drove scope CH1 and C
 electrical node. Public evidence excludes instrument IPs, serial numbers, raw waveforms, and full
 SCPI logs.
 
+This file preserves the historical `0.8.22` acceptance result. WaveBench `0.8.23` now implements
+the public Scope R1.3 contract; new capability adoption is recorded separately without rewriting
+the observations below.
+
 The run covered declared capabilities: identity, CH1–CH4 coupling, stopped non-sequence `DMAX`
 waveform fetch with `check_errors=False`, single- and dual-channel capture, and statistics from a preconfigured advanced-measurement
 slot. Screenshot, Autoset, standalone acquisition control, error queue, and sequence waveforms were
@@ -148,17 +152,18 @@ removed after acceptance and did not enter the repository.
 
 - The screenshot query returned `43628` bytes. It began with the PNG signature rather than `#`;
   IEND completed at byte `43627`, followed by one trailing byte. This confirms a non-IEEE raw
-  response. The probe retained no image content. The current core transport and screenshot menu
-  semantics are insufficient, so the capability remains disabled.
+  response. The probe retained no image content. The core transport and screenshot menu semantics
+  were insufficient at the time. WaveBench `0.8.23` now provides the contract, but the capability
+  remains disabled until the new backend path passes hardware acceptance.
 - `FUNCtion1?` through `FUNCtion4?` all returned OFF. No math function was enabled or changed, and
   this state cannot construct `ScopeDerivedWaveformMetadata` or `ScopeFftStatus`; math and FFT
   capabilities remain disabled.
 - No undocumented error-queue query was sent. `scope.errors` remains undeclared.
 
-These cross-instrument gaps are recorded in the `R1.3 Draft`
-[generic Scope RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md); core pre-review does not
-modify the main repository, and the driver does not add a private transport path or vendor-specific
-public method.
+These cross-instrument interfaces are public in the WaveBench `0.8.23`
+[Scope R1.3 contract](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md).
+Core completion does not complete plugin adoption, and the driver does not add a private transport
+path or vendor-specific public method.
 
 ## Final state
 

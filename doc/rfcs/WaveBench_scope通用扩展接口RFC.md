@@ -1,10 +1,15 @@
 # WaveBench scope 通用扩展接口 RFC
 
-> 状态：`Draft`（核心预审后修订，未接受）
+> 状态：插件侧 `R1.3` 评审存档；核心 `0.8.23` 已接受并实现公共合同
 > 修订：`R1.3`（核心复审增补）
 > 证据仓库：WaveBench Instrument Plugins
 > 核心评审基线：WaveBench `0.8.22`，`origin/master@006c431`
 > 目标版本：未排期
+
+> 当前规范以核心仓库的
+> [Accepted RFC](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC.md)
+> 和[实施说明](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)
+> 为准。下文保留核心接受前的评审措辞，仅作为设计历史，不再描述当前核心状态。
 
 ## 摘要与状态边界
 

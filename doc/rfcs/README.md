@@ -1,8 +1,7 @@
 # 接口 RFC
 
-本目录保存从仪器插件实现和实机验收中形成的 WaveBench 公共接口提案。RFC 只描述跨仪器
-问题、兼容边界和建议合同，不代表主仓库已经接受或实现对应接口。核心预审意见只会形成
-插件侧修订，不会自动修改主仓库。
+本目录保存从仪器插件实现和实机验收中形成的 WaveBench 公共接口提案及其评审历史。已经由
+核心接受的合同以核心仓库副本为准；插件侧副本保留提交评审时的证据和修订过程。
 
 状态说明：
 
@@ -13,12 +12,14 @@
 
 ## 当前 RFC
 
-- [WaveBench scope 通用扩展接口 RFC](WaveBench_scope通用扩展接口RFC.md)：`R1.3 Draft`，核心复审增补已添加
-  snapshot/restore/verify、非嵌套 phase authorization、回绕拒绝和旧 `scope.errors` 隔离；仍不代表
-  核心已实现这些接口，A1 的 P0/P1 验收门仍待核心团队冻结。
+- [WaveBench scope 通用扩展接口 RFC](WaveBench_scope通用扩展接口RFC.md)：插件侧
+  `R1.3` 评审存档。核心 `0.8.23` 已接受并实现公共合同；当前规范以
+  [核心 RFC](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC.md)
+  和[核心实施说明](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)
+  为准。
 - [R1.3 Acceptance Addendum A1](WaveBench_scope通用扩展接口RFC-R1.3-acceptance-addendum.md)：
-  列出 transfer recovery、capability/descriptor、常量、context nonce、父 capture 字段闭包和
-  trace 首轮排除项的公共注册前验收门。
+  插件侧验收门存档。核心离线 A1 已通过；每个插件仍需按 capability 单独完成实现、conformance
+  和实机验收。
 
 ## 后续文档拆分
 
@@ -29,5 +30,5 @@
 3. `trace`：依赖 binary transfer 字段闭包和 source/axis 模型；包含 analog、digital、reference、spectrum。
 4. `error-policy`：依赖非嵌套 phase authorization 和 artifact；包含 `scope.error_drain_v1` 与旧 `scope.errors` 迁移。
 
-Acceptance Addendum A1 是核心本轮明确要求的验收索引，不构成并行版本；其他子 RFC 在核心
-确认拆分边界前仍不创建。这不改变当前 Draft 状态或任何插件能力。
+Acceptance Addendum A1 是核心采用的验收索引，不构成并行版本。核心合同完成不改变现有插件
+descriptor；只有完成插件自身验收后，才能声明对应 capability。

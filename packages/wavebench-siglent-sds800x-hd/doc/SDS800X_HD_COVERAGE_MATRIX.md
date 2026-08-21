@@ -17,13 +17,12 @@ SDS 命令自动视为 SDS800X HD 的可用能力。
 - **实机已验收**：当前外置插件、目标 SDS800X HD 实机和受控测试证据同时存在。
 - **已实现 / 离线验证**：该功能已有 driver 和 FakeTransport 测试，但尚无对应实机证据。
 - **手册已审计**：命令格式和返回语义已核对，但尚未公开 capability。
-- **核心接口阻塞**：厂商协议与 WaveBench 当前 transport 或公共模型不能完整对接。
+- **插件采用待验收**：核心接口已经提供，但本插件的正式 driver、profile 或实机证据尚未完成。
 - **实机阻塞**：离线代码不足以证明响应 framing、状态迁移或硬件差异。
 - **默认拒绝**：命令会修改全局状态、写仪器存储或缺少可靠恢复边界。
 
-通用接口缺口目前对应 `R1.3 Draft` RFC。这里的「核心接口阻塞」表示当前核心合同不足，
-不是插件缺少一个可以私自补上的方法；RFC 预审不会改变主仓库，也不会扩大本插件的
-descriptor capability。
+核心 `0.8.23` 已实现 Scope R1.3 公共合同。核心完成不表示 SDS800X HD 自动获得新能力；正式
+driver、descriptor profile、backend/resource 和实机恢复证据仍须分别验收。
 
 ## 当前覆盖
 
@@ -37,11 +36,11 @@ descriptor capability。
 | Sequence 门禁 | `:ACQuire:SEQuence?` | `scope.fetch_waveform` 的前置条件 | **SDS804X HD 实机已验收** | `NORMAL` 触发模式下建立 Stop + sequence ON；driver 在任何 waveform 写入和 binary query 前拒绝 |
 | 测量统计 | `:MEASure:MODE?`、`ADVanced:P<n>?`、`TYPE?`、`STATistics?`、`SHIStory?` | `scope.measurement_statistics` | **SDS804X HD 实机已验收** | 只读既有槽位；P3 `PKPK` 的 6 项统计和停止态 5 项历史通过，driver 零写入 |
 | 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`ACQuire:NUMACq?` | `scope.capture_waveform`、`scope.capture_waveforms` | **SDS804X HD 实机已验收** | SINGLE 模式回读、Stop 轮询和采集计数通过；CH1/CH2 只执行一次 acquisition，不依赖 `*OPC?` |
-| 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | 无独立 capability | **核心接口阻塞** | 不能误映射为公共 `ScopeAcquisitionStatus`；跨仪器运行状态和控制见通用 RFC |
-| 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot` | **核心接口阻塞；framing 实机确认** | 实机返回 `43628` 字节 raw PNG、无 IEEE block、IEND 后 1 个尾字节；核心缺 message-bounded binary，现有菜单参数也无法满足 |
+| 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | `scope.acquisition_run_state`、`scope.acquisition_control` | **插件采用待验收** | 不映射为旧 `ScopeAcquisitionStatus`；需完成 typed snapshot、失败恢复和 fresh readback 实机验收 |
+| 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot_profile`、`scope.screenshot_v2` | **插件采用待验收；framing 已观察** | 实机返回 `43628` 字节 raw PNG、无 IEEE block、IEND 后 1 个尾字节；仍需用核心 `query_binary()` 验证真实 MESSAGE EOM 和下一次查询 |
 | Autoset | `:AUToset` | `scope.autoscale` | **默认拒绝** | 同时修改触发、垂直和水平设置；没有错误队列和恢复闭环 |
-| 采集状态 | `ACQuire:TYPE?`、`SEQuence?`、`NUMACq?` 等 | `scope.acquisition_status` | **核心模型不匹配** | 无法完整提供 `average_complete`、选件、容量和可用段数；运行阶段应使用独立模型 |
-| Math / FFT | `FUNCtion<n>`、`OPERation?`、`SOURce?`、FFT scale/span 等 | `scope.math_metadata`、`scope.fft_status` | **核心模型不匹配** | 实机 F1–F4 均为 OFF；手册没有通用 FFT ready/RBW 合同，也不能把频率轴塞入模拟波形模型 |
+| 采集状态 | `ACQuire:TYPE?`、`SEQuence?`、`NUMACq?` 等 | `scope.acquisition_run_state` | **插件采用待验收** | 旧 `ScopeAcquisitionStatus` 仍不匹配；R1.3 run-state 模型可用，但 count 只能作诊断，完成证明使用状态迁移 |
+| Math / FFT | `FUNCtion<n>`、`OPERation?`、`SOURce?`、FFT scale/span 等 | 现有 metadata/status；频谱读取待后续 trace 扩展 | **后续核心接口待设计** | 实机 F1–F4 均为 OFF；当前没有可证明的通用 FFT ready/RBW 数据，也不能把频率轴塞入模拟波形模型 |
 | Snapshot、测量配置、数字与历史 | 多个通用 SDS 子系统 | 对应可选 Scope capability | **未覆盖** | 逐能力核对型号、选件、公共模型和恢复语义后再拆分 |
 | Reset、系统和仪器文件系统 | `*RST`、系统设置、保存/调用、图片保存等 | 无基础 capability | **默认拒绝** | 可能改变全局状态、网络或持久存储，不纳入基础驱动 |
 
@@ -100,9 +99,9 @@ transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖
 - 多通道 capture 必须先配置全部通道，只触发一次 acquisition，再逐通道读取；不得逐通道重新触发。
 - capture 使用 `DriverContext.opc_timeout_ms` 作为状态轮询 deadline，但不调用 `query_opc()`；
   `*OPC?` 不作为物理触发完成证据。
-- 截图、独立采集运行控制、类型化 trace source 和三态错误检查的跨仪器方案见
-  [scope 通用扩展接口 RFC](../../../doc/rfcs/WaveBench_scope通用扩展接口RFC.md)。该 RFC 为
-  `R1.3 Draft`，不代表主仓库已经提供对应 capability。
+- 截图、独立采集运行控制、类型化 trace source 和三态错误检查已由核心 `0.8.23` 的
+  [Scope R1.3 公共合同](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)
+  提供。插件仍须按 capability 完成正式实现和实机验收。
 
 ## 开发顺序
 
@@ -112,8 +111,8 @@ transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖
 3. M3：已在一台 SDS804X HD 上完成 TCPIP WORD/LSB 读取、CH1/CH2 数值、transfer 恢复、
    `10M` 真实多块读取和 sequence ON 安全拒绝；USB 路径和其他型号仍待补。
 4. M4：SINGLE、Stop 轮询、采集计数和一次 CH1/CH2 acquisition 已完成实机验收；capture capability 已公开。
-5. 截图、独立采集控制和 math/FFT 等待通用 RFC 评审；数字通道、sequence/history、Autoset
-   和其他写能力分别立项，不经 raw SCPI 绕过门禁。
+5. 截图、独立采集控制和 typed trace 进入核心 `0.8.23` 采用验收；math/FFT 仍等待后续 trace
+   扩展合同。数字通道、sequence/history、Autoset 和其他写能力分别立项，不经 raw SCPI 绕过门禁。
 
 ## 当前直接使用的 SCPI
 
