@@ -988,7 +988,7 @@ class SDG2000XSource:
                 return after.status
             except Exception as exc:
                 self._fail_configuration_transaction(channel, exc)
-                raise AssertionError("unreachable")
+                raise AssertionError("unreachable")  # pragma: no cover
 
     def set_amplitude_vpp(
         self,
@@ -1044,7 +1044,7 @@ class SDG2000XSource:
                 return after.status
             except Exception as exc:
                 self._fail_configuration_transaction(channel, exc)
-                raise AssertionError("unreachable")
+                raise AssertionError("unreachable")  # pragma: no cover
 
     def set_function(
         self,
@@ -1150,7 +1150,7 @@ class SDG2000XSource:
                 return after.status
             except Exception as exc:
                 self._fail_configuration_transaction(channel, exc)
-                raise AssertionError("unreachable")
+                raise AssertionError("unreachable")  # pragma: no cover
 
     def set_square_duty_cycle(
         self,
@@ -1206,7 +1206,7 @@ class SDG2000XSource:
                 return after.status
             except Exception as exc:
                 self._fail_configuration_transaction(channel, exc)
-                raise AssertionError("unreachable")
+                raise AssertionError("unreachable")  # pragma: no cover
 
     def set_output(
         self,
@@ -1270,7 +1270,7 @@ class SDG2000XSource:
                 return status
             except Exception as exc:
                 self._fail_configuration_transaction(channel, exc)
-                raise AssertionError("unreachable")
+                raise AssertionError("unreachable")  # pragma: no cover
 
     def probe_arbitrary_queries(self, channel: int) -> list[ArbitraryQueryProbeResult]:
         _validate_channel(channel)

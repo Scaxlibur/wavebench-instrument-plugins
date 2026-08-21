@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import inspect
 import re
 from types import SimpleNamespace
@@ -15,7 +16,13 @@ from wavebench.logging import CommandLogger
 from wavebench.services.source_service import SourceService
 
 from wavebench_siglent_sdg2000x import descriptor
-from wavebench_siglent_sdg2000x.driver import SDG2000XSource, parse_idn_model
+from wavebench_siglent_sdg2000x.driver import (
+    SDG2000XSource,
+    _ConfigurationSnapshot,
+    _OutputSafetyContext,
+    _OutputStatus,
+    parse_idn_model,
+)
 
 
 class FakeTransport:
@@ -2098,3 +2105,375 @@ def test_core_source_service_rejects_output_above_10_vpp_before_write() -> None:
 
     assert transport.outputs[1] == "OFF"
     assert transport.writes == []
+
+
+def _disabled_output_safety_context() -> _OutputSafetyContext:
+    return _OutputSafetyContext(
+        modulation_enabled=False,
+        burst_enabled=False,
+        harmonic_enabled=False,
+        combine_enabled=False,
+        noise_add_enabled=False,
+        coupling_trace_enabled=False,
+        coupling_tracking_direction_enabled=False,
+        coupling_frequency_enabled=False,
+        coupling_phase_enabled=False,
+        coupling_amplitude_enabled=False,
+    )
+
+
+def _safe_source_status(**changes: object) -> SourceStatus:
+    status = SourceStatus(
+        channel=1,
+        output="OFF",
+        function="SIN",
+        frequency_hz=1_000.0,
+        amplitude=4.0,
+        amplitude_unit="VPP",
+        offset_v=0.0,
+        phase_deg=0.0,
+        frequency_mode="FIX",
+        sweep_enabled="OFF",
+        apply_raw="C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0",
+        square_duty_cycle_percent=None,
+    )
+    return replace(status, **changes)
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        ("*IDN?", "X" * 16_385, "oversized"),
+        ("C1:BSWV?", "C1:BSWV", "no parameters"),
+        (
+            "C1:BSWV?",
+            "C1:BSWV WVTP,SINE,,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0",
+            "empty parameter",
+        ),
+        ("C1:BSWV?", "C1:BSWV WVTP,SINE,FRQ", "incomplete parameter pair"),
+        (
+            "C1:BSWV?",
+            "C1:BSWV WVTP,SINE,FRQ,1e999HZ,AMP,4V,OFST,0V,PHSE,0",
+            "must be finite",
+        ),
+        (
+            "C1:BSWV?",
+            "C1:BSWV WVTP,SINE,FRQ,0HZ,AMP,4V,OFST,0V,PHSE,0",
+            "must be positive",
+        ),
+        ("C1:BSWV?", "C1:BSWV WVTP,PRBS", "unsupported"),
+        (
+            "C1:BSWV?",
+            "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,101",
+            "out of range",
+        ),
+    ],
+)
+def test_strict_response_parser_covers_structural_and_numeric_guards(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.query_overrides[command] = response
+
+    with pytest.raises(DataError, match=message):
+        SDG2000XSource(transport).get_status(1)
+
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    [
+        ("C1:CMBN?", "C1:CMBN OFF,EXTRA", "combine response"),
+        (
+            "COUP?",
+            "COUPLING TRACE,OFF,FCOUP,OFF,PCOUP,OFF,ACOUP,OFF",
+            "response header",
+        ),
+    ],
+)
+def test_output_safety_parser_rejects_bad_combine_and_coupling_shapes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.query_overrides[command] = response
+
+    with pytest.raises(DataError, match=message):
+        SDG2000XSource(transport).set_output(1, True, check_errors=False)
+
+    assert transport.writes == []
+
+
+def test_output_safety_accepts_coupling_response_without_optional_trduch() -> None:
+    transport = StatefulOutputTransport()
+    transport.query_overrides["COUP?"] = (
+        "COUP TRACE,OFF,FCOUP,OFF,PCOUP,OFF,ACOUP,OFF"
+    )
+
+    status = SDG2000XSource(transport).set_output(1, True, check_errors=False)
+
+    assert status.output == "ON"
+    assert transport.writes == ["C1:OUTP ON"]
+
+
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [
+        (_safe_source_status(offset_v=None), "voltage offset"),
+        (_safe_source_status(amplitude=10.1), "10 Vpp"),
+        (_safe_source_status(amplitude=4.0, offset_v=9.0), "voltage envelope"),
+    ],
+)
+def test_output_snapshot_covers_every_voltage_safety_guard(
+    status: SourceStatus,
+    message: str,
+) -> None:
+    with pytest.raises(DataError, match=message):
+        SDG2000XSource._validate_output_enable_snapshot(
+            status,
+            _OutputStatus("OFF", None, "NOR", "OFF"),
+            _disabled_output_safety_context(),
+        )
+
+
+def test_configuration_closure_detects_output_metadata_and_context_changes() -> None:
+    status = _safe_source_status()
+    output = _OutputStatus("OFF", None, "NOR", "OFF")
+    safe_context = _disabled_output_safety_context()
+    safe = _ConfigurationSnapshot(status, output, safe_context)
+
+    with pytest.raises(InstrumentError, match="changed output"):
+        SDG2000XSource._verify_configuration_closure(
+            before=safe,
+            after=_ConfigurationSnapshot(
+                status,
+                replace(output, polarity="INVT"),
+                safe_context,
+            ),
+        )
+
+    active_before = replace(safe_context, modulation_enabled=True)
+    with pytest.raises(InstrumentError, match="advanced signal state"):
+        SDG2000XSource._verify_configuration_closure(
+            before=_ConfigurationSnapshot(status, output, active_before),
+            after=safe,
+        )
+
+
+def test_force_output_off_rejects_nonconverging_readback() -> None:
+    transport = StatefulOutputTransport()
+    transport.outputs[1] = "ON"
+    transport.ignore_write_counts["C1:OUTP OFF"] = 1
+
+    with pytest.raises(InstrumentError, match="failed to converge"):
+        SDG2000XSource(transport)._force_output_off(1)
+
+    assert transport.outputs[1] == "ON"
+    assert transport.writes == ["C1:OUTP OFF"]
+
+
+def test_frequency_fix_selection_detects_drift_and_can_finish_idempotently() -> None:
+    drift_transport = StatefulOutputTransport()
+    drift_transport.sweeps[1] = "ON"
+    drift_transport.drift_write_counts["C1:SWWV STATE,OFF"] = 1
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        SDG2000XSource(drift_transport).set_frequency(
+            1,
+            2_000.0,
+            check_errors=False,
+        )
+    assert drift_transport.writes == ["C1:SWWV STATE,OFF", "C1:OUTP OFF"]
+
+    idempotent_transport = StatefulOutputTransport()
+    idempotent_transport.sweeps[1] = "ON"
+    status = SDG2000XSource(idempotent_transport).set_frequency(
+        1,
+        1_000.0,
+        check_errors=False,
+    )
+    assert status.frequency_mode == "FIX"
+    assert idempotent_transport.writes == ["C1:SWWV STATE,OFF"]
+
+
+def test_frequency_transaction_detects_nonfrequency_drift() -> None:
+    transport = StatefulOutputTransport()
+    original_write = transport.write
+
+    def write_with_amplitude_drift(command: str) -> None:
+        original_write(command)
+        if command == "C1:BSWV FRQ,2000":
+            transport.basics[1] = re.sub(
+                r"AMP,[^,]+",
+                "AMP,2V",
+                transport.basics[1],
+                count=1,
+            )
+
+    transport.write = write_with_amplitude_drift  # type: ignore[method-assign]
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        SDG2000XSource(transport).set_frequency(
+            1,
+            2_000.0,
+            check_errors=False,
+        )
+
+    assert transport.writes == ["C1:BSWV FRQ,2000", "C1:OUTP OFF"]
+
+
+def test_amplitude_transaction_detects_nonamplitude_drift() -> None:
+    transport = StatefulOutputTransport()
+    original_write = transport.write
+
+    def write_with_frequency_drift(command: str) -> None:
+        original_write(command)
+        if command == "C1:BSWV AMP,2":
+            transport.basics[1] = re.sub(
+                r"FRQ,[^,]+",
+                "FRQ,2KHZ",
+                transport.basics[1],
+                count=1,
+            )
+
+    transport.write = write_with_frequency_drift  # type: ignore[method-assign]
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        SDG2000XSource(transport).set_amplitude_vpp(
+            1,
+            2.0,
+            check_errors=False,
+        )
+
+    assert transport.writes == ["C1:BSWV AMP,2", "C1:OUTP OFF"]
+
+
+def test_amplitude_write_requires_offset_in_the_configuration_snapshot() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    snapshot = _ConfigurationSnapshot(
+        _safe_source_status(offset_v=None),
+        _OutputStatus("OFF", None, "NOR", "OFF"),
+        _disabled_output_safety_context(),
+    )
+
+    with patch.object(driver, "_read_configuration_snapshot", return_value=snapshot):
+        with pytest.raises(DataError, match="verified voltage offset"):
+            driver.set_amplitude_vpp(1, 2.0, check_errors=False)
+
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("drift", ["unsafe", "common", "phase"])
+def test_function_transaction_covers_periodic_postwrite_invariants(drift: str) -> None:
+    transport = StatefulOutputTransport()
+    original_write = transport.write
+
+    def write_with_drift(command: str) -> None:
+        original_write(command)
+        if command != "C1:BSWV WVTP,SQUARE":
+            return
+        if drift == "unsafe":
+            replacement = "AMP,12V"
+            pattern = r"AMP,[^,]+"
+        elif drift == "common":
+            replacement = "AMP,2V"
+            pattern = r"AMP,[^,]+"
+        else:
+            replacement = "PHSE,90"
+            pattern = r"PHSE,[^,]+"
+        transport.basics[1] = re.sub(
+            pattern,
+            replacement,
+            transport.basics[1],
+            count=1,
+        )
+
+    transport.write = write_with_drift  # type: ignore[method-assign]
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        SDG2000XSource(transport).set_function(
+            1,
+            "square",
+            check_errors=False,
+        )
+
+    assert transport.writes == ["C1:BSWV WVTP,SQUARE", "C1:OUTP OFF"]
+
+
+def test_square_duty_rejects_missing_snapshot_and_detects_other_drift() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    snapshot = _ConfigurationSnapshot(
+        _safe_source_status(function="SQU", square_duty_cycle_percent=None),
+        _OutputStatus("OFF", None, "NOR", "OFF"),
+        _disabled_output_safety_context(),
+    )
+    with patch.object(driver, "_read_configuration_snapshot", return_value=snapshot):
+        with pytest.raises(DataError, match="readback is unavailable"):
+            driver.set_square_duty_cycle(1, 25.0, check_errors=False)
+    assert transport.writes == []
+
+    drift_transport = StatefulOutputTransport()
+    drift_transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    original_write = drift_transport.write
+
+    def write_with_amplitude_drift(command: str) -> None:
+        original_write(command)
+        if command == "C1:BSWV DUTY,25":
+            drift_transport.basics[1] = re.sub(
+                r"AMP,[^,]+",
+                "AMP,2V",
+                drift_transport.basics[1],
+                count=1,
+            )
+
+    drift_transport.write = write_with_amplitude_drift  # type: ignore[method-assign]
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        SDG2000XSource(drift_transport).set_square_duty_cycle(
+            1,
+            25.0,
+            check_errors=False,
+        )
+    assert drift_transport.writes == ["C1:BSWV DUTY,25", "C1:OUTP OFF"]
+
+
+def test_output_transaction_detects_metadata_and_secondary_context_drift() -> None:
+    metadata_transport = StatefulOutputTransport()
+    original_metadata_write = metadata_transport.write
+
+    def write_with_load_drift(command: str) -> None:
+        original_metadata_write(command)
+        if command == "C1:OUTP ON":
+            metadata_transport.loads[1] = "50OHM"
+
+    metadata_transport.write = write_with_load_drift  # type: ignore[method-assign]
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        SDG2000XSource(metadata_transport).set_output(
+            1,
+            True,
+            check_errors=False,
+        )
+    assert metadata_transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+
+    context_transport = StatefulOutputTransport()
+    context_transport.advanced_drift_write_counts["C1:OUTP ON"] = 1
+    with patch.object(
+        SDG2000XSource,
+        "_validate_output_enable_snapshot",
+        return_value=None,
+    ):
+        with pytest.raises(InstrumentError, match="confirmed OFF"):
+            SDG2000XSource(context_transport).set_output(
+                1,
+                True,
+                check_errors=False,
+            )
+    assert context_transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
