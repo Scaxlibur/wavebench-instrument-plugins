@@ -34,6 +34,7 @@
 - [x] Latch further ON writes after a post-write failure, recover OFF, and report uncertain state when recovery fails.
 - [x] Complete 4 Vpp high-impedance closed-loop acceptance on SDG2122X CH1/CH2 and leave both outputs OFF.
 - [x] Expose `source.set_frequency` separately with model/function limits, complete safety snapshots, one-write readback, OFF recovery, and a session latch.
+- [x] Complete SDG2122X CH2 closed loops for a 2 kHz OFF-state write and a live 5 kHz ON-state write; restore 1 kHz and leave both outputs OFF.
 - [ ] Develop function, amplitude, and duty-cycle write transactions as separate tasks.
 
 ## M4: Advanced command domains

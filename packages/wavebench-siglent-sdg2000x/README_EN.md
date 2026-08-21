@@ -8,7 +8,7 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 
 Version `0.4.0` adds `source.set_frequency` to the M3 baseline and declares `source.idn`, `source.status`, `source.set_frequency`, and `source.output`. Frequency writes enforce the 1 µHz floor and the model/function-specific upper limit. Complete safety context is read before and after each write; any post-write failure confirms output OFF and latches all configuration writes for the session. Function, amplitude, duty-cycle, modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
 
-An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptance for identity, CH1/CH2 status, and `source.output`. Both channels retained their 1 kHz, 4 Vpp, 0 V offset sine configuration, passed closed-loop measurement through high-impedance RTM2032 inputs, and ended OFF. `SDG2042X` and `SDG2082X` expose `source.output` under the same documented command contract, but hardware evidence from the `SDG2122X` is not extrapolated to them.
+An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptance for identity, CH1/CH2 status, and `source.output`. `source.set_frequency` separately passed a 2 kHz OFF-state write and a live 5 kHz ON-state write on CH2, with approximately 4.08 Vpp measured by the RTM2032. The original 1 kHz setting was restored and both outputs ended OFF. `SDG2042X` and `SDG2082X` expose the same documented command contract, but hardware evidence from the `SDG2122X` is not extrapolated to them.
 
 ## Identity and compatibility
 
@@ -29,7 +29,7 @@ The vendor programming guide is stored under ignored [`doc/vendor-local/`](doc/v
 SDG_Series_Programming_Guide_E05C.pdf
 ```
 
-The original manual is excluded from Git and release artifacts. See the [SDG2000X coverage matrix](doc/SDG2000X_COVERAGE_MATRIX_EN.md) for public command status, the [SDG2000X coverage milestones](doc/SDG2000X_COVERAGE_MILESTONES_EN.md) for staged development gates, the [read-only hardware acceptance](doc/SDG2000X_READONLY_ACCEPTANCE_EN.md), and the [output-control hardware acceptance](doc/SDG2000X_OUTPUT_ACCEPTANCE_EN.md).
+The original manual is excluded from Git and release artifacts. See the [SDG2000X coverage matrix](doc/SDG2000X_COVERAGE_MATRIX_EN.md) for public command status, the [SDG2000X coverage milestones](doc/SDG2000X_COVERAGE_MILESTONES_EN.md) for staged development gates, the [read-only hardware acceptance](doc/SDG2000X_READONLY_ACCEPTANCE_EN.md), the [output-control hardware acceptance](doc/SDG2000X_OUTPUT_ACCEPTANCE_EN.md), and the [frequency-write hardware acceptance](doc/SDG2000X_FREQUENCY_ACCEPTANCE_EN.md).
 
 ## Configuration example
 
@@ -81,3 +81,4 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X protocol audit](doc/SDG2000X_PROTOCOL_AUDIT_EN.md)
 - [SDG2000X read-only hardware acceptance](doc/SDG2000X_READONLY_ACCEPTANCE_EN.md)
 - [SDG2000X output-control hardware acceptance](doc/SDG2000X_OUTPUT_ACCEPTANCE_EN.md)
+- [SDG2000X frequency-write hardware acceptance](doc/SDG2000X_FREQUENCY_ACCEPTANCE_EN.md)
