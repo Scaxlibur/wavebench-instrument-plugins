@@ -6,7 +6,7 @@
 
 ## 当前开发基线
 
-版本 `0.7.0` 已覆盖主仓库现有基础 Source 写接口：`source.set_frequency`、`source.set_function`、`source.set_amplitude_vpp`、`source.set_square_duty_cycle` 与 `source.output`。方波占空比接受数据手册的 0.001% 至 99.999% 全局范围，并依靠独立回读拒绝当前频率下被仪器钳位的值。Noise/DC 只允许在输出 OFF 时配置，并仍由输出安全门禁拒绝开启。调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
+版本 `0.8.0` 已覆盖主仓库现有基础 Source 写接口：`source.set_frequency`、`source.set_function`、`source.set_amplitude_vpp`、`source.set_square_duty_cycle` 与 `source.output`，并提供只读 `source.arbitrary_probe`。任意波探测只发送固定白名单查询，不上传、不删除、不覆盖波形。方波占空比接受数据手册的 0.001% 至 99.999% 全局范围，并依靠独立回读拒绝当前频率下被仪器钳位的值。Noise/DC 只允许在输出 OFF 时配置，并仍由输出安全门禁拒绝开启。调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
 
 `SDG2122X` 固件 `2.01.01.39R7T2` 已完成身份、CH1/CH2 状态与 `source.output` 实机验收。CH2 另完成频率、幅度、周期波函数和方波占空比闭环；最大实测 4.24 Vpp，最终恢复 Sine / 1 kHz / 4 Vpp 且两路 OFF。Noise/DC 仅完成 OFF 配置回读。`SDG2042X` 与 `SDG2082X` 按同一手册命令合同放行，但实机结论不从 `SDG2122X` 外推。
 

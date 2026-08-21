@@ -6,11 +6,16 @@ import re
 from threading import RLock
 
 from wavebench.errors import DataError, InstrumentError
-from wavebench.instruments.models import SourceStatus
+from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
 from wavebench.transport.base import InstrumentTransport
 
 
 _SUPPORTED_MODELS = frozenset({"SDG2042X", "SDG2082X", "SDG2122X"})
+ARBITRARY_QUERY_CANDIDATES: tuple[tuple[str, str], ...] = (
+    ("current_selection", "C{channel}:ARWV?"),
+    ("sample_rate_mode", "C{channel}:SRATE?"),
+    ("builtin_catalog", "STL? BUILDIN"),
+)
 _WAVE_FUNCTIONS = {
     "SINE": "SIN",
     "SQUARE": "SQU",
@@ -152,7 +157,7 @@ class _ConfigurationSnapshot:
 
 
 def _validate_channel(channel: int) -> None:
-    if isinstance(channel, bool) or channel not in (1, 2):
+    if type(channel) is not int or channel not in (1, 2):
         raise DataError("SDG2000X channel must be 1 or 2")
 
 
@@ -1266,6 +1271,33 @@ class SDG2000XSource:
             except Exception as exc:
                 self._fail_configuration_transaction(channel, exc)
                 raise AssertionError("unreachable")
+
+    def probe_arbitrary_queries(self, channel: int) -> list[ArbitraryQueryProbeResult]:
+        _validate_channel(channel)
+        with self._io_lock:
+            self._ensure_identity()
+            results: list[ArbitraryQueryProbeResult] = []
+            for label, template in ARBITRARY_QUERY_CANDIDATES:
+                command = template.format(channel=channel)
+                response: str | None = None
+                exception: str | None = None
+                try:
+                    response = _response_text(
+                        self.transport.query(command),
+                        command=command,
+                    )
+                except Exception as exc:
+                    exception = f"{type(exc).__name__}: {exc}"
+                results.append(
+                    ArbitraryQueryProbeResult(
+                        label=label,
+                        command=command,
+                        response=response,
+                        errors=[],
+                        exception=exception,
+                    )
+                )
+            return results
 
     def close(self) -> None:
         with self._io_lock:

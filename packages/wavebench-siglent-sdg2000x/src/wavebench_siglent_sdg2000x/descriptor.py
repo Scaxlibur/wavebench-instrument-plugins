@@ -25,6 +25,7 @@ def descriptor() -> InstrumentDescriptor:
             "source.set_amplitude_vpp",
             "source.set_square_duty_cycle",
             "source.output",
+            "source.arbitrary_probe",
         ),
         idn_patterns=("Siglent Technologies,SDG2", "*IDN,SDG,SDG2"),
         backends=("pyvisa",),
@@ -38,7 +39,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.0",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sdg2000x",
-        version="0.7.0",
+        version="0.8.0",
         source="entry_point:siglent.sdg2000x",
         config_fields=(
             "source.resource",

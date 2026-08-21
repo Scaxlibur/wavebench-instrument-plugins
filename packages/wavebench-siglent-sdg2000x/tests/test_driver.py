@@ -10,7 +10,7 @@ import pytest
 from wavebench.errors import ConfigError, DataError, InstrumentError
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
-from wavebench.instruments.models import SourceStatus
+from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
 from wavebench.logging import CommandLogger
 from wavebench.services.source_service import SourceService
 
@@ -313,11 +313,12 @@ def test_descriptor_declares_output_capable_external_source() -> None:
         "source.set_amplitude_vpp",
         "source.set_square_duty_cycle",
         "source.output",
+        "source.arbitrary_probe",
     )
     assert item.backends == ("pyvisa",)
     assert item.wavebench_min_version == "0.8.0"
     assert item.wavebench_max_version == "0.9.0"
-    assert item.version == "0.7.0"
+    assert item.version == "0.8.0"
     assert item.config_fields == (
         "source.resource",
         "source.driver",
@@ -353,6 +354,77 @@ def test_factory_opens_one_core_transport_and_satisfies_capabilities() -> None:
     assert driver.transport is transport
     assert opened == 1
     assert transport.queries == []
+
+
+def test_arbitrary_probe_uses_only_documented_queries_and_core_results() -> None:
+    transport = FakeTransport(
+        responses={
+            "*IDN?": "Siglent Technologies,SDG2122X,<serial>,<firmware>",
+            "C2:ARWV?": "C2:ARWV INDEX,2,NAME,StairUp",
+            "C2:SRATE?": "C2:SRATE MODE,DDS",
+            "STL? BUILDIN": "STL M2,StairUp,M3,StairDn",
+        }
+    )
+
+    results = SDG2000XSource(transport).probe_arbitrary_queries(2)
+
+    assert all(isinstance(item, ArbitraryQueryProbeResult) for item in results)
+    assert [(item.label, item.command) for item in results] == [
+        ("current_selection", "C2:ARWV?"),
+        ("sample_rate_mode", "C2:SRATE?"),
+        ("builtin_catalog", "STL? BUILDIN"),
+    ]
+    assert [item.response for item in results] == [
+        "C2:ARWV INDEX,2,NAME,StairUp",
+        "C2:SRATE MODE,DDS",
+        "STL M2,StairUp,M3,StairDn",
+    ]
+    assert all(item.errors == [] and item.exception is None and item.accepted for item in results)
+    assert transport.queries == [
+        "*IDN?",
+        "C2:ARWV?",
+        "C2:SRATE?",
+        "STL? BUILDIN",
+    ]
+    assert transport.writes == []
+
+
+def test_arbitrary_probe_records_query_failure_and_continues_without_writes() -> None:
+    transport = StatefulOutputTransport()
+    transport.query_overrides.update(
+        {
+            "C1:ARWV?": "C1:ARWV INDEX,3,NAME,StairDn",
+            "C1:SRATE?": "C1:SRATE MODE,DDS",
+            "STL? BUILDIN": "STL M2,StairUp,M3,StairDn",
+        }
+    )
+    transport.fail_query_counts["C1:SRATE?"] = 1
+
+    results = SDG2000XSource(transport).probe_arbitrary_queries(1)
+
+    assert results[0].accepted
+    assert not results[1].accepted
+    assert results[1].response is None
+    assert results[1].exception == "InstrumentError: injected SDG2000X query failure"
+    assert results[2].accepted
+    assert transport.queries == [
+        "*IDN?",
+        "C1:ARWV?",
+        "C1:SRATE?",
+        "STL? BUILDIN",
+    ]
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize("channel", [0, 3, True, 1.0, "1"])
+def test_arbitrary_probe_rejects_invalid_channel_before_io(channel: object) -> None:
+    transport = FakeTransport()
+
+    with pytest.raises(DataError):
+        SDG2000XSource(transport).probe_arbitrary_queries(channel)  # type: ignore[arg-type]
+
+    assert transport.queries == []
+    assert transport.writes == []
 
 
 @pytest.mark.parametrize(
