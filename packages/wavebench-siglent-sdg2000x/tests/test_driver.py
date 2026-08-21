@@ -52,6 +52,7 @@ class StatefulOutputTransport:
     def __init__(self, *, model: str = "SDG2122X") -> None:
         self.model = model
         self.outputs = {1: "OFF", 2: "OFF"}
+        self.loads = {1: "HZ", 2: "HZ"}
         self.basics = {
             channel: (
                 f"C{channel}:BSWV WVTP,SINE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0"
@@ -59,14 +60,27 @@ class StatefulOutputTransport:
             for channel in (1, 2)
         }
         self.sweeps = {1: "OFF", 2: "OFF"}
+        self.modulation = {1: "OFF", 2: "OFF"}
+        self.burst = {1: "OFF", 2: "OFF"}
+        self.harmonic = {1: "OFF", 2: "OFF"}
+        self.combine = {1: "OFF", 2: "OFF"}
+        self.noise_add = {1: "OFF", 2: "OFF"}
+        self.coupling = {
+            "TRACE": "OFF",
+            "FCOUP": "OFF",
+            "PCOUP": "OFF",
+            "ACOUP": "OFF",
+        }
         self.queries: list[str] = []
         self.writes: list[str] = []
+        self.query_overrides: dict[str, str] = {}
         self.fail_query_counts: dict[str, int] = {}
         self.fail_before_write_counts: dict[str, int] = {}
         self.fail_after_write_counts: dict[str, int] = {}
         self.fail_readback_counts: dict[str, int] = {}
         self.ignore_write_counts: dict[str, int] = {}
         self.drift_write_counts: dict[str, int] = {}
+        self.advanced_drift_write_counts: dict[str, int] = {}
         self.closed = False
 
     @staticmethod
@@ -81,23 +95,47 @@ class StatefulOutputTransport:
         self.queries.append(command)
         if self._consume(self.fail_query_counts, command):
             raise InstrumentError("injected SDG2000X query failure")
+        if command in self.query_overrides:
+            return self.query_overrides[command]
         if command == "*IDN?":
             return f"Siglent Technologies,{self.model},<serial>,<firmware>"
-        match = re.fullmatch(r"C([12]):(OUTP|BSWV|SWWV)\?", command)
+        if command == "COUP?":
+            return "COUP " + ",".join(
+                item
+                for name, value in self.coupling.items()
+                for item in (name, value)
+            )
+        match = re.fullmatch(
+            r"C([12]):(OUTP|BSWV|SWWV|MDWV|BTWV|HARM|CMBN|NOISE_ADD)\?",
+            command,
+        )
         if match is None:
             raise AssertionError(f"unexpected SDG2000X query: {command}")
         channel = int(match.group(1))
         header = match.group(2)
         if header == "OUTP":
             return (
-                f"C{channel}:OUTP {self.outputs[channel]},LOAD,HZ,"
+                f"C{channel}:OUTP {self.outputs[channel]},LOAD,{self.loads[channel]},"
                 "POWERON_STATE,OFF,PLRT,NOR"
             )
         if header == "BSWV":
             return self.basics[channel]
-        if self.sweeps[channel] == "ON":
+        if header == "SWWV" and self.sweeps[channel] == "ON":
             return f"C{channel}:SWWV STATE,ON,TIME,1S"
-        return f"C{channel}:SWWV STATE,OFF"
+        if header == "SWWV":
+            return f"C{channel}:SWWV STATE,OFF"
+        if header == "MDWV":
+            return f"C{channel}:MDWV STATE,{self.modulation[channel]}"
+        if header == "BTWV":
+            return f"C{channel}:BTWV STATE,{self.burst[channel]}"
+        if header == "HARM":
+            return f"C{channel}:HARM HARMSTATE,{self.harmonic[channel]}"
+        if header == "CMBN":
+            return f"C{channel}:CMBN {self.combine[channel]}"
+        return (
+            f"C{channel}:NOISE_ADD STATE,{self.noise_add[channel]},"
+            "RATIO,100,RATIO_DB,20dB"
+        )
 
     def write(self, command: str) -> None:
         self.writes.append(command)
@@ -113,6 +151,8 @@ class StatefulOutputTransport:
             self.basics[channel] = (
                 f"C{channel}:BSWV WVTP,SINE,FRQ,1KHZ,AMP,2V,OFST,0V,PHSE,0"
             )
+        if self._consume(self.advanced_drift_write_counts, command):
+            self.combine[channel] = "ON"
         if self._consume(self.fail_readback_counts, command):
             query = f"C{channel}:OUTP?"
             self.fail_query_counts[query] = self.fail_query_counts.get(query, 0) + 1
@@ -136,6 +176,17 @@ def _status_responses(
         f"C{channel}:BSWV?": basic,
         f"C{channel}:SWWV?": sweep,
     }
+
+
+def _output_safety_queries(channel: int) -> list[str]:
+    return [
+        f"C{channel}:MDWV?",
+        f"C{channel}:BTWV?",
+        f"C{channel}:HARM?",
+        f"C{channel}:CMBN?",
+        f"C{channel}:NOISE_ADD?",
+        "COUP?",
+    ]
 
 
 def test_descriptor_declares_output_capable_external_source() -> None:
@@ -540,15 +591,24 @@ def test_set_output_covers_both_channels_and_both_transitions(
     assert status.output == target
     assert transport.outputs[channel] == target
     assert transport.writes == [f"C{channel}:OUTP {target}"]
-    assert transport.queries == [
+    expected_queries = [
         "*IDN?",
         f"C{channel}:OUTP?",
         f"C{channel}:BSWV?",
         f"C{channel}:SWWV?",
+    ]
+    if enabled:
+        expected_queries.extend(_output_safety_queries(channel))
+    expected_queries.extend(
+        [
         f"C{channel}:OUTP?",
         f"C{channel}:BSWV?",
         f"C{channel}:SWWV?",
-    ]
+        ]
+    )
+    if enabled:
+        expected_queries.extend(_output_safety_queries(channel))
+    assert transport.queries == expected_queries
 
 
 @pytest.mark.parametrize(("initial", "enabled"), [("OFF", False), ("ON", True)])
@@ -560,7 +620,13 @@ def test_set_output_is_idempotent_without_a_write(initial: str, enabled: bool) -
 
     assert status.output == initial
     assert transport.writes == []
-    assert transport.queries == ["*IDN?", "C1:OUTP?", "C1:BSWV?", "C1:SWWV?"]
+    assert transport.queries == [
+        "*IDN?",
+        "C1:OUTP?",
+        "C1:BSWV?",
+        "C1:SWWV?",
+        *(_output_safety_queries(1) if enabled else []),
+    ]
 
 
 @pytest.mark.parametrize("channel", [0, 3, -1, True, "1"])
@@ -627,6 +693,88 @@ def test_output_enable_rejects_an_unbounded_snapshot_before_write(
     assert transport.writes == []
 
 
+@pytest.mark.parametrize(
+    "unsafe_mode",
+    [
+        "modulation",
+        "burst",
+        "harmonic",
+        "combine",
+        "noise_add",
+        "TRACE",
+        "FCOUP",
+        "PCOUP",
+        "ACOUP",
+    ],
+)
+def test_output_enable_rejects_every_advanced_signal_mode_before_write(
+    unsafe_mode: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    if unsafe_mode in {"TRACE", "FCOUP", "PCOUP", "ACOUP"}:
+        transport.coupling[unsafe_mode] = "ON"
+    else:
+        getattr(transport, unsafe_mode)[1] = "ON"
+
+    with pytest.raises(DataError, match="advanced signal modes OFF"):
+        SDG2000XSource(transport).set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == []
+
+
+def test_output_enable_rejects_terminated_load_before_write() -> None:
+    transport = StatefulOutputTransport()
+    transport.loads[1] = "50OHM"
+
+    with pytest.raises(DataError, match="high-impedance load"):
+        SDG2000XSource(transport).set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response"),
+    [
+        ("C1:MDWV?", "C1:MDWV STATE,MAYBE"),
+        ("C1:BTWV?", "C1:BTWV STATE,OFF,STATE,ON"),
+        ("C1:HARM?", "C1:HARM HARMTYPE,EVEN"),
+        ("C1:CMBN?", "C2:CMBN OFF"),
+        ("C1:NOISE_ADD?", "C1:NOISE_ADD RATIO,100"),
+        ("COUP?", "COUP TRACE,OFF,FCOUP,OFF,PCOUP,OFF"),
+        ("COUP?", "COUP TRACE,OFF,FCOUP,OFF,PCOUP,OFF,ACOUP,MAYBE"),
+    ],
+)
+def test_output_enable_rejects_malformed_advanced_state_before_write(
+    command: str,
+    response: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.query_overrides[command] = response
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(DataError):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == []
+    assert driver.output_writes_blocked is False
+
+
+def test_advanced_state_query_failure_before_write_does_not_latch() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_query_counts["C1:HARM?"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="query failure"):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == []
+    assert driver.output_writes_blocked is False
+
+
 def test_output_readback_mismatch_forces_off_and_latches() -> None:
     transport = StatefulOutputTransport()
     transport.ignore_write_counts["C1:OUTP ON"] = 1
@@ -677,6 +825,19 @@ def test_output_readback_failure_forces_off_and_latches() -> None:
 def test_output_non_output_drift_forces_off_and_latches() -> None:
     transport = StatefulOutputTransport()
     transport.drift_write_counts["C1:OUTP ON"] = 1
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(InstrumentError, match="confirmed OFF"):
+        driver.set_output(1, True, check_errors=False)
+
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+    assert driver.output_writes_blocked is True
+
+
+def test_output_advanced_state_drift_forces_off_and_latches() -> None:
+    transport = StatefulOutputTransport()
+    transport.advanced_drift_write_counts["C1:OUTP ON"] = 1
     driver = SDG2000XSource(transport)
 
     with pytest.raises(InstrumentError, match="confirmed OFF"):

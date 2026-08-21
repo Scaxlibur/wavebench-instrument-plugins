@@ -72,6 +72,27 @@ class _BasicWaveStatus:
     square_duty_cycle_percent: float | None
 
 
+@dataclass(frozen=True)
+class _OutputStatus:
+    state: str
+    load_ohm: float | None
+    polarity: str
+    power_on_state: str | None
+
+
+@dataclass(frozen=True)
+class _OutputSafetyContext:
+    modulation_enabled: bool
+    burst_enabled: bool
+    harmonic_enabled: bool
+    combine_enabled: bool
+    noise_add_enabled: bool
+    coupling_trace_enabled: bool
+    coupling_frequency_enabled: bool
+    coupling_phase_enabled: bool
+    coupling_amplitude_enabled: bool
+
+
 def _validate_channel(channel: int) -> None:
     if isinstance(channel, bool) or channel not in (1, 2):
         raise DataError("SDG2000X channel must be 1 or 2")
@@ -213,7 +234,16 @@ def _plain_number(
     )
 
 
-def _parse_output(response: str, *, channel: int) -> str:
+def _parse_on_off(value: str, *, command: str, field_name: str) -> bool:
+    normalized = value.strip().upper()
+    if normalized not in {"ON", "OFF"}:
+        raise DataError(
+            f"unexpected SDG2000X {field_name} for {command}: {normalized!r}"
+        )
+    return normalized == "ON"
+
+
+def _parse_output(response: str, *, channel: int) -> _OutputStatus:
     command = f"C{channel}:OUTP?"
     _, body = _response_body(response, channel=channel, header="OUTP")
     values = _tokens(body, command=command)
@@ -229,24 +259,102 @@ def _parse_output(response: str, *, channel: int) -> str:
         raise DataError(f"SDG2000X response for {command} must include LOAD and PLRT")
 
     load = parameters["LOAD"].strip().upper().replace(" ", "")
+    load_ohm = None
     if load not in {"HZ", "HIZ", "HIGHZ"}:
         if load.endswith("OHM"):
             load = load[:-3]
-        numeric_load = _plain_number(load, command=command, field_name="load")
-        if not 50 <= numeric_load <= 100_000:
+        load_ohm = _plain_number(load, command=command, field_name="load")
+        if not 50 <= load_ohm <= 100_000:
             raise DataError(f"SDG2000X load response for {command} is out of range")
 
     polarity = parameters["PLRT"].upper()
     if polarity not in {"NOR", "INVT"}:
         raise DataError(f"unexpected SDG2000X output polarity for {command}: {polarity!r}")
-    if "POWERON_STATE" in parameters:
-        power_on_state = parameters["POWERON_STATE"].upper()
-        if power_on_state not in {"ON", "OFF"}:
-            raise DataError(
-                f"unexpected SDG2000X power-on output state for {command}: "
-                f"{power_on_state!r}"
-            )
-    return state
+    power_on_state = parameters.get("POWERON_STATE")
+    if power_on_state is not None:
+        power_on_state = power_on_state.upper()
+        _parse_on_off(
+            power_on_state,
+            command=command,
+            field_name="power-on output state",
+        )
+    return _OutputStatus(
+        state=state,
+        load_ohm=load_ohm,
+        polarity="NORMAL" if polarity == "NOR" else "INVERTED",
+        power_on_state=power_on_state,
+    )
+
+
+def _parse_named_state(
+    response: str,
+    *,
+    channel: int,
+    header: str,
+    state_name: str,
+) -> bool:
+    command = f"C{channel}:{header}?"
+    _, body = _response_body(response, channel=channel, header=header)
+    values = _tokens(body, command=command)
+    matches = [index for index, value in enumerate(values) if value.upper() == state_name]
+    if len(matches) != 1 or matches[0] + 1 >= len(values):
+        raise DataError(
+            f"SDG2000X response for {command} must contain one complete {state_name} field"
+        )
+    return _parse_on_off(
+        values[matches[0] + 1],
+        command=command,
+        field_name=state_name.lower(),
+    )
+
+
+def _parse_combine_state(response: str, *, channel: int) -> bool:
+    command = f"C{channel}:CMBN?"
+    _, body = _response_body(response, channel=channel, header="CMBN")
+    values = _tokens(body, command=command)
+    if len(values) != 1:
+        raise DataError(f"unexpected SDG2000X combine response for {command}")
+    return _parse_on_off(values[0], command=command, field_name="combine state")
+
+
+def _parse_coupling_states(response: str) -> tuple[bool, bool, bool, bool]:
+    command = "COUP?"
+    value = _response_text(response, command=command)
+    match = re.fullmatch(r"COUP\s+(.+)", value, flags=re.IGNORECASE)
+    if match is None:
+        raise DataError(f"unexpected SDG2000X response header for {command}")
+    parameters = _parameter_pairs(
+        _tokens(match.group(1), command=command),
+        command=command,
+        known=frozenset(
+            {
+                "TRACE",
+                "STATE",
+                "BSCH",
+                "FCOUP",
+                "FDEV",
+                "FRAT",
+                "PCOUP",
+                "PDEV",
+                "PRAT",
+                "ACOUP",
+                "ADEV",
+            }
+        ),
+    )
+    required = ("TRACE", "FCOUP", "PCOUP", "ACOUP")
+    if not set(required).issubset(parameters):
+        raise DataError(
+            "SDG2000X response for COUP? must include TRACE, FCOUP, PCOUP, and ACOUP"
+        )
+    return tuple(
+        _parse_on_off(
+            parameters[name],
+            command=command,
+            field_name=name.lower(),
+        )
+        for name in required
+    )  # type: ignore[return-value]
 
 
 def _parse_basic_wave(response: str, *, channel: int) -> tuple[str, _BasicWaveStatus]:
@@ -381,25 +489,24 @@ class SDG2000XSource:
             self._identity_model = parse_idn_model(response)
             return response
 
-    def get_status(self, channel: int) -> SourceStatus:
-        _validate_channel(channel)
-        with self._io_lock:
-            self._ensure_identity()
-            output = _parse_output(
-                self.transport.query(f"C{channel}:OUTP?"),
+    def _read_status(self, channel: int) -> tuple[SourceStatus, _OutputStatus]:
+        self._ensure_identity()
+        output = _parse_output(
+            self.transport.query(f"C{channel}:OUTP?"),
+            channel=channel,
+        )
+        apply_raw, basic = _parse_basic_wave(
+            self.transport.query(f"C{channel}:BSWV?"),
+            channel=channel,
+        )
+        sweep_enabled = _parse_sweep_state(
+            self.transport.query(f"C{channel}:SWWV?"),
+            channel=channel,
+        )
+        return (
+            SourceStatus(
                 channel=channel,
-            )
-            apply_raw, basic = _parse_basic_wave(
-                self.transport.query(f"C{channel}:BSWV?"),
-                channel=channel,
-            )
-            sweep_enabled = _parse_sweep_state(
-                self.transport.query(f"C{channel}:SWWV?"),
-                channel=channel,
-            )
-            return SourceStatus(
-                channel=channel,
-                output=output,
+                output=output.state,
                 function=basic.function,
                 frequency_hz=basic.frequency_hz,
                 amplitude=basic.amplitude,
@@ -410,7 +517,56 @@ class SDG2000XSource:
                 sweep_enabled=sweep_enabled,
                 apply_raw=apply_raw,
                 square_duty_cycle_percent=basic.square_duty_cycle_percent,
-            )
+            ),
+            output,
+        )
+
+    def _read_output_safety_context(self, channel: int) -> _OutputSafetyContext:
+        modulation_enabled = _parse_named_state(
+            self.transport.query(f"C{channel}:MDWV?"),
+            channel=channel,
+            header="MDWV",
+            state_name="STATE",
+        )
+        burst_enabled = _parse_named_state(
+            self.transport.query(f"C{channel}:BTWV?"),
+            channel=channel,
+            header="BTWV",
+            state_name="STATE",
+        )
+        harmonic_enabled = _parse_named_state(
+            self.transport.query(f"C{channel}:HARM?"),
+            channel=channel,
+            header="HARM",
+            state_name="HARMSTATE",
+        )
+        combine_enabled = _parse_combine_state(
+            self.transport.query(f"C{channel}:CMBN?"),
+            channel=channel,
+        )
+        noise_add_enabled = _parse_named_state(
+            self.transport.query(f"C{channel}:NOISE_ADD?"),
+            channel=channel,
+            header="NOISE_ADD",
+            state_name="STATE",
+        )
+        coupling = _parse_coupling_states(self.transport.query("COUP?"))
+        return _OutputSafetyContext(
+            modulation_enabled=modulation_enabled,
+            burst_enabled=burst_enabled,
+            harmonic_enabled=harmonic_enabled,
+            combine_enabled=combine_enabled,
+            noise_add_enabled=noise_add_enabled,
+            coupling_trace_enabled=coupling[0],
+            coupling_frequency_enabled=coupling[1],
+            coupling_phase_enabled=coupling[2],
+            coupling_amplitude_enabled=coupling[3],
+        )
+
+    def get_status(self, channel: int) -> SourceStatus:
+        _validate_channel(channel)
+        with self._io_lock:
+            return self._read_status(channel)[0]
 
     @property
     def output_writes_blocked(self) -> bool:
@@ -418,13 +574,41 @@ class SDG2000XSource:
             return self._output_writes_blocked
 
     @staticmethod
-    def _validate_output_enable_snapshot(status: SourceStatus) -> None:
+    def _validate_output_enable_snapshot(
+        status: SourceStatus,
+        output: _OutputStatus,
+        context: _OutputSafetyContext,
+    ) -> None:
         if status.frequency_mode != "FIX" or status.sweep_enabled != "OFF":
             raise DataError("SDG2000X output enable requires fixed-frequency mode with sweep OFF")
         if status.amplitude is None or status.amplitude_unit != "VPP":
             raise DataError("SDG2000X output enable requires a verified Vpp amplitude")
         if status.offset_v is None:
             raise DataError("SDG2000X output enable requires a verified voltage offset")
+        if output.load_ohm is not None:
+            raise DataError(
+                "SDG2000X output enable requires a verified high-impedance load setting"
+            )
+        active = tuple(
+            name
+            for name, enabled in (
+                ("modulation", context.modulation_enabled),
+                ("burst", context.burst_enabled),
+                ("harmonic", context.harmonic_enabled),
+                ("combine", context.combine_enabled),
+                ("noise-add", context.noise_add_enabled),
+                ("coupling-trace", context.coupling_trace_enabled),
+                ("frequency-coupling", context.coupling_frequency_enabled),
+                ("phase-coupling", context.coupling_phase_enabled),
+                ("amplitude-coupling", context.coupling_amplitude_enabled),
+            )
+            if enabled
+        )
+        if active:
+            raise DataError(
+                "SDG2000X output enable requires advanced signal modes OFF; active modes: "
+                + ", ".join(active)
+            )
 
     def _force_output_off(self, channel: int) -> None:
         self.transport.write(f"C{channel}:OUTP OFF")
@@ -432,7 +616,7 @@ class SDG2000XSource:
             self.transport.query(f"C{channel}:OUTP?"),
             channel=channel,
         )
-        if output != "OFF":
+        if output.state != "OFF":
             raise InstrumentError("SDG2000X output failed to converge to OFF")
 
     def set_output(
@@ -458,22 +642,39 @@ class SDG2000XSource:
                 self._force_output_off(channel)
                 return self.get_status(channel)
 
-            previous = self.get_status(channel)
+            previous, previous_output = self._read_status(channel)
             target = "ON" if enabled else "OFF"
+            previous_context = None
+            if enabled:
+                previous_context = self._read_output_safety_context(channel)
+                self._validate_output_enable_snapshot(
+                    previous,
+                    previous_output,
+                    previous_context,
+                )
             if previous.output == target:
                 return previous
-            if enabled:
-                self._validate_output_enable_snapshot(previous)
 
             try:
                 self.transport.write(f"C{channel}:OUTP {target}")
-                status = self.get_status(channel)
+                status, output = self._read_status(channel)
                 if status.output != target:
                     raise InstrumentError("SDG2000X output write readback mismatch")
                 if replace(status, output=previous.output) != previous:
                     raise InstrumentError(
                         "SDG2000X output transaction changed non-output channel state"
                     )
+                if replace(output, state=previous_output.state) != previous_output:
+                    raise InstrumentError(
+                        "SDG2000X output transaction changed load, polarity, or power-on state"
+                    )
+                if enabled:
+                    context = self._read_output_safety_context(channel)
+                    self._validate_output_enable_snapshot(status, output, context)
+                    if context != previous_context:
+                        raise InstrumentError(
+                            "SDG2000X output transaction changed advanced signal state"
+                        )
                 return status
             except Exception as exc:
                 self._output_writes_blocked = True
