@@ -89,3 +89,4 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [Source V2 capability, state, and composite-output safety RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY_EN.md)
 - [SDG2000X harmonic protocol and spectrum acceptance](doc/SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [SDG2000X modulation protocol and waveform acceptance](doc/SDG2000X_MODULATION_ACCEPTANCE_EN.md)
+- [SDG2000X sweep protocol and waveform acceptance](doc/SDG2000X_SWEEP_ACCEPTANCE_EN.md)

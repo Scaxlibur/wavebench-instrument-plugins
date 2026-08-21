@@ -20,7 +20,8 @@
 | 方波占空比 | `source.set_square_duty_cycle` | 20%/80% 在 SDG2122X CH2 实测高电平占比 0.200/0.800 | 补充频率相关点、CH1 和其它型号 |
 | 谐波 | 无损 capability 暂缺 | SDG2122X H2–H16 槽位通过；H2/H3 幅度、H2 相位和 ALL/EVEN/ODD 通过 A4 频谱 | 采用 Source V2 变长/selected-only 模型后再声明 capability |
 | 调制 | 无损 capability 暂缺 | SDG2122X 内部 AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK 均通过协议与 A4 波形 | Source V2 支持关闭态缺省与厂商范围后再声明；外部源需接线 |
-| Sweep 与 Burst | 无 | 未开放 | 每个子域单独形成严格协议证据，再评估写 capability |
+| Sweep | 无损 capability 暂缺 | SDG2122X LINE/LOG/STEP、UP/DOWN/UP_DOWN 与 INT/MAN 通过协议和 A4 波形；EXT 仅回读 | Source V2 支持字段缺省后再声明；补外部触发线 |
+| Burst | 无 | 未开放 | 建立严格协议与周期数/包络证据，再评估写 capability |
 | 任意波形 | 无 | 默认拒绝 | 明确数据格式、易失内容、副作用、大小限制和恢复边界 |
 | Counter | 无 | 未开放 | 先建立不改变计数器状态的严格只读 profile |
 

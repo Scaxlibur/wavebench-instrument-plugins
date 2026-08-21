@@ -20,7 +20,8 @@ The current release exposes all five basic Source write capabilities in the core
 | Square-wave duty cycle | `source.set_square_duty_cycle` | SDG2122X CH2 20%/80% writes measured high fractions of 0.200/0.800 | Add frequency-dependent points, CH1, and other models |
 | Harmonics | No lossless capability yet | SDG2122X H2–H16 slots pass; H2/H3 amplitude, H2 phase, and ALL/EVEN/ODD pass A4 spectrum tests | Declare after a variable/selected-only Source V2 model exists |
 | Modulation | No lossless capability yet | SDG2122X internal AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK pass protocol and A4 waveform tests | Declare after Source V2 supports disabled-state absence and vendor ranges; wire external sources |
-| Sweep and burst | None | Disabled | Establish strict protocol evidence per domain before evaluating writes |
+| Sweep | No lossless capability yet | SDG2122X LINE/LOG/STEP, UP/DOWN/UP_DOWN, and INT/MAN pass protocol and A4 waveform tests; EXT is readback-only | Declare after Source V2 supports absent fields; wire external trigger |
+| Burst | None | Disabled | Establish strict protocol plus cycle/envelope evidence before evaluating writes |
 | Arbitrary waveforms | None | Denied by default | Define data format, volatile side effects, size limits, and restoration boundary |
 | Counter | None | Disabled | First establish a strict profile that does not change counter state |
 
