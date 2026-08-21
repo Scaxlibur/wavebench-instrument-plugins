@@ -176,6 +176,22 @@ def test_get_status_parses_ch1_sine_without_writes() -> None:
     assert transport.writes == []
 
 
+def test_get_status_accepts_verified_sdg2122x_power_on_output_state() -> None:
+    transport = FakeTransport(
+        responses=_status_responses(
+            channel=1,
+            output="C1:OUTP OFF,LOAD,HZ,POWERON_STATE,OFF,PLRT,NOR",
+            basic="C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,1V,OFST,0V,PHSE,0",
+            sweep="C1:SWWV STATE,OFF",
+        )
+    )
+
+    status = SDG2000XSource(transport).get_status(1)
+
+    assert status.output == "OFF"
+    assert transport.writes == []
+
+
 def test_get_status_parses_ch2_square_units_and_enabled_sweep_without_writes() -> None:
     basic = (
         "C2:BSWV WVTP,SQUARE,FRQ,2.5KHZ,PERI,0.0004S,AMP,500MVPP,"
@@ -269,6 +285,7 @@ def test_get_status_rejects_invalid_channels_before_io(channel: object) -> None:
         "C1:OUTP ON,LOAD,HZ,LOAD,50,PLRT,NOR",
         "C1:OUTP ON,LOAD,10,PLRT,NOR",
         "C1:OUTP ON,LOAD,HZ,PLRT,UNKNOWN",
+        "C1:OUTP ON,LOAD,HZ,POWERON_STATE,UNKNOWN,PLRT,NOR",
         "C1:OUTP ON,LOAD,HZ,PLRT,NOR,EXTRA,1",
     ],
 )

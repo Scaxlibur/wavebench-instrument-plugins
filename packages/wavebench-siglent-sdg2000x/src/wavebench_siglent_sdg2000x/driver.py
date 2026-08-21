@@ -213,9 +213,9 @@ def _parse_output(response: str, *, channel: int) -> str:
     parameters = _parameter_pairs(
         values[1:],
         command=command,
-        known=frozenset({"LOAD", "PLRT"}),
+        known=frozenset({"LOAD", "PLRT", "POWERON_STATE"}),
     )
-    if set(parameters) != {"LOAD", "PLRT"}:
+    if not {"LOAD", "PLRT"}.issubset(parameters):
         raise DataError(f"SDG2000X response for {command} must include LOAD and PLRT")
 
     load = parameters["LOAD"].strip().upper().replace(" ", "")
@@ -229,6 +229,13 @@ def _parse_output(response: str, *, channel: int) -> str:
     polarity = parameters["PLRT"].upper()
     if polarity not in {"NOR", "INVT"}:
         raise DataError(f"unexpected SDG2000X output polarity for {command}: {polarity!r}")
+    if "POWERON_STATE" in parameters:
+        power_on_state = parameters["POWERON_STATE"].upper()
+        if power_on_state not in {"ON", "OFF"}:
+            raise DataError(
+                f"unexpected SDG2000X power-on output state for {command}: "
+                f"{power_on_state!r}"
+            )
     return state
 
 
