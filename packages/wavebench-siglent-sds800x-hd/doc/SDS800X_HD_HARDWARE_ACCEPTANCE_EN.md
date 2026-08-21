@@ -142,19 +142,64 @@ The managed path through the real descriptor and
 `triggered_single=true` and completed channels `[1, 2]`; the temporary waveform package was
 removed after acceptance and did not enter the repository.
 
+## Scope R1.3 capability acceptance
+
+On 2026-08-21, WaveBench `master@6cd2eb5` / `0.8.23` exercised screenshot and acquisition control
+through the production `0.6.0` descriptor over TCPIP/VXI-11. DG4202 CH1 remained ON, SIN,
+`1 kHz`, `5 Vpp`, `0 V` offset, FIX, and sweep OFF; the harness issued zero source writes.
+
+### Screenshot
+
+- `scope.screenshot_v2` completed through the core `query_binary()` MESSAGE/EOM path.
+- Normal and inverted output were both `1024×600` PNGs. Canonical PNG sizes in the final run
+  were `50360` and `52602` bytes; size varies with display content and is not a device constant.
+- Exactly one `0A` content-trailing byte followed IEND and remained charged to the binary budget.
+  Only the canonical PNG entered the public model.
+- After a real MESSAGE read, the harness injected an application-layer `DataError`. The next
+  `scope.acquisition_run_state` query succeeded and the session remained `healthy`.
+- The command changes no known persistent display state, so the profile uses
+  `changed_fields=()` rather than inventing an unreadable menu/color baseline.
+
+### Acquisition control
+
+- AUTO and NORMAL continuous start both read back `ARM`; subsequent STOP operations read back a
+  stopped phase.
+- After establishing acquisition count `1`, selecting SINGLE reset it to `0`, and the completed
+  acquisition reported `1`. Count remains diagnostic and never proves completion by itself.
+- The public SINGLE path observed `ready/acquiring/.../stopped` and used `state_transition` as its
+  only completion proof. It did not use `*OPC?`.
+- The harness injected invalid postconditions after real SINGLE and AUTO-start writes. Core cleanup
+  performed STOP, acquisition/trigger restoration, and fresh readback; both cleanup artifacts were
+  `verified`, and the following independent query succeeded.
+- Hardware showed a short STOP settling interval after trigger-mode restoration. The driver bounds
+  cleanup verification to at most 13 state queries followed by three baseline-token queries; it
+  remains fail-closed beyond the 16-step limit.
+
+### Signal and final restoration
+
+The legacy waveform path in the same run returned `100000` points on both CH1 and CH2. Both FFT
+peaks were `999.999988 Hz`; `1 kHz` sine-fit Vpp was `5.02080 V` and `5.01779 V`; cross-channel
+correlation was `0.9999122`. Raw min/max remains diagnostic because isolated spikes can distort it.
+
+Final readback confirmed restoration of acquisition/trigger tokens, running/stopped class, memory
+management and depth, CH1/CH2 switches, and all six waveform-transfer fields. Resources, serials,
+raw screenshots, raw waveforms, and complete command logs were not retained.
+
 ## Remaining gates
 
 - USBTMC and additional SDS800X HD models remain pending and are intentionally outside this run.
 - Sequence waveform parsing remains unsupported; current evidence covers non-sequence reads and
   safe rejection while sequence is ON.
+- `scope.fetch_trace` remains undeclared because the core `8388608`-point ceiling cannot represent
+  the accepted SDS `10M` complete record.
 
-## Read-only probes for unexposed capabilities
+## Initial read-only probes for then-unexposed capabilities
 
 - The screenshot query returned `43628` bytes. It began with the PNG signature rather than `#`;
   IEND completed at byte `43627`, followed by one trailing byte. This confirms a non-IEEE raw
   response. The probe retained no image content. The core transport and screenshot menu semantics
-  were insufficient at the time. WaveBench `0.8.23` now provides the contract, but the capability
-  remains disabled until the new backend path passes hardware acceptance.
+  were insufficient at the time. The `0.8.23` MESSAGE/EOM acceptance above supersedes this
+  historical observation, and the screenshot capability is now exposed.
 - `FUNCtion1?` through `FUNCtion4?` all returned OFF. No math function was enabled or changed, and
   this state cannot construct `ScopeDerivedWaveformMetadata` or `ScopeFftStatus`; math and FFT
   capabilities remain disabled.

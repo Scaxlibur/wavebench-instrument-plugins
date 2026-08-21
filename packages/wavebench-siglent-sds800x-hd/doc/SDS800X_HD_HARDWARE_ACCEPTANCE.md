@@ -164,17 +164,63 @@ CH1、CH2 各 `100000` 点。两通道原始 Vpp 为 `5.0354 V` 和 `5.0375 V`�
 生成临时 metadata，记录 `triggered_single=true` 和完成通道 `[1, 2]`。临时波形包在验收结束
 后删除，没有进入仓库。
 
+## Scope R1.3 新能力验收
+
+2026-08-21 使用 WaveBench `master@6cd2eb5` / `0.8.23` 公共合同，对正式
+`0.6.0` descriptor 的 screenshot 和 acquisition control 进行 TCPIP/VXI-11 验收。
+DG4202 CH1 仍为 ON、SIN、`1 kHz`、`5 Vpp`、`0 V` offset、FIX、sweep OFF；
+验收脚本只查询信号源，写入次数为 `0`。
+
+### Screenshot
+
+- `scope.screenshot_v2` 通过核心 `query_binary()` 的 MESSAGE/EOM 路径读取成功。
+- 普通和反色输出均为 `1024×600` PNG；本轮规范 PNG 长度分别为
+  `50360` 和 `52602` bytes。PNG 长度会随屏幕内容变化，不作为固定设备常量。
+- IEND 后为精确一个 `0A` content trailing；它仍计入 binary budget，driver
+  仅将规范 PNG 交给公共模型。
+- 在完成真实 MESSAGE 读取后注入应用层 `DataError`，随后的
+  `scope.acquisition_run_state` 查询成功，session 保持 `healthy`。
+- 截图命令不修改已知持久显示状态，因此 profile 使用
+  `changed_fields=()`，不伪造无法回读的 menu/color baseline。
+
+### Acquisition control
+
+- AUTO 和 NORMAL 连续启动均回读为 `ARM`，后续 STOP 回读为已停止。
+- 建立非零 acquisition count `1` 后，切换 SINGLE 将 count 复位为 `0`；
+  完成后 count 为 `1`。count 仍只作诊断，不单独证明采集完成。
+- SINGLE 公共路径观察到 `ready/acquiring/.../stopped`，以
+  `state_transition` 作为唯一 completion proof，不使用 `*OPC?`。
+- 在真实 SINGLE 和 AUTO start 写入完成后，验收脚本分别注入无效
+  postcondition。核心均执行 STOP、acquisition/trigger baseline 恢复和 fresh
+  readback，两次 cleanup 均为 `verified`，随后的独立查询成功。
+- 实机证明 trigger mode 写回后 STOP 状态需要短暂收敛。driver 在有界
+  verification 阶段最多轮询 `13` 次状态，再查询 `3` 个 baseline token；
+  超出 `16` 步仍失败关闭。
+
+### 信号与最终恢复
+
+同一轮旧 waveform 路径交叉验证返回 CH1/CH2 各 `100000` 点，FFT 主峰均为
+`999.999988 Hz`，`1 kHz` 正弦拟合 Vpp 为 `5.02080 V` 和 `5.01779 V`，相关
+系数为 `0.9999122`。原始 min/max 会受少量尖峰影响，只作诊断，不作幅值验收门限。
+
+验收结束后回读确认 acquisition/trigger token、运行/停止类别、内存管理与
+深度、CH1/CH2 开关和六项 waveform transfer 字段均恢复到本轮初始值。
+报告未保存地址、序列号、原始截图、原始波形或完整命令日志。
+
 ## 剩余退出门
 
 - USBTMC 和其他 SDS800X HD 型号仍待补；本轮按计划不扩展这些实机范围。
 - sequence 波形解析仍未实现；当前证据只证明非 sequence 读取和 sequence ON 下的安全拒绝。
+- `scope.fetch_trace` 仍未声明；核心 `8388608` 点上限无法表示已验收的
+  SDS `10M` 完整记录。
 
-## 未公开能力的只读探测
+## 首轮未公开能力的只读探测
 
 - 截图查询返回 `43628` 字节，首 8 字节为 PNG signature，不以 `#` 开头。解析到 IEND 时为
   `43627` 字节，随后还有 1 个尾字节。该结果确认响应不是 IEEE definite block；探测未保存
   图片内容。当时核心 transport 和 screenshot 菜单参数不足；核心 `0.8.23` 已补接口，但本
-  capability 在完成新 backend 实机验收前仍保持关闭。
+  该历史观察已由上文 `0.8.23` MESSAGE/EOM 验收取代，截图 capability
+  现已公开。
 - `FUNCtion1?` 至 `FUNCtion4?` 均返回 OFF。未开启或修改数学函数；现有状态不足以构造核心
   `ScopeDerivedWaveformMetadata` 或 `ScopeFftStatus`，math/FFT capability 保持关闭。
 - 未发送任何未文档化错误队列命令。`scope.errors` 保持未声明。

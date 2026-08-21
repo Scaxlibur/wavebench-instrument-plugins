@@ -2,9 +2,9 @@
 
 [English](README_EN.md)
 
-该目录用于放置独立的 WaveBench 仪器插件源码包。当前可安装包为 `wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800`、已完成 SocketIO 数据路径实机验收的 `wavebench-rohde-schwarz-rtm2000`、M3 query-only 的 `wavebench-shengpu-sp3000a`，以及已完成 SDS804X HD 多块、双通道采集和只读测量统计验收的 `wavebench-siglent-sds800x-hd` `0.5.0` 驱动。前五个包是主包预装驱动的可选外置发行版；后续也按仪器或紧密相关系列逐包维护，但不以移除预装驱动为目标，也不在这里冻结第二套 manifest、安装器或 catalog 协议。
+该目录用于放置独立的 WaveBench 仪器插件源码包。当前可安装包为 `wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800`、已完成 SocketIO 数据路径实机验收的 `wavebench-rohde-schwarz-rtm2000`、M3 query-only 的 `wavebench-shengpu-sp3000a`，以及已完成 SDS804X HD 波形、PNG 截图和独立采集控制验收的 `wavebench-siglent-sds800x-hd` `0.6.0` 驱动。前五个包是主包预装驱动的可选外置发行版；后续也按仪器或紧密相关系列逐包维护，但不以移除预装驱动为目标，也不在这里冻结第二套 manifest、安装器或 catalog 协议。
 
-这些包当前对齐 WaveBench `v0.8.0` release，并统一声明 `wavebench>=0.8,<0.9`。它们不能与 `v0.7.0` 配套运行，也不会把未来 `0.9` 自动视为兼容版本。
+这些包分别声明各自的 WaveBench `0.8.x` 最低版本；SDS800X HD `0.6.0` 要求 `wavebench>=0.8.23,<0.9`。它们不能与 `v0.7.0` 配套运行，也不会把未来 `0.9` 自动视为兼容版本。
 
 每个正式包至少应具备：
 

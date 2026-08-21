@@ -2,17 +2,17 @@
 
 [English](README_EN.md)
 
-面向 SIGLENT SDS800X HD 系列示波器的外置 WaveBench 驱动包。`0.5.0` 提供严格身份、模拟通道耦合、`DMAX` 已停止记录读取、单次采集，以及已配置测量槽位的只读统计查询。SDS804X HD 的单块、多块、单通道与双通道单次采集、sequence 拒绝和测量统计均已完成实机验收。
+面向 SIGLENT SDS800X HD 系列示波器的外置 WaveBench 驱动包。`0.6.0` 提供严格身份、模拟通道耦合、`DMAX` 波形读取与单次采集、只读测量统计、PNG 截图，以及独立采集运行状态与控制。当前公开能力均已在 SDS804X HD TCPIP/VXI-11 路径完成受控实机验收。
 
 ## 当前状态
 
-- Distribution：`wavebench-siglent-sds800x-hd` `0.5.0`
+- Distribution：`wavebench-siglent-sds800x-hd` `0.6.0`
 - Canonical driver ID：`siglent.sds800x-hd`
 - 仪器类型：`scope`
 - Backend：WaveBench 核心 `pyvisa` transport
 - Resource scheme：`tcpip`、`usb`
-- 已声明 capability：`scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`、`scope.measurement_statistics`
-- WaveBench：`>=0.8,<0.9`
+- 已声明 capability：`scope.idn`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`、`scope.measurement_statistics`、`scope.screenshot_profile`、`scope.screenshot_v2`、`scope.acquisition_run_state`、`scope.acquisition_control`
+- WaveBench：`>=0.8.23,<0.9`
 
 descriptor 导入不执行仪器 I/O；factory 只通过 `DriverContext.open_transport()` 获取一个核心 transport。driver 每次显式 `idn()` 都发送 `*IDN?` 并严格核对四字段、厂商、支持型号和 14 字符 ASCII 序列号；同一 operation 内复用已解析型号。读取 coupling 前按型号限制二通道或四通道范围，再发送 `:CHANnel<n>:COUPling?`；只接受 `AC`、`DC` 或 `GND`。波形读取使用核心 `query_bin_block()`，返回核心 `WaveformData` / `WaveformHeader`。`close()` 幂等释放 transport。
 
@@ -34,6 +34,8 @@ descriptor 导入不执行仪器 I/O；factory 只通过 `DriverContext.open_tra
 - `scope.fetch_waveform`：读取已经停止的非 sequence 模拟通道记录；当前只支持 `points="dmax"`。
 - `scope.capture_waveform` / `scope.capture_waveforms`：执行一次 SINGLE acquisition，轮询到 Stop 后读取一个或多个模拟通道；当前只支持 `points="dmax"`。
 - `scope.measurement_statistics`：只读查询已经配置并启用的高级测量槽位；不会创建槽位、开启统计或重置历史。
+- `scope.screenshot_profile` / `scope.screenshot_v2`：通过核心 MESSAGE binary 边界读取 `1024×600` PNG，支持普通和反色输出；严格验证 IEND 后的单个 `0A` content trailing，不保存图片。
+- `scope.acquisition_run_state` / `scope.acquisition_control`：读取触发运行阶段，支持 AUTO/NORMAL 连续启动、STOP 和 SINGLE；SINGLE 完成只使用状态迁移证明，失败时恢复 acquisition/trigger baseline 并 fresh readback。
 
 直接调用 `scope.channel_coupling` 时会先读取身份，以免在二通道型号上向不存在的 CH3 或 CH4 发送命令。WaveBench `status` fallback 在同一会话中先调用 `idn()`，因此不会重复身份查询。
 
@@ -64,8 +66,8 @@ points = "dmax"
 
 - `scope.errors`
 - `scope.autoscale`
-- `scope.screenshot`
-- 独立 RUN/STOP/SINGLE 控制、其他状态、测量配置、数学、数字通道和历史帧能力
+- `scope.trace_metadata` / `scope.fetch_trace`
+- 测量配置、数学/FFT、数字通道和历史帧能力
 
 编程手册中的其他命令只有在完成格式审计、FakeTransport 测试和必要的受控实机验收后，才会进入 driver 和 descriptor。当前没有 raw SCPI 入口，也不推测其他 SIGLENT 系列的协议可以直接复用。`scope.fetch_waveform` 是读取现有记录，不等同于 `capture_waveform`。
 
@@ -86,10 +88,7 @@ doc/vendor-local/
 1. 使用其他 SDS800X HD 型号获取脱敏 `*IDN?` 样本，复核身份格式和二通道、四通道 coupling 返回。
 2. 后续取得 USB 条件时，复核 binary block、WORD 对齐、时基和 transfer 状态恢复；TCPIP 真实多块已验收。
 3. 仅在取得明确协议或实机证据后评估 `DEF/MAX` 点数模式；不得猜测关键字。
-4. 核心 `0.8.23` 已实现
-   [Scope R1.3 公共合同](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)。
-   截图、独立采集控制和 typed trace 仅在正式 driver、descriptor profile 和实机恢复证据完成后
-   opt-in；math/FFT 仍等待后续 trace 扩展合同。不通过私有 raw SCPI 绕过核心。
+4. 截图和独立采集控制已按核心 `0.8.23` Scope R1.3 合同 opt-in；typed trace 受 `8388608` 点上限与现有 `10M` 记录的兼容性边界阻塞，math/FFT 等待后续通用扩展合同。不通过私有 raw SCPI 绕过核心。
 
 ## 许可证
 

@@ -1,24 +1,26 @@
 # SDS800X HD 的 Scope R1.3 Conformance 证据
 
-> 状态：核心 `0.8.23` 公共合同 conformance；SDS 正式 capability 尚未 opt-in
+> 状态：核心 `0.8.23` 公共合同 conformance；screenshot 与 acquisition 已 opt-in
 >
 > 对齐核心：`master@6cd2eb5`，WaveBench `0.8.23`
 >
 > 对齐说明：[核心实施说明](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)
 
-本文记录 SDS800X HD 插件针对 Scope R1.3 公共合同的测试专用 adapter、fake backend 和脱敏
-实机观察。它不是正式 driver 迁移说明，不改变 descriptor、WaveBench 最低版本或现有执行路径。
+本文记录 SDS800X HD 插件针对 Scope R1.3 公共合同的正式 driver、stateful fake
+backend 和脱敏实机证据。`0.6.0` 已声明 screenshot 与 acquisition capability，
+并将 WaveBench 最低版本提高到 `0.8.23`。
 
 ## 证据分层
 
 | 层级 | 内容 | 可证明范围 |
 | --- | --- | --- |
 | 插件单元测试 | 现有 `FakeTransport`、waveform parser 和正式 driver 测试 | SDS 命令顺序、六项 transfer 恢复、多分块拼接、SINGLE/Stop 和 sequence 拒绝 |
-| R1.3 conformance | [`tests/conformance/`](../tests/conformance/) 中的测试专用 descriptor、adapter 和 stateful backend | 核心 typed baseline、phase、binary ledger、cleanup 和 completion proof 如何消费 SDS 映射 |
+| R1.3 conformance | [`tests/conformance/`](../tests/conformance/) 中的正式 descriptor/driver 与 stateful backend | 核心 typed baseline、phase、binary ledger、cleanup 和 completion proof 如何消费 SDS 映射 |
 | 脱敏实机观察 | [SDS804X HD TCPIP 脱敏清单](../tests/conformance/fixtures/sds804x_hd_tcpip_redacted.json) | 已观察的长度、状态、固件和恢复摘要；不证明尚未接通的 backend 合同 |
 
-R1.3 conformance 使用核心 `0.8.23` 的稳定 `ScopeExtensionService` 与公共 model。旧核心缺少
-R1.3 model 时会跳过该目录，因此未声明新 capability 的正式插件仍保持原行为。
+R1.3 conformance 使用核心 `0.8.23` 的稳定 `ScopeExtensionService` 与公共 model。
+正式 driver 已依赖这些类型，因此 package metadata 与 descriptor 都明确拒绝低于
+`0.8.23` 的核心，不再宣称 `0.8.22` 加载兼容。
 
 ## 运行方式
 
@@ -31,8 +33,8 @@ PYTHONPATH="${WAVEBENCH_CORE_ROOT}/src" \
   packages/wavebench-siglent-sds800x-hd/tests/conformance -q
 ```
 
-核心 `master@6cd2eb5` 下，SDS800X HD 全部测试为 `138 passed`，其中本目录
-`15 passed`。旧核心下只跳过 R1.3 conformance，不改变正式能力。
+核心 `master@6cd2eb5` 下，SDS800X HD 全部测试为 `142 passed`，其中本目录
+`19 passed`。本包要求 WaveBench `>=0.8.23,<0.9`，不在旧核心下运行。
 
 ## Transfer restore
 
@@ -71,14 +73,14 @@ CN11G 的 `:PRINt?` 直接接收图片格式和 NORMAL/INVerted 参数；当前�
 持久状态需要临时修改。SDS profile 因此声明 `changed_fields=()`，测试覆盖：
 
 - `MESSAGE` framing 的 raw response；
-- IEND 后精确一个 `00` content trailing；
+- IEND 后精确一个 `0A` content trailing；
 - content trailing 仍计入 `BinaryQueryResult.data` 和 binary budget；
 - driver 完整校验后只把规范 PNG 交给 `ScopeScreenshot`；
 - trailing 不匹配时失败，并保持零 restore/verify I/O。
 
 这证明 SDS 的 stateless screenshot 分支；该命令不修改已知持久状态，因此不需要虚构非空
-baseline。核心 A1 已包含其他 fixture 的有状态恢复证据。真实 SDS 截图的 EOM 边界仍须通过
-核心 `query_binary()` 在目标仪器上验收，才能声明本插件 capability。
+baseline。真实 SDS804X HD 已通过 PyVISA MESSAGE/EOM、普通/反色 `1024×600`
+PNG、`0A` content trailing 和「完成读取后注入应用层失败，下一查询仍同步」验收。
 
 ## Acquisition proof
 
@@ -92,16 +94,16 @@ SDS fixture 使用 `configure_then_arm` 和 `identity_semantics="unknown"`。有
 - count 增加但缺少 `counter_epoch`；
 - identity 变化但 profile 未证明 epoch 内唯一性。
 
-现有实机记录已经观察到 SINGLE query-back、Arm 到 Stop 和正数 count，但 count 仍不能单独
-证明完成。
+实机已验证 AUTO/NORMAL start、STOP、SINGLE 状态迁移，以及 SINGLE 和 start
+注入失败后的 `verified` cleanup。切换 SINGLE 会将非零 count 复位为 `0`，但 count
+仍不能单独证明完成。trigger mode 恢复后的 STOP 收敛使用最多 `16` 步 fresh
+verification，超出即失败关闭。
 
-## SDS 正式采用前仍需完成
+## 仍未采用的 R1.3 范围
 
-- 目标 TCPIP/VXI-11 resource 的 MESSAGE EOM、长 payload 和下一次查询实机验证；
 - SDS 八项 typed transfer baseline 的完整实机 fresh readback；
-- acquisition 失败 cleanup、STOP、trigger/acquisition 设置恢复和 fresh readback 实机验证；
-- 正式 driver 方法、descriptor profile、capability 和 `wavebench>=0.8.23,<0.9` 版本门；
-- 新能力启用后的 package check、CLI artifact 和旧 capability 回归。
+- `scope.trace_metadata` / `scope.fetch_trace` 正式 driver 与 descriptor profile；
+- CN11G 未记录错误队列查询，因此 `scope.error_drain_v1` 保持未声明。
 
 核心 R1.3 把 `SCOPE_TRACE_MAX_POINTS` 固定为 `8388608`。SDS804X HD 已验收的 `10M` 记录
 超出该模型上限，只能继续由现有 `scope.fetch_waveform` 路径读取；在读取策略另行裁决前，
