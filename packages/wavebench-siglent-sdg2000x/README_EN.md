@@ -93,3 +93,4 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X Burst protocol and waveform acceptance](doc/SDG2000X_BURST_ACCEPTANCE_EN.md)
 - [SDG2000X Pulse protocol and waveform acceptance](doc/SDG2000X_PULSE_ACCEPTANCE_EN.md)
 - [SDG2000X read-only arbitrary probe acceptance](doc/SDG2000X_ARBITRARY_PROBE_ACCEPTANCE_EN.md)
+- [SDG2000X full built-in arbitrary catalog acceptance](doc/SDG2000X_BUILTIN_ARB_ACCEPTANCE_EN.md)
