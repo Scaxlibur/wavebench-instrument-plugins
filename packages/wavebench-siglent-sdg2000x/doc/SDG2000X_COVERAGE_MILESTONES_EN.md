@@ -38,6 +38,7 @@
 - [x] Expose `source.set_amplitude_vpp` separately with a 2 mVpp through 10 Vpp range and a joint offset-envelope check.
 - [x] Expose `source.set_function` separately; allow live switching among four bounded periodic waves and require output OFF for Noise/DC.
 - [x] Expose `source.set_square_duty_cycle` separately for FIX-mode square waves from 0.001% through 99.999%; reject clamped values through independent readback.
+- [x] Complete SDG2122X CH2 loops for frequency, amplitude, four periodic functions, and 20%/80% square duty; restore Sine / 1 kHz / 4 Vpp and leave both outputs OFF.
 
 ## M4: Advanced command domains
 

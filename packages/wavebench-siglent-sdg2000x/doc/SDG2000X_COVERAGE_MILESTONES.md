@@ -38,6 +38,7 @@
 - [x] `source.set_amplitude_vpp` 已单独开放；限制为 2 mVpp 至 10 Vpp，并联合检查偏置包络。
 - [x] `source.set_function` 已单独开放；四种有界周期波允许实时切换，Noise/DC 只允许输出 OFF 配置。
 - [x] `source.set_square_duty_cycle` 已单独开放；只接受 FIX 模式方波和 0.001% 至 99.999%，钳位值由独立回读拒绝。
+- [x] `SDG2122X` CH2 已完成频率、幅度、四种周期波函数和 20%/80% 方波占空比闭环；最终恢复 Sine / 1 kHz / 4 Vpp 且两路 OFF。
 
 ## M4：高级命令域
 

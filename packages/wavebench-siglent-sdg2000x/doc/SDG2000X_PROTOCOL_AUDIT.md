@@ -58,6 +58,8 @@ E05C 的 Basic Wave Command 定义 `WVTP`、`FRQ`、`AMP` 与 `DUTY` 写入。�
 
 当前声明 `source.status`、四项基础配置写入与 `source.output`，均返回主仓库公开的 `wavebench.instruments.SourceStatus`。字段映射如下：
 
+Harmonic Command 仅在基础波形为 SINE 时可用。驱动因此采用状态依赖查询：非 SINE 快照不发送 `HARM?`；切回 SINE 时重新查询，以捕获可能重新生效的遗留谐波状态。该行为已由实机超时负向证据和故障测试确认。
+
 | `SourceStatus` 字段 | SDG2000X 来源 |
 | --- | --- |
 | `channel` | 已验证的请求通道 |

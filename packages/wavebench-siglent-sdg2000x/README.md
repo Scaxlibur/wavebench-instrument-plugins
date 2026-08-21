@@ -8,7 +8,7 @@
 
 版本 `0.7.0` 已覆盖主仓库现有基础 Source 写接口：`source.set_frequency`、`source.set_function`、`source.set_amplitude_vpp`、`source.set_square_duty_cycle` 与 `source.output`。方波占空比接受数据手册的 0.001% 至 99.999% 全局范围，并依靠独立回读拒绝当前频率下被仪器钳位的值。Noise/DC 只允许在输出 OFF 时配置，并仍由输出安全门禁拒绝开启。调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
 
-`SDG2122X` 固件 `2.01.01.39R7T2` 已完成身份、CH1/CH2 状态与 `source.output` 实机验收。`source.set_frequency` 另在 CH2 完成 2 kHz 输出 OFF 写入和 5 kHz 输出 ON 实时写入闭环，RTM2032 测得约 4.08 Vpp；验收结束后恢复 1 kHz，两路均为 OFF。`SDG2042X` 与 `SDG2082X` 按同一手册命令合同放行，但实机结论不从 `SDG2122X` 外推。
+`SDG2122X` 固件 `2.01.01.39R7T2` 已完成身份、CH1/CH2 状态与 `source.output` 实机验收。CH2 另完成频率、幅度、周期波函数和方波占空比闭环；最大实测 4.24 Vpp，最终恢复 Sine / 1 kHz / 4 Vpp 且两路 OFF。Noise/DC 仅完成 OFF 配置回读。`SDG2042X` 与 `SDG2082X` 按同一手册命令合同放行，但实机结论不从 `SDG2122X` 外推。
 
 ## 身份与兼容范围
 
@@ -29,7 +29,7 @@
 SDG_Series_Programming_Guide_E05C.pdf
 ```
 
-手册原文件不进入 Git 或发行包。公开的命令覆盖状态见 [SDG2000X 功能覆盖矩阵](doc/SDG2000X_COVERAGE_MATRIX.md)，分阶段开发门见 [SDG2000X 覆盖里程碑](doc/SDG2000X_COVERAGE_MILESTONES.md)，实机证据见 [SDG2000X 只读实机验收](doc/SDG2000X_READONLY_ACCEPTANCE.md)、[SDG2000X 输出控制实机验收](doc/SDG2000X_OUTPUT_ACCEPTANCE.md)与 [SDG2000X 频率写入实机验收](doc/SDG2000X_FREQUENCY_ACCEPTANCE.md)。
+手册原文件不进入 Git 或发行包。公开的命令覆盖状态见 [SDG2000X 功能覆盖矩阵](doc/SDG2000X_COVERAGE_MATRIX.md)，分阶段开发门见 [SDG2000X 覆盖里程碑](doc/SDG2000X_COVERAGE_MILESTONES.md)，实机证据见 [SDG2000X 只读实机验收](doc/SDG2000X_READONLY_ACCEPTANCE.md)、[SDG2000X 输出控制实机验收](doc/SDG2000X_OUTPUT_ACCEPTANCE.md)、[SDG2000X 频率写入实机验收](doc/SDG2000X_FREQUENCY_ACCEPTANCE.md)与 [SDG2000X 基础写入实机验收](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE.md)。
 
 ## 配置示例
 
@@ -85,3 +85,4 @@ python -m wavebench plugin package check packages/wavebench-siglent-sdg2000x
 - [SDG2000X 只读实机验收](doc/SDG2000X_READONLY_ACCEPTANCE.md)
 - [SDG2000X 输出控制实机验收](doc/SDG2000X_OUTPUT_ACCEPTANCE.md)
 - [SDG2000X 频率写入实机验收](doc/SDG2000X_FREQUENCY_ACCEPTANCE.md)
+- [SDG2000X 基础写入实机验收](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE.md)

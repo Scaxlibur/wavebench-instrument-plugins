@@ -58,6 +58,8 @@ An `SDG2122X` running firmware `2.01.01.39R7T2` returned `POWERON_STATE,ON|OFF` 
 
 The current descriptor declares `source.status`, all four basic configuration writes, and `source.output`; all return the public core model `wavebench.instruments.SourceStatus`.
 
+Harmonic Command is available only when the basic wave is SINE. The driver therefore uses state-dependent querying: non-SINE snapshots omit `HARM?`, while returning to SINE queries it again to detect a stored harmonic state that may become active. Hardware timeout evidence and injected-fault tests cover this behavior.
+
 | `SourceStatus` field | SDG2000X source |
 | --- | --- |
 | `channel` | Validated requested channel |
