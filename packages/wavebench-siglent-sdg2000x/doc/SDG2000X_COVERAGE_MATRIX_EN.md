@@ -18,6 +18,7 @@ The current release exposes all five basic Source write capabilities in the core
 | Fixed-wave amplitude | `source.set_amplitude_vpp` | All models pass offline; SDG2122X CH2 2/3 Vpp OFF/ON writes pass closed loop | Add CH1 and other-model hardware evidence |
 | Fixed-wave function | `source.set_function` | Four periodic functions pass live SDG2122X CH2 loops; Noise/DC have OFF-state readback only | Wait for a reusable Noise/DC safety model; test other models |
 | Square-wave duty cycle | `source.set_square_duty_cycle` | SDG2122X CH2 20%/80% writes measured high fractions of 0.200/0.800 | Add frequency-dependent points, CH1, and other models |
+| Harmonics | No lossless capability yet | SDG2122X H2–H16 slots pass; H2/H3 amplitude, H2 phase, and ALL/EVEN/ODD pass A4 spectrum tests | Declare after a variable/selected-only Source V2 model exists |
 | Modulation, sweep, and burst | None | Disabled | Build a separate read-only profile for each domain before evaluating writes |
 | Arbitrary waveforms | None | Denied by default | Define data format, volatile side effects, size limits, and restoration boundary |
 | Counter | None | Disabled | First establish a strict profile that does not change counter state |

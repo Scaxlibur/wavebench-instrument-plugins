@@ -42,6 +42,7 @@
 
 ## M4: Advanced command domains
 
+- [x] Complete SDG2122X A4 spectrum acceptance for H2–H16 slots, H2/H3 amplitude, H2 phase, and ALL/EVEN/ODD; do not declare a lossy legacy capability.
 - [ ] Treat modulation, sweep, burst, arbitrary-wave, and counter work as separate tasks rather than a raw-SCPI interface.
 - [ ] Document irreversible or volatile effects for triggers and arbitrary-wave upload.
 - [ ] Declare a capability only after its public WaveBench model and service consumer are defined.
