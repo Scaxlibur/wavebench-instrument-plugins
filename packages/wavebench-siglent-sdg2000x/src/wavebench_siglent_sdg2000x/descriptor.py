@@ -3,7 +3,12 @@ from __future__ import annotations
 from wavebench.instruments.api import InstrumentDescriptor
 from wavebench.instruments.source_extensions import (
     SOURCE_CONTRACT_VERSION,
+    ComponentAmplitudeKind,
+    HarmonicCompleteness,
     SourceAmplitudeUnit,
+    SourceActivationPredicate,
+    SourceActivationRule,
+    SourceAnchorField,
     SourceBasicCapabilityProfile,
     SourceConstraintApplicability,
     SourceDescriptorExtensions,
@@ -14,6 +19,7 @@ from wavebench.instruments.source_extensions import (
     SourceFeatureDirection,
     SourceFieldId,
     SourceFrequencyMode,
+    SourceHarmonicCapabilityProfile,
     SourceOutputCapabilityProfile,
     SourceQueryContract,
     SourceQueryEffect,
@@ -31,6 +37,10 @@ def _source_extensions() -> SourceDescriptorExtensions:
     """Describe the narrow, readback-proven Source V2 basic/output surface."""
 
     applicability = SourceConstraintApplicability()
+    harmonic_disable_applicability = SourceConstraintApplicability(
+        models=("SDG2122X",),
+        firmware_ids=("2.01.01.39R7T2",),
+    )
     basic_profile = SourceBasicCapabilityProfile(
         waveform_kinds=(
             SourceWaveformKind.PULSE,
@@ -80,10 +90,34 @@ def _source_extensions() -> SourceDescriptorExtensions:
         )
         for channel in _V2_CHANNELS
     )
+    harmonic_disable_profile = SourceHarmonicCapabilityProfile(
+        minimum_order=2,
+        maximum_order=16,
+        amplitude_kinds=(
+            ComponentAmplitudeKind.ABSOLUTE_VPP,
+            ComponentAmplitudeKind.RELATIVE_DB,
+        ),
+        completeness_modes=(HarmonicCompleteness.SELECTED_ONLY,),
+    )
+    harmonic_disable_features = tuple(
+        SourceFeatureCapability(
+            feature=SourceFeature.HARMONICS,
+            support=SupportState.SUPPORTED,
+            directions=(
+                SourceFeatureDirection.DISABLE,
+                SourceFeatureDirection.READ,
+            ),
+            scope=SourceFacetScope.CHANNEL,
+            channels=(channel,),
+            applicability=harmonic_disable_applicability,
+            profile=harmonic_disable_profile,
+        )
+        for channel in _V2_CHANNELS
+    )
     return SourceDescriptorExtensions(
         contract_version=SOURCE_CONTRACT_VERSION,
         topology=SourceTopologyContract(channels=_V2_CHANNELS),
-        features=(*basic_features, *output_features),
+        features=(*basic_features, *harmonic_disable_features, *output_features),
         query_contract=SourceQueryContract(
             anchor_fields=(
                 SourceFieldId.BASIC,
@@ -110,6 +144,24 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     required=True,
                 ),
                 SourceFacetQueryContract(
+                    feature=SourceFeature.HARMONICS,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.HARMONICS,),
+                    activation_any=(
+                        SourceActivationRule(
+                            predicates=(
+                                SourceActivationPredicate(
+                                    field=SourceAnchorField.WAVEFORM_KIND,
+                                    equals=SourceWaveformKind.SINE,
+                                ),
+                            ),
+                        ),
+                    ),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=1,
+                    required=True,
+                ),
+                SourceFacetQueryContract(
                     feature=SourceFeature.OUTPUT,
                     scope=SourceFacetScope.CHANNEL,
                     fields=(SourceFieldId.OUTPUT,),
@@ -119,7 +171,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     required=True,
                 ),
             ),
-            max_queries=42,
+            max_queries=44,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),
@@ -152,6 +204,7 @@ def descriptor() -> InstrumentDescriptor:
             "source.snapshot_v2",
             "source.basic_configure_v2",
             "source.output_v2",
+            "source.harmonics_disable_v2",
         ),
         idn_patterns=("Siglent Technologies,SDG2", "*IDN,SDG,SDG2"),
         backends=("pyvisa",),
@@ -160,7 +213,8 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "Strict identity and channel status for SIGLENT SDG2000X-series sources, "
-            "with Source V2 basic/output snapshots and core-owned fail-safe recovery."
+            "with Source V2 basic/output and SDG2122X Harmonic-disable snapshots, "
+            "plus core-owned fail-safe recovery."
         ),
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",

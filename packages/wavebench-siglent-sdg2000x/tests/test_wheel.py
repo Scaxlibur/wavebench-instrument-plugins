@@ -206,6 +206,7 @@ assert item.capabilities == (
     "source.snapshot_v2",
     "source.basic_configure_v2",
     "source.output_v2",
+    "source.harmonics_disable_v2",
 )
 validate_source_descriptor(item)
 validate_source_plugin_dependencies(

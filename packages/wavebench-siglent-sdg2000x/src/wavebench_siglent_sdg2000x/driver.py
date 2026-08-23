@@ -13,6 +13,8 @@ from wavebench.instruments.source_extensions import (
     SOURCE_CONTRACT_VERSION,
     Availability,
     BasicWaveFacet,
+    HarmonicCompleteness,
+    HarmonicFacet,
     Observed,
     OutputFacet,
     PatchAction,
@@ -23,6 +25,8 @@ from wavebench.instruments.source_extensions import (
     SourceDisplayLoad,
     SourceFieldId,
     SourceFrequencyMode,
+    SourceHarmonicDisableRequest,
+    SourceHarmonicDisableResult,
     SourceLoadKind,
     SourceOutputPolarity,
     SourceOutputRequest,
@@ -810,6 +814,17 @@ class SDG2000XSource:
             polarity=Observed.value_of(polarity),
         )
 
+    @classmethod
+    def _v2_harmonic_facet(cls, snapshot: _ConfigurationSnapshot) -> HarmonicFacet:
+        return HarmonicFacet(
+            enabled=Observed.value_of(snapshot.context.harmonic_enabled),
+            completeness=Observed.value_of(HarmonicCompleteness.SELECTED_ONLY),
+            maximum_supported_order=Observed.value_of(16),
+            components=cls._v2_missing(),
+            configured_order=cls._v2_missing(),
+            preset=cls._v2_missing(),
+        )
+
     @staticmethod
     def _v2_snapshot_query_count(snapshot: _ConfigurationSnapshot) -> int:
         return 9 if snapshot.status.function == "SIN" else 8
@@ -839,7 +854,11 @@ class SDG2000XSource:
                     if field_ref.target.scope.value != "instrument":
                         raise DataError("SDG2000X Source V2 identity must be instrument scoped")
                     channel = None
-                elif field_ref.field in {SourceFieldId.BASIC, SourceFieldId.OUTPUT}:
+                elif field_ref.field in {
+                    SourceFieldId.BASIC,
+                    SourceFieldId.OUTPUT,
+                    SourceFieldId.HARMONICS,
+                }:
                     if field_ref.target.scope.value != "channel":
                         raise DataError("SDG2000X Source V2 channel facets must be channel scoped")
                     channel = field_ref.target.channel
@@ -853,9 +872,14 @@ class SDG2000XSource:
                     raise DataError("SDG2000X Source V2 query plan repeats a field target")
                 channels.add(channel)
 
-        for fields in phase_fields.values():
+        before_basic_channels = phase_fields.get(
+            SourceQueryPhase.ANCHOR_BEFORE,
+            {},
+        ).get(SourceFieldId.BASIC, set())
+        for phase, fields in phase_fields.items():
             basic_channels = fields.get(SourceFieldId.BASIC, set())
             output_channels = fields.get(SourceFieldId.OUTPUT, set())
+            harmonic_channels = fields.get(SourceFieldId.HARMONICS, set())
             identity_targets = fields.get(SourceFieldId.IDENTITY, set())
             if basic_channels or output_channels:
                 if identity_targets != {None}:
@@ -865,6 +889,13 @@ class SDG2000XSource:
                 if not output_channels <= basic_channels:
                     raise DataError(
                         "SDG2000X Source V2 output snapshots require matching basic anchors"
+                    )
+            if harmonic_channels:
+                if phase is not SourceQueryPhase.FACET:
+                    raise DataError("SDG2000X Source V2 harmonics must be a facet query")
+                if not harmonic_channels <= before_basic_channels:
+                    raise DataError(
+                        "SDG2000X Source V2 harmonic snapshots require matching basic anchors"
                     )
 
     @staticmethod
@@ -897,6 +928,7 @@ class SDG2000XSource:
         self._v2_validate_query_plan(plan)
         with self._io_lock:
             records: dict[str, SourceProtocolQueryRecord] = {}
+            before_snapshots: dict[int, _ConfigurationSnapshot] = {}
             after_snapshots: dict[int, _ConfigurationSnapshot] = {}
 
             def query(command: str) -> str:
@@ -935,6 +967,8 @@ class SDG2000XSource:
                                 field_ref.target.channel,
                                 query=query,
                             )
+                if phase is SourceQueryPhase.ANCHOR_BEFORE:
+                    before_snapshots = dict(snapshots)
                 if phase is SourceQueryPhase.ANCHOR_AFTER:
                     after_snapshots = snapshots
 
@@ -956,14 +990,29 @@ class SDG2000XSource:
                                 )
                             )
                             query_count += self._v2_snapshot_query_count(snapshot)
-                        else:
-                            assert field_ref.field is SourceFieldId.OUTPUT
+                        elif field_ref.field is SourceFieldId.OUTPUT:
                             assert field_ref.target.channel is not None
                             snapshot = snapshots[field_ref.target.channel]
                             observations.append(
                                 SourceTypedObservation(
                                     field_ref,
                                     self._v2_output_facet(snapshot.output),
+                                )
+                            )
+                        else:
+                            assert field_ref.field is SourceFieldId.HARMONICS
+                            assert field_ref.target.channel is not None
+                            try:
+                                snapshot = before_snapshots[field_ref.target.channel]
+                            except KeyError as exc:
+                                raise DataError(
+                                    "SDG2000X Source V2 harmonic snapshot is missing its "
+                                    "basic anchor"
+                                ) from exc
+                            observations.append(
+                                SourceTypedObservation(
+                                    field_ref,
+                                    self._v2_harmonic_facet(snapshot),
                                 )
                             )
                     if query_count > item.max_queries:
@@ -1183,6 +1232,35 @@ class SDG2000XSource:
                 enabled=True,
                 final_amplitude=amplitude,
                 final_offset_v=offset_v,
+            )
+
+    def disable_source_harmonics_v2(
+        self,
+        request: SourceHarmonicDisableRequest,
+    ) -> SourceHarmonicDisableResult:
+        """Disable one preflight-proven SDG Harmonic state with a single write."""
+
+        if not isinstance(request, SourceHarmonicDisableRequest):
+            raise DataError("SDG2000X Source V2 harmonic-disable request has an invalid type")
+        _validate_channel(request.channel)
+        with self._io_lock:
+            self._ensure_configuration_writes_allowed()
+            before = self._v2_preflight_snapshot(request.channel)
+            if before.status.output != "OFF":
+                raise DataError("SDG2000X Source V2 harmonic disable requires output OFF")
+            if before.status.function != "SIN":
+                raise DataError("SDG2000X Source V2 harmonic disable requires the SINE function")
+            if before.context.harmonic_enabled:
+                self.transport.write(f"C{request.channel}:HARM HARMSTATE,OFF")
+                before = replace(
+                    before,
+                    context=replace(before.context, harmonic_enabled=False),
+                )
+                self._v2_preflight_snapshots[request.channel] = before
+            return SourceHarmonicDisableResult(
+                channel=request.channel,
+                harmonics=self._v2_harmonic_facet(before),
+                output_enabled=False,
             )
 
     def _read_status(

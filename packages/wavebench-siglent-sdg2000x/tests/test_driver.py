@@ -14,10 +14,12 @@ from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
 from wavebench.instruments.source_extension_capabilities import validate_source_descriptor
 from wavebench.instruments.source_extensions import (
+    Availability,
     PatchAction,
     PatchValue,
     SourceBasicConfigureRequest,
     SourceBasicPatch,
+    SourceHarmonicDisableRequest,
     SourceOutputRequest,
     SourceWaveformKind,
 )
@@ -75,8 +77,14 @@ class FakeTransport:
 class StatefulOutputTransport:
     resource = "fake-sdg2000x"
 
-    def __init__(self, *, model: str = "SDG2122X") -> None:
+    def __init__(
+        self,
+        *,
+        model: str = "SDG2122X",
+        firmware: str = "2.01.01.39R7T2",
+    ) -> None:
         self.model = model
+        self.firmware = firmware
         self.outputs = {1: "OFF", 2: "OFF"}
         self.loads = {1: "HZ", 2: "HZ"}
         self.basics = {
@@ -134,7 +142,7 @@ class StatefulOutputTransport:
         if command in self.query_overrides:
             return self.query_overrides[command]
         if command == "*IDN?":
-            return f"Siglent Technologies,{self.model},<serial>,<firmware>"
+            return f"Siglent Technologies,{self.model},<serial>,{self.firmware}"
         if command == "COUP?":
             return "COUP " + ",".join(
                 item
@@ -200,6 +208,7 @@ class StatefulOutputTransport:
             r"C([12]):BSWV DUTY,([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
             command,
         )
+        harmonic_disable_match = re.fullmatch(r"C([12]):HARM HARMSTATE,OFF", command)
         match = (
             output_match
             or sweep_match
@@ -207,6 +216,7 @@ class StatefulOutputTransport:
             or amplitude_match
             or function_match
             or duty_match
+            or harmonic_disable_match
         )
         if match is None:
             raise AssertionError(f"unexpected SDG2000X write: {command}")
@@ -267,6 +277,8 @@ class StatefulOutputTransport:
                 else:
                     body = f"WVTP,DC,OFST,{value('OFST', '0V')}"
                 self.basics[channel] = f"C{channel}:BSWV {body}"
+            elif harmonic_disable_match is not None:
+                self.harmonic[channel] = "OFF"
             else:
                 assert duty_match is not None
                 duty_percent = float(duty_match.group(2))
@@ -287,6 +299,8 @@ class StatefulOutputTransport:
                 query = f"C{channel}:OUTP?"
             elif sweep_match is not None:
                 query = f"C{channel}:SWWV?"
+            elif harmonic_disable_match is not None:
+                query = f"C{channel}:HARM?"
             else:
                 query = f"C{channel}:BSWV?"
             self.fail_query_counts[query] = self.fail_query_counts.get(query, 0) + 1
@@ -352,6 +366,7 @@ def test_descriptor_declares_output_capable_external_source() -> None:
         "source.snapshot_v2",
         "source.basic_configure_v2",
         "source.output_v2",
+        "source.harmonics_disable_v2",
     )
     assert item.backends == ("pyvisa",)
     assert item.wavebench_min_version == "0.8.24"
@@ -364,7 +379,7 @@ def test_descriptor_declares_output_capable_external_source() -> None:
     )
     assert item.source_extensions is not None
     assert item.source_extensions.topology.channels == (1, 2)
-    assert item.source_extensions.query_contract.max_queries == 42
+    assert item.source_extensions.query_contract.max_queries == 44
     validate_source_descriptor(item)
 
 
@@ -436,6 +451,9 @@ def test_source_v2_snapshot_is_pure_read_and_caches_after_anchors() -> None:
     assert snapshot.channels[0].basic.value.frequency_hz.value == 1_000.0
     assert snapshot.channels[1].output.value is not None
     assert snapshot.channels[1].output.value.enabled.value is False
+    assert snapshot.channels[0].harmonics.availability is Availability.VALUE
+    assert snapshot.channels[0].harmonics.value is not None
+    assert snapshot.channels[0].harmonics.value.enabled.value is False
 
 
 def test_source_v2_snapshot_rejects_an_underdeclared_total_budget_before_io() -> None:
@@ -696,6 +714,60 @@ def test_source_v2_output_transitions_use_no_driver_readback_in_main() -> None:
     assert len(transport.queries) == query_count
 
 
+def test_source_v2_harmonic_disable_uses_one_audited_command_after_snapshot() -> None:
+    transport = StatefulOutputTransport()
+    transport.harmonic[2] = "ON"
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    result = driver.disable_source_harmonics_v2(SourceHarmonicDisableRequest(channel=2))
+
+    assert result.harmonics.enabled.value is False
+    assert transport.harmonic[2] == "OFF"
+    assert transport.writes == ["C2:HARM HARMSTATE,OFF"]
+    assert len(transport.queries) == query_count
+
+
+def test_source_v2_harmonic_disable_is_idempotent_after_snapshot() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    result = driver.disable_source_harmonics_v2(SourceHarmonicDisableRequest(channel=1))
+
+    assert result.harmonics.enabled.value is False
+    assert transport.writes == []
+    assert len(transport.queries) == query_count
+
+
+def test_source_v2_harmonic_disable_rejects_non_sine_or_enabled_output_before_write() -> None:
+    transport = StatefulOutputTransport()
+    transport.harmonic[1] = "ON"
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+
+    with pytest.raises(DataError, match="SINE function"):
+        driver.disable_source_harmonics_v2(SourceHarmonicDisableRequest(channel=1))
+
+    assert transport.writes == []
+
+    transport = StatefulOutputTransport()
+    transport.harmonic[1] = "ON"
+    transport.outputs[1] = "ON"
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+
+    with pytest.raises(DataError, match="requires output OFF"):
+        driver.disable_source_harmonics_v2(SourceHarmonicDisableRequest(channel=1))
+
+    assert transport.writes == []
+
+
 def test_source_v2_writes_require_a_fresh_snapshot_before_any_io() -> None:
     transport = StatefulOutputTransport()
     driver = SDG2000XSource(transport)
@@ -836,6 +908,59 @@ def test_source_v2_core_output_transactions_use_one_main_write_per_transition() 
     assert disable_artifact["operation"] == "source.output_disable_v2"
     assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
     assert guarded.audit_snapshot()["counters"]["write_completed"] == 2
+
+
+def test_source_v2_core_harmonic_disable_writes_once_and_recovers_output_on_mismatch() -> None:
+    transport = StatefulOutputTransport()
+    transport.harmonic[1] = "ON"
+    service, guarded = _source_v2_service(transport)
+
+    result, artifact = service.disable_harmonics_v2(SourceHarmonicDisableRequest(channel=1))
+
+    assert result.harmonics.enabled.value is False
+    assert transport.harmonic[1] == "OFF"
+    assert transport.writes == ["C1:HARM HARMSTATE,OFF"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 1
+    assert artifact["operation"] == "source.harmonics_disable_v2"
+
+    transport = StatefulOutputTransport()
+    transport.harmonic[1] = "ON"
+    transport.ignore_write_counts["C1:HARM HARMSTATE,OFF"] = 1
+    service, guarded = _source_v2_service(transport)
+
+    with pytest.raises(ConfigError, match="postcondition reports harmonics enabled") as raised:
+        service.disable_harmonics_v2(SourceHarmonicDisableRequest(channel=1))
+
+    failure_artifact = raised.value.source_operation_artifact
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:HARM HARMSTATE,OFF", "C1:OUTP OFF"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 2
+    assert failure_artifact["recovery"] == {
+        "status": "off_verified",
+        "session_health": "uncertain",
+    }
+
+
+@pytest.mark.parametrize(
+    ("model", "firmware"),
+    (
+        ("SDG2042X", "2.01.01.39R7T2"),
+        ("SDG2122X", "2.01.01.39R7T3"),
+    ),
+)
+def test_source_v2_core_harmonic_disable_rejects_other_runtime_targets_before_write(
+    model: str,
+    firmware: str,
+) -> None:
+    transport = StatefulOutputTransport(model=model, firmware=firmware)
+    transport.harmonic[1] = "ON"
+    service, guarded = _source_v2_service(transport)
+
+    with pytest.raises(ConfigError, match="not available for the runtime target channel"):
+        service.disable_harmonics_v2(SourceHarmonicDisableRequest(channel=1))
+
+    assert transport.writes == []
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 0
 
 
 def test_source_v2_core_output_keeps_channels_independent() -> None:
@@ -2692,7 +2817,15 @@ def _source_service(driver: SDG2000XSource, *, max_source_vpp: float) -> SourceS
         ),
         safety_limits=SimpleNamespace(max_source_vpp=max_source_vpp),
     )
-    return SourceService(config=config, logger=CommandLogger(), session=driver)
+    # These regression cases exercise the legacy V1 implementation directly.
+    # Keep their route independent from whatever Source V2 plugin is installed
+    # in the shared development environment.
+    return SourceService(
+        config=config,
+        logger=CommandLogger(),
+        session=driver,
+        descriptor=SimpleNamespace(capabilities=()),
+    )
 
 
 def test_core_source_service_allows_output_at_the_10_vpp_boundary() -> None:
