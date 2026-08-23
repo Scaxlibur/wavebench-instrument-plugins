@@ -4,7 +4,7 @@
 
 ## 结论
 
-插件版本 `0.8.1` 声明 `source.snapshot_v2`、`source.basic_configure_v2`、`source.output_v2` 与
+插件版本 `0.8.2` 声明 `source.snapshot_v2`、`source.basic_configure_v2`、`source.output_v2` 与
 `source.harmonics_disable_v2`。本记录只证明 A0 离线合同：描述符、查询计划、SCPI 格式、发送次数、核心 phase
 授权、失败前拒绝和故障注入后的失败关闭均由 fake transport 验证。它不构成任一型号或固件的 Source V2 实机验收。
 

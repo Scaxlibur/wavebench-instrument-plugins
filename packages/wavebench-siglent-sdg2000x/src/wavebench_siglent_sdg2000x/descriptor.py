@@ -219,7 +219,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sdg2000x",
-        version="0.8.1",
+        version="0.8.2",
         source="entry_point:siglent.sdg2000x",
         config_fields=(
             "source.resource",

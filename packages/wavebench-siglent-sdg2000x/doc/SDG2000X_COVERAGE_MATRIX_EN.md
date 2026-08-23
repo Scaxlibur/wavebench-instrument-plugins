@@ -4,7 +4,7 @@
 
 ## Current conclusion
 
-Version `0.8.1` declares twelve capabilities: the legacy identity, status, five basic writes, and read-only
+Version `0.8.2` declares twelve capabilities: the legacy identity, status, five basic writes, and read-only
 arbitrary probe, plus `source.snapshot_v2`, `source.basic_configure_v2`, `source.output_v2`, and
 `source.harmonics_disable_v2`. The first eight have SDG2122X core-consumer hardware evidence. The four new
 capabilities currently have A0 offline contracts only and make no Source V2 hardware claim for any model.

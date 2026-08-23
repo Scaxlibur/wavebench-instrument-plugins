@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-截至插件版本 `0.8.1`，C3 尚未完成。本文件只记录可离线复核的发布准备情况，并把 A0 与需要真实设备的
+截至插件版本 `0.8.2`，C3 尚未完成。本文件只记录可离线复核的发布准备情况，并把 A0 与需要真实设备的
 A1–A3 分开。它不是发布签核、wheel conformance manifest，也不构成任何型号或固件的实机声明。
 
 ## C3 条件与当前证据
@@ -15,7 +15,7 @@ A1–A3 分开。它不是发布签核、wheel conformance manifest，也不构�
 | Basic 的已声明写面 | CH1/CH2 的频率、Vpp、Sine/Square/Ramp/Pulse 函数和方波占空比均有单字段、单写、无 MAIN 查询的 fake 测试；`offset_v` 与多字段 patch 在 I/O 前拒绝；回读不匹配时最多一次 OFF，未知写结果不追加 I/O | A0 已完成 |
 | Output 的已声明写面 | CH1/CH2 可同时 ON，且任一路 OFF 不影响另一路；核心 phase、写后回读不一致的一次 OFF 恢复，以及 ON/OFF 结果未知时的零重试或零追加 I/O 均有 fake 测试 | A0 已完成 |
 | Harmonic 关闭的已声明写面 | `source.harmonics_disable_v2` 只在 `SDG2122X` / `2.01.01.39R7T2`、Sine、目标输出 OFF 时适用；已关闭时零 MAIN 写入，已开启时仅一条 `HARMSTATE,OFF`，核心独立回读 Harmonic 与输出；不提供配置或启用能力 | A0 已完成 |
-| 版本、descriptor 和包元数据 | `pyproject.toml`、descriptor、README、覆盖矩阵和 A0 记录统一为 `0.8.1`；wheel/sdist、隔离发现、dependency/descriptor 交叉校验均有离线测试 | 离线已完成 |
+| 版本、descriptor 和包元数据 | `pyproject.toml`、descriptor、README、覆盖矩阵和 A0 记录统一为 `0.8.2`；wheel/sdist、隔离发现、dependency/descriptor 交叉校验均有离线测试 | 离线已完成 |
 | 未登记写 capability | descriptor、driver、`validate_source_descriptor()` 与 `validate_declared_capabilities()` 一起校验；未暴露 raw SCPI | 当前源码已审计 |
 | A1、A2、A3 | 尚未执行真实设备的只读、输出转换/恢复和示波器环回验证 | 待单独授权 |
 | 稳定核心与发布物签核 | WaveBench `0.8.24` 仍是开发线；没有最终插件 wheel 摘要、A1–A3 manifest 或发布签核 | 待完成 |

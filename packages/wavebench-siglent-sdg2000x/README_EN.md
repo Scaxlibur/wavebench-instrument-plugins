@@ -6,7 +6,7 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 
 ## Current development baseline
 
-Version `0.8.1` retains the eight legacy V1 capabilities and adds `source.snapshot_v2`,
+Version `0.8.2` retains the eight legacy V1 capabilities and adds `source.snapshot_v2`,
 `source.basic_configure_v2`, `source.output_v2`, and `source.harmonics_disable_v2`. V2 currently has A0 offline-contract coverage only:
 descriptor validation, query budgets, single-write MAIN phases, and core phase authorization use fake
 transports. No Source V2 hardware acceptance has been performed. C3 has offline-audit preparation only;

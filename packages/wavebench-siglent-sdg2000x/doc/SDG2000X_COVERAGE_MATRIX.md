@@ -4,7 +4,7 @@
 
 ## 当前结论
 
-版本 `0.8.1` 声明 12 项 capability：既有的身份、状态、五项基础写能力和任意波只读探测，以及
+版本 `0.8.2` 声明 12 项 capability：既有的身份、状态、五项基础写能力和任意波只读探测，以及
 `source.snapshot_v2`、`source.basic_configure_v2`、`source.output_v2` 和 `source.harmonics_disable_v2`。前 8 项已有 `SDG2122X`
 核心消费路径实机证据；新增的 4 项目前只有 A0 离线合同，不能声称任一型号的 V2 实机通过。其中 Harmonic 关闭仅对
 `SDG2122X` 固件 `2.01.01.39R7T2` 适用。三个登记型号的

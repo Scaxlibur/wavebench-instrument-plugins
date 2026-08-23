@@ -4,7 +4,7 @@
 
 ## Conclusion
 
-Plugin version `0.8.1` declares `source.snapshot_v2`, `source.basic_configure_v2`, `source.output_v2`, and
+Plugin version `0.8.2` declares `source.snapshot_v2`, `source.basic_configure_v2`, `source.output_v2`, and
 `source.harmonics_disable_v2`. This record proves A0 offline contracts only: descriptor validation, query plans,
 SCPI forms, send counts, core phase authorization, pre-write rejection, and injected-failure closeout use
 fake transports. It is

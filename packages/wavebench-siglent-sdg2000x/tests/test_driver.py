@@ -371,7 +371,7 @@ def test_descriptor_declares_output_capable_external_source() -> None:
     assert item.backends == ("pyvisa",)
     assert item.wavebench_min_version == "0.8.24"
     assert item.wavebench_max_version == "0.9.0"
-    assert item.version == "0.8.1"
+    assert item.version == "0.8.2"
     assert item.config_fields == (
         "source.resource",
         "source.driver",

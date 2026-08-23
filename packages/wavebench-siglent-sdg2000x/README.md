@@ -6,7 +6,7 @@
 
 ## 当前开发基线
 
-版本 `0.8.1` 保留 8 项既有 V1 capability，并新增 `source.snapshot_v2`、`source.basic_configure_v2`、
+版本 `0.8.2` 保留 8 项既有 V1 capability，并新增 `source.snapshot_v2`、`source.basic_configure_v2`、
 `source.output_v2` 和 `source.harmonics_disable_v2`。V2 当前只完成 A0 离线合同：描述符、查询预算、单写主阶段和核心 phase 授权均由
 fake transport 验证，尚未进行 Source V2 实机验收。C3 仅完成离线审计准备，不能视为发布完成。完整边界见
 [Source V2 A0 离线适配记录](doc/SDG2000X_SOURCE_V2_A0.md) 和 [Source V2 C3 发布审计准备](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
