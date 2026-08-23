@@ -585,6 +585,66 @@ def test_source_v2_basic_duty_write_uses_one_audited_command_after_snapshot() ->
     assert len(transport.queries) == query_count
 
 
+def test_source_v2_basic_ch2_covers_every_declared_write_field() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[2] = (
+        "C2:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    driver.configure_source_basic_v2(
+        SourceBasicConfigureRequest(
+            channel=2,
+            patch=SourceBasicPatch(
+                frequency_hz=PatchValue(PatchAction.SET, 2_000.0),
+            ),
+        )
+    )
+    driver.configure_source_basic_v2(
+        SourceBasicConfigureRequest(
+            channel=2,
+            patch=SourceBasicPatch(
+                amplitude_vpp=PatchValue(PatchAction.SET, 2.5),
+            ),
+        )
+    )
+    driver.configure_source_basic_v2(
+        SourceBasicConfigureRequest(
+            channel=2,
+            patch=SourceBasicPatch(
+                square_duty_cycle_percent=PatchValue(PatchAction.SET, 25.0),
+            ),
+        )
+    )
+    for waveform in (
+        SourceWaveformKind.SINE,
+        SourceWaveformKind.RAMP,
+        SourceWaveformKind.PULSE,
+        SourceWaveformKind.SQUARE,
+    ):
+        driver.configure_source_basic_v2(
+            SourceBasicConfigureRequest(
+                channel=2,
+                patch=SourceBasicPatch(
+                    waveform_kind=PatchValue(PatchAction.SET, waveform),
+                ),
+            )
+        )
+
+    assert transport.writes == [
+        "C2:BSWV FRQ,2000",
+        "C2:BSWV AMP,2.5",
+        "C2:BSWV DUTY,25",
+        "C2:BSWV WVTP,SINE",
+        "C2:BSWV WVTP,RAMP",
+        "C2:BSWV WVTP,PULSE",
+        "C2:BSWV WVTP,SQUARE",
+    ]
+    assert len(transport.queries) == query_count
+
+
 @pytest.mark.parametrize(
     ("patch", "message"),
     (
@@ -681,13 +741,20 @@ def _source_v2_service(
     )
 
 
-def test_source_v2_core_basic_transaction_allows_only_the_single_main_write() -> None:
+@pytest.mark.parametrize(
+    ("channel", "expected_command"),
+    ((1, "C1:BSWV FRQ,2000"), (2, "C2:BSWV FRQ,2000")),
+)
+def test_source_v2_core_basic_transaction_allows_only_the_single_main_write(
+    channel: int,
+    expected_command: str,
+) -> None:
     transport = StatefulOutputTransport()
     service, guarded = _source_v2_service(transport)
 
     result, artifact = service.configure_basic_v2(
         SourceBasicConfigureRequest(
-            channel=1,
+            channel=channel,
             patch=SourceBasicPatch(
                 frequency_hz=PatchValue(PatchAction.SET, 2_000.0),
             ),
@@ -696,8 +763,58 @@ def test_source_v2_core_basic_transaction_allows_only_the_single_main_write() ->
 
     assert result.basic.frequency_hz.value == 2_000.0
     assert artifact["operation"] == "source.basic_configure_v2"
-    assert transport.writes == ["C1:BSWV FRQ,2000"]
+    assert transport.writes == [expected_command]
     assert guarded.audit_snapshot()["counters"]["write_completed"] == 1
+
+
+def test_source_v2_core_basic_readback_mismatch_attempts_one_off_recovery() -> None:
+    transport = StatefulOutputTransport()
+    transport.drift_write_counts["C1:BSWV FRQ,2000"] = 1
+    service, guarded = _source_v2_service(transport)
+
+    with pytest.raises(ConfigError, match="frequency_hz readback") as raised:
+        service.configure_basic_v2(
+            SourceBasicConfigureRequest(
+                channel=1,
+                patch=SourceBasicPatch(
+                    frequency_hz=PatchValue(PatchAction.SET, 2_000.0),
+                ),
+            )
+        )
+
+    artifact = raised.value.source_operation_artifact
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:BSWV FRQ,2000", "C1:OUTP OFF"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 2
+    assert artifact["recovery"] == {
+        "status": "off_verified",
+        "session_health": "uncertain",
+    }
+    assert artifact["safe_state_verified"] is True
+
+
+def test_source_v2_core_basic_ambiguous_write_does_not_send_unprovable_off() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_after_write_counts["C1:BSWV FRQ,2000"] = 1
+    service, guarded = _source_v2_service(transport)
+
+    with pytest.raises(InstrumentError, match="ambiguous SDG2000X write failure") as raised:
+        service.configure_basic_v2(
+            SourceBasicConfigureRequest(
+                channel=1,
+                patch=SourceBasicPatch(
+                    frequency_hz=PatchValue(PatchAction.SET, 2_000.0),
+                ),
+            )
+        )
+
+    artifact = raised.value.source_operation_artifact
+    assert transport.writes == ["C1:BSWV FRQ,2000"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 0
+    assert artifact["recovery"] == {
+        "status": "not_attempted",
+        "reason": "session_poisoned",
+    }
 
 
 def test_source_v2_core_output_transactions_use_one_main_write_per_transition() -> None:
@@ -776,6 +893,25 @@ def test_source_v2_core_output_enable_transport_failure_does_not_send_unprovable
     }
 
 
+def test_source_v2_core_output_disable_transport_failure_does_not_retry_off() -> None:
+    transport = StatefulOutputTransport()
+    transport.outputs[1] = "ON"
+    transport.fail_after_write_counts["C1:OUTP OFF"] = 1
+    service, guarded = _source_v2_service(transport)
+
+    with pytest.raises(InstrumentError, match="ambiguous SDG2000X write failure") as raised:
+        service.set_output_v2(SourceOutputRequest(channel=1, enabled=False))
+
+    artifact = raised.value.source_operation_artifact
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:OUTP OFF"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 0
+    assert artifact["recovery"] == {
+        "status": "not_attempted",
+        "reason": "off_result_unknown_not_retried",
+    }
+
+
 @pytest.mark.parametrize(
     ("initial_basic", "target", "expected_function", "expected_command"),
     (
@@ -784,6 +920,12 @@ def test_source_v2_core_output_enable_transport_failure_does_not_send_unprovable
             "noise",
             "NOIS",
             "C1:BSWV WVTP,NOISE",
+        ),
+        (
+            "C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0",
+            "dc",
+            "DC",
+            "C1:BSWV WVTP,DC",
         ),
         (
             "C1:BSWV WVTP,NOISE,STDEV,1V,MEAN,0V,BANDSTATE,OFF,BANDWIDTH,120MHZ",
@@ -813,6 +955,26 @@ def test_source_v2_keeps_unrepresentable_v1_function_paths_compatible(
 
     assert status.function == expected_function
     assert transport.writes == [expected_command]
+
+
+@pytest.mark.parametrize(
+    "basic",
+    (
+        "C1:BSWV WVTP,NOISE,STDEV,1V,MEAN,0V,BANDSTATE,OFF,BANDWIDTH,120MHZ",
+        "C1:BSWV WVTP,DC,OFST,0V",
+    ),
+)
+def test_source_v2_keeps_v1_noise_and_dc_output_enable_fail_closed(
+    basic: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = basic
+    service, _guarded = _source_v2_service(transport)
+
+    with pytest.raises(ConfigError, match="requires a final Vpp amplitude"):
+        service.set_output(channel=1, enabled=True)
+
+    assert transport.writes == []
 
 
 def test_arbitrary_probe_uses_only_documented_queries_and_core_results() -> None:
