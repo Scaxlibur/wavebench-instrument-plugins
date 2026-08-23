@@ -21,8 +21,8 @@ Source V2 的 C3 仍未完成。离线审计已确认当前包的版本、声明
 | 系统错误队列 | 无 | 未开放 | 确认查询命令、空队列语义和是否为消费型读取 |
 | 通道基础状态 | `source.status` | SDG2122X 多轮只读稳定；CH1/CH2 均完成频率、Vpp、均值和最终独立零写审计 | 新固件响应变体需单独验收 |
 | Source V2 快照 | `source.snapshot_v2` | A0 完成：CH1/CH2 纯读取 anchor/facet/anchor、38 查询 Sine fixture、0 写入 | A1 确认真实响应、预算、型号和固件 |
-| Source V2 基础配置 | `source.basic_configure_v2` | A0 完成：Sine/Square/Ramp/Pulse 的单字段 Basic MAIN 写入和核心回读；`offset_v` 暂在写前拒绝 | A2/A3 确认实机回读、故障恢复和 session health |
-| Source V2 输出 | `source.output_v2` | A0 完成：CH1/CH2 独立 ON/OFF、单写 MAIN、核心回读；独立端口可同时 ON | A2/A3 确认实机输出、失败恢复和 session health |
+| Source V2 基础配置 | `source.basic_configure_v2` | A0 完成：CH1/CH2 的 Sine/Square/Ramp/Pulse 单字段 Basic MAIN 写入、核心回读与一次 OFF 恢复；`offset_v` 暂在写前拒绝 | A2 确认实机命令接受与回读形态；A3 通过示波器环回确认频率、Vpp、函数和占空比 |
+| Source V2 输出 | `source.output_v2` | A0 完成：CH1/CH2 独立 ON/OFF、单写 MAIN、核心回读、可读不匹配时一次 OFF 恢复；独立端口可同时 ON | A2 确认实机输出转换、独立回读和 OFF 恢复 |
 | 输出控制 | `source.output` | 三个型号通过离线合同；SDG2122X CH1/CH2 通过核心 Service ON→A4→OFF，未知写结果为 0 | 其它型号 A4 仅在有样机时补充 |
 | 固定波频率 | `source.set_frequency` | SDG2122X CH1/CH2 均覆盖 OFF 写入和 ON 状态实时写入；按型号/函数边界离线全覆盖 | 其它型号 A4 仅在有样机时补充 |
 | 固定波幅度 | `source.set_amplitude_vpp` | SDG2122X CH1/CH2 均覆盖 OFF 与 ON 实时写入；2 mVpp–10 Vpp、偏置包络和漂移分支 100% 覆盖 | 其它型号 A4 仅在有样机时补充 |

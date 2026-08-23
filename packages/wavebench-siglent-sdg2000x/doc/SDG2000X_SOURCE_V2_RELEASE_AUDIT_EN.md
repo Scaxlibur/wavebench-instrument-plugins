@@ -12,9 +12,9 @@ wheel conformance manifest, or a hardware claim for any model or firmware.
 
 | C3 condition | Current offline evidence | Status |
 | --- | --- | --- |
-| First plugin M5 Basic/Output offline contract | The descriptor declares `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`; driver and core fake-transport tests cover query, write, and recovery branches | A0 complete |
-| Declared Basic write surface | Frequency, Vpp, Sine/Square/Ramp/Pulse changes, and square duty each have single-field, single-write, no-MAIN-query fake tests; `offset_v` and multi-field patches reject before I/O | A0 complete |
-| Declared Output write surface | CH1/CH2 may be ON together and disabling either leaves the other unchanged; core phases, one OFF recovery after a readable postcondition mismatch, and zero extra I/O after a poisoned transport have fake tests | A0 complete |
+| First plugin M5 Basic/Output offline contract | The descriptor declares `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`; driver and core fake-transport tests cover query, write, readable mismatch, and recovery branches | A0 complete |
+| Declared Basic write surface | CH1/CH2 frequency, Vpp, Sine/Square/Ramp/Pulse changes, and square duty each have single-field, single-write, no-MAIN-query fake tests; `offset_v` and multi-field patches reject before I/O; a readable mismatch gets at most one OFF and an ambiguous write gets no extra I/O | A0 complete |
+| Declared Output write surface | CH1/CH2 may be ON together and disabling either leaves the other unchanged; core phases, one OFF recovery after a readable postcondition mismatch, and no retry or extra I/O after an ambiguous ON/OFF result have fake tests | A0 complete |
 | Version, descriptor, and package metadata | `pyproject.toml`, descriptor, READMEs, coverage matrices, and A0 record agree on `0.8.1`; wheel/sdist, isolated discovery, and dependency/descriptor cross-checks have offline tests | Offline complete |
 | No unregistered write capability | Descriptor, driver, `validate_source_descriptor()`, and `validate_declared_capabilities()` are checked together; no raw-SCPI endpoint is exposed | Current source audited |
 | A1, A2, and A3 | No real-device profile read, output transition/recovery, or scope-loopback validation has run | Awaiting separate authorization |
@@ -25,9 +25,10 @@ wheel conformance manifest, or a hardware claim for any model or firmware.
 Offline tests prove protocol contracts and core call boundaries only:
 
 - `source.snapshot_v2` anchor/facet/anchor plans, query budgets, deadlines, and zero writes;
-- audited `BSWV` write forms and pre-write rejection for `source.basic_configure_v2`;
-- `source.output_v2` single-write MAIN, independent postcondition, one OFF recovery after a known readback
-  failure, and close-only behavior after a poisoned session;
+- audited `BSWV` write forms, pre-write rejection, one OFF recovery after a readable mismatch, and zero
+  extra I/O after an ambiguous write for `source.basic_configure_v2`;
+- `source.output_v2` single-write MAIN, independent postcondition, one OFF recovery after a readable
+  mismatch, and no retry or extra I/O after an ambiguous ON/OFF result;
 - wheel/sdist metadata, entry point, version gates, and descriptor cross-checks.
 
 They do not prove that a real instrument accepts a command, changes an output relay, has correct wiring, or

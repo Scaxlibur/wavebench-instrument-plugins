@@ -6,7 +6,8 @@
 
 Plugin version `0.8.1` declares `source.snapshot_v2`, `source.basic_configure_v2`, and
 `source.output_v2`. This record proves A0 offline contracts only: descriptor validation, query plans,
-SCPI forms, send counts, core phase authorization, and pre-write rejection use fake transports. It is
+SCPI forms, send counts, core phase authorization, pre-write rejection, and injected-failure closeout use
+fake transports. It is
 not Source V2 hardware acceptance for any model or firmware.
 
 Existing SDG2122X V1 acceptance remains evidence for the legacy capabilities. It does not substitute
@@ -26,7 +27,9 @@ for Source V2 A1, A2, or A3.
 
 Output enable still requires FIX mode, Sweep OFF, readable Vpp and Offset, high-impedance display load,
 and inactive known advanced modes. Output disable does not depend on Vpp, Offset, or load information and
-is available for one-step core recovery.
+is available for one-step core recovery. After a readable Basic or Output postcondition mismatch, the core
+attempts V2 OFF once. An ambiguous write that poisons the session sends no additional OFF, and an ambiguous
+OFF is not retried.
 
 ## Query and Send Counts
 
@@ -36,7 +39,8 @@ snapshot and issues no extra `OUTP?` query.
 
 With both fixture channels set to Sine, a complete Source V2 snapshot performs 38 queries and zero writes,
 below the descriptor limit of 42 queries. A0 tests also prove that Basic and Output MAIN writes issue no
-driver query.
+driver query. The core validates the plan deadline and query budget after it receives the execution record;
+that validation is not A1 evidence from a real device.
 
 ## Noise, DC, and V1 Compatibility
 
@@ -53,7 +57,12 @@ crest-factor, or statistical Noise safety model.
 
 - A1: confirm real V2 snapshot responses and budgets for an explicitly authorized model, firmware,
   resource, and transport/backend.
-- A2: validate V2 Basic and Output command completion, readback, rejection branches, and recovery.
-- A3: validate timeout, disconnection, unknown write outcome, and session health through core consumers.
+- A2: validate V2 Output ON/OFF, independent readback, and OFF recovery; also confirm V2 Basic command
+  acceptance and readback form.
+- A3: use a scope loopback to confirm declared V2 Basic writes for frequency, Vpp, function, and duty
+  cycle, recording offset, termination, tolerance, and the final OFF state.
+
+Timeout, disconnection, and unknown-write fault injection are A0 contracts. Any real transport-fault
+evidence requires a separate record and does not substitute for A1–A3.
 
 Hardware testing requires separate authorization. Offline fixtures are not device-behavior evidence.

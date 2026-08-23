@@ -71,10 +71,10 @@
 - [x] Declare `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`, with a minimum core version of `0.8.24`.
 - [x] Read CH1/CH2 through pure-read anchor/facet/anchor plans; the two-Sine fixture completes 38 queries and zero writes under the declared limit of 42.
 - [x] Permit one audited write in each V2 Basic or Output MAIN phase, followed by the core's independent snapshot readback.
-- [x] Verify V2 Basic frequency writes, Output ON/OFF, descriptor/wheel cross-checks, and legacy V1 Noise/DC function compatibility offline.
+- [x] Verify V2 Basic CH1/CH2 frequency, Vpp, waveform, and square-duty writes; one OFF recovery after a readable mismatch; zero extra I/O after an ambiguous write; Output ON/OFF; descriptor/wheel cross-checks; and legacy V1 Noise/DC function compatibility offline.
 - [ ] A1: confirm real V2 snapshot responses, budgets, model, and firmware applicability.
 - [ ] A2: confirm V2 Basic/Output readback, rejection branches, and recovery on hardware.
-- [ ] A3: confirm timeout, disconnection, unknown write outcomes, and session health through core hardware consumers.
+- [ ] A3: use an authorized scope loopback to confirm V2 Basic frequency, Vpp, function, and duty cycle; record offset, termination, tolerance, and the final OFF state.
 
 Noise `STDEV` and DC/Noise states without final Vpp/Offset are not represented as Vpp. Such legacy
 `set_function` calls retain their V1 output-OFF transaction; this rule does not add RMS, crest-factor, or
@@ -82,10 +82,10 @@ statistical models.
 
 ## M7: Source V2 plugin opt-in
 
-- [x] A0: complete offline adaptation for `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`; cover Basic waveform, frequency, Vpp, square-duty, rejected `offset_v`, and core transactions for independent CH1/CH2 ON/OFF.
+- [x] A0: complete offline adaptation for `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`; cover CH1/CH2 Basic waveform, frequency, Vpp, square-duty, rejected `offset_v`, one OFF recovery after a readable mismatch, zero extra I/O after an ambiguous write, and core transactions for independent CH1/CH2 ON/OFF.
 - [ ] A1: confirm V2 snapshot responses, query budgets, model, and firmware applicability on authorized hardware.
 - [ ] A2: confirm V2 Basic/Output readback, rejection branches, OFF recovery, and independent outputs simultaneously ON on authorized hardware.
-- [ ] A3: confirm timeout, disconnection, unknown write outcomes, and session health through core hardware consumers; fake transports do not replace this evidence.
+- [ ] A3: use an authorized scope loopback to confirm V2 Basic frequency, Vpp, function, and duty cycle, recording offset, termination, tolerance, and the final OFF state; fake transports do not replace this evidence.
 
 ## C3: Stable-release audit
 
