@@ -1,0 +1,52 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "sdg2122x-harmonics-disable-ch2-a0",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A0",
+  "capability": "source.harmonics_disable_v2",
+  "feature": "harmonics",
+  "direction": "disable",
+  "model": "SDG2122X",
+  "firmware_id": "2.01.01.39R7T2",
+  "option_ids": [],
+  "channels": [2],
+  "core_version": "0.8.24",
+  "plugin_version": "0.8.2",
+  "wheel_sha256": "sha256:f7eb7dd034062535e80f0fdb2fb4ee9584806b634e7236f9201a3186e9776a8e",
+  "descriptor_digest": "sha256:3ce159e9fecab956062cc776ced3ed4f13be08b6e2ab6b489ae29035488cf4ca",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "driver": "fake transport",
+    "source_channel": 2,
+    "transport": "offline"
+  },
+  "safety_limits": {
+    "output_state": "off",
+    "waveform": "sine"
+  },
+  "budget": {
+    "admitted": true,
+    "maximum_main_writes": 1
+  },
+  "results": {
+    "failure_closed_cases": true,
+    "main_queries": 0,
+    "maximum_main_writes": 1
+  },
+  "session_health": {
+    "after": "fixture_defined",
+    "before": "fixture_defined"
+  },
+  "final_state": {
+    "output_recovery": "bounded single off"
+  },
+  "coverage": [
+    "channel 2 offline contract and failure-closed behavior"
+  ],
+  "limitations": [
+    "no channel 2 hardware disable operation",
+    "no harmonic configure or enable claim",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:d9af36027302ef8928fb2dee3a18927c0801278611bb149cc2ca8f12c50c2233"
+}

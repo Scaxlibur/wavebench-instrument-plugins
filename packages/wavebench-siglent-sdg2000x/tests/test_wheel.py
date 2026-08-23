@@ -11,6 +11,7 @@ import tomllib
 from zipfile import ZipFile
 
 import wavebench
+from wavebench.plugins.package_inspect import inspect_plugin_wheel
 
 from wavebench_siglent_sdg2000x import descriptor
 
@@ -86,6 +87,31 @@ def test_wheel_contains_license_dependency_and_single_entry_point(tmp_path: Path
     assert [(item.name, item.value) for item in entry_points] == [
         ("siglent.sdg2000x", "wavebench_siglent_sdg2000x:descriptor")
     ]
+
+
+def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) -> None:
+    wheelhouse = tmp_path / "wheelhouse"
+    wheelhouse.mkdir()
+    wheel = _build_wheel(wheelhouse)
+
+    package = inspect_plugin_wheel(wheel)
+
+    assert package.source_conformance_wheel_sha256 == (
+        "sha256:f7eb7dd034062535e80f0fdb2fb4ee9584806b634e7236f9201a3186e9776a8e"
+    )
+    assert {
+        (item.manifest_id, item.claimed_level.value, item.channels)
+        for item in package.source_conformance_manifests
+    } == {
+        ("sdg2122x-basic-configure-a3", "A3", (1, 2)),
+        ("sdg2122x-basic-read-a1", "A1", (1, 2)),
+        ("sdg2122x-harmonics-disable-ch1-a2", "A2", (1,)),
+        ("sdg2122x-harmonics-disable-ch2-a0", "A0", (2,)),
+        ("sdg2122x-harmonics-read-a1", "A1", (1, 2)),
+        ("sdg2122x-output-disable-a2", "A2", (1, 2)),
+        ("sdg2122x-output-enable-a2", "A2", (1, 2)),
+        ("sdg2122x-output-read-a1", "A1", (1, 2)),
+    }
 
 
 def test_source_v2_release_version_is_consistent_in_metadata_descriptor_and_docs() -> None:

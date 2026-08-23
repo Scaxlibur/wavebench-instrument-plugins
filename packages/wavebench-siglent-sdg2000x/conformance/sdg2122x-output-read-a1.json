@@ -1,0 +1,52 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "sdg2122x-output-read-a1",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A1",
+  "capability": "source.snapshot_v2",
+  "feature": "output",
+  "direction": "read",
+  "model": "SDG2122X",
+  "firmware_id": "2.01.01.39R7T2",
+  "option_ids": [],
+  "channels": [1, 2],
+  "core_version": "0.8.24",
+  "plugin_version": "0.8.2",
+  "wheel_sha256": "sha256:f7eb7dd034062535e80f0fdb2fb4ee9584806b634e7236f9201a3186e9776a8e",
+  "descriptor_digest": "sha256:3ce159e9fecab956062cc776ced3ed4f13be08b6e2ab6b489ae29035488cf4ca",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "resource": "redacted",
+    "source_channels": [1, 2],
+    "transport": "managed WaveBench session"
+  },
+  "safety_limits": {
+    "output_state": "off",
+    "source_limit_vpp": 5.0
+  },
+  "budget": {
+    "admitted": true,
+    "declared_query_limit": 44
+  },
+  "results": {
+    "consistent": true,
+    "queries": 38,
+    "writes": 0
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "channels": [1, 2],
+    "output_state": "off"
+  },
+  "coverage": [
+    "dual-channel output snapshot on the exact model and firmware"
+  ],
+  "limitations": [
+    "no output conversion or simultaneous-output claim",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:dc79eafd6730a7e2da11fe3b7e3e9ffe4005621434dcd02ea85349b3d8714fa7"
+}

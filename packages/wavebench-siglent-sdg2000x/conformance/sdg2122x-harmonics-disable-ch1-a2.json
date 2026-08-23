@@ -1,0 +1,54 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "sdg2122x-harmonics-disable-ch1-a2",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A2",
+  "capability": "source.harmonics_disable_v2",
+  "feature": "harmonics",
+  "direction": "disable",
+  "model": "SDG2122X",
+  "firmware_id": "2.01.01.39R7T2",
+  "option_ids": [],
+  "channels": [1],
+  "core_version": "0.8.24",
+  "plugin_version": "0.8.2",
+  "wheel_sha256": "sha256:f7eb7dd034062535e80f0fdb2fb4ee9584806b634e7236f9201a3186e9776a8e",
+  "descriptor_digest": "sha256:3ce159e9fecab956062cc776ced3ed4f13be08b6e2ab6b489ae29035488cf4ca",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "external_measurement": "not_used",
+    "resource": "redacted",
+    "source_channel": 1
+  },
+  "safety_limits": {
+    "output_state": "off",
+    "waveform": "sine"
+  },
+  "budget": {
+    "admitted": true,
+    "maximum_main_writes": 1
+  },
+  "results": {
+    "harmonic_state_after": "off",
+    "main_writes": 1,
+    "recovery_writes": 0
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "harmonic_state": "off",
+    "output_state": "off"
+  },
+  "coverage": [
+    "channel 1 harmonic disable and independent postcondition readback"
+  ],
+  "limitations": [
+    "channel 2 has A0 evidence only",
+    "no fault-injection hardware evidence",
+    "no harmonic configure or enable claim",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:d7c9180ce86c5df7ade5b2fa360aa224820b33c4f25358642eccd146e678526e"
+}

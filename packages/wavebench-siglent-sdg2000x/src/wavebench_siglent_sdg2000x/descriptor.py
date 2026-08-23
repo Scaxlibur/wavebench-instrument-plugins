@@ -31,6 +31,26 @@ from wavebench.instruments.source_extensions import (
 
 
 _V2_CHANNELS = (1, 2)
+_CONFORMANCE_PREFIX = "dist-info:wavebench-source-conformance/"
+_BASIC_EVIDENCE_REFS = (
+    _CONFORMANCE_PREFIX + "sdg2122x-basic-configure-a3.json",
+    _CONFORMANCE_PREFIX + "sdg2122x-basic-read-a1.json",
+)
+_OUTPUT_EVIDENCE_REFS = (
+    _CONFORMANCE_PREFIX + "sdg2122x-output-disable-a2.json",
+    _CONFORMANCE_PREFIX + "sdg2122x-output-enable-a2.json",
+    _CONFORMANCE_PREFIX + "sdg2122x-output-read-a1.json",
+)
+_HARMONIC_EVIDENCE_REFS = {
+    1: (
+        _CONFORMANCE_PREFIX + "sdg2122x-harmonics-disable-ch1-a2.json",
+        _CONFORMANCE_PREFIX + "sdg2122x-harmonics-read-a1.json",
+    ),
+    2: (
+        _CONFORMANCE_PREFIX + "sdg2122x-harmonics-disable-ch2-a0.json",
+        _CONFORMANCE_PREFIX + "sdg2122x-harmonics-read-a1.json",
+    ),
+}
 
 
 def _source_extensions() -> SourceDescriptorExtensions:
@@ -71,6 +91,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
             channels=(channel,),
             applicability=applicability,
             profile=basic_profile,
+            evidence_refs=_BASIC_EVIDENCE_REFS,
         )
         for channel in _V2_CHANNELS
     )
@@ -87,6 +108,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
             channels=(channel,),
             applicability=applicability,
             profile=output_profile,
+            evidence_refs=_OUTPUT_EVIDENCE_REFS,
         )
         for channel in _V2_CHANNELS
     )
@@ -111,6 +133,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
             channels=(channel,),
             applicability=harmonic_disable_applicability,
             profile=harmonic_disable_profile,
+            evidence_refs=_HARMONIC_EVIDENCE_REFS[channel],
         )
         for channel in _V2_CHANNELS
     )
