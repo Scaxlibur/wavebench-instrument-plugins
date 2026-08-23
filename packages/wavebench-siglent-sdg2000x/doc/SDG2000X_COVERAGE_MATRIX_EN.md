@@ -4,9 +4,13 @@
 
 ## Current conclusion
 
-The current release declares eight capabilities: identity, status, five basic writes, and the read-only arbitrary probe. Every capability has passed its core consumer path on one `SDG2122X`; all five writes completed CH1/CH2 A4 loops. Every registered model passes the offline protocol matrix and is released under the shared manual contract as authorized.
+Version `0.8.1` declares eleven capabilities: the legacy identity, status, five basic writes, and read-only
+arbitrary probe, plus `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`. The first
+eight have SDG2122X core-consumer hardware evidence. The three new capabilities currently have A0 offline
+contracts only and make no Source V2 hardware claim for any model. Registered-model V1 capabilities remain
+released under the common manual contract and offline model matrix.
 
-Advanced command domains have the broadest practical domain-specific protocol/A4 evidence, but no lossy write capability or raw-SCPI endpoint is declared where the core lacks an exact state model. Plugin source coverage is 620/620 statements and 244/244 branches, both 100%. That number describes code paths, not physical evidence for unwired ports or unavailable models.
+Advanced command domains have the broadest practical domain-specific protocol/A4 evidence, but no lossy write capability or raw-SCPI endpoint is declared where the core lacks an exact state model. Historical coverage numbers apply to version `0.8.0`; current Source V2 coverage is established by the present offline test report, not by carrying forward those numbers. Code coverage does not establish physical evidence for unwired ports or unavailable models.
 
 ## Coverage status
 
@@ -15,6 +19,9 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 | Instrument identity | `source.idn` | Passed on `SDG2122X` / `2.01.01.39R7T2`; other registered models released by the common protocol | New models or response variants still need redacted evidence |
 | System error queue | None | Disabled | Confirm the query, empty-queue semantics, and whether reads consume state |
 | Basic channel status | `source.status` | Repeated SDG2122X read-only rounds are stable; CH1/CH2 have frequency, Vpp, mean, and final independent zero-write evidence | Accept new firmware response variants separately |
+| Source V2 snapshot | `source.snapshot_v2` | A0: pure-read CH1/CH2 anchor/facet/anchor plan, 38-query Sine fixture, zero writes | A1 confirms real responses, budgets, models, and firmware |
+| Source V2 basic configuration | `source.basic_configure_v2` | A0: one-field Basic MAIN writes and core readback for Sine/Square/Ramp/Pulse; `offset_v` is pre-write rejected | A2/A3 confirm hardware readback, recovery, and session health |
+| Source V2 output | `source.output_v2` | A0: independent CH1/CH2 ON/OFF, one-write MAIN, and core readback; independent outputs may be ON together | A2/A3 confirm hardware output, recovery, and session health |
 | Output control | `source.output` | All models pass offline; SDG2122X CH1/CH2 passed core-Service ON→A4→OFF with zero unknown writes | Add other-model A4 only when hardware is available |
 | Fixed-wave frequency | `source.set_frequency` | SDG2122X CH1/CH2 cover OFF-state and live-ON writes; model/function boundaries are fully covered offline | Add other-model A4 only when hardware is available |
 | Fixed-wave amplitude | `source.set_amplitude_vpp` | SDG2122X CH1/CH2 cover OFF and live-ON writes; 2 mVpp–10 Vpp, offset envelope, and drift branches are 100% covered | Add other-model A4 only when hardware is available |
@@ -31,7 +38,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 | Phase mode / Invert | No lossless capability yet | `EQPHASE` leaves 0.27°; CH1/CH2 inversion is about 179.9°; actual token is `PHASE-LOCKED` | Split single-field polarity/phase facets before declaration |
 | Tracking / Coupling / Copy | No lossless capability yet | TRACE, F/P/A ratio/deviation, and CH1→CH2 PACP have A4; reverse PACP has A3 | Source V2 must model conditional fields, actions, and cross-channel transactions |
 | Sync / Counter / Clock / Cascade | None | An 18-query zero-write pass succeeded; Sync and Counter OFF, ROSC INT, Cascade OFF; unwired ports have no A4 claim | Add dedicated Sync, Counter, external-reference, and second-source wiring |
-| Code paths | Not applicable | 348 plugin tests; 620/620 statements and 244/244 branches, 100% | New code must preserve semantic coverage, not inflate numbers with empty assertions |
+| Code paths | Not applicable | V1 historical release: 348 tests, 620/620 statements, and 244/244 branches; new V2 A0 tests run separately | Run the current plugin tests and coverage report; do not inflate metrics with empty assertions |
 
 ## Denied by default
 
@@ -52,6 +59,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 - [Output-control hardware acceptance](SDG2000X_OUTPUT_ACCEPTANCE_EN.md)
 - [Frequency-write hardware acceptance](SDG2000X_FREQUENCY_ACCEPTANCE_EN.md)
 - [Basic-write hardware acceptance](SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
+- [Source V2 A0 offline adapter record](SDG2000X_SOURCE_V2_A0_EN.md)
 - [Harmonic protocol and spectrum acceptance](SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [Modulation protocol and waveform acceptance](SDG2000X_MODULATION_ACCEPTANCE_EN.md)
 - [Sweep protocol and waveform acceptance](SDG2000X_SWEEP_ACCEPTANCE_EN.md)

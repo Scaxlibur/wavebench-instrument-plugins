@@ -60,11 +60,24 @@
 
 ## M5：覆盖率与发行收尾
 
-- [x] SDG 插件测试达到 348 项；源码 620/620 statements、244/244 branches，均为 100%。
+- [x] 版本 `0.8.0` 的 SDG 插件测试达到 348 项；源码 620/620 statements、244/244 branches，均为 100%。
 - [x] 响应结构、数值边界、复合模式门禁、写后漂移、恢复不收敛和会话锁止均有语义测试。
 - [x] 仓库全量 `895 passed, 2 skipped`；Ruff、插件 package check 与 `pip check` 通过。
 - [x] 独立最终只读会话确认信号源 27 查询、示波器 54 查询、双方 0 写入；两路输出 OFF，RTM2032 AUTO 且无过载。
 - [x] `SDG2042X` 与 `SDG2082X` 按共同手册协议和离线型号矩阵放行；不伪造其它型号 A4 证据。
+
+## M6：Source V2 A0 离线适配
+
+- [x] 声明 `source.snapshot_v2`、`source.basic_configure_v2` 与 `source.output_v2`，并将最低核心版本提高到 `0.8.24`。
+- [x] 以纯读取 anchor/facet/anchor 计划读取 CH1/CH2；两个 Sine fixture 通道完成 38 次查询、0 次写入，低于 42 次声明上限。
+- [x] Basic 与 Output 的 V2 MAIN 阶段各只允许一条已审计写命令，随后由核心独立快照回读。
+- [x] 离线验证 V2 Basic 的频率写入、Output ON/OFF、描述符/轮包交叉校验，以及 V1 Noise/DC 函数路径兼容。
+- [ ] A1：未在实机确认 V2 快照响应、查询预算和型号/固件适用性。
+- [ ] A2：未在实机确认 V2 Basic/Output 的回读、拒绝分支和失败恢复。
+- [ ] A3：未在核心实机路径确认 timeout、断连、未知写结果和 session health。
+
+Noise 的 `STDEV` 与缺少最终 Vpp/Offset 的 DC/Noise 状态不被伪装成 Vpp。此类旧 `set_function`
+调用保留 V1 的输出 OFF 事务；该规则不引入 RMS、峰值因子或统计模型。
 
 ## 实机门禁
 

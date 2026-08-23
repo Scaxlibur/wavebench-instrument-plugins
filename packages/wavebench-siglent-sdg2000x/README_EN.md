@@ -6,16 +6,34 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 
 ## Current development baseline
 
-Version `0.8.0` covers the core's current basic Source write surface: `source.set_frequency`, `source.set_function`, `source.set_amplitude_vpp`, `source.set_square_duty_cycle`, and `source.output`, plus read-only `source.arbitrary_probe`. Arbitrary probing sends only a fixed query allowlist and never uploads, deletes, or overwrites a waveform. Square duty cycle accepts the datasheet's global 0.001% through 99.999% range and uses independent readback to reject values clamped at the current frequency. Noise/DC may be configured only while output is OFF and remain blocked by output-enable safety. Modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
+Version `0.8.1` retains the eight legacy V1 capabilities and adds `source.snapshot_v2`,
+`source.basic_configure_v2`, and `source.output_v2`. V2 currently has A0 offline-contract coverage only:
+descriptor validation, query budgets, single-write MAIN phases, and core phase authorization use fake
+transports. No Source V2 hardware acceptance has been performed. See the
+[Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md).
 
-An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptance for all eight published capabilities. All five basic write capabilities passed core `SourceService` closed loops on CH1 and CH2. Harmonic, modulation, Sweep, Burst, Pulse, Noise/DC, TARB, all 199 built-ins, Combine, phase/invert, tracking/coupling/copy, and auxiliary global state also completed protocol or A4 acceptance wherever the available wiring allowed it. The maximum measured output was 4.24 Vpp. A final independent read-only session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, all composite modes other than restored original Harmonic states disabled, and no RTM2032 overload. Plugin source now has 100% statement and branch coverage. Under the user's authorization, `SDG2042X` and `SDG2082X` are released by the same documented contract and offline model matrix; SDG2122X A4 evidence is still not extrapolated to them.
+The V1 basic surface remains `source.set_frequency`, `source.set_function`,
+`source.set_amplitude_vpp`, `source.set_square_duty_cycle`, `source.output`, and read-only
+`source.arbitrary_probe`. V2 Basic currently covers Sine, Square, Ramp, and Pulse function changes,
+frequency, Vpp, and square duty cycle. Each request writes one field; `offset_v` is not yet exposed.
+Noise/DC retain their V1 output-OFF configuration semantics: the adapter does not represent `STDEV` or a
+nominal value as Vpp, and the core retains the V1 `set_function` setter when no lossless V2 state exists.
+Modulation, sweep, burst, arbitrary-wave upload, and counter capabilities remain disabled.
+
+An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptance for the eight legacy V1
+capabilities. All five basic writes passed core `SourceService` closed loops on CH1 and CH2. Harmonic,
+modulation, Sweep, Burst, Pulse, Noise/DC, TARB, all 199 built-ins, Combine, phase/invert,
+tracking/coupling/copy, and auxiliary global state also completed protocol or A4 acceptance where available
+wiring allowed it. This evidence does not establish Source V2 A1–A3. The maximum measured output was 4.24
+Vpp; a final independent read-only session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, with all
+composite modes other than restored original Harmonic states disabled and no RTM2032 overload.
 
 ## Identity and compatibility
 
 - Distribution: `wavebench-siglent-sdg2000x`
 - Canonical driver ID: `siglent.sdg2000x`
 - Registered models: `SDG2042X`, `SDG2082X`, `SDG2122X`
-- WaveBench: `>=0.8,<0.9`
+- WaveBench: `>=0.8.24,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa`
 
@@ -59,6 +77,8 @@ Change `access` to `read_write` before calling a basic Source write capability. 
 - `source.set_amplitude_vpp` accepts 2 mVpp through 10 Vpp and requires the amplitude-plus-offset envelope to remain within ±10 V.
 - `source.set_function` allows live switching among four bounded periodic waves. Noise/DC require output OFF and do not bypass output-enable safety.
 - `source.set_square_duty_cycle` applies only to FIX-mode square waves. Frequency-dependent clamping must fail readback closed.
+- Source V2 Basic and Output MAIN each send one audited write, followed by an independent core snapshot; independent outputs may be ON together.
+- Source V2 does not guess a Noise/DC Vpp. Legacy `set_function` calls without a lossless V2 representation retain the V1 setter; output enable still requires final readable Vpp and Offset.
 - Each target configuration is written once. Any post-write failure attempts OFF recovery and latches all configuration writes for the session.
 - Advanced command domains have separate hardware evidence, but write capabilities remain disabled until the core has lossless models; no raw-SCPI endpoint is exposed.
 - Hardware tests require separate authorization and prior confirmation of the resource, firmware, termination, output state, safety limit, and restoration procedure.
@@ -86,6 +106,7 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X output-control hardware acceptance](doc/SDG2000X_OUTPUT_ACCEPTANCE_EN.md)
 - [SDG2000X frequency-write hardware acceptance](doc/SDG2000X_FREQUENCY_ACCEPTANCE_EN.md)
 - [SDG2000X basic-write hardware acceptance](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
+- [SDG2000X Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md)
 - [Source V2 capability, state, and composite-output safety RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY_EN.md)
 - [SDG2000X harmonic protocol and spectrum acceptance](doc/SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [SDG2000X modulation protocol and waveform acceptance](doc/SDG2000X_MODULATION_ACCEPTANCE_EN.md)

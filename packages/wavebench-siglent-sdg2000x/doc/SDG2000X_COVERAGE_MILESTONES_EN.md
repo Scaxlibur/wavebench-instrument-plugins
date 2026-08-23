@@ -60,11 +60,25 @@
 
 ## M5: Coverage and release closure
 
-- [x] Reach 348 SDG plugin tests and 100% source coverage: 620/620 statements and 244/244 branches.
+- [x] Version `0.8.0` reached 348 SDG plugin tests and 100% source coverage: 620/620 statements and 244/244 branches.
 - [x] Semantically test response structure, numeric boundaries, composite-mode gates, post-write drift, non-converging recovery, and the session latch.
 - [x] Pass the repository-wide `895 passed, 2 skipped`, Ruff, plugin package check, and `pip check`.
 - [x] In a final independent read-only session, record 27 source queries, 54 scope queries, and zero writes on either instrument; both source outputs OFF and RTM2032 AUTO with no overload.
 - [x] Release `SDG2042X` and `SDG2082X` under the common manual protocol and offline model matrix without fabricating other-model A4 evidence.
+
+## M6: Source V2 A0 offline adapter
+
+- [x] Declare `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`, with a minimum core version of `0.8.24`.
+- [x] Read CH1/CH2 through pure-read anchor/facet/anchor plans; the two-Sine fixture completes 38 queries and zero writes under the declared limit of 42.
+- [x] Permit one audited write in each V2 Basic or Output MAIN phase, followed by the core's independent snapshot readback.
+- [x] Verify V2 Basic frequency writes, Output ON/OFF, descriptor/wheel cross-checks, and legacy V1 Noise/DC function compatibility offline.
+- [ ] A1: confirm real V2 snapshot responses, budgets, model, and firmware applicability.
+- [ ] A2: confirm V2 Basic/Output readback, rejection branches, and recovery on hardware.
+- [ ] A3: confirm timeout, disconnection, unknown write outcomes, and session health through core hardware consumers.
+
+Noise `STDEV` and DC/Noise states without final Vpp/Offset are not represented as Vpp. Such legacy
+`set_function` calls retain their V1 output-OFF transaction; this rule does not add RMS, crest-factor, or
+statistical models.
 
 ## Hardware gate
 

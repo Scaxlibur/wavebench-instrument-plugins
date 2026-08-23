@@ -4,9 +4,12 @@
 
 ## 当前结论
 
-当前版本声明 8 项 capability：身份、状态、五项基础写能力和任意波只读探测。全部 capability 已在 `SDG2122X` 上通过核心消费路径实机验收；五项写能力完成 CH1/CH2 A4 闭环。三个登记型号均通过离线协议矩阵，按授权依据共同手册合同放行。
+版本 `0.8.1` 声明 11 项 capability：既有的身份、状态、五项基础写能力和任意波只读探测，以及
+`source.snapshot_v2`、`source.basic_configure_v2` 和 `source.output_v2`。前 8 项已有 `SDG2122X`
+核心消费路径实机证据；新增的 3 项目前只有 A0 离线合同，不能声称任一型号的 V2 实机通过。三个登记型号的
+V1 capability 仍按共同手册合同和离线型号矩阵放行。
 
-高级命令域已完成尽可能全面的分域协议/A4 验收，但核心缺少无损状态模型时继续不声明写 capability，也不提供 raw SCPI。插件源码覆盖率为 620/620 statements、244/244 branches，均为 100%。该数字只代表代码路径覆盖，不替代未接外部端口和未持有型号的物理证据。
+高级命令域已完成尽可能全面的分域协议/A4 验收，但核心缺少无损状态模型时继续不声明写 capability，也不提供 raw SCPI。历史覆盖率数字只对应版本 `0.8.0`；新增 Source V2 代码的当前覆盖率以本次离线测试报告为准，不用旧数字替代验证。代码覆盖不替代未接外部端口和未持有型号的物理证据。
 
 ## 覆盖状态
 
@@ -15,6 +18,9 @@
 | 仪器身份 | `source.idn` | `SDG2122X` / `2.01.01.39R7T2` 实机通过；其它登记型号按共同协议放行 | 新型号或协议变体仍需脱敏证据 |
 | 系统错误队列 | 无 | 未开放 | 确认查询命令、空队列语义和是否为消费型读取 |
 | 通道基础状态 | `source.status` | SDG2122X 多轮只读稳定；CH1/CH2 均完成频率、Vpp、均值和最终独立零写审计 | 新固件响应变体需单独验收 |
+| Source V2 快照 | `source.snapshot_v2` | A0 完成：CH1/CH2 纯读取 anchor/facet/anchor、38 查询 Sine fixture、0 写入 | A1 确认真实响应、预算、型号和固件 |
+| Source V2 基础配置 | `source.basic_configure_v2` | A0 完成：Sine/Square/Ramp/Pulse 的单字段 Basic MAIN 写入和核心回读；`offset_v` 暂在写前拒绝 | A2/A3 确认实机回读、故障恢复和 session health |
+| Source V2 输出 | `source.output_v2` | A0 完成：CH1/CH2 独立 ON/OFF、单写 MAIN、核心回读；独立端口可同时 ON | A2/A3 确认实机输出、失败恢复和 session health |
 | 输出控制 | `source.output` | 三个型号通过离线合同；SDG2122X CH1/CH2 通过核心 Service ON→A4→OFF，未知写结果为 0 | 其它型号 A4 仅在有样机时补充 |
 | 固定波频率 | `source.set_frequency` | SDG2122X CH1/CH2 均覆盖 OFF 写入和 ON 状态实时写入；按型号/函数边界离线全覆盖 | 其它型号 A4 仅在有样机时补充 |
 | 固定波幅度 | `source.set_amplitude_vpp` | SDG2122X CH1/CH2 均覆盖 OFF 与 ON 实时写入；2 mVpp–10 Vpp、偏置包络和漂移分支 100% 覆盖 | 其它型号 A4 仅在有样机时补充 |
@@ -31,7 +37,7 @@
 | 相位模式 / Invert | 无损 capability 暂缺 | `EQPHASE` 后差 0.27°；CH1/CH2 反相约 179.9°；实机 token 为 `PHASE-LOCKED` | 拆分单字段 polarity/phase facet 后再声明 |
 | 跟踪 / 耦合 / 复制 | 无损 capability 暂缺 | TRACE、F/P/A ratio/deviation、CH1→CH2 PACP 均有 A4；反向 PACP 有 A3 | Source V2 表达条件字段、动作和跨通道事务 |
 | Sync / Counter / 时钟 / Cascade | 无 | 18 查询零写轮次通过；Sync 与 Counter OFF、ROSC INT、Cascade OFF；未接端口不宣称 A4 | 补 Sync、Counter、外部参考和第二台源的专用接线 |
-| 代码路径 | 不适用 | 348 项插件测试；620/620 statements、244/244 branches，100% | 新增代码必须维持语义覆盖，不以空断言刷数值 |
+| 代码路径 | 不适用 | V1 历史版本为 348 项测试、620/620 statements、244/244 branches；本次新增 V2 A0 测试单独执行 | 运行当前插件测试与覆盖率报告；不以空断言刷数值 |
 
 ## 默认拒绝项
 
@@ -52,6 +58,7 @@
 - [输出控制实机验收](SDG2000X_OUTPUT_ACCEPTANCE.md)
 - [频率写入实机验收](SDG2000X_FREQUENCY_ACCEPTANCE.md)
 - [基础写入实机验收](SDG2000X_BASIC_WRITE_ACCEPTANCE.md)
+- [Source V2 A0 离线适配记录](SDG2000X_SOURCE_V2_A0.md)
 - [谐波协议与频谱验收](SDG2000X_HARMONIC_ACCEPTANCE.md)
 - [调制协议与波形验收](SDG2000X_MODULATION_ACCEPTANCE.md)
 - [Sweep 协议与波形验收](SDG2000X_SWEEP_ACCEPTANCE.md)

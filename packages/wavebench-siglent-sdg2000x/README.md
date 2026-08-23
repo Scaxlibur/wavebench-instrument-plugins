@@ -6,16 +6,28 @@
 
 ## 当前开发基线
 
-版本 `0.8.0` 已覆盖主仓库现有基础 Source 写接口：`source.set_frequency`、`source.set_function`、`source.set_amplitude_vpp`、`source.set_square_duty_cycle` 与 `source.output`，并提供只读 `source.arbitrary_probe`。任意波探测只发送固定白名单查询，不上传、不删除、不覆盖波形。方波占空比接受数据手册的 0.001% 至 99.999% 全局范围，并依靠独立回读拒绝当前频率下被仪器钳位的值。Noise/DC 只允许在输出 OFF 时配置，并仍由输出安全门禁拒绝开启。调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
+版本 `0.8.1` 保留 8 项既有 V1 capability，并新增 `source.snapshot_v2`、`source.basic_configure_v2`
+和 `source.output_v2`。V2 当前只完成 A0 离线合同：描述符、查询预算、单写主阶段和核心 phase 授权均由
+fake transport 验证，尚未进行 Source V2 实机验收。完整边界见 [Source V2 A0 离线适配记录](doc/SDG2000X_SOURCE_V2_A0.md)。
 
-`SDG2122X` 固件 `2.01.01.39R7T2` 已完成全部 8 项公开 capability 的实机验收。五项基础写能力均通过核心 `SourceService` 在 CH1/CH2 闭环；Harmonic、调制、Sweep、Burst、Pulse、Noise/DC、TARB、199 项内置任意波、Combine、相位/反相、跟踪/耦合/复制和辅助全局状态也已按可用接线完成协议或 A4 验收。最大实测 4.24 Vpp。独立最终只读会话确认两路 Sine / 1 kHz / 4 Vpp / OFF，除 Harmonic 按原状态恢复外，其余复合模式关闭，RTM2032 无过载。插件源码达到 100% statement 与 branch 覆盖率。按用户授权，`SDG2042X` 与 `SDG2082X` 依据同一手册合同和离线型号矩阵放行；A4 结论仍不从 `SDG2122X` 外推。
+V1 基础接口仍包括 `source.set_frequency`、`source.set_function`、`source.set_amplitude_vpp`、
+`source.set_square_duty_cycle`、`source.output` 和只读 `source.arbitrary_probe`。V2 Basic 当前覆盖
+Sine、Square、Ramp、Pulse 的函数、频率、Vpp 和方波占空比；每次只写一个字段，`offset_v` 尚未开放。
+Noise/DC 保持输出 OFF 的 V1 配置语义：驱动不把 `STDEV` 或标称值伪装为 Vpp，核心会将无法无损表达的
+旧 `set_function` 调用留在 V1 setter。调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
+
+`SDG2122X` 固件 `2.01.01.39R7T2` 已完成既有 8 项 V1 capability 的实机验收。五项基础写能力均通过核心
+`SourceService` 在 CH1/CH2 闭环；Harmonic、调制、Sweep、Burst、Pulse、Noise/DC、TARB、199 项内置任意波、
+Combine、相位/反相、跟踪/耦合/复制和辅助全局状态也已按可用接线完成协议或 A4 验收。该证据不外推为新
+Source V2 capability 的 A1–A3 结果。最大实测 4.24 Vpp；最终独立只读会话确认两路 Sine / 1 kHz / 4 Vpp /
+OFF，除 Harmonic 按原状态恢复外，其余复合模式关闭，RTM2032 无过载。
 
 ## 身份与兼容范围
 
 - distribution：`wavebench-siglent-sdg2000x`
 - canonical driver ID：`siglent.sdg2000x`
 - 已登记型号：`SDG2042X`、`SDG2082X`、`SDG2122X`
-- WaveBench：`>=0.8,<0.9`
+- WaveBench：`>=0.8.24,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
 
@@ -59,6 +71,8 @@ max_source_vpp = 10.0
 - `source.set_amplitude_vpp` 只接受 2 mVpp 至 10 Vpp，并要求幅度与偏置不越过 ±10 V 包络。
 - `source.set_function` 允许四种有界周期波实时切换；Noise/DC 必须在输出 OFF 时配置，且不会绕过输出安全门禁。
 - `source.set_square_duty_cycle` 仅适用于 FIX 模式方波；频率相关钳位必须导致回读失败关闭。
+- Source V2 的 Basic 和 Output MAIN 各只发送一个已审计写命令，最终状态由核心独立快照回读；独立通道可同时 ON。
+- Source V2 的 Noise/DC 不猜测 Vpp；无法无损表示的旧 `set_function` 仍调用 V1 setter，输出 ON 继续要求可读最终 Vpp 与 Offset。
 - 目标配置只写入一次；任何写后异常都会尝试 OFF 恢复并锁止本会话的全部配置写入。
 - 高级命令域已完成分域实机验收，但在核心缺少无损模型时继续不开放写 capability，也不提供 raw SCPI。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、输出状态、安全上限和恢复方式。
@@ -86,6 +100,7 @@ python -m wavebench plugin package check packages/wavebench-siglent-sdg2000x
 - [SDG2000X 输出控制实机验收](doc/SDG2000X_OUTPUT_ACCEPTANCE.md)
 - [SDG2000X 频率写入实机验收](doc/SDG2000X_FREQUENCY_ACCEPTANCE.md)
 - [SDG2000X 基础写入实机验收](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE.md)
+- [SDG2000X Source V2 A0 离线适配记录](doc/SDG2000X_SOURCE_V2_A0.md)
 - [Source V2 能力、状态与复合输出安全 RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY.md)
 - [SDG2000X 谐波协议与频谱验收](doc/SDG2000X_HARMONIC_ACCEPTANCE.md)
 - [SDG2000X 调制协议与波形验收](doc/SDG2000X_MODULATION_ACCEPTANCE.md)

@@ -59,7 +59,26 @@ An `SDG2122X` running firmware `2.01.01.39R7T2` returned `POWERON_STATE,ON|OFF` 
 
 ## Core interface mapping
 
-The current descriptor declares `source.idn`, `source.status`, all four basic configuration writes, `source.output`, and `source.arbitrary_probe`. Status and basic writes return the public `wavebench.instruments.SourceStatus`; arbitrary probing returns a list of `ArbitraryQueryProbeResult`. Status fields map as follows.
+The descriptor also declares `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`. These
+capabilities have A0 offline-adapter coverage only; existing V1 hardware records do not replace V2 A1–A3.
+Status and basic writes return the public `wavebench.instruments.SourceStatus`; arbitrary probing returns a
+list of `ArbitraryQueryProbeResult`. Status fields map as follows.
+
+### Source V2 A0 adapter
+
+The Source V2 snapshot uses only audited `*IDN?`, `OUTP?`, `BSWV?`, `SWWV?`, and advanced-state queries. It
+does not send selector or configuration writes. Within both anchor phases, the Output facet reuses its channel's
+Basic snapshot. The complete two-Sine A0 fixture performs 38 queries and zero writes, below the descriptor
+limit of 42.
+
+V2 Basic MAIN reuses only verified `BSWV WVTP`, `BSWV FRQ`, `BSWV AMP`, and `BSWV DUTY` writes. A request
+contains one field; `BSWV OFST` has no independently verified write evidence and therefore rejects `offset_v`
+before I/O. V2 Output MAIN uses only `OUTP ON|OFF`. The core obtains a new snapshot after MAIN, rather than
+allowing driver readback inside MAIN.
+
+Noise `STDEV` is not final Vpp. The current adapter does not use it to justify V2 output enable and does not
+convert it to Vpp. Legacy V1 `set_function` paths involving Noise/DC therefore retain their output-OFF V1
+transaction, while periodic waves fully represented by the V2 profile use V2.
 
 Harmonic Command is available only when the basic wave is SINE. The driver therefore uses state-dependent querying: non-SINE snapshots omit `HARM?`, while returning to SINE queries it again to detect a stored harmonic state that may become active. Hardware timeout evidence and injected-fault tests cover this behavior.
 
@@ -93,5 +112,5 @@ Harmonic Command is available only when the basic wave is SINE. The driver there
 - Declared capabilities pass the core `validate_declared_capabilities` check.
 - Fake transports cover CH1/CH2, ON/OFF, idempotency, all three model identities, readback mismatch, state drift, ambiguous writes, OFF recovery, failed recovery, and session latching.
 - Core `SourceService` safety tests allow the 10 Vpp boundary and reject 10.0001 Vpp without a write.
-- Plugin source reaches 620/620 statements and 244/244 branches; all 348 plugin tests pass.
+- Version `0.8.0` reached 620/620 statements and 244/244 branches; all 348 plugin tests passed. Current Source V2 code is covered by the present offline tests and coverage report.
 - Isolated wheel installation, entry-point discovery, vendor-manual exclusion from sdist, and the repository-wide `895 passed, 2 skipped` pass.

@@ -59,7 +59,22 @@ E05C 的 Basic Wave Command 定义 `WVTP`、`FRQ`、`AMP` 与 `DUTY` 写入。�
 
 ## 主仓库接口映射
 
-当前 descriptor 声明 `source.idn`、`source.status`、四项基础配置写入、`source.output` 与 `source.arbitrary_probe`。状态和基础写返回主仓库公开的 `wavebench.instruments.SourceStatus`；任意波探测返回 `ArbitraryQueryProbeResult` 列表。状态字段映射如下：
+当前 descriptor 还声明 `source.snapshot_v2`、`source.basic_configure_v2` 与 `source.output_v2`。这三项只完成
+A0 离线适配，不以既有 V1 实机记录替代 V2 的 A1–A3。状态和基础写返回主仓库公开的
+`wavebench.instruments.SourceStatus`；任意波探测返回 `ArbitraryQueryProbeResult` 列表。状态字段映射如下：
+
+### Source V2 A0 适配
+
+Source V2 snapshot 只使用已经审计的 `*IDN?`、`OUTP?`、`BSWV?`、`SWWV?` 和高级状态查询；它不会发送
+selector 或配置写入。两个 anchor phase 中，Output facet 复用同通道 Basic 快照，避免额外读取。A0 Sine
+fixture 的完整计划为 38 次查询、0 次写入，descriptor 上限为 42。
+
+V2 Basic MAIN 仅复用已验证的 `BSWV WVTP`、`BSWV FRQ`、`BSWV AMP` 和 `BSWV DUTY` 写入。每个请求只接受
+一个字段；`BSWV OFST` 尚未具有独立写入证据，因此 `offset_v` 在 I/O 前拒绝。V2 Output MAIN 仅使用
+`OUTP ON|OFF`。写后状态由核心发起新的 snapshot 回读，driver 不在 MAIN 阶段附带查询。
+
+Noise 的 `STDEV` 不是最终 Vpp。当前插件不会用它构造 V2 输出开启依据，也不会将它换算为 Vpp。旧 V1
+`set_function` 的 Noise/DC 路径因此保留原有输出 OFF 事务；可由 V2 profile 完整表达的周期波继续使用 V2。
 
 Harmonic Command 仅在基础波形为 SINE 时可用。驱动因此采用状态依赖查询：非 SINE 快照不发送 `HARM?`；切回 SINE 时重新查询，以捕获可能重新生效的遗留谐波状态。该行为已由实机超时负向证据和故障测试确认。
 
@@ -93,5 +108,5 @@ Harmonic Command 仅在基础波形为 SINE 时可用。驱动因此采用状态
 - descriptor 声明的 capability 必须通过主仓库 `validate_declared_capabilities`。
 - fake transport 覆盖 CH1/CH2、ON/OFF、幂等、三个型号身份、回读不符、状态漂移、歧义写入、OFF 恢复、恢复失败和会话锁止。
 - 核心 `SourceService` 安全测试要求 10 Vpp 边界允许、10.0001 Vpp 在零写入条件下拒绝。
-- SDG 插件源码达到 620/620 statements、244/244 branches；348 项插件测试通过。
+- 版本 `0.8.0` 的 SDG 插件源码达到 620/620 statements、244/244 branches；348 项插件测试通过。新增 Source V2 代码以当前离线测试和覆盖率报告为准。
 - wheel 隔离安装、entry point 发现、sdist 厂商资料排除和仓库全量 `895 passed, 2 skipped` 通过。
