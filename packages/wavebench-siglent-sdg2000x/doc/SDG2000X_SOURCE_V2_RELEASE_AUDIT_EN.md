@@ -5,7 +5,7 @@
 ## Current Status
 
 At plugin version `0.8.2`, C3 is not complete. This document records offline-reviewable release preparation and
-the exact-target A1/limited-A2 evidence, separately from the outstanding A3 gate. It is not release sign-off,
+the exact-target A1/limited-A2/Basic-A3 evidence, separately from final release gates. It is not release sign-off,
 a wheel conformance manifest, or an extrapolated claim for any model or firmware.
 
 ## C3 Conditions and Current Evidence
@@ -21,8 +21,8 @@ a wheel conformance manifest, or an extrapolated claim for any model or firmware
 | A1: V2 snapshot | On `SDG2122X` / `2.01.01.39R7T2`, a CH1/CH2 hardware snapshot completed 38 queries and zero writes with consistent state and a healthy session | Complete; not extrapolated |
 | A2: normal Basic/Output/Harmonic disable | On that target, one 1 Vpp Basic write/readback on each of CH1/CH2, one Output ON/OFF on each channel, and one CH1 Harmonic disable all succeeded; both channels finish Harmonic OFF/output OFF with a healthy session | Limited normal path complete; not full A2 |
 | A2: fault, rejection, and recovery | No transport failure, ambiguous write, or post-write mismatch was induced. An initial Basic request was rejected by existing Harmonic state before the Basic command; because MAIN had started, the core completed one OFF recovery | Neither hardware fault injection nor a successful Basic write; A0 covers the corresponding injected branches |
-| A3: scope loopback | No Source V2 waveform capture ran; the scope supplied only the coupling safety gate | Await manual wiring and high-impedance-input confirmation, then separate authorization |
-| Stable core and release-artifact sign-off | WaveBench `0.8.24` remains a development line; no final plugin wheel digest, A1–A3 manifest, or release sign-off exists | Pending |
+| A3: Basic scope loopback | With confirmed high-impedance CH1-to-CH1 and CH2-to-CH2 wiring, Sine/Square/Ramp/Pulse on CH1/CH2 all completed 2 kHz / 2 Vpp scope capture; both Square captures measured 25% duty, all eight quality gates passed, and both outputs finished OFF | Exact operating points complete; not extrapolated |
+| Stable core and release-artifact sign-off | WaveBench `0.8.24` remains a development line; no final plugin wheel digest, implemented and verified conformance manifest, or release sign-off exists | Pending |
 
 ## A0 Scope
 
@@ -42,11 +42,9 @@ produces a measured waveform.
 
 ## Remaining Before C3
 
-1. A3: after manual confirmation of SDG CH1 → RTM2032 CH1 wiring and a high-impedance input/probe setup, use a
-   scope loopback to confirm declared writes for frequency, Vpp, function, and duty cycle; record the pre-enable
-   offset reading, termination, limits, tolerance, and final OFF state.
-2. Use a stable core and final plugin wheel to create and review a conformance manifest, then perform the
-   actual release sign-off.
+1. Implement and validate the conformance-manifest schema, digest checks, and current-distribution wheel
+   ownership, then use a stable core and final plugin wheel to create and review that manifest.
+2. Perform the actual release sign-off from the final artifacts and manifest.
 
 Hardware fault injection beyond A3 needs separate authorization if it is ever required; the current C3 does not
 substitute it for the minimal safety closure. This audit does not change `wavebench.toml`, connect to instruments,

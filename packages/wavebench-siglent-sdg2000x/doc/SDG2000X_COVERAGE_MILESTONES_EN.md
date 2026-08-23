@@ -75,7 +75,7 @@
 - [x] A1: on the exact `SDG2122X` / `2.01.01.39R7T2` target, confirm the V2 dual-channel snapshot, 38 queries / zero writes, the Harmonic-state facet, and runtime model/firmware applicability.
 - [x] A2 (normal path): on that target, complete one 1 Vpp Basic write and independent readback on each of CH1/CH2, one Output ON/OFF on each channel, and one CH1 Harmonic disable with independent Harmonic/output readback; both outputs finish OFF.
 - [ ] Hardware rejection, unknown-write, post-write-mismatch, and OFF-recovery paths have not been induced for A2. Only A0 has fault-injection evidence; it is not hardware acceptance.
-- [ ] A3: use an authorized scope loopback to confirm V2 Basic frequency, Vpp, function, and duty cycle; record offset, termination, tolerance, and the final OFF state.
+- [x] A3: on the exact `SDG2122X` / `2.01.01.39R7T2` target with confirmed high-impedance CH1-to-CH1 and CH2-to-CH2 wiring, complete 2 kHz / 2 Vpp scope capture for Sine, Square, Ramp, and Pulse on both channels; both Square captures additionally confirm 25% duty. All eight capture quality gates pass and both outputs finish OFF. See the [A3 hardware waveform acceptance](SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md).
 
 Noise `STDEV` and DC/Noise states without final Vpp/Offset are not represented as Vpp. Such legacy
 `set_function` calls retain their V1 output-OFF transaction; this rule does not add RMS, crest-factor, or
@@ -87,16 +87,17 @@ statistical models.
 - [x] A1: on the exact `SDG2122X` / `2.01.01.39R7T2` target, confirm the V2 dual-channel snapshot, 38 queries / zero writes, the Harmonic-state facet, and runtime model/firmware applicability.
 - [x] A2 (normal path): on that target, complete one 1 Vpp Basic write and independent readback on each of CH1/CH2, one Output ON/OFF on each channel, and one CH1 Harmonic disable with independent Harmonic/output readback; both outputs finish OFF. Hardware simultaneous ON was not verified.
 - [ ] Hardware rejection, unknown-write, post-write-mismatch, and OFF-recovery paths have not been induced for A2. Only A0 has fault-injection evidence; it is not hardware acceptance.
-- [ ] A3: use an authorized scope loopback to confirm V2 Basic frequency, Vpp, function, and duty cycle, recording offset, termination, tolerance, and the final OFF state; fake transports do not replace this evidence.
+- [x] A3: on the exact `SDG2122X` / `2.01.01.39R7T2` target with confirmed high-impedance CH1-to-CH1 and CH2-to-CH2 wiring, complete 2 kHz / 2 Vpp scope capture for Sine, Square, Ramp, and Pulse on both channels; both Square captures additionally confirm 25% duty. All eight capture quality gates pass and both outputs finish OFF. See the [A3 hardware waveform acceptance](SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md); fake transports do not replace this evidence.
 
 ## C3: Stable-release audit
 
 - [x] Complete offline-audit preparation: version, descriptor, release metadata, documentation, sdist file list, and A0 test boundary agree.
 - [x] Record exact-target A1 and limited normal-path A2 evidence, explicitly excluding A3, fault injection, and release sign-off.
-- [ ] Complete sign-off after A3, a stable core version, final plugin artifacts, and a conformance manifest are available. Before then, do not represent Source V2 write capabilities as released.
+- [x] Record exact-target dual-channel Basic A3 operating-point waveform evidence, explicitly excluding other frequency/amplitude ranges, loads, fault injection, and release sign-off.
+- [ ] Complete sign-off after a stable core version, final plugin artifacts, and a conformance manifest are available. Before then, do not represent Source V2 write capabilities as released.
 
 ## Hardware gate
 
-Before hardware access, record the target model, firmware, redacted resource, initial output state, allowed commands, denied commands, success criteria, and restoration steps. The complete 2026-08-21 acceptance used a 10 Vpp maximum and a 9 Vpp active stop line; the highest measured output was 4.24 Vpp. A final independent session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, with all composite modes other than restored original Harmonic states disabled. Before A3, manually confirm SDG CH1 → RTM2032 CH1 wiring and an appropriate high-impedance probe/input setup.
+Before hardware access, record the target model, firmware, redacted resource, initial output state, allowed commands, denied commands, success criteria, and restoration steps. The complete 2026-08-21 acceptance used a 10 Vpp maximum and a 9 Vpp active stop line; the highest measured output was 4.24 Vpp. A final independent session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, with all composite modes other than restored original Harmonic states disabled. The 2026-08-24 Source V2 A3 record confirms high-impedance CH1-to-CH1 and CH2-to-CH2 wiring only for its documented operating points.
 
 Unwired Sync, Counter, external Trigger/Gate, external reference, and multi-device Cascade remain A3 or explicitly unaccepted. Software coverage is not substituted for electrical evidence.

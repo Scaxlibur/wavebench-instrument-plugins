@@ -75,7 +75,7 @@
 - [x] A1：在精确的 `SDG2122X`／`2.01.01.39R7T2` 实机确认 V2 双通道快照、38 次查询／0 次写入、Harmonic 状态 facet 和运行时型号／固件适用性。
 - [x] A2（正常路径）：在同一目标上完成 CH1/CH2 各一次 1 Vpp Basic 写入与独立回读、各一次 Output ON/OFF，以及 CH1 一次 Harmonic 关闭与独立 Harmonic／输出回读；最终两路输出 OFF。
 - [ ] A2 的实机拒绝、未知写结果、写后回读不一致和 OFF recovery 未人为诱发；仅有 A0 故障注入证据，不能冒充为实机验收。
-- [ ] A3：未通过授权示波器通道环回确认 V2 Basic 的频率、Vpp、函数和占空比；尚未记录偏置、端接、容差和最终 OFF 状态。
+- [x] A3：在精确的 `SDG2122X`／`2.01.01.39R7T2`、确认的高阻 CH1→CH1／CH2→CH2 接线下，完成双通道 Sine、Square、Ramp、Pulse 的 2 kHz／2 Vpp scope capture；两次 Square 额外确认 25% 占空比。八次采集质量门均通过，最终两路输出 OFF。详见 [A3 实机波形验收](SDG2000X_SOURCE_V2_A3_ACCEPTANCE.md)。
 
 Noise 的 `STDEV` 与缺少最终 Vpp/Offset 的 DC/Noise 状态不被伪装成 Vpp。此类旧 `set_function`
 调用保留 V1 的输出 OFF 事务；该规则不引入 RMS、峰值因子或统计模型。
@@ -86,16 +86,17 @@ Noise 的 `STDEV` 与缺少最终 Vpp/Offset 的 DC/Noise 状态不被伪装成 
 - [x] A1：在精确的 `SDG2122X`／`2.01.01.39R7T2` 实机确认 V2 双通道快照、38 次查询／0 次写入、Harmonic 状态 facet 和运行时型号／固件适用性。
 - [x] A2（正常路径）：在同一目标上完成 CH1/CH2 各一次 1 Vpp Basic 写入与独立回读、各一次 Output ON/OFF，以及 CH1 一次 Harmonic 关闭与独立 Harmonic／输出回读；最终两路输出 OFF。未验证实机同时 ON。
 - [ ] A2 的实机拒绝、未知写结果、写后回读不一致和 OFF recovery 未人为诱发；仅有 A0 故障注入证据，不能冒充为实机验收。
-- [ ] A3：通过授权示波器通道环回确认 V2 Basic 的频率、Vpp、函数和占空比，并记录偏置、端接、容差和最终 OFF 状态；不以 fake transport 替代该证据。
+- [x] A3：在精确的 `SDG2122X`／`2.01.01.39R7T2`、确认的高阻 CH1→CH1／CH2→CH2 接线下，完成双通道 Sine、Square、Ramp、Pulse 的 2 kHz／2 Vpp scope capture；两次 Square 额外确认 25% 占空比。八次采集质量门均通过，最终两路输出 OFF。详见 [A3 实机波形验收](SDG2000X_SOURCE_V2_A3_ACCEPTANCE.md)；不以 fake transport 替代该证据。
 
 ## C3：稳定发布审计
 
 - [x] 完成离线审计准备：版本、描述符、发行元数据、文档、sdist 文件清单和 A0 测试边界一致。
 - [x] 记录精确目标的 A1 和有限 A2 正常路径证据，明确其未覆盖 A3、故障注入或发布签核。
-- [ ] 在 A3、稳定核心版本、最终插件发行包和 conformance manifest 确定后完成签核；此前不得将 Source V2 写 capability 作为已发布能力。
+- [x] 记录精确目标的 Basic A3 双通道工作点波形证据，明确其未覆盖其它频率／幅度范围、负载、故障注入或发布签核。
+- [ ] 在稳定核心版本、最终插件发行包和 conformance manifest 确定后完成签核；此前不得将 Source V2 写 capability 作为已发布能力。
 
 ## 实机门禁
 
-任何实机任务开始前必须记录：目标型号、固件、脱敏 resource、初始输出状态、允许命令、禁止命令、成功标准和恢复步骤。2026 年 8 月 21 日的完整验收限制最大 10 Vpp，并在 9 Vpp 设置主动停止线；最大实测 4.24 Vpp。最终独立新会话确认两路 Sine / 1 kHz / 4 Vpp / OFF，除 Harmonic 按原状态恢复外，其余复合模式关闭。A3 开始前还必须人工确认 SDG CH1 → RTM2032 CH1 的接线，以及探头／输入为高阻且设置适当。
+任何实机任务开始前必须记录：目标型号、固件、脱敏 resource、初始输出状态、允许命令、禁止命令、成功标准和恢复步骤。2026 年 8 月 21 日的完整验收限制最大 10 Vpp，并在 9 Vpp 设置主动停止线；最大实测 4.24 Vpp。最终独立新会话确认两路 Sine / 1 kHz / 4 Vpp / OFF，除 Harmonic 按原状态恢复外，其余复合模式关闭。2026 年 8 月 24 日的 Source V2 A3 已确认 CH1→CH1、CH2→CH2 的高阻接线；该结论仅适用于 A3 记录的工作点。
 
 未接线的 Sync、Counter、外部 Trigger/Gate、外部参考与多机 Cascade 只保留 A3 或明确未验收，不以软件覆盖率替代电气证据。

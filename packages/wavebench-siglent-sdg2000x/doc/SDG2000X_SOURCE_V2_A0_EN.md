@@ -63,8 +63,10 @@ crest-factor, or statistical Noise safety model.
   model/firmware. A2 has confirmed the normal Basic, Output, and Harmonic-disable paths. See the
   [A1/A2 hardware acceptance](SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md). This A0 record still proves only
   offline contracts; it does not fold A1/A2 write behavior into A0 evidence.
-- A3: use a scope loopback to confirm declared V2 Basic writes for frequency, Vpp, function, and duty
-  cycle, recording offset, termination, tolerance, and the final OFF state.
+- A3 has completed on the exact model/firmware with confirmed high-impedance CH1-to-CH1 and CH2-to-CH2 wiring
+  at the documented 2 kHz / 2 Vpp operating points. See the
+  [A3 hardware waveform acceptance](SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md). This A0 record does not merge that
+  hardware evidence into its offline contract.
 
 Timeout, disconnection, and unknown-write fault injection are A0 contracts. Any real transport-fault
 evidence requires a separate record and does not substitute for A1–A3.

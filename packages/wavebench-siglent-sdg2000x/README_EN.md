@@ -9,10 +9,13 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 Version `0.8.2` retains the eight legacy V1 capabilities and adds `source.snapshot_v2`,
 `source.basic_configure_v2`, `source.output_v2`, and `source.harmonics_disable_v2`. All four have A0
 offline contracts. An `SDG2122X` running firmware `2.01.01.39R7T2` has completed A1 for the V2 snapshot and
-limited A2 normal-path acceptance for Basic, Output, and Harmonic disable. A3 waveform loopback, other models
-or firmware, hardware fault recovery, and release sign-off remain incomplete. C3 has audit preparation only;
-it is not a completed release. See the [Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md),
-[Source V2 A1/A2 hardware acceptance](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md), and
+limited A2 normal-path acceptance for Basic, Output, and Harmonic disable. A3 completed dual-channel Basic
+Sine, Square, Ramp, and Pulse operating-point waveform acceptance with confirmed high-impedance CH1-to-CH1 and
+CH2-to-CH2 wiring. Other models or firmware, hardware fault recovery, and release sign-off remain incomplete.
+C3 has audit preparation only; it is not a completed release. See the
+[Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md),
+[Source V2 A1/A2 hardware acceptance](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md),
+[Source V2 A3 hardware waveform acceptance](doc/SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md), and
 [Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
 
 The V1 basic surface remains `source.set_frequency`, `source.set_function`,
@@ -33,7 +36,7 @@ An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptanc
 capabilities. All five basic writes passed core `SourceService` closed loops on CH1 and CH2. Harmonic,
 modulation, Sweep, Burst, Pulse, Noise/DC, TARB, all 199 built-ins, Combine, phase/invert,
 tracking/coupling/copy, and auxiliary global state also completed protocol or A4 acceptance where available
-wiring allowed it. This evidence does not establish Source V2 A3. The maximum measured output was 4.24
+wiring allowed it. This evidence does not establish the separate Source V2 A3 record. The maximum measured output was 4.24
 Vpp; a final independent read-only session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, with all
 composite modes other than restored original Harmonic states disabled and no RTM2032 overload.
 
@@ -118,6 +121,7 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X basic-write hardware acceptance](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
 - [SDG2000X Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md)
 - [SDG2000X Source V2 A1/A2 hardware acceptance](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md)
+- [SDG2000X Source V2 A3 hardware waveform acceptance](doc/SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md)
 - [SDG2000X Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
 - [Source V2 capability, state, and composite-output safety RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY_EN.md)
 - [SDG2000X harmonic protocol and spectrum acceptance](doc/SDG2000X_HARMONIC_ACCEPTANCE_EN.md)

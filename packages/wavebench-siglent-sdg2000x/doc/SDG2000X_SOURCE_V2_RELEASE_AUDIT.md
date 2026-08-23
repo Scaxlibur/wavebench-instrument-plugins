@@ -4,8 +4,8 @@
 
 ## 当前状态
 
-截至插件版本 `0.8.2`，C3 尚未完成。本文件记录可离线复核的发布准备和精确实机目标的 A1／有限 A2 证据，并把它们与
-仍待完成的 A3 分开。它不是发布签核、wheel conformance manifest，也不把有限证据外推为任意型号或固件的声明。
+截至插件版本 `0.8.2`，C3 尚未完成。本文件记录可离线复核的发布准备和精确实机目标的 A1／有限 A2／Basic A3 证据，
+并把它们与最终发布门分开。它不是发布签核、wheel conformance manifest，也不把有限证据外推为任意型号或固件的声明。
 
 ## C3 条件与当前证据
 
@@ -20,8 +20,8 @@
 | A1：V2 快照 | `SDG2122X` / `2.01.01.39R7T2` 的 CH1/CH2 实机快照完成 38 查询、0 写入；快照一致且 session healthy | 已完成；不外推 |
 | A2：正常 Basic／Output／Harmonic 关闭 | 同一目标上，CH1/CH2 各一次 1 Vpp Basic 写入与独立回读、各一次 Output ON/OFF，以及 CH1 一次 Harmonic 关闭均成功；最终两路 Harmonic OFF、输出 OFF，session healthy | 有限正常路径已完成；不等于完整 A2 |
 | A2：故障、拒绝和恢复 | 未人为诱发传输失败、未知写结果或写后回读不一致。首次 Basic 被既有 Harmonic 状态拒绝发生在 Basic 命令发送前；因 MAIN 已进入，核心完成一次 OFF recovery | 不作为实机故障注入或 Basic 成功证据；A0 覆盖对应注入分支 |
-| A3：示波器环回 | 未执行 Source V2 波形采集；示波器只提供耦合安全门 | 待人工确认接线和高阻输入后单独授权 |
-| 稳定核心与发布物签核 | WaveBench `0.8.24` 仍是开发线；没有最终插件 wheel 摘要、A1–A3 manifest 或发布签核 | 待完成 |
+| A3：Basic 示波器环回 | 在确认的高阻 CH1→CH1、CH2→CH2 接线下，CH1／CH2 的 Sine、Square、Ramp、Pulse 均于 2 kHz／2 Vpp 完成 scope capture；两次 Square 测得 25% 占空比，八次质量门均通过，最终两路输出 OFF | 精确工作点已完成；不外推 |
+| 稳定核心与发布物签核 | WaveBench `0.8.24` 仍是开发线；没有最终插件 wheel 摘要、已实现并经校验的 conformance manifest 或发布签核 | 待完成 |
 
 ## A0 的验证范围
 
@@ -37,7 +37,7 @@
 
 ## C3 前仍需完成的项目
 
-1. A3：在人工确认 SDG CH1 → RTM2032 CH1 接线和高阻输入／探头设置后，通过示波器通道环回确认已声明写入的频率、Vpp、函数和占空比，并记录输出前读取到的偏置、端接、限制、容差和最终 OFF 状态。
-2. 使用稳定核心和最终插件 wheel 生成与审核 conformance manifest，再执行实际发布签核。
+1. 实现并验证 conformance manifest 的 schema、摘要校验和当前 distribution 内的 wheel 归属，再使用稳定核心和最终插件 wheel 生成与审核该 manifest。
+2. 基于最终包和 manifest 执行实际发布签核。
 
 超出 A3 的实机故障注入若有需要，必须单独授权；当前 C3 不把它作为最小安全闭环的替代品。本审计不修改 `wavebench.toml`，不连接仪器，也不替代任何恢复步骤。

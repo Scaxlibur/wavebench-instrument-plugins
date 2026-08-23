@@ -8,13 +8,15 @@ Version `0.8.2` declares twelve capabilities: the legacy identity, status, five 
 arbitrary probe, plus `source.snapshot_v2`, `source.basic_configure_v2`, `source.output_v2`, and
 `source.harmonics_disable_v2`. The first eight have SDG2122X core-consumer hardware evidence. The four new
 capabilities all have A0 offline contracts. On the exact `SDG2122X` / `2.01.01.39R7T2` target, the V2 snapshot
-has A1 evidence and the normal Basic, Output, and Harmonic-disable paths have limited A2 evidence. This does not
-extend to other models, firmware revisions, feature fields, or hardware recovery. Harmonic disable applies only to
+has A1 evidence and the normal Basic, Output, and Harmonic-disable paths have limited A2 evidence. Basic has
+dual-channel A3 operating-point waveform acceptance with confirmed high-impedance CH1-to-CH1 and CH2-to-CH2
+wiring. This does not extend to other models, firmware revisions, frequency/amplitude ranges, feature fields, or
+hardware recovery. Harmonic disable applies only to
 `SDG2122X` firmware `2.01.01.39R7T2`. Registered-model V1 capabilities remain
 released under the common manual contract and offline model matrix.
 
-Source V2 C3 remains incomplete. The offline audit and the exact-target A1/limited-A2 record are complete; A3
-scope loopback, a stable core, final release artifacts, and sign-off remain separate work. See the
+Source V2 C3 remains incomplete. The offline audit and the exact-target A1/limited-A2/Basic-A3 records are
+complete; a stable core, final release artifacts, a conformance manifest, and sign-off remain separate work. See the
 [C3 release-audit preparation](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
 
 Advanced command domains have the broadest practical domain-specific protocol/A4 evidence, but no lossy write capability or raw-SCPI endpoint is declared where the core lacks an exact state model. Historical coverage numbers apply to version `0.8.0`; current Source V2 coverage is established by the present offline test report, not by carrying forward those numbers. Code coverage does not establish physical evidence for unwired ports or unavailable models.
@@ -27,7 +29,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 | System error queue | None | Disabled | Confirm the query, empty-queue semantics, and whether reads consume state |
 | Basic channel status | `source.status` | Repeated SDG2122X read-only rounds are stable; CH1/CH2 have frequency, Vpp, mean, and final independent zero-write evidence | Accept new firmware response variants separately |
 | Source V2 snapshot | `source.snapshot_v2` | A0: pure-read CH1/CH2 anchor/facet/anchor plan, 38-query Sine fixture, zero writes, declared limit 44. A1: exact-target hardware dual-channel snapshot with 38 queries, zero writes, consistent state, and a healthy session | Accept other models, firmware, or response variants separately |
-| Source V2 basic configuration | `source.basic_configure_v2` | A0: CH1/CH2 one-field Basic MAIN writes, core readback, and one OFF recovery for Sine/Square/Ramp/Pulse; `offset_v` is pre-write rejected. Limited A2: one 1 Vpp write and independent readback on each channel with output OFF on the exact target | A3 scope-loopback verifies frequency, Vpp, function, and duty; hardware rejection and recovery paths are not claimed |
+| Source V2 basic configuration | `source.basic_configure_v2` | A0: CH1/CH2 one-field Basic MAIN writes, core readback, and one OFF recovery for Sine/Square/Ramp/Pulse; `offset_v` is pre-write rejected. Limited A2: one 1 Vpp write and independent readback on each channel with output OFF on the exact target. A3: with confirmed high-impedance CH1-to-CH1 and CH2-to-CH2 wiring, Sine/Square/Ramp/Pulse on both channels completed scope capture at 2 kHz / 2 Vpp; both Square captures confirm 25% duty | Other models, firmware, frequency/amplitude ranges, loads, and hardware rejection/recovery paths are not claimed; `offset_v` remains unavailable for writing |
 | Source V2 output | `source.output_v2` | A0: independent CH1/CH2 ON/OFF, one-write MAIN, core readback, and one OFF recovery after a readable mismatch; independent outputs may be ON together. Limited A2: CH1 and CH2 each completed ON and OFF with independent readback and a final OFF state on the exact target | No hardware simultaneous-ON, recovery, or other-model/firmware claim |
 | Output control | `source.output` | All models pass offline; SDG2122X CH1/CH2 passed core-Service ON→A4→OFF with zero unknown writes | Add other-model A4 only when hardware is available |
 | Fixed-wave frequency | `source.set_frequency` | SDG2122X CH1/CH2 cover OFF-state and live-ON writes; model/function boundaries are fully covered offline | Add other-model A4 only when hardware is available |
@@ -68,6 +70,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 - [Basic-write hardware acceptance](SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
 - [Source V2 A0 offline adapter record](SDG2000X_SOURCE_V2_A0_EN.md)
 - [Source V2 A1/A2 hardware acceptance](SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md)
+- [Source V2 A3 hardware waveform acceptance](SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md)
 - [Source V2 C3 release-audit preparation](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
 - [Harmonic protocol and spectrum acceptance](SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [Modulation protocol and waveform acceptance](SDG2000X_MODULATION_ACCEPTANCE_EN.md)

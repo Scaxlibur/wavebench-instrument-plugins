@@ -7,11 +7,12 @@
 版本 `0.8.2` 声明 12 项 capability：既有的身份、状态、五项基础写能力和任意波只读探测，以及
 `source.snapshot_v2`、`source.basic_configure_v2`、`source.output_v2` 和 `source.harmonics_disable_v2`。前 8 项已有 `SDG2122X`
 核心消费路径实机证据；新增 4 项均有 A0 离线合同。对精确的 `SDG2122X`／`2.01.01.39R7T2` 目标，已完成 V2 快照的
-A1，以及 Basic、Output 和 Harmonic 关闭正常路径的有限 A2；该证据不外推到其它型号、固件、功能字段或故障恢复。
+A1，以及 Basic、Output 和 Harmonic 关闭正常路径的有限 A2。Basic 已在确认的高阻 CH1→CH1、CH2→CH2 接线下完成
+双通道 A3 工作点波形验收；该证据不外推到其它型号、固件、频率／幅度范围、功能字段或故障恢复。
 其中 Harmonic 关闭仅对 `SDG2122X` 固件 `2.01.01.39R7T2` 适用。三个登记型号的
 V1 capability 仍按共同手册合同和离线型号矩阵放行。
 
-Source V2 的 C3 仍未完成。离线审计以及精确目标的 A1／有限 A2 记录均已具备；A3 示波器环回、稳定核心、最终发行物和签核仍待完成，详见 [C3 发布审计准备](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
+Source V2 的 C3 仍未完成。离线审计和精确目标的 A1／有限 A2／Basic A3 记录均已具备；稳定核心、最终发行物、conformance manifest 和签核仍待完成，详见 [C3 发布审计准备](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
 
 高级命令域已完成尽可能全面的分域协议/A4 验收，但核心缺少无损状态模型时继续不声明写 capability，也不提供 raw SCPI。历史覆盖率数字只对应版本 `0.8.0`；新增 Source V2 代码的当前覆盖率以本次离线测试报告为准，不用旧数字替代验证。代码覆盖不替代未接外部端口和未持有型号的物理证据。
 
@@ -23,7 +24,7 @@ Source V2 的 C3 仍未完成。离线审计以及精确目标的 A1／有限 A2
 | 系统错误队列 | 无 | 未开放 | 确认查询命令、空队列语义和是否为消费型读取 |
 | 通道基础状态 | `source.status` | SDG2122X 多轮只读稳定；CH1/CH2 均完成频率、Vpp、均值和最终独立零写审计 | 新固件响应变体需单独验收 |
 | Source V2 快照 | `source.snapshot_v2` | A0 完成：CH1/CH2 纯读取 anchor/facet/anchor、38 查询 Sine fixture、0 写入，声明上限为 44；A1：精确目标实机双通道 38 查询、0 写入，快照一致且 session healthy | 其它型号、固件或响应变体单独验收 |
-| Source V2 基础配置 | `source.basic_configure_v2` | A0 完成：CH1/CH2 的 Sine/Square/Ramp/Pulse 单字段 Basic MAIN 写入、核心回读与一次 OFF 恢复；`offset_v` 暂在写前拒绝。有限 A2：精确目标在输出 OFF 时对 CH1/CH2 各完成一次 1 Vpp 单字段写入及独立回读 | A3 通过示波器环回确认频率、Vpp、函数和占空比；不声明实机拒绝或故障恢复分支 |
+| Source V2 基础配置 | `source.basic_configure_v2` | A0 完成：CH1/CH2 的 Sine/Square/Ramp/Pulse 单字段 Basic MAIN 写入、核心回读与一次 OFF 恢复；`offset_v` 暂在写前拒绝。有限 A2：精确目标在输出 OFF 时对 CH1/CH2 各完成一次 1 Vpp 单字段写入及独立回读。A3：确认高阻 CH1→CH1、CH2→CH2 接线下，CH1/CH2 的 Sine/Square/Ramp/Pulse 均在 2 kHz／2 Vpp 工作点完成 scope capture；两次方波均确认 25% 占空比 | 其它型号、固件、频率／幅度范围、负载和实机拒绝／故障恢复不作声明；`offset_v` 继续不开放写入 |
 | Source V2 输出 | `source.output_v2` | A0 完成：CH1/CH2 独立 ON/OFF、单写 MAIN、核心回读、可读不匹配时一次 OFF 恢复；独立端口可同时 ON。有限 A2：精确目标的 CH1、CH2 分别完成 ON 与 OFF 及独立回读，最终均 OFF | 不声明实机同时 ON、故障恢复或其它型号／固件结果 |
 | 输出控制 | `source.output` | 三个型号通过离线合同；SDG2122X CH1/CH2 通过核心 Service ON→A4→OFF，未知写结果为 0 | 其它型号 A4 仅在有样机时补充 |
 | 固定波频率 | `source.set_frequency` | SDG2122X CH1/CH2 均覆盖 OFF 写入和 ON 状态实时写入；按型号/函数边界离线全覆盖 | 其它型号 A4 仅在有样机时补充 |
@@ -64,6 +65,7 @@ Source V2 的 C3 仍未完成。离线审计以及精确目标的 A1／有限 A2
 - [基础写入实机验收](SDG2000X_BASIC_WRITE_ACCEPTANCE.md)
 - [Source V2 A0 离线适配记录](SDG2000X_SOURCE_V2_A0.md)
 - [Source V2 A1／A2 实机验收](SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE.md)
+- [Source V2 A3 实机波形验收](SDG2000X_SOURCE_V2_A3_ACCEPTANCE.md)
 - [Source V2 C3 发布审计准备](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)
 - [谐波协议与频谱验收](SDG2000X_HARMONIC_ACCEPTANCE.md)
 - [调制协议与波形验收](SDG2000X_MODULATION_ACCEPTANCE.md)

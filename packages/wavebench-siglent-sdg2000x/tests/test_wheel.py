@@ -101,6 +101,8 @@ def test_source_v2_release_version_is_consistent_in_metadata_descriptor_and_docs
         "doc/SDG2000X_COVERAGE_MATRIX_EN.md",
         "doc/SDG2000X_SOURCE_V2_A0.md",
         "doc/SDG2000X_SOURCE_V2_A0_EN.md",
+        "doc/SDG2000X_SOURCE_V2_A3_ACCEPTANCE.md",
+        "doc/SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md",
         "doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT.md",
         "doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md",
     ):
@@ -143,6 +145,8 @@ def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) 
         "SDG2000X_OUTPUT_ACCEPTANCE_EN.md",
         "SDG2000X_SOURCE_V2_A0.md",
         "SDG2000X_SOURCE_V2_A0_EN.md",
+        "SDG2000X_SOURCE_V2_A3_ACCEPTANCE.md",
+        "SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md",
         "SDG2000X_SOURCE_V2_RELEASE_AUDIT.md",
         "SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md",
     ):
