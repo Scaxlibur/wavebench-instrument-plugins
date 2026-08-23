@@ -19,6 +19,7 @@ from wavebench.instruments.source_extensions import (
     SourceBasicConfigureRequest,
     SourceBasicPatch,
     SourceOutputRequest,
+    SourceWaveformKind,
 )
 from wavebench.logging import CommandLogger
 from wavebench.services.source_service import SourceService
@@ -485,6 +486,139 @@ def test_source_v2_basic_write_uses_one_audited_command_after_snapshot() -> None
     assert len(transport.queries) == query_count
 
 
+def test_source_v2_basic_amplitude_write_uses_one_audited_command_after_snapshot() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    result = driver.configure_source_basic_v2(
+        SourceBasicConfigureRequest(
+            channel=1,
+            patch=SourceBasicPatch(
+                amplitude_vpp=PatchValue(PatchAction.SET, 2.5),
+            ),
+        )
+    )
+
+    assert result.basic.amplitude.value is not None
+    assert result.basic.amplitude.value.value == 2.5
+    assert transport.writes == ["C1:BSWV AMP,2.5"]
+    assert len(transport.queries) == query_count
+
+
+@pytest.mark.parametrize(
+    ("initial_basic", "waveform", "expected_function", "expected_command"),
+    (
+        (
+            "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50",
+            SourceWaveformKind.SINE,
+            SourceWaveformKind.SINE,
+            "C1:BSWV WVTP,SINE",
+        ),
+        (
+            "C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0",
+            SourceWaveformKind.SQUARE,
+            SourceWaveformKind.SQUARE,
+            "C1:BSWV WVTP,SQUARE",
+        ),
+        (
+            "C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0",
+            SourceWaveformKind.RAMP,
+            SourceWaveformKind.RAMP,
+            "C1:BSWV WVTP,RAMP",
+        ),
+        (
+            "C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0",
+            SourceWaveformKind.PULSE,
+            SourceWaveformKind.PULSE,
+            "C1:BSWV WVTP,PULSE",
+        ),
+    ),
+)
+def test_source_v2_basic_waveform_writes_use_one_audited_command_after_snapshot(
+    initial_basic: str,
+    waveform: SourceWaveformKind,
+    expected_function: SourceWaveformKind,
+    expected_command: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = initial_basic
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    result = driver.configure_source_basic_v2(
+        SourceBasicConfigureRequest(
+            channel=1,
+            patch=SourceBasicPatch(
+                waveform_kind=PatchValue(PatchAction.SET, waveform),
+            ),
+        )
+    )
+
+    assert result.basic.waveform_kind.value is expected_function
+    assert transport.writes == [expected_command]
+    assert len(transport.queries) == query_count
+
+
+def test_source_v2_basic_duty_write_uses_one_audited_command_after_snapshot() -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = (
+        "C1:BSWV WVTP,SQUARE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0,DUTY,50"
+    )
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    result = driver.configure_source_basic_v2(
+        SourceBasicConfigureRequest(
+            channel=1,
+            patch=SourceBasicPatch(
+                square_duty_cycle_percent=PatchValue(PatchAction.SET, 25.0),
+            ),
+        )
+    )
+
+    assert result.basic.square_duty_cycle_percent.value == 25.0
+    assert transport.writes == ["C1:BSWV DUTY,25"]
+    assert len(transport.queries) == query_count
+
+
+@pytest.mark.parametrize(
+    ("patch", "message"),
+    (
+        (
+            SourceBasicPatch(offset_v=PatchValue(PatchAction.SET, 0.25)),
+            "offset writes",
+        ),
+        (
+            SourceBasicPatch(
+                frequency_hz=PatchValue(PatchAction.SET, 2_000.0),
+                amplitude_vpp=PatchValue(PatchAction.SET, 2.5),
+            ),
+            "one SET field",
+        ),
+    ),
+)
+def test_source_v2_basic_rejects_unavailable_or_multifield_writes_before_io(
+    patch: SourceBasicPatch,
+    message: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    with pytest.raises(DataError, match=message):
+        driver.configure_source_basic_v2(
+            SourceBasicConfigureRequest(channel=1, patch=patch)
+        )
+
+    assert len(transport.queries) == query_count
+    assert transport.writes == []
+
+
 def test_source_v2_output_transitions_use_no_driver_readback_in_main() -> None:
     transport = StatefulOutputTransport()
     driver = SDG2000XSource(transport)
@@ -564,6 +698,82 @@ def test_source_v2_core_basic_transaction_allows_only_the_single_main_write() ->
     assert artifact["operation"] == "source.basic_configure_v2"
     assert transport.writes == ["C1:BSWV FRQ,2000"]
     assert guarded.audit_snapshot()["counters"]["write_completed"] == 1
+
+
+def test_source_v2_core_output_transactions_use_one_main_write_per_transition() -> None:
+    transport = StatefulOutputTransport()
+    service, guarded = _source_v2_service(transport)
+
+    enabled, enable_artifact = service.set_output_v2(
+        SourceOutputRequest(channel=1, enabled=True)
+    )
+    disabled, disable_artifact = service.set_output_v2(
+        SourceOutputRequest(channel=1, enabled=False)
+    )
+
+    assert enabled.enabled is True
+    assert enabled.final_amplitude is not None
+    assert enabled.final_amplitude.value == 4.0
+    assert disabled.enabled is False
+    assert enable_artifact["operation"] == "source.output_enable_v2"
+    assert disable_artifact["operation"] == "source.output_disable_v2"
+    assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 2
+
+
+def test_source_v2_core_output_keeps_channels_independent() -> None:
+    transport = StatefulOutputTransport()
+    service, guarded = _source_v2_service(transport)
+
+    service.set_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    service.set_output_v2(SourceOutputRequest(channel=2, enabled=True))
+    assert transport.outputs == {1: "ON", 2: "ON"}
+
+    service.set_output_v2(SourceOutputRequest(channel=1, enabled=False))
+    assert transport.outputs == {1: "OFF", 2: "ON"}
+    service.set_output_v2(SourceOutputRequest(channel=2, enabled=False))
+
+    assert transport.outputs == {1: "OFF", 2: "OFF"}
+    assert transport.writes == [
+        "C1:OUTP ON",
+        "C2:OUTP ON",
+        "C1:OUTP OFF",
+        "C2:OUTP OFF",
+    ]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 4
+
+
+def test_source_v2_core_output_enable_readback_failure_attempts_one_off_recovery() -> None:
+    transport = StatefulOutputTransport()
+    transport.ignore_write_counts["C1:OUTP ON"] = 1
+    service, guarded = _source_v2_service(transport)
+
+    with pytest.raises(ConfigError, match="postcondition reports output OFF") as raised:
+        service.set_output_v2(SourceOutputRequest(channel=1, enabled=True))
+
+    artifact = raised.value.source_operation_artifact
+    assert transport.outputs[1] == "OFF"
+    assert transport.writes == ["C1:OUTP ON", "C1:OUTP OFF"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 2
+    assert artifact["recovery"]["status"] == "off_verified"
+
+
+def test_source_v2_core_output_enable_transport_failure_does_not_send_unprovable_off() -> None:
+    transport = StatefulOutputTransport()
+    transport.fail_after_write_counts["C1:OUTP ON"] = 1
+    service, guarded = _source_v2_service(transport)
+
+    with pytest.raises(InstrumentError, match="ambiguous SDG2000X write failure") as raised:
+        service.set_output_v2(SourceOutputRequest(channel=1, enabled=True))
+
+    artifact = raised.value.source_operation_artifact
+    assert transport.outputs[1] == "ON"
+    assert transport.writes == ["C1:OUTP ON"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 0
+    assert artifact["recovery"] == {
+        "status": "not_attempted",
+        "reason": "session_poisoned",
+    }
 
 
 @pytest.mark.parametrize(
