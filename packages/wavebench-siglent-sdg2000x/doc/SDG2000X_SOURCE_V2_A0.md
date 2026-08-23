@@ -44,10 +44,9 @@ Harmonic（仅 Sine）、Combine、Noise Add 与 Coupling 状态。Output 与 Ha
 周期波，均继续执行原有的输出 OFF 事务。可由 V2 profile 完整表达的周期波调用仍进入 V2 事务。该分流不为
 Noise 增加 RMS、峰值因子或统计安全模型。
 
-## 尚未完成的门
+## 后续门
 
-- A1：在明确型号、固件、resource 与 transport/backend 后，确认 V2 snapshot 的真实响应、查询预算和 Harmonic 状态 facet。
-- A2：验证 V2 Output 的 ON/OFF、独立回读和 OFF 恢复；同时确认 V2 Basic 的命令接受与回读形态，以及精确运行时目标上的 Harmonic 关闭与回读。
+- A1 已在精确型号／固件上确认 V2 snapshot 的真实响应、查询预算和 Harmonic 状态 facet；A2 已确认 Basic、Output 与 Harmonic 关闭的正常路径。详见 [A1／A2 实机验收](SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE.md)。本 A0 记录仍只证明离线合同，不把 A1/A2 写入行为倒灌为 A0 证据。
 - A3：通过示波器通道环回确认 V2 Basic 已声明写入的频率、Vpp、函数和占空比，并记录偏置、端接、容差和最终 OFF 状态。
 
 timeout、断连和未知写结果的故障注入属于 A0 合同；真实 transport 故障若另行验证，必须单独记录，且不替代 A1–A3。

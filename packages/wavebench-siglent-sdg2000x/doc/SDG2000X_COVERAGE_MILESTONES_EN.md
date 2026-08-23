@@ -72,8 +72,9 @@
 - [x] Read CH1/CH2 through pure-read anchor/facet/anchor plans; the two-Sine fixture completes 38 queries and zero writes under the declared limit of 44; the Harmonic facet reuses the Basic snapshot without an extra query.
 - [x] Permit one audited write in each V2 Basic, Output, or Harmonic-disable MAIN phase, followed by the core's independent snapshot readback.
 - [x] Verify V2 Basic CH1/CH2 frequency, Vpp, waveform, and square-duty writes; one OFF recovery after a readable mismatch; zero extra I/O after an ambiguous write; Output ON/OFF; and, on `SDG2122X` / `2.01.01.39R7T2`, Harmonic-disable zero-write idempotence, one `HARMSTATE,OFF` write, runtime model/firmware denial, descriptor/wheel cross-checks, and legacy V1 Noise/DC function compatibility offline.
-- [ ] A1: confirm real V2 snapshot responses, budgets, Harmonic-state facet, model, and firmware applicability.
-- [ ] A2: confirm V2 Basic/Output and exact-runtime-target Harmonic-disable readback, rejection branches, and recovery on hardware.
+- [x] A1: on the exact `SDG2122X` / `2.01.01.39R7T2` target, confirm the V2 dual-channel snapshot, 38 queries / zero writes, the Harmonic-state facet, and runtime model/firmware applicability.
+- [x] A2 (normal path): on that target, complete one 1 Vpp Basic write and independent readback on each of CH1/CH2, one Output ON/OFF on each channel, and one CH1 Harmonic disable with independent Harmonic/output readback; both outputs finish OFF.
+- [ ] Hardware rejection, unknown-write, post-write-mismatch, and OFF-recovery paths have not been induced for A2. Only A0 has fault-injection evidence; it is not hardware acceptance.
 - [ ] A3: use an authorized scope loopback to confirm V2 Basic frequency, Vpp, function, and duty cycle; record offset, termination, tolerance, and the final OFF state.
 
 Noise `STDEV` and DC/Noise states without final Vpp/Offset are not represented as Vpp. Such legacy
@@ -83,17 +84,19 @@ statistical models.
 ## M7: Source V2 plugin opt-in
 
 - [x] A0: complete offline adaptation for `source.snapshot_v2`, `source.basic_configure_v2`, `source.output_v2`, and `source.harmonics_disable_v2`, the last limited to `SDG2122X` / `2.01.01.39R7T2`; cover CH1/CH2 Basic waveform, frequency, Vpp, square-duty, rejected `offset_v`, one OFF recovery after a readable mismatch, zero extra I/O after an ambiguous write, core transactions for independent CH1/CH2 ON/OFF, plus Harmonic-disable zero-write idempotence and one-write branches.
-- [ ] A1: confirm V2 snapshot responses, query budgets, Harmonic-state facet, model, and firmware applicability on authorized hardware.
-- [ ] A2: confirm V2 Basic/Output readback, rejection branches, OFF recovery, independent outputs simultaneously ON, and exact-runtime-target Harmonic disable on authorized hardware.
+- [x] A1: on the exact `SDG2122X` / `2.01.01.39R7T2` target, confirm the V2 dual-channel snapshot, 38 queries / zero writes, the Harmonic-state facet, and runtime model/firmware applicability.
+- [x] A2 (normal path): on that target, complete one 1 Vpp Basic write and independent readback on each of CH1/CH2, one Output ON/OFF on each channel, and one CH1 Harmonic disable with independent Harmonic/output readback; both outputs finish OFF. Hardware simultaneous ON was not verified.
+- [ ] Hardware rejection, unknown-write, post-write-mismatch, and OFF-recovery paths have not been induced for A2. Only A0 has fault-injection evidence; it is not hardware acceptance.
 - [ ] A3: use an authorized scope loopback to confirm V2 Basic frequency, Vpp, function, and duty cycle, recording offset, termination, tolerance, and the final OFF state; fake transports do not replace this evidence.
 
 ## C3: Stable-release audit
 
 - [x] Complete offline-audit preparation: version, descriptor, release metadata, documentation, sdist file list, and A0 test boundary agree.
-- [ ] Complete sign-off after A1–A3, a stable core version, and final release artifacts are available. Before then, do not represent Source V2 write capabilities as released.
+- [x] Record exact-target A1 and limited normal-path A2 evidence, explicitly excluding A3, fault injection, and release sign-off.
+- [ ] Complete sign-off after A3, a stable core version, final plugin artifacts, and a conformance manifest are available. Before then, do not represent Source V2 write capabilities as released.
 
 ## Hardware gate
 
-Before hardware access, record the target model, firmware, redacted resource, initial output state, allowed commands, denied commands, success criteria, and restoration steps. The complete 2026-08-21 acceptance used a 10 Vpp maximum and a 9 Vpp active stop line; the highest measured output was 4.24 Vpp. A final independent session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, with all composite modes other than restored original Harmonic states disabled.
+Before hardware access, record the target model, firmware, redacted resource, initial output state, allowed commands, denied commands, success criteria, and restoration steps. The complete 2026-08-21 acceptance used a 10 Vpp maximum and a 9 Vpp active stop line; the highest measured output was 4.24 Vpp. A final independent session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, with all composite modes other than restored original Harmonic states disabled. Before A3, manually confirm SDG CH1 → RTM2032 CH1 wiring and an appropriate high-impedance probe/input setup.
 
 Unwired Sync, Counter, external Trigger/Gate, external reference, and multi-device Cascade remain A3 or explicitly unaccepted. Software coverage is not substituted for electrical evidence.

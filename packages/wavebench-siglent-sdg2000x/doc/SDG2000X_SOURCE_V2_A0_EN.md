@@ -57,12 +57,12 @@ to Noise, and Noise/DC to a provable periodic waveform, continue through the exi
 Periodic requests fully represented by the V2 profile continue through V2. This routing does not add an RMS,
 crest-factor, or statistical Noise safety model.
 
-## Remaining Gates
+## Follow-On Gates
 
-- A1: confirm real V2 snapshot responses, budgets, and the Harmonic-state facet for an explicitly authorized
-  model, firmware, resource, and transport/backend.
-- A2: validate V2 Output ON/OFF, independent readback, and OFF recovery; also confirm V2 Basic command
-  acceptance and readback form, plus Harmonic disable and readback on the exact runtime target.
+- A1 has confirmed real V2 snapshot responses, budget, and the Harmonic-state facet on the exact
+  model/firmware. A2 has confirmed the normal Basic, Output, and Harmonic-disable paths. See the
+  [A1/A2 hardware acceptance](SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md). This A0 record still proves only
+  offline contracts; it does not fold A1/A2 write behavior into A0 evidence.
 - A3: use a scope loopback to confirm declared V2 Basic writes for frequency, Vpp, function, and duty
   cycle, recording offset, termination, tolerance, and the final OFF state.
 

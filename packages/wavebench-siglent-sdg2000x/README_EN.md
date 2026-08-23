@@ -7,11 +7,13 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 ## Current development baseline
 
 Version `0.8.2` retains the eight legacy V1 capabilities and adds `source.snapshot_v2`,
-`source.basic_configure_v2`, `source.output_v2`, and `source.harmonics_disable_v2`. V2 currently has A0 offline-contract coverage only:
-descriptor validation, query budgets, single-write MAIN phases, and core phase authorization use fake
-transports. No Source V2 hardware acceptance has been performed. C3 has offline-audit preparation only;
-it is not a completed release. See the [Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md)
-and [Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
+`source.basic_configure_v2`, `source.output_v2`, and `source.harmonics_disable_v2`. All four have A0
+offline contracts. An `SDG2122X` running firmware `2.01.01.39R7T2` has completed A1 for the V2 snapshot and
+limited A2 normal-path acceptance for Basic, Output, and Harmonic disable. A3 waveform loopback, other models
+or firmware, hardware fault recovery, and release sign-off remain incomplete. C3 has audit preparation only;
+it is not a completed release. See the [Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md),
+[Source V2 A1/A2 hardware acceptance](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md), and
+[Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
 
 The V1 basic surface remains `source.set_frequency`, `source.set_function`,
 `source.set_amplitude_vpp`, `source.set_square_duty_cycle`, `source.output`, and read-only
@@ -31,7 +33,7 @@ An `SDG2122X` running firmware `2.01.01.39R7T2` has completed hardware acceptanc
 capabilities. All five basic writes passed core `SourceService` closed loops on CH1 and CH2. Harmonic,
 modulation, Sweep, Burst, Pulse, Noise/DC, TARB, all 199 built-ins, Combine, phase/invert,
 tracking/coupling/copy, and auxiliary global state also completed protocol or A4 acceptance where available
-wiring allowed it. This evidence does not establish Source V2 A1–A3. The maximum measured output was 4.24
+wiring allowed it. This evidence does not establish Source V2 A3. The maximum measured output was 4.24
 Vpp; a final independent read-only session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, with all
 composite modes other than restored original Harmonic states disabled and no RTM2032 overload.
 
@@ -84,7 +86,7 @@ Change `access` to `read_write` before calling a basic Source write capability. 
 - `source.set_amplitude_vpp` accepts 2 mVpp through 10 Vpp and requires the amplitude-plus-offset envelope to remain within ±10 V.
 - `source.set_function` allows live switching among four bounded periodic waves. Noise/DC require output OFF and do not bypass output-enable safety.
 - `source.set_square_duty_cycle` applies only to FIX-mode square waves. Frequency-dependent clamping must fail readback closed.
-- Source V2 Basic and Output MAIN each send one audited write, followed by an independent core snapshot; independent outputs may be ON together.
+- Source V2 Basic and Output MAIN each send one audited write, followed by an independent core snapshot. The contract permits independent outputs to be ON together, but that combination has no Source V2 hardware acceptance yet.
 - Source V2 Harmonic disable applies only to the exact runtime model/firmware while Sine and output OFF are proven; it does not configure or enable Harmonic, sends no write when already disabled, and otherwise sends at most one `HARMSTATE,OFF` before the core independently reads Harmonic and output state.
 - Source V2 does not guess a Noise/DC Vpp. Legacy `set_function` calls without a lossless V2 representation retain the V1 setter; output enable still requires final readable Vpp and Offset.
 - Each target configuration is written once. Any post-write failure attempts OFF recovery and latches all configuration writes for the session.
@@ -115,6 +117,7 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X frequency-write hardware acceptance](doc/SDG2000X_FREQUENCY_ACCEPTANCE_EN.md)
 - [SDG2000X basic-write hardware acceptance](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
 - [SDG2000X Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md)
+- [SDG2000X Source V2 A1/A2 hardware acceptance](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md)
 - [SDG2000X Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
 - [Source V2 capability, state, and composite-output safety RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY_EN.md)
 - [SDG2000X harmonic protocol and spectrum acceptance](doc/SDG2000X_HARMONIC_ACCEPTANCE_EN.md)

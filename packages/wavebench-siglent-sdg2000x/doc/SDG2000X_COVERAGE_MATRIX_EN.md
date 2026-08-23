@@ -7,12 +7,14 @@
 Version `0.8.2` declares twelve capabilities: the legacy identity, status, five basic writes, and read-only
 arbitrary probe, plus `source.snapshot_v2`, `source.basic_configure_v2`, `source.output_v2`, and
 `source.harmonics_disable_v2`. The first eight have SDG2122X core-consumer hardware evidence. The four new
-capabilities currently have A0 offline contracts only and make no Source V2 hardware claim for any model.
-Harmonic disable applies only to `SDG2122X` firmware `2.01.01.39R7T2`. Registered-model V1 capabilities remain
+capabilities all have A0 offline contracts. On the exact `SDG2122X` / `2.01.01.39R7T2` target, the V2 snapshot
+has A1 evidence and the normal Basic, Output, and Harmonic-disable paths have limited A2 evidence. This does not
+extend to other models, firmware revisions, feature fields, or hardware recovery. Harmonic disable applies only to
+`SDG2122X` firmware `2.01.01.39R7T2`. Registered-model V1 capabilities remain
 released under the common manual contract and offline model matrix.
 
-Source V2 C3 remains incomplete. The offline audit verifies the current package's version, declarations, and
-test boundary; A1–A3, a stable core, and final release-artifact sign-off remain separate work. See the
+Source V2 C3 remains incomplete. The offline audit and the exact-target A1/limited-A2 record are complete; A3
+scope loopback, a stable core, final release artifacts, and sign-off remain separate work. See the
 [C3 release-audit preparation](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
 
 Advanced command domains have the broadest practical domain-specific protocol/A4 evidence, but no lossy write capability or raw-SCPI endpoint is declared where the core lacks an exact state model. Historical coverage numbers apply to version `0.8.0`; current Source V2 coverage is established by the present offline test report, not by carrying forward those numbers. Code coverage does not establish physical evidence for unwired ports or unavailable models.
@@ -24,16 +26,16 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 | Instrument identity | `source.idn` | Passed on `SDG2122X` / `2.01.01.39R7T2`; other registered models released by the common protocol | New models or response variants still need redacted evidence |
 | System error queue | None | Disabled | Confirm the query, empty-queue semantics, and whether reads consume state |
 | Basic channel status | `source.status` | Repeated SDG2122X read-only rounds are stable; CH1/CH2 have frequency, Vpp, mean, and final independent zero-write evidence | Accept new firmware response variants separately |
-| Source V2 snapshot | `source.snapshot_v2` | A0: pure-read CH1/CH2 anchor/facet/anchor plan, 38-query Sine fixture, zero writes, declared limit 44 | A1 confirms real responses, budgets, models, and firmware |
-| Source V2 basic configuration | `source.basic_configure_v2` | A0: CH1/CH2 one-field Basic MAIN writes, core readback, and one OFF recovery for Sine/Square/Ramp/Pulse; `offset_v` is pre-write rejected | A2 confirms hardware command acceptance and readback form; A3 uses a scope loopback for frequency, Vpp, function, and duty |
-| Source V2 output | `source.output_v2` | A0: independent CH1/CH2 ON/OFF, one-write MAIN, core readback, and one OFF recovery after a readable mismatch; independent outputs may be ON together | A2 confirms hardware transitions, independent readback, and OFF recovery |
+| Source V2 snapshot | `source.snapshot_v2` | A0: pure-read CH1/CH2 anchor/facet/anchor plan, 38-query Sine fixture, zero writes, declared limit 44. A1: exact-target hardware dual-channel snapshot with 38 queries, zero writes, consistent state, and a healthy session | Accept other models, firmware, or response variants separately |
+| Source V2 basic configuration | `source.basic_configure_v2` | A0: CH1/CH2 one-field Basic MAIN writes, core readback, and one OFF recovery for Sine/Square/Ramp/Pulse; `offset_v` is pre-write rejected. Limited A2: one 1 Vpp write and independent readback on each channel with output OFF on the exact target | A3 scope-loopback verifies frequency, Vpp, function, and duty; hardware rejection and recovery paths are not claimed |
+| Source V2 output | `source.output_v2` | A0: independent CH1/CH2 ON/OFF, one-write MAIN, core readback, and one OFF recovery after a readable mismatch; independent outputs may be ON together. Limited A2: CH1 and CH2 each completed ON and OFF with independent readback and a final OFF state on the exact target | No hardware simultaneous-ON, recovery, or other-model/firmware claim |
 | Output control | `source.output` | All models pass offline; SDG2122X CH1/CH2 passed core-Service ON→A4→OFF with zero unknown writes | Add other-model A4 only when hardware is available |
 | Fixed-wave frequency | `source.set_frequency` | SDG2122X CH1/CH2 cover OFF-state and live-ON writes; model/function boundaries are fully covered offline | Add other-model A4 only when hardware is available |
 | Fixed-wave amplitude | `source.set_amplitude_vpp` | SDG2122X CH1/CH2 cover OFF and live-ON writes; 2 mVpp–10 Vpp, offset envelope, and drift branches are 100% covered | Add other-model A4 only when hardware is available |
 | Fixed-wave function | `source.set_function` | Sine/Square/Ramp pass core loops on CH1/CH2; Pulse passes on CH2; Noise/DC remain OFF-config-only publicly | Wait for a reusable Noise/DC safety model |
 | Square-wave duty cycle | `source.set_square_duty_cycle` | CH2 20%/80% measured 0.200/0.800; final CH1 30% and CH2 70% measured 0.287/0.6949 | Frequency-dependent high-rate clamping remains strict fail-closed readback |
 | Pulse parameters | No lossless capability yet | SDG2122X 25%/65% duty and 20/40 µs edges pass A4; DLY is A3 only | Declare after Source V2 supports unknown hold; add an independent delay reference |
-| Harmonics | `source.harmonics_disable_v2`, `SDG2122X` / `2.01.01.39R7T2` only | A0: while Sine and target output OFF are proven, an already-disabled state has zero writes and an enabled state sends only `HARMSTATE,OFF`, followed by independent core Harmonic/output readback; SDG2122X H2–H16 slots, H2/H3 amplitude, H2 phase, and ALL/EVEN/ODD remain legacy A4 evidence | A1/A2 confirm the exact runtime target; Harmonic configuration/enable remains pending a more complete Source V2 model |
+| Harmonics | `source.harmonics_disable_v2`, `SDG2122X` / `2.01.01.39R7T2` only | A0: while Sine and target output OFF are proven, an already-disabled state has zero writes and an enabled state sends only `HARMSTATE,OFF`, followed by independent core Harmonic/output readback. A1/limited A2: the exact target returns the Harmonic facet and CH1 completed one disable write with independent Harmonic-OFF/output-OFF readback; SDG2122X H2–H16 slots, H2/H3 amplitude, H2 phase, and ALL/EVEN/ODD remain legacy A4 evidence | Harmonic configuration/enable remains pending a more complete Source V2 model; do not extrapolate to other models or firmware |
 | Modulation | No lossless capability yet | SDG2122X internal AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK pass protocol and A4 waveform tests | Declare after Source V2 supports disabled-state absence and vendor ranges; wire external sources |
 | Sweep | No lossless capability yet | SDG2122X LINE/LOG/STEP, UP/DOWN/UP_DOWN, and INT/MAN pass protocol and A4 waveform tests; EXT is readback-only | Declare after Source V2 supports absent fields; wire external trigger |
 | Burst | No lossless capability yet | Finite INT/MAN pass cycle/repetition A4; `TRDUCH` CH2-to-both passes; EXT/Gate are readback-only; INF did not form a continuous carrier | Wire external trigger/gate; use a discriminated Source V2 model |
@@ -65,6 +67,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 - [Frequency-write hardware acceptance](SDG2000X_FREQUENCY_ACCEPTANCE_EN.md)
 - [Basic-write hardware acceptance](SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
 - [Source V2 A0 offline adapter record](SDG2000X_SOURCE_V2_A0_EN.md)
+- [Source V2 A1/A2 hardware acceptance](SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md)
 - [Source V2 C3 release-audit preparation](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
 - [Harmonic protocol and spectrum acceptance](SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [Modulation protocol and waveform acceptance](SDG2000X_MODULATION_ACCEPTANCE_EN.md)
