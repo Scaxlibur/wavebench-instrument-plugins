@@ -12,7 +12,7 @@ A1，以及 Basic、Output 和 Harmonic 关闭正常路径的有限 A2。Basic �
 其中 Harmonic 关闭仅对 `SDG2122X` 固件 `2.01.01.39R7T2` 适用。三个登记型号的
 V1 capability 仍按共同手册合同和离线型号矩阵放行。
 
-Source V2 的 C3 仍未完成。离线审计和精确目标的 A1／有限 A2／Basic A3 记录均已具备；稳定核心、最终发行物、conformance manifest 和签核仍待完成，详见 [C3 发布审计准备](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
+Source V2 的 C3 核心实现、候选 wheel manifest 和候选包审计已完成；稳定核心、最终发行物与正式发布签核仍待完成，详见 [C3 候选发布审计](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
 
 高级命令域已完成尽可能全面的分域协议/A4 验收，但核心缺少无损状态模型时继续不声明写 capability，也不提供 raw SCPI。历史覆盖率数字只对应版本 `0.8.0`；新增 Source V2 代码的当前覆盖率以本次离线测试报告为准，不用旧数字替代验证。代码覆盖不替代未接外部端口和未持有型号的物理证据。
 

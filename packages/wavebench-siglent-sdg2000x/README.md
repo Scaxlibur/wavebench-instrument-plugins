@@ -10,10 +10,11 @@
 `source.output_v2` 和 `source.harmonics_disable_v2`。四项均有 A0 离线合同；`SDG2122X` 固件
 `2.01.01.39R7T2` 已完成 V2 snapshot 的 A1，以及 Basic、Output 和 Harmonic 关闭正常路径的有限 A2 验收。
 A3 已在已确认的高阻 CH1→CH1、CH2→CH2 接线下完成 Basic 的双通道 Sine、Square、Ramp、Pulse 工作点波形验收；
-其它型号或固件、实机故障恢复和发布签核仍未完成。C3 仅完成审计准备，不能视为发布完成。完整边界见
+其它型号或固件、实机故障恢复和发布签核仍未完成。C3 核心实现、候选 wheel manifest 和候选包审计已完成，
+但尚未 push、tag 或发布。完整边界见
 [Source V2 A0 离线适配记录](doc/SDG2000X_SOURCE_V2_A0.md)、[Source V2 A1／A2 实机验收](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE.md)
 、[Source V2 A3 实机波形验收](doc/SDG2000X_SOURCE_V2_A3_ACCEPTANCE.md) 和
-[Source V2 C3 发布审计准备](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
+[Source V2 C3 候选发布审计](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
 
 V1 基础接口仍包括 `source.set_frequency`、`source.set_function`、`source.set_amplitude_vpp`、
 `source.set_square_duty_cycle`、`source.output` 和只读 `source.arbitrary_probe`。V2 Basic 当前覆盖
@@ -113,7 +114,7 @@ python -m wavebench plugin package check packages/wavebench-siglent-sdg2000x
 - [SDG2000X Source V2 A0 离线适配记录](doc/SDG2000X_SOURCE_V2_A0.md)
 - [SDG2000X Source V2 A1／A2 实机验收](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE.md)
 - [SDG2000X Source V2 A3 实机波形验收](doc/SDG2000X_SOURCE_V2_A3_ACCEPTANCE.md)
-- [SDG2000X Source V2 C3 发布审计准备](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)
+- [SDG2000X Source V2 C3 候选发布审计](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)
 - [Source V2 能力、状态与复合输出安全 RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY.md)
 - [SDG2000X 谐波协议与频谱验收](doc/SDG2000X_HARMONIC_ACCEPTANCE.md)
 - [SDG2000X 调制协议与波形验收](doc/SDG2000X_MODULATION_ACCEPTANCE.md)

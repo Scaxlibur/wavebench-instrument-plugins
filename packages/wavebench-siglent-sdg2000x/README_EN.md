@@ -12,11 +12,12 @@ offline contracts. An `SDG2122X` running firmware `2.01.01.39R7T2` has completed
 limited A2 normal-path acceptance for Basic, Output, and Harmonic disable. A3 completed dual-channel Basic
 Sine, Square, Ramp, and Pulse operating-point waveform acceptance with confirmed high-impedance CH1-to-CH1 and
 CH2-to-CH2 wiring. Other models or firmware, hardware fault recovery, and release sign-off remain incomplete.
-C3 has audit preparation only; it is not a completed release. See the
+The C3 core implementation, candidate-wheel manifests, and candidate package audit are complete, but no push,
+tag, or publication has occurred. See the
 [Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md),
 [Source V2 A1/A2 hardware acceptance](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md),
 [Source V2 A3 hardware waveform acceptance](doc/SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md), and
-[Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
+[Source V2 C3 candidate release audit](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
 
 The V1 basic surface remains `source.set_frequency`, `source.set_function`,
 `source.set_amplitude_vpp`, `source.set_square_duty_cycle`, `source.output`, and read-only
@@ -122,7 +123,7 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md)
 - [SDG2000X Source V2 A1/A2 hardware acceptance](doc/SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md)
 - [SDG2000X Source V2 A3 hardware waveform acceptance](doc/SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md)
-- [SDG2000X Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
+- [SDG2000X Source V2 C3 candidate release audit](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
 - [Source V2 capability, state, and composite-output safety RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY_EN.md)
 - [SDG2000X harmonic protocol and spectrum acceptance](doc/SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [SDG2000X modulation protocol and waveform acceptance](doc/SDG2000X_MODULATION_ACCEPTANCE_EN.md)

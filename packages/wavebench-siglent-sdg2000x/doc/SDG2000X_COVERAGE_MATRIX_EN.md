@@ -15,9 +15,9 @@ hardware recovery. Harmonic disable applies only to
 `SDG2122X` firmware `2.01.01.39R7T2`. Registered-model V1 capabilities remain
 released under the common manual contract and offline model matrix.
 
-Source V2 C3 remains incomplete. The offline audit and the exact-target A1/limited-A2/Basic-A3 records are
-complete; a stable core, final release artifacts, a conformance manifest, and sign-off remain separate work. See the
-[C3 release-audit preparation](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
+The Source V2 C3 core implementation, candidate-wheel manifests, and candidate package audit are complete.
+A stable core, final release artifacts, and formal release sign-off remain separate work. See the
+[C3 candidate release audit](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
 
 Advanced command domains have the broadest practical domain-specific protocol/A4 evidence, but no lossy write capability or raw-SCPI endpoint is declared where the core lacks an exact state model. Historical coverage numbers apply to version `0.8.0`; current Source V2 coverage is established by the present offline test report, not by carrying forward those numbers. Code coverage does not establish physical evidence for unwired ports or unavailable models.
 
@@ -71,7 +71,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 - [Source V2 A0 offline adapter record](SDG2000X_SOURCE_V2_A0_EN.md)
 - [Source V2 A1/A2 hardware acceptance](SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE_EN.md)
 - [Source V2 A3 hardware waveform acceptance](SDG2000X_SOURCE_V2_A3_ACCEPTANCE_EN.md)
-- [Source V2 C3 release-audit preparation](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
+- [Source V2 C3 candidate release audit](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
 - [Harmonic protocol and spectrum acceptance](SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [Modulation protocol and waveform acceptance](SDG2000X_MODULATION_ACCEPTANCE_EN.md)
 - [Sweep protocol and waveform acceptance](SDG2000X_SWEEP_ACCEPTANCE_EN.md)

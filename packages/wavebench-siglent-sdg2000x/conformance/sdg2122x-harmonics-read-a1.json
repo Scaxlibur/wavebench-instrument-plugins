@@ -12,7 +12,7 @@
   "channels": [1, 2],
   "core_version": "0.8.24",
   "plugin_version": "0.8.2",
-  "wheel_sha256": "sha256:f7eb7dd034062535e80f0fdb2fb4ee9584806b634e7236f9201a3186e9776a8e",
+  "wheel_sha256": "sha256:767c46ff3978908b681982a964a23558974be1353469b0011d3112b9cec57d6e",
   "descriptor_digest": "sha256:3ce159e9fecab956062cc776ced3ed4f13be08b6e2ab6b489ae29035488cf4ca",
   "source_contract_version": "wavebench.source.v2",
   "fixture": {
@@ -49,5 +49,5 @@
     "no harmonic configure or enable claim",
     "no other firmware or model"
   ],
-  "evidence_digest": "sha256:9e8f0a3bba879994bb96353e756fddaf0fa6f3cecd4554a68a79fa5f0b8d0fc7"
+  "evidence_digest": "sha256:953981af990b35418eb2298478a1d44bfbca0b25c07272161e0e631194664f05"
 }

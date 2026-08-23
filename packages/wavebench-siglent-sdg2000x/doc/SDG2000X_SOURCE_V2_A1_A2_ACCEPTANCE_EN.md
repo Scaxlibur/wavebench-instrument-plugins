@@ -75,4 +75,5 @@ ran only after the CH1 operation.
 - No transport failure, ambiguous write, or post-write readback mismatch was induced. Those recovery branches
   remain A0 fault-injection evidence and are not claimed as A2 hardware evidence.
 - No other model, firmware, load, port mapping, or advanced Source V2 capability was verified.
-- No final wheel conformance manifest or release sign-off exists.
+- No wheel conformance manifest existed when this acceptance ran; later candidate manifests and release sign-off
+  status are recorded separately.

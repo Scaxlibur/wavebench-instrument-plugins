@@ -56,4 +56,4 @@ anchor/facet/anchor 状态。记录结果如下：
 - 未通过示波器环回验证频率、Vpp、偏置、函数或占空比；A3 仍待完成。
 - 未人为诱发传输失败、未知写入或写后回读不匹配。此类恢复分支仍只有 A0 故障注入证据，不宣称为 A2 实机证据。
 - 未验证任何其它型号、固件、负载、端口映射或高级 Source V2 capability。
-- 未生成正式 wheel conformance manifest，未进行发布签核。
+- 验收执行当时尚未生成 wheel conformance manifest；后续候选 manifest 与发布签核状态单独记录。

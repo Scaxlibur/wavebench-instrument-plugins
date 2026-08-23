@@ -78,4 +78,5 @@ readback was `DCL`.
   hardware, evidence.
 - Harmonic configuration/enable, modulation, Sweep, Burst, arbitrary upload, external triggering, or any other
   advanced capability.
-- A final plugin-wheel conformance manifest or release sign-off.
+- No final plugin-wheel conformance manifest existed when this acceptance ran; later candidate manifests and
+  release sign-off status are recorded separately.

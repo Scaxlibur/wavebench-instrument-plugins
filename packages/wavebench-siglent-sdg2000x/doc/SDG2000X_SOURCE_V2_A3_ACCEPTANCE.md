@@ -64,4 +64,4 @@ scope capture 会改变所选示波器通道的采集、时基、垂直、触发
 - `offset_v` 是当前插件的可读安全状态，但不是已开放的 V2 Basic 写字段；本次仅记录其写前与最终回读为 0 V。
 - 未人为诱发传输失败、未知写入或写后回读不一致；此类分支只有 A0 故障注入证据。
 - 未验证 Harmonic 配置／启用、调制、Sweep、Burst、任意波上传、外部触发或其它高级 capability。
-- 未生成最终插件 wheel conformance manifest，也未进行发布签核。
+- 验收执行当时尚未生成最终插件 wheel conformance manifest；后续候选 manifest 与发布签核状态单独记录。
