@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.8.0"
+PACKAGE_VERSION = "0.8.1"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -77,7 +77,7 @@ def test_wheel_contains_license_dependency_and_single_entry_point(tmp_path: Path
     assert distribution.version == PACKAGE_VERSION
     requires_dist = distribution.metadata.get_all("Requires-Dist") or []
     assert any(
-        requirement.replace(" ", "") == "wavebench<0.9,>=0.8"
+        requirement.replace(" ", "") == "wavebench<0.9,>=0.8.24"
         for requirement in requires_dist
     )
     assert [(item.name, item.value) for item in entry_points] == [
@@ -117,6 +117,7 @@ def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) 
         "SDG2000X_READONLY_ACCEPTANCE_EN.md",
         "SDG2000X_OUTPUT_ACCEPTANCE.md",
         "SDG2000X_OUTPUT_ACCEPTANCE_EN.md",
+        "SDG2000X_SOURCE_V2_A0.md",
     ):
         assert any(name.endswith(f"/doc/{public_doc}") for name in names)
 
@@ -150,6 +151,10 @@ def test_wheel_install_discovery_and_uninstall_without_instrument_io(tmp_path: P
     discovery_script = """
 from importlib.metadata import entry_points
 from wavebench.instruments.registry import build_instrument_registry
+from wavebench.instruments.source_extension_capabilities import (
+    validate_source_descriptor,
+    validate_source_plugin_dependencies,
+)
 from wavebench.transport.pyvisa_transport import PyVisaTransport
 
 def forbidden(*args, **kwargs):
@@ -161,7 +166,7 @@ assert [point.name for point in points] == ["siglent.sdg2000x"]
 item = points[0].load()()
 assert item.driver_id == "siglent.sdg2000x"
 assert item.distribution == "wavebench-siglent-sdg2000x"
-assert item.version == "0.8.0"
+assert item.version == "0.8.1"
 assert item.capabilities == (
     "source.idn",
     "source.status",
@@ -171,6 +176,14 @@ assert item.capabilities == (
     "source.set_square_duty_cycle",
     "source.output",
     "source.arbitrary_probe",
+    "source.snapshot_v2",
+    "source.basic_configure_v2",
+    "source.output_v2",
+)
+validate_source_descriptor(item)
+validate_source_plugin_dependencies(
+    item,
+    ("wavebench>=0.8.24,<0.9",),
 )
 resolved = build_instrument_registry().resolve(
     "siglent.sdg2000x", expected_kind="source"

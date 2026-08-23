@@ -4,9 +4,40 @@ from dataclasses import dataclass, field, replace
 from math import isclose, isfinite
 import re
 from threading import RLock
+import time
+from collections.abc import Callable
 
 from wavebench.errors import DataError, InstrumentError
 from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
+from wavebench.instruments.source_extensions import (
+    SOURCE_CONTRACT_VERSION,
+    Availability,
+    BasicWaveFacet,
+    Observed,
+    OutputFacet,
+    PatchAction,
+    SourceAmplitude,
+    SourceAmplitudeUnit,
+    SourceBasicConfigureRequest,
+    SourceBasicConfigureResult,
+    SourceDisplayLoad,
+    SourceFieldId,
+    SourceFrequencyMode,
+    SourceLoadKind,
+    SourceOutputPolarity,
+    SourceOutputRequest,
+    SourceOutputResult,
+    SourceProtocolQueryRecord,
+    SourceQueryEffect,
+    SourceQueryExecutionRecord,
+    SourceQueryItemOutcome,
+    SourceQueryPhase,
+    SourceReasonCode,
+    SourceRuntimeIdentity,
+    SourceSemanticQueryPlan,
+    SourceTypedObservation,
+    SourceWaveformKind,
+)
 from wavebench.transport.base import InstrumentTransport
 
 
@@ -104,6 +135,21 @@ _CORE_TO_VENDOR_FUNCTION = {
     "DC": "DC",
 }
 _PERIODIC_FUNCTIONS = frozenset({"SIN", "SQU", "RAMP", "PULS"})
+_V2_WAVEFORMS = {
+    "SIN": SourceWaveformKind.SINE,
+    "SQU": SourceWaveformKind.SQUARE,
+    "RAMP": SourceWaveformKind.RAMP,
+    "PULS": SourceWaveformKind.PULSE,
+    "NOIS": SourceWaveformKind.NOISE,
+    "USER": SourceWaveformKind.ARBITRARY,
+    "DC": SourceWaveformKind.DC,
+}
+_V2_WRITABLE_FUNCTIONS = {
+    SourceWaveformKind.SINE: "SINE",
+    SourceWaveformKind.SQUARE: "SQUARE",
+    SourceWaveformKind.RAMP: "RAMP",
+    SourceWaveformKind.PULSE: "PULSE",
+}
 
 
 @dataclass(frozen=True)
@@ -644,12 +690,36 @@ def parse_idn_model(response: str) -> str:
     return model
 
 
+def _runtime_identity_from_idn(response: str) -> SourceRuntimeIdentity:
+    """Parse the documented IDN variants into the V2 identity contract."""
+
+    value = _response_text(response, command="*IDN?")
+    fields = tuple(item.strip() for item in value.split(","))
+    model = parse_idn_model(value)
+    if len(fields) == 4:
+        manufacturer = fields[0]
+        firmware_id = fields[3]
+    else:
+        manufacturer = "SIGLENT Technologies"
+        firmware_id = fields[4]
+    return SourceRuntimeIdentity(
+        manufacturer=manufacturer,
+        model=model,
+        firmware_id=firmware_id,
+    )
+
+
 @dataclass
 class SDG2000XSource:
     transport: InstrumentTransport
     _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _identity_model: str | None = field(default=None, init=False, repr=False)
     _configuration_writes_blocked: bool = field(default=False, init=False, repr=False)
+    _v2_preflight_snapshots: dict[int, _ConfigurationSnapshot] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
 
     def _ensure_identity(self) -> str:
         if self._identity_model is None:
@@ -662,18 +732,477 @@ class SDG2000XSource:
             self._identity_model = parse_idn_model(response)
             return response
 
-    def _read_status(self, channel: int) -> tuple[SourceStatus, _OutputStatus]:
+    @staticmethod
+    def _v2_missing() -> Observed[object]:
+        return Observed.missing(
+            Availability.NOT_APPLICABLE,
+            SourceReasonCode.INACTIVE_BY_ANCHOR,
+        )
+
+    @classmethod
+    def _v2_basic_facet(cls, status: SourceStatus) -> BasicWaveFacet:
+        try:
+            waveform_kind = _V2_WAVEFORMS[status.function]
+        except KeyError as exc:  # pragma: no cover - status parsing is closed above
+            raise DataError(
+                f"SDG2000X cannot map function {status.function!r} to Source V2"
+            ) from exc
+        frequency_mode = (
+            SourceFrequencyMode.FIXED
+            if status.frequency_mode == "FIX"
+            else SourceFrequencyMode.SWEEP
+        )
+        amplitude = (
+            Observed.value_of(
+                SourceAmplitude(
+                    value=status.amplitude,
+                    unit=SourceAmplitudeUnit.VPP,
+                )
+            )
+            if status.amplitude is not None and status.amplitude_unit == "VPP"
+            else cls._v2_missing()
+        )
+        return BasicWaveFacet(
+            waveform_kind=Observed.value_of(waveform_kind),
+            waveform_id=Observed.value_of(waveform_kind.value),
+            frequency_mode=Observed.value_of(frequency_mode),
+            frequency_hz=(
+                Observed.value_of(status.frequency_hz)
+                if status.frequency_hz is not None
+                else cls._v2_missing()
+            ),
+            amplitude=amplitude,
+            offset_v=(
+                Observed.value_of(status.offset_v)
+                if status.offset_v is not None
+                else cls._v2_missing()
+            ),
+            phase_deg=(
+                Observed.value_of(status.phase_deg)
+                if status.phase_deg is not None
+                else cls._v2_missing()
+            ),
+            square_duty_cycle_percent=(
+                Observed.value_of(status.square_duty_cycle_percent)
+                if status.square_duty_cycle_percent is not None
+                else cls._v2_missing()
+            ),
+        )
+
+    @staticmethod
+    def _v2_output_facet(output: _OutputStatus) -> OutputFacet:
+        if output.state not in {"ON", "OFF"}:
+            raise DataError(f"unexpected SDG2000X output state: {output.state!r}")
+        if output.polarity == "NORMAL":
+            polarity = SourceOutputPolarity.NORMAL
+        elif output.polarity == "INVERTED":
+            polarity = SourceOutputPolarity.INVERTED
+        else:  # pragma: no cover - output parsing is closed above
+            raise DataError(f"unexpected SDG2000X output polarity: {output.polarity!r}")
+        display_load = (
+            SourceDisplayLoad(SourceLoadKind.HIGH_IMPEDANCE)
+            if output.load_ohm is None
+            else SourceDisplayLoad(SourceLoadKind.RESISTIVE, output.load_ohm)
+        )
+        return OutputFacet(
+            enabled=Observed.value_of(output.state == "ON"),
+            display_load=Observed.value_of(display_load),
+            polarity=Observed.value_of(polarity),
+        )
+
+    @staticmethod
+    def _v2_snapshot_query_count(snapshot: _ConfigurationSnapshot) -> int:
+        return 9 if snapshot.status.function == "SIN" else 8
+
+    @staticmethod
+    def _v2_validate_query_plan(plan: SourceSemanticQueryPlan) -> None:
+        if not isinstance(plan, SourceSemanticQueryPlan):
+            raise DataError("SDG2000X Source V2 query plan has an invalid type")
+        if plan.contract_version != SOURCE_CONTRACT_VERSION:
+            raise DataError("SDG2000X Source V2 query plan has an unsupported version")
+        if SourceQueryEffect.PURE_READ not in plan.allowed_effects:
+            raise DataError("SDG2000X Source V2 query plan does not permit pure reads")
+        if time.monotonic() > plan.deadline_monotonic:
+            raise DataError("SDG2000X Source V2 query plan deadline has expired")
+        if sum(item.max_queries for item in plan.items) > plan.max_queries:
+            raise DataError(
+                "SDG2000X Source V2 query plan exceeds its declared total query budget"
+            )
+
+        phase_fields: dict[SourceQueryPhase, dict[SourceFieldId, set[int | None]]] = {}
+        for item in plan.items:
+            if item.effect is not SourceQueryEffect.PURE_READ:
+                raise DataError("SDG2000X Source V2 snapshots only support pure reads")
+            current = phase_fields.setdefault(item.phase, {})
+            for field_ref in item.fields:
+                if field_ref.field is SourceFieldId.IDENTITY:
+                    if field_ref.target.scope.value != "instrument":
+                        raise DataError("SDG2000X Source V2 identity must be instrument scoped")
+                    channel = None
+                elif field_ref.field in {SourceFieldId.BASIC, SourceFieldId.OUTPUT}:
+                    if field_ref.target.scope.value != "channel":
+                        raise DataError("SDG2000X Source V2 channel facets must be channel scoped")
+                    channel = field_ref.target.channel
+                    _validate_channel(channel)
+                else:
+                    raise DataError(
+                        "SDG2000X Source V2 query plan requests an unsupported field"
+                    )
+                channels = current.setdefault(field_ref.field, set())
+                if channel in channels:
+                    raise DataError("SDG2000X Source V2 query plan repeats a field target")
+                channels.add(channel)
+
+        for fields in phase_fields.values():
+            basic_channels = fields.get(SourceFieldId.BASIC, set())
+            output_channels = fields.get(SourceFieldId.OUTPUT, set())
+            identity_targets = fields.get(SourceFieldId.IDENTITY, set())
+            if basic_channels or output_channels:
+                if identity_targets != {None}:
+                    raise DataError(
+                        "SDG2000X Source V2 channel snapshots require one identity anchor"
+                    )
+                if not output_channels <= basic_channels:
+                    raise DataError(
+                        "SDG2000X Source V2 output snapshots require matching basic anchors"
+                    )
+
+    @staticmethod
+    def _v2_query_with_deadline(
+        plan: SourceSemanticQueryPlan,
+        query: Callable[[str], str],
+        command: str,
+    ) -> str:
+        if time.monotonic() > plan.deadline_monotonic:
+            raise DataError("SDG2000X Source V2 query plan deadline has expired")
+        return query(command)
+
+    def _v2_query_identity(
+        self,
+        plan: SourceSemanticQueryPlan,
+        query: Callable[[str], str],
+    ) -> SourceRuntimeIdentity:
+        identity = _runtime_identity_from_idn(
+            self._v2_query_with_deadline(plan, query, "*IDN?")
+        )
+        self._identity_model = identity.model
+        return identity
+
+    def execute_source_query_plan_v2(
+        self,
+        plan: SourceSemanticQueryPlan,
+    ) -> SourceQueryExecutionRecord:
+        """Execute the core-owned pure-read Source V2 plan without selector writes."""
+
+        self._v2_validate_query_plan(plan)
+        with self._io_lock:
+            records: dict[str, SourceProtocolQueryRecord] = {}
+            after_snapshots: dict[int, _ConfigurationSnapshot] = {}
+
+            def query(command: str) -> str:
+                return self._v2_query_with_deadline(
+                    plan,
+                    self.transport.query,
+                    command,
+                )
+
+            for phase in SourceQueryPhase:
+                phase_items = tuple(item for item in plan.items if item.phase is phase)
+                if not phase_items:
+                    continue
+                identity_item = next(
+                    (
+                        item
+                        for item in phase_items
+                        if any(
+                            field_ref.field is SourceFieldId.IDENTITY
+                            for field_ref in item.fields
+                        )
+                    ),
+                    None,
+                )
+                identity = (
+                    self._v2_query_identity(plan, self.transport.query)
+                    if identity_item is not None
+                    else None
+                )
+                snapshots: dict[int, _ConfigurationSnapshot] = {}
+                for item in phase_items:
+                    for field_ref in item.fields:
+                        if field_ref.field is SourceFieldId.BASIC:
+                            assert field_ref.target.channel is not None
+                            snapshots[field_ref.target.channel] = self._read_configuration_snapshot(
+                                field_ref.target.channel,
+                                query=query,
+                            )
+                if phase is SourceQueryPhase.ANCHOR_AFTER:
+                    after_snapshots = snapshots
+
+                for item in phase_items:
+                    observations: list[SourceTypedObservation] = []
+                    query_count = 0
+                    for field_ref in item.fields:
+                        if field_ref.field is SourceFieldId.IDENTITY:
+                            assert identity is not None
+                            observations.append(SourceTypedObservation(field_ref, identity))
+                            query_count += 1
+                        elif field_ref.field is SourceFieldId.BASIC:
+                            assert field_ref.target.channel is not None
+                            snapshot = snapshots[field_ref.target.channel]
+                            observations.append(
+                                SourceTypedObservation(
+                                    field_ref,
+                                    self._v2_basic_facet(snapshot.status),
+                                )
+                            )
+                            query_count += self._v2_snapshot_query_count(snapshot)
+                        else:
+                            assert field_ref.field is SourceFieldId.OUTPUT
+                            assert field_ref.target.channel is not None
+                            snapshot = snapshots[field_ref.target.channel]
+                            observations.append(
+                                SourceTypedObservation(
+                                    field_ref,
+                                    self._v2_output_facet(snapshot.output),
+                                )
+                            )
+                    if query_count > item.max_queries:
+                        raise DataError(
+                            "SDG2000X Source V2 query plan under-declares a snapshot query"
+                        )
+                    records[item.item_id] = SourceProtocolQueryRecord(
+                        item_id=item.item_id,
+                        effect=item.effect,
+                        outcome=SourceQueryItemOutcome.OBSERVED,
+                        query_count=query_count,
+                        observations=tuple(observations),
+                    )
+
+            if not after_snapshots:
+                raise DataError("SDG2000X Source V2 query plan has no after anchors")
+            self._v2_preflight_snapshots = dict(after_snapshots)
+            ordered_records = tuple(records[item.item_id] for item in plan.items)
+            return SourceQueryExecutionRecord(
+                contract_version=SOURCE_CONTRACT_VERSION,
+                plan_id=plan.plan_id,
+                items=ordered_records,
+                query_count=sum(item.query_count for item in ordered_records),
+            )
+
+    def _v2_preflight_snapshot(self, channel: int) -> _ConfigurationSnapshot:
+        _validate_channel(channel)
+        try:
+            return self._v2_preflight_snapshots[channel]
+        except KeyError as exc:
+            raise DataError(
+                "SDG2000X Source V2 write requires a fresh source.snapshot_v2 preflight"
+            ) from exc
+
+    @classmethod
+    def _validate_v2_basic_preflight(cls, snapshot: _ConfigurationSnapshot) -> None:
+        if snapshot.status.output != "OFF":
+            raise DataError("SDG2000X Source V2 basic configuration requires output OFF")
+        if snapshot.status.frequency_mode != "FIX" or snapshot.status.sweep_enabled != "OFF":
+            raise DataError(
+                "SDG2000X Source V2 basic configuration requires fixed-frequency mode"
+            )
+        cls._validate_advanced_modes_off(snapshot.context)
+        if snapshot.status.amplitude is None or snapshot.status.amplitude_unit != "VPP":
+            raise DataError(
+                "SDG2000X Source V2 basic configuration requires a verified Vpp amplitude"
+            )
+        if snapshot.status.offset_v is None:
+            raise DataError(
+                "SDG2000X Source V2 basic configuration requires a verified voltage offset"
+            )
+
+    @staticmethod
+    def _v2_result_amplitude_offset(status: SourceStatus) -> tuple[SourceAmplitude, float]:
+        if status.amplitude is None or status.amplitude_unit != "VPP":
+            raise DataError("SDG2000X Source V2 result requires a verified Vpp amplitude")
+        if status.offset_v is None:
+            raise DataError("SDG2000X Source V2 result requires a verified voltage offset")
+        return SourceAmplitude(status.amplitude, SourceAmplitudeUnit.VPP), status.offset_v
+
+    def configure_source_basic_v2(
+        self,
+        request: SourceBasicConfigureRequest,
+    ) -> SourceBasicConfigureResult:
+        """Perform one previously audited SDG basic write from a V2 preflight cache."""
+
+        if not isinstance(request, SourceBasicConfigureRequest):
+            raise DataError("SDG2000X Source V2 basic request has an invalid type")
+        _validate_channel(request.channel)
+        fields = tuple(
+            (name, patch_value.value)
+            for name, patch_value in (
+                ("waveform_kind", request.patch.waveform_kind),
+                ("frequency_hz", request.patch.frequency_hz),
+                ("amplitude_vpp", request.patch.amplitude_vpp),
+                ("offset_v", request.patch.offset_v),
+                (
+                    "square_duty_cycle_percent",
+                    request.patch.square_duty_cycle_percent,
+                ),
+            )
+            if patch_value.action is PatchAction.SET
+        )
+        if len(fields) != 1:
+            raise DataError(
+                "SDG2000X Source V2 basic configuration supports one SET field per write"
+            )
+        field_name, raw_value = fields[0]
+        if field_name == "offset_v":
+            raise DataError(
+                "SDG2000X Source V2 offset writes are not yet supported by verified SCPI"
+            )
+
+        with self._io_lock:
+            self._ensure_configuration_writes_allowed()
+            before = self._v2_preflight_snapshot(request.channel)
+            self._validate_v2_basic_preflight(before)
+            status = before.status
+            model = self._identity_model
+            if model is None:  # pragma: no cover - cache is only filled after identity
+                raise DataError("SDG2000X Source V2 preflight identity is unavailable")
+
+            updated = status
+            command: str | None = None
+            if field_name == "frequency_hz":
+                value_hz = _finite_number(raw_value, field_name="frequency")
+                self._validate_frequency_range(
+                    model=model,
+                    function=status.function,
+                    value_hz=value_hz,
+                )
+                if not _numeric_matches(status.frequency_hz, value_hz):
+                    command = f"C{request.channel}:BSWV FRQ,{value_hz:.12g}"
+                    updated = replace(status, frequency_hz=value_hz)
+            elif field_name == "amplitude_vpp":
+                value_vpp = _finite_number(raw_value, field_name="amplitude")
+                if not _MIN_AMPLITUDE_VPP <= value_vpp <= _MAX_USER_AMPLITUDE_VPP:
+                    raise DataError("SDG2000X amplitude must be from 0.002 Vpp to 10 Vpp")
+                assert status.offset_v is not None
+                if abs(status.offset_v) + value_vpp / 2 > _MAX_ABSOLUTE_OUTPUT_V:
+                    raise DataError(
+                        "SDG2000X amplitude and offset exceed the absolute voltage envelope"
+                    )
+                if not _numeric_matches(status.amplitude, value_vpp):
+                    command = f"C{request.channel}:BSWV AMP,{value_vpp:.12g}"
+                    updated = replace(status, amplitude=value_vpp, amplitude_unit="VPP")
+            elif field_name == "waveform_kind":
+                if not isinstance(raw_value, SourceWaveformKind):
+                    raise DataError("SDG2000X Source V2 waveform kind has an invalid type")
+                try:
+                    vendor_function = _V2_WRITABLE_FUNCTIONS[raw_value]
+                except KeyError as exc:
+                    raise DataError(
+                        "SDG2000X Source V2 only configures sine, square, ramp, and pulse"
+                    ) from exc
+                target_function = _WAVE_FUNCTIONS[vendor_function]
+                if status.frequency_hz is None:
+                    raise DataError(
+                        "SDG2000X Source V2 waveform changes require a verified frequency"
+                    )
+                self._validate_frequency_range(
+                    model=model,
+                    function=target_function,
+                    value_hz=status.frequency_hz,
+                )
+                if status.function != target_function:
+                    command = f"C{request.channel}:BSWV WVTP,{vendor_function}"
+                    updated = replace(
+                        status,
+                        function=target_function,
+                        square_duty_cycle_percent=(
+                            status.square_duty_cycle_percent
+                            if target_function == "SQU"
+                            else None
+                        ),
+                    )
+            else:
+                assert field_name == "square_duty_cycle_percent"
+                duty_percent = _finite_number(raw_value, field_name="duty cycle percent")
+                if not _MIN_DUTY_PERCENT <= duty_percent <= _MAX_DUTY_PERCENT:
+                    raise DataError("SDG2000X duty cycle must be from 0.001% to 99.999%")
+                if status.function != "SQU" or status.square_duty_cycle_percent is None:
+                    raise DataError("SDG2000X duty-cycle writes require the SQUARE function")
+                if not _numeric_matches(status.square_duty_cycle_percent, duty_percent):
+                    command = f"C{request.channel}:BSWV DUTY,{duty_percent:.12g}"
+                    updated = replace(status, square_duty_cycle_percent=duty_percent)
+
+            if command is not None:
+                self.transport.write(command)
+            self._v2_preflight_snapshots[request.channel] = replace(
+                before,
+                status=updated,
+            )
+            return SourceBasicConfigureResult(
+                channel=request.channel,
+                basic=self._v2_basic_facet(updated),
+                output_enabled=False,
+            )
+
+    def set_source_output_v2(
+        self,
+        request: SourceOutputRequest,
+    ) -> SourceOutputResult:
+        """Write exactly one SDG output transition from a V2 preflight cache."""
+
+        if not isinstance(request, SourceOutputRequest):
+            raise DataError("SDG2000X Source V2 output request has an invalid type")
+        _validate_channel(request.channel)
+        with self._io_lock:
+            before = self._v2_preflight_snapshot(request.channel)
+            target = "ON" if request.enabled else "OFF"
+            if request.enabled:
+                self._ensure_configuration_writes_allowed()
+                self._validate_output_enable_snapshot(
+                    before.status,
+                    before.output,
+                    before.context,
+                )
+                if before.status.output != target:
+                    self.transport.write(f"C{request.channel}:OUTP {target}")
+            else:
+                # Core recovery may reach this path after a main-write result is unknown.
+                self.transport.write(f"C{request.channel}:OUTP {target}")
+
+            updated_status = replace(before.status, output=target)
+            updated_output = replace(before.output, state=target)
+            self._v2_preflight_snapshots[request.channel] = replace(
+                before,
+                status=updated_status,
+                output=updated_output,
+            )
+            if not request.enabled:
+                return SourceOutputResult(channel=request.channel, enabled=False)
+            amplitude, offset_v = self._v2_result_amplitude_offset(updated_status)
+            return SourceOutputResult(
+                channel=request.channel,
+                enabled=True,
+                final_amplitude=amplitude,
+                final_offset_v=offset_v,
+            )
+
+    def _read_status(
+        self,
+        channel: int,
+        *,
+        query: Callable[[str], str] | None = None,
+    ) -> tuple[SourceStatus, _OutputStatus]:
         self._ensure_identity()
+        query_response = self.transport.query if query is None else query
         output = _parse_output(
-            self.transport.query(f"C{channel}:OUTP?"),
+            query_response(f"C{channel}:OUTP?"),
             channel=channel,
         )
         apply_raw, basic = _parse_basic_wave(
-            self.transport.query(f"C{channel}:BSWV?"),
+            query_response(f"C{channel}:BSWV?"),
             channel=channel,
         )
         sweep_enabled = _parse_sweep_state(
-            self.transport.query(f"C{channel}:SWWV?"),
+            query_response(f"C{channel}:SWWV?"),
             channel=channel,
         )
         return (
@@ -699,15 +1228,17 @@ class SDG2000XSource:
         channel: int,
         *,
         function: str,
+        query: Callable[[str], str] | None = None,
     ) -> _OutputSafetyContext:
+        query_response = self.transport.query if query is None else query
         modulation_enabled = _parse_named_state(
-            self.transport.query(f"C{channel}:MDWV?"),
+            query_response(f"C{channel}:MDWV?"),
             channel=channel,
             header="MDWV",
             state_name="STATE",
         )
         burst_enabled = _parse_named_state(
-            self.transport.query(f"C{channel}:BTWV?"),
+            query_response(f"C{channel}:BTWV?"),
             channel=channel,
             header="BTWV",
             state_name="STATE",
@@ -715,20 +1246,20 @@ class SDG2000XSource:
         harmonic_enabled = False
         if function == "SIN":
             harmonic_enabled = _parse_harmonic_status(
-                self.transport.query(f"C{channel}:HARM?"),
+                query_response(f"C{channel}:HARM?"),
                 channel=channel,
             ).enabled
         combine_enabled = _parse_combine_state(
-            self.transport.query(f"C{channel}:CMBN?"),
+            query_response(f"C{channel}:CMBN?"),
             channel=channel,
         )
         noise_add_enabled = _parse_named_state(
-            self.transport.query(f"C{channel}:NOISE_ADD?"),
+            query_response(f"C{channel}:NOISE_ADD?"),
             channel=channel,
             header="NOISE_ADD",
             state_name="STATE",
         )
-        coupling = _parse_coupling_states(self.transport.query("COUP?"))
+        coupling = _parse_coupling_states(query_response("COUP?"))
         return _OutputSafetyContext(
             modulation_enabled=modulation_enabled,
             burst_enabled=burst_enabled,
@@ -742,14 +1273,20 @@ class SDG2000XSource:
             coupling_amplitude_enabled=coupling[4],
         )
 
-    def _read_configuration_snapshot(self, channel: int) -> _ConfigurationSnapshot:
-        status, output = self._read_status(channel)
+    def _read_configuration_snapshot(
+        self,
+        channel: int,
+        *,
+        query: Callable[[str], str] | None = None,
+    ) -> _ConfigurationSnapshot:
+        status, output = self._read_status(channel, query=query)
         return _ConfigurationSnapshot(
             status=status,
             output=output,
             context=self._read_output_safety_context(
                 channel,
                 function=status.function,
+                query=query,
             ),
         )
 

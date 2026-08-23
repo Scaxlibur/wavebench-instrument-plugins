@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-siglent-sdg2000x"
-version = "0.8.0"
+version = "0.8.1"
 description = "SIGLENT SDG2000X function and arbitrary waveform generator plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["wavebench>=0.8,<0.9"]
+dependencies = ["wavebench>=0.8.24,<0.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "ruff>=0.8.0"]

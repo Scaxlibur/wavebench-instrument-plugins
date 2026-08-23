@@ -12,8 +12,24 @@ from wavebench.errors import ConfigError, DataError, InstrumentError
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import ArbitraryQueryProbeResult, SourceStatus
+from wavebench.instruments.source_extension_capabilities import validate_source_descriptor
+from wavebench.instruments.source_extensions import (
+    PatchAction,
+    PatchValue,
+    SourceBasicConfigureRequest,
+    SourceBasicPatch,
+    SourceOutputRequest,
+)
 from wavebench.logging import CommandLogger
 from wavebench.services.source_service import SourceService
+from wavebench.services.source_snapshot_v2 import (
+    build_source_snapshot,
+    build_source_snapshot_plan,
+    new_source_snapshot_context,
+)
+from wavebench.transport.contracts import ReplayPolicy
+from wavebench.transport.guarded import GuardedAuditedTransport
+from wavebench.transport.session import InstrumentSessionState
 
 from wavebench_siglent_sdg2000x import descriptor
 from wavebench_siglent_sdg2000x.driver import (
@@ -56,6 +72,8 @@ class FakeTransport:
 
 
 class StatefulOutputTransport:
+    resource = "fake-sdg2000x"
+
     def __init__(self, *, model: str = "SDG2122X") -> None:
         self.model = model
         self.outputs = {1: "OFF", 2: "OFF"}
@@ -99,7 +117,16 @@ class StatefulOutputTransport:
         values[command] = remaining - 1
         return True
 
-    def query(self, command: str) -> str:
+    def record_event(self, direction: str, text: str) -> None:
+        del direction, text
+
+    def query(
+        self,
+        command: str,
+        *,
+        replay: ReplayPolicy = ReplayPolicy.NO_REPLAY,
+    ) -> str:
+        del replay
         self.queries.append(command)
         if self._consume(self.fail_query_counts, command):
             raise InstrumentError("injected SDG2000X query failure")
@@ -321,16 +348,23 @@ def test_descriptor_declares_output_capable_external_source() -> None:
         "source.set_square_duty_cycle",
         "source.output",
         "source.arbitrary_probe",
+        "source.snapshot_v2",
+        "source.basic_configure_v2",
+        "source.output_v2",
     )
     assert item.backends == ("pyvisa",)
-    assert item.wavebench_min_version == "0.8.0"
+    assert item.wavebench_min_version == "0.8.24"
     assert item.wavebench_max_version == "0.9.0"
-    assert item.version == "0.8.0"
+    assert item.version == "0.8.1"
     assert item.config_fields == (
         "source.resource",
         "source.driver",
         "safety_limits.max_source_vpp",
     )
+    assert item.source_extensions is not None
+    assert item.source_extensions.topology.channels == (1, 2)
+    assert item.source_extensions.query_contract.max_queries == 42
+    validate_source_descriptor(item)
 
 
 def test_factory_opens_one_core_transport_and_satisfies_capabilities() -> None:
@@ -361,6 +395,214 @@ def test_factory_opens_one_core_transport_and_satisfies_capabilities() -> None:
     assert driver.transport is transport
     assert opened == 1
     assert transport.queries == []
+
+
+def _source_v2_snapshot_plan():
+    extensions = descriptor().source_extensions
+    assert extensions is not None
+    context = new_source_snapshot_context(
+        session_epoch="sdg2000x-a0",
+        session_health_before="healthy",
+        descriptor_extensions=extensions,
+        timeout_ms=5_000,
+    )
+    return context, build_source_snapshot_plan(context)
+
+
+def _execute_source_v2_snapshot(driver: SDG2000XSource):
+    context, plan = _source_v2_snapshot_plan()
+    execution = driver.execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+    return execution, snapshot
+
+
+def test_source_v2_snapshot_is_pure_read_and_caches_after_anchors() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+
+    execution, snapshot = _execute_source_v2_snapshot(driver)
+
+    assert execution.query_count == 38
+    assert len(transport.queries) == 38
+    assert transport.writes == []
+    assert tuple(channel.channel for channel in snapshot.channels) == (1, 2)
+    assert snapshot.channels[0].basic.value is not None
+    assert snapshot.channels[0].basic.value.frequency_hz.value == 1_000.0
+    assert snapshot.channels[1].output.value is not None
+    assert snapshot.channels[1].output.value.enabled.value is False
+
+
+def test_source_v2_snapshot_rejects_an_underdeclared_total_budget_before_io() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    _context, plan = _source_v2_snapshot_plan()
+    underdeclared = replace(plan, max_queries=plan.max_queries - 1)
+
+    with pytest.raises(DataError, match="total query budget"):
+        driver.execute_source_query_plan_v2(underdeclared)
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+def test_source_v2_snapshot_rejects_an_expired_plan_before_io() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    _context, plan = _source_v2_snapshot_plan()
+    expired = replace(plan, deadline_monotonic=0.0)
+
+    with pytest.raises(DataError, match="deadline has expired"):
+        driver.execute_source_query_plan_v2(expired)
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+def test_source_v2_basic_write_uses_one_audited_command_after_snapshot() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    result = driver.configure_source_basic_v2(
+        SourceBasicConfigureRequest(
+            channel=1,
+            patch=SourceBasicPatch(
+                frequency_hz=PatchValue(PatchAction.SET, 2_000.0),
+            ),
+        )
+    )
+
+    assert result.basic.frequency_hz.value == 2_000.0
+    assert result.basic.amplitude.value is not None
+    assert result.basic.amplitude.value.value == 4.0
+    assert transport.writes == ["C1:BSWV FRQ,2000"]
+    assert len(transport.queries) == query_count
+
+
+def test_source_v2_output_transitions_use_no_driver_readback_in_main() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+    _execute_source_v2_snapshot(driver)
+    query_count = len(transport.queries)
+
+    enabled = driver.set_source_output_v2(SourceOutputRequest(channel=2, enabled=True))
+    disabled = driver.set_source_output_v2(SourceOutputRequest(channel=2, enabled=False))
+
+    assert enabled.final_amplitude is not None
+    assert enabled.final_amplitude.value == 4.0
+    assert enabled.final_offset_v == 0.0
+    assert disabled.enabled is False
+    assert transport.writes == ["C2:OUTP ON", "C2:OUTP OFF"]
+    assert len(transport.queries) == query_count
+
+
+def test_source_v2_writes_require_a_fresh_snapshot_before_any_io() -> None:
+    transport = StatefulOutputTransport()
+    driver = SDG2000XSource(transport)
+
+    with pytest.raises(DataError, match="fresh source.snapshot_v2 preflight"):
+        driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=False))
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+def _source_v2_service(
+    transport: StatefulOutputTransport,
+) -> tuple[SourceService, GuardedAuditedTransport]:
+    session_state = InstrumentSessionState(epoch_id="sdg2000x-v2-a0")
+    guarded = GuardedAuditedTransport(transport, session_state=session_state)
+    driver = SDG2000XSource(guarded)
+    config = SimpleNamespace(
+        connection=SimpleNamespace(timeout_ms=1_000),
+        source=SimpleNamespace(
+            resource="TCPIP::192.0.2.40::INSTR",
+            driver="siglent.sdg2000x",
+            default_channel=1,
+            check_errors=False,
+            access="read_write",
+        ),
+        safety_limits=SimpleNamespace(
+            max_source_vpp=10.0,
+            min_source_port_voltage_v=None,
+            max_source_port_voltage_v=None,
+        ),
+    )
+    return (
+        SourceService(
+            config=config,
+            logger=CommandLogger(),
+            session=driver,
+            descriptor=descriptor(),
+            transport=guarded,
+            session_state=session_state,
+        ),
+        guarded,
+    )
+
+
+def test_source_v2_core_basic_transaction_allows_only_the_single_main_write() -> None:
+    transport = StatefulOutputTransport()
+    service, guarded = _source_v2_service(transport)
+
+    result, artifact = service.configure_basic_v2(
+        SourceBasicConfigureRequest(
+            channel=1,
+            patch=SourceBasicPatch(
+                frequency_hz=PatchValue(PatchAction.SET, 2_000.0),
+            ),
+        )
+    )
+
+    assert result.basic.frequency_hz.value == 2_000.0
+    assert artifact["operation"] == "source.basic_configure_v2"
+    assert transport.writes == ["C1:BSWV FRQ,2000"]
+    assert guarded.audit_snapshot()["counters"]["write_completed"] == 1
+
+
+@pytest.mark.parametrize(
+    ("initial_basic", "target", "expected_function", "expected_command"),
+    (
+        (
+            "C1:BSWV WVTP,SINE,FRQ,1KHZ,AMP,4V,OFST,0V,PHSE,0",
+            "noise",
+            "NOIS",
+            "C1:BSWV WVTP,NOISE",
+        ),
+        (
+            "C1:BSWV WVTP,NOISE,STDEV,1V,MEAN,0V,BANDSTATE,OFF,BANDWIDTH,120MHZ",
+            "sine",
+            "SIN",
+            "C1:BSWV WVTP,SINE",
+        ),
+        (
+            "C1:BSWV WVTP,DC,OFST,0V",
+            "sine",
+            "SIN",
+            "C1:BSWV WVTP,SINE",
+        ),
+    ),
+)
+def test_source_v2_keeps_unrepresentable_v1_function_paths_compatible(
+    initial_basic: str,
+    target: str,
+    expected_function: str,
+    expected_command: str,
+) -> None:
+    transport = StatefulOutputTransport()
+    transport.basics[1] = initial_basic
+    service, _guarded = _source_v2_service(transport)
+
+    status = service.set_function(channel=1, function=target)
+
+    assert status.function == expected_function
+    assert transport.writes == [expected_command]
 
 
 def test_arbitrary_probe_uses_only_documented_queries_and_core_results() -> None:
