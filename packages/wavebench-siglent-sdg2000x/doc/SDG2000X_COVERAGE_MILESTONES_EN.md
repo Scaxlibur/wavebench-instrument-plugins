@@ -80,6 +80,18 @@ Noise `STDEV` and DC/Noise states without final Vpp/Offset are not represented a
 `set_function` calls retain their V1 output-OFF transaction; this rule does not add RMS, crest-factor, or
 statistical models.
 
+## M7: Source V2 plugin opt-in
+
+- [x] A0: complete offline adaptation for `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`; cover Basic waveform, frequency, Vpp, square-duty, rejected `offset_v`, and core transactions for independent CH1/CH2 ON/OFF.
+- [ ] A1: confirm V2 snapshot responses, query budgets, model, and firmware applicability on authorized hardware.
+- [ ] A2: confirm V2 Basic/Output readback, rejection branches, OFF recovery, and independent outputs simultaneously ON on authorized hardware.
+- [ ] A3: confirm timeout, disconnection, unknown write outcomes, and session health through core hardware consumers; fake transports do not replace this evidence.
+
+## C3: Stable-release audit
+
+- [x] Complete offline-audit preparation: version, descriptor, release metadata, documentation, sdist file list, and A0 test boundary agree.
+- [ ] Complete sign-off after A1–A3, a stable core version, and final release artifacts are available. Before then, do not represent Source V2 write capabilities as released.
+
 ## Hardware gate
 
 Before hardware access, record the target model, firmware, redacted resource, initial output state, allowed commands, denied commands, success criteria, and restoration steps. The complete 2026-08-21 acceptance used a 10 Vpp maximum and a 9 Vpp active stop line; the highest measured output was 4.24 Vpp. A final independent session confirmed Sine / 1 kHz / 4 Vpp / OFF on both channels, with all composite modes other than restored original Harmonic states disabled.

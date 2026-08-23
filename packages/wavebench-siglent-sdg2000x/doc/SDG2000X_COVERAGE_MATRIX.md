@@ -9,6 +9,8 @@
 核心消费路径实机证据；新增的 3 项目前只有 A0 离线合同，不能声称任一型号的 V2 实机通过。三个登记型号的
 V1 capability 仍按共同手册合同和离线型号矩阵放行。
 
+Source V2 的 C3 仍未完成。离线审计已确认当前包的版本、声明和测试边界；A1–A3、稳定核心和最终发布物签核仍待单独完成，详见 [C3 发布审计准备](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
+
 高级命令域已完成尽可能全面的分域协议/A4 验收，但核心缺少无损状态模型时继续不声明写 capability，也不提供 raw SCPI。历史覆盖率数字只对应版本 `0.8.0`；新增 Source V2 代码的当前覆盖率以本次离线测试报告为准，不用旧数字替代验证。代码覆盖不替代未接外部端口和未持有型号的物理证据。
 
 ## 覆盖状态
@@ -42,7 +44,7 @@ V1 capability 仍按共同手册合同和离线型号矩阵放行。
 ## 默认拒绝项
 
 - 不发送 `*RST` 或其它全局预置命令。
-- 面向用户的输出开启只能经 `source.output` 和核心 `max_source_vpp` 上限执行；高级实机脚本不是公共 raw 接口。
+- 面向用户的输出开启只能经 `source.output` 或 `source.output_v2` 的核心 operation contract 执行；高级实机脚本不是公共 raw 接口。
 - 不提供 raw SCPI 入口。
 - 不上传、不删除、不覆盖用户任意波或状态文件。
 - 不为覆盖率切换外部参考、保护、Counter、Cascade 或未知负载的辅助输出。
@@ -59,6 +61,7 @@ V1 capability 仍按共同手册合同和离线型号矩阵放行。
 - [频率写入实机验收](SDG2000X_FREQUENCY_ACCEPTANCE.md)
 - [基础写入实机验收](SDG2000X_BASIC_WRITE_ACCEPTANCE.md)
 - [Source V2 A0 离线适配记录](SDG2000X_SOURCE_V2_A0.md)
+- [Source V2 C3 发布审计准备](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)
 - [谐波协议与频谱验收](SDG2000X_HARMONIC_ACCEPTANCE.md)
 - [调制协议与波形验收](SDG2000X_MODULATION_ACCEPTANCE.md)
 - [Sweep 协议与波形验收](SDG2000X_SWEEP_ACCEPTANCE.md)

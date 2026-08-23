@@ -10,6 +10,10 @@ eight have SDG2122X core-consumer hardware evidence. The three new capabilities 
 contracts only and make no Source V2 hardware claim for any model. Registered-model V1 capabilities remain
 released under the common manual contract and offline model matrix.
 
+Source V2 C3 remains incomplete. The offline audit verifies the current package's version, declarations, and
+test boundary; A1–A3, a stable core, and final release-artifact sign-off remain separate work. See the
+[C3 release-audit preparation](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
+
 Advanced command domains have the broadest practical domain-specific protocol/A4 evidence, but no lossy write capability or raw-SCPI endpoint is declared where the core lacks an exact state model. Historical coverage numbers apply to version `0.8.0`; current Source V2 coverage is established by the present offline test report, not by carrying forward those numbers. Code coverage does not establish physical evidence for unwired ports or unavailable models.
 
 ## Coverage status
@@ -43,7 +47,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 ## Denied by default
 
 - Do not send `*RST` or another global preset command.
-- User-facing output enable remains limited to `source.output` with core `max_source_vpp`; advanced hardware scripts are not a public raw endpoint.
+- User-facing output enable remains limited to the core operation contracts behind `source.output` or `source.output_v2`; advanced hardware scripts are not a public raw endpoint.
 - Do not expose raw SCPI.
 - Do not upload, delete, or overwrite user arbitrary waves or state files.
 - Do not switch external reference, protection, Counter, Cascade, or unknown-load auxiliary outputs merely for coverage.
@@ -60,6 +64,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 - [Frequency-write hardware acceptance](SDG2000X_FREQUENCY_ACCEPTANCE_EN.md)
 - [Basic-write hardware acceptance](SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
 - [Source V2 A0 offline adapter record](SDG2000X_SOURCE_V2_A0_EN.md)
+- [Source V2 C3 release-audit preparation](SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
 - [Harmonic protocol and spectrum acceptance](SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [Modulation protocol and waveform acceptance](SDG2000X_MODULATION_ACCEPTANCE_EN.md)
 - [Sweep protocol and waveform acceptance](SDG2000X_SWEEP_ACCEPTANCE_EN.md)

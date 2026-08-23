@@ -7,9 +7,12 @@ import subprocess
 import sys
 import sysconfig
 import tarfile
+import tomllib
 from zipfile import ZipFile
 
 import wavebench
+
+from wavebench_siglent_sdg2000x import descriptor
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -85,6 +88,27 @@ def test_wheel_contains_license_dependency_and_single_entry_point(tmp_path: Path
     ]
 
 
+def test_source_v2_release_version_is_consistent_in_metadata_descriptor_and_docs() -> None:
+    with Path(PACKAGE_ROOT, "pyproject.toml").open("rb") as file:
+        metadata = tomllib.load(file)
+
+    assert metadata["project"]["version"] == PACKAGE_VERSION
+    assert descriptor().version == PACKAGE_VERSION
+    for relative_path in (
+        "README.md",
+        "README_EN.md",
+        "doc/SDG2000X_COVERAGE_MATRIX.md",
+        "doc/SDG2000X_COVERAGE_MATRIX_EN.md",
+        "doc/SDG2000X_SOURCE_V2_A0.md",
+        "doc/SDG2000X_SOURCE_V2_A0_EN.md",
+        "doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT.md",
+        "doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md",
+    ):
+        assert f"`{PACKAGE_VERSION}`" in Path(PACKAGE_ROOT, relative_path).read_text(
+            encoding="utf-8"
+        )
+
+
 def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) -> None:
     dist_dir = tmp_path / "dist"
     _run(
@@ -118,6 +142,9 @@ def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) 
         "SDG2000X_OUTPUT_ACCEPTANCE.md",
         "SDG2000X_OUTPUT_ACCEPTANCE_EN.md",
         "SDG2000X_SOURCE_V2_A0.md",
+        "SDG2000X_SOURCE_V2_A0_EN.md",
+        "SDG2000X_SOURCE_V2_RELEASE_AUDIT.md",
+        "SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md",
     ):
         assert any(name.endswith(f"/doc/{public_doc}") for name in names)
 

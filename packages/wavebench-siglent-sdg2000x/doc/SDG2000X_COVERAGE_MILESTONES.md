@@ -79,6 +79,18 @@
 Noise 的 `STDEV` 与缺少最终 Vpp/Offset 的 DC/Noise 状态不被伪装成 Vpp。此类旧 `set_function`
 调用保留 V1 的输出 OFF 事务；该规则不引入 RMS、峰值因子或统计模型。
 
+## M7：Source V2 插件 opt in
+
+- [x] A0：完成 `source.snapshot_v2`、`source.basic_configure_v2` 和 `source.output_v2` 的离线适配；覆盖 Basic 的函数、频率、Vpp、方波占空比、拒绝 `offset_v`，以及独立双通道 ON/OFF 的核心事务。
+- [ ] A1：在授权实机上确认 V2 快照响应、查询预算、型号和固件适用性。
+- [ ] A2：在授权实机上确认 V2 Basic/Output 的回读、拒绝分支、OFF 恢复和独立通道同时 ON。
+- [ ] A3：在核心实机路径确认 timeout、断连、未知写结果和 session health；不以 fake transport 替代该证据。
+
+## C3：稳定发布审计
+
+- [x] 完成离线审计准备：版本、描述符、发行元数据、文档、sdist 文件清单和 A0 测试边界一致。
+- [ ] 在 A1–A3、稳定核心版本和最终发行包确定后完成签核；此前不得将 Source V2 写 capability 作为已发布能力。
+
 ## 实机门禁
 
 任何实机任务开始前必须记录：目标型号、固件、脱敏 resource、初始输出状态、允许命令、禁止命令、成功标准和恢复步骤。2026 年 8 月 21 日的完整验收限制最大 10 Vpp，并在 9 Vpp 设置主动停止线；最大实测 4.24 Vpp。最终独立新会话确认两路 Sine / 1 kHz / 4 Vpp / OFF，除 Harmonic 按原状态恢复外，其余复合模式关闭。

@@ -9,8 +9,9 @@ An executable WaveBench instrument plugin for the SIGLENT SDG2042X, SDG2082X, an
 Version `0.8.1` retains the eight legacy V1 capabilities and adds `source.snapshot_v2`,
 `source.basic_configure_v2`, and `source.output_v2`. V2 currently has A0 offline-contract coverage only:
 descriptor validation, query budgets, single-write MAIN phases, and core phase authorization use fake
-transports. No Source V2 hardware acceptance has been performed. See the
-[Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md).
+transports. No Source V2 hardware acceptance has been performed. C3 has offline-audit preparation only;
+it is not a completed release. See the [Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md)
+and [Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md).
 
 The V1 basic surface remains `source.set_frequency`, `source.set_function`,
 `source.set_amplitude_vpp`, `source.set_square_duty_cycle`, `source.output`, and read-only
@@ -107,6 +108,7 @@ This plugin is licensed under the [MIT License](LICENSE).
 - [SDG2000X frequency-write hardware acceptance](doc/SDG2000X_FREQUENCY_ACCEPTANCE_EN.md)
 - [SDG2000X basic-write hardware acceptance](doc/SDG2000X_BASIC_WRITE_ACCEPTANCE_EN.md)
 - [SDG2000X Source V2 A0 offline adapter record](doc/SDG2000X_SOURCE_V2_A0_EN.md)
+- [SDG2000X Source V2 C3 release-audit preparation](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT_EN.md)
 - [Source V2 capability, state, and composite-output safety RFC](doc/RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY_EN.md)
 - [SDG2000X harmonic protocol and spectrum acceptance](doc/SDG2000X_HARMONIC_ACCEPTANCE_EN.md)
 - [SDG2000X modulation protocol and waveform acceptance](doc/SDG2000X_MODULATION_ACCEPTANCE_EN.md)
