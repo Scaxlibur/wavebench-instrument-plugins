@@ -68,12 +68,12 @@
 
 ## M6：Source V2 A0 离线适配
 
-- [x] 声明 `source.snapshot_v2`、`source.basic_configure_v2` 与 `source.output_v2`，并将最低核心版本提高到 `0.8.24`。
-- [x] 以纯读取 anchor/facet/anchor 计划读取 CH1/CH2；两个 Sine fixture 通道完成 38 次查询、0 次写入，低于 42 次声明上限。
-- [x] Basic 与 Output 的 V2 MAIN 阶段各只允许一条已审计写命令，随后由核心独立快照回读。
-- [x] 离线验证 V2 Basic 的 CH1/CH2 频率写入、Vpp、函数、方波占空比、写后回读不匹配的一次 OFF 恢复、未知写结果的零追加 I/O、Output ON/OFF、描述符/轮包交叉校验，以及 V1 Noise/DC 函数路径兼容。
-- [ ] A1：未在实机确认 V2 快照响应、查询预算和型号/固件适用性。
-- [ ] A2：未在实机确认 V2 Basic/Output 的回读、拒绝分支和失败恢复。
+- [x] 声明 `source.snapshot_v2`、`source.basic_configure_v2`、`source.output_v2` 与 `source.harmonics_disable_v2`，并将最低核心版本提高到 `0.8.24`。
+- [x] 以纯读取 anchor/facet/anchor 计划读取 CH1/CH2；两个 Sine fixture 通道完成 38 次查询、0 次写入，低于 44 次声明上限；Harmonic facet 复用 Basic 快照，不额外查询。
+- [x] Basic、Output 与 Harmonic 关闭的 V2 MAIN 阶段各只允许一条已审计写命令，随后由核心独立快照回读。
+- [x] 离线验证 V2 Basic 的 CH1/CH2 频率写入、Vpp、函数、方波占空比、写后回读不匹配的一次 OFF 恢复、未知写结果的零追加 I/O、Output ON/OFF；并验证 `SDG2122X` / `2.01.01.39R7T2` 上 Harmonic 关闭的零写入幂等分支、单条 `HARMSTATE,OFF`、运行时型号/固件拒绝、描述符/轮包交叉校验和 V1 Noise/DC 函数路径兼容。
+- [ ] A1：未在实机确认 V2 快照响应、查询预算、Harmonic 状态 facet 和型号/固件适用性。
+- [ ] A2：未在实机确认 V2 Basic/Output 与精确运行时目标上的 Harmonic 关闭的回读、拒绝分支和失败恢复。
 - [ ] A3：未通过授权示波器通道环回确认 V2 Basic 的频率、Vpp、函数和占空比；尚未记录偏置、端接、容差和最终 OFF 状态。
 
 Noise 的 `STDEV` 与缺少最终 Vpp/Offset 的 DC/Noise 状态不被伪装成 Vpp。此类旧 `set_function`
@@ -81,9 +81,9 @@ Noise 的 `STDEV` 与缺少最终 Vpp/Offset 的 DC/Noise 状态不被伪装成 
 
 ## M7：Source V2 插件 opt in
 
-- [x] A0：完成 `source.snapshot_v2`、`source.basic_configure_v2` 和 `source.output_v2` 的离线适配；覆盖 CH1/CH2 Basic 的函数、频率、Vpp、方波占空比、拒绝 `offset_v`、写后不匹配的一次 OFF 恢复、未知写结果的零追加 I/O，以及独立双通道 ON/OFF 的核心事务。
-- [ ] A1：在授权实机上确认 V2 快照响应、查询预算、型号和固件适用性。
-- [ ] A2：在授权实机上确认 V2 Basic/Output 的回读、拒绝分支、OFF 恢复和独立通道同时 ON。
+- [x] A0：完成 `source.snapshot_v2`、`source.basic_configure_v2`、`source.output_v2` 和仅 `SDG2122X` / `2.01.01.39R7T2` 适用的 `source.harmonics_disable_v2` 的离线适配；覆盖 CH1/CH2 Basic 的函数、频率、Vpp、方波占空比、拒绝 `offset_v`、写后不匹配的一次 OFF 恢复、未知写结果的零追加 I/O、独立双通道 ON/OFF 的核心事务，以及 Harmonic 关闭的零写入幂等和单写分支。
+- [ ] A1：在授权实机上确认 V2 快照响应、查询预算、Harmonic 状态 facet、型号和固件适用性。
+- [ ] A2：在授权实机上确认 V2 Basic/Output 的回读、拒绝分支、OFF 恢复、独立通道同时 ON，以及精确运行时目标上的 Harmonic 关闭。
 - [ ] A3：通过授权示波器通道环回确认 V2 Basic 的频率、Vpp、函数和占空比，并记录偏置、端接、容差和最终 OFF 状态；不以 fake transport 替代该证据。
 
 ## C3：稳定发布审计

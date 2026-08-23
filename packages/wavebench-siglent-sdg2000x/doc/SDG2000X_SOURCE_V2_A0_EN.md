@@ -4,8 +4,8 @@
 
 ## Conclusion
 
-Plugin version `0.8.1` declares `source.snapshot_v2`, `source.basic_configure_v2`, and
-`source.output_v2`. This record proves A0 offline contracts only: descriptor validation, query plans,
+Plugin version `0.8.1` declares `source.snapshot_v2`, `source.basic_configure_v2`, `source.output_v2`, and
+`source.harmonics_disable_v2`. This record proves A0 offline contracts only: descriptor validation, query plans,
 SCPI forms, send counts, core phase authorization, pre-write rejection, and injected-failure closeout use
 fake transports. It is
 not Source V2 hardware acceptance for any model or firmware.
@@ -22,7 +22,11 @@ for Source V2 A1, A2, or A3.
   no verified SCPI write evidence is registered.
 - `source.output_v2` supports independent ON/OFF transitions for both physical outputs. Independent
   outputs may be ON together; this adapter has no global single-output restriction.
-- V2 MAIN sends one audited `BSWV` or `OUTP` write. The core performs the independent postcondition
+- `source.harmonics_disable_v2` only disables an observed Harmonic state; it does not configure or enable
+  Harmonic. It applies only to CH1/CH2 of an `SDG2122X` with firmware `2.01.01.39R7T2`, while Sine and
+  target output OFF are proven. An already-disabled state sends no MAIN write; an enabled state sends only
+  `C<n>:HARM HARMSTATE,OFF`, then the core independently reads Harmonic and output state.
+- V2 MAIN sends one audited `BSWV`, `OUTP`, or `HARM` write. The core performs the independent postcondition
   snapshot.
 
 Output enable still requires FIX mode, Sweep OFF, readable Vpp and Offset, high-impedance display load,
@@ -34,11 +38,11 @@ OFF is not retried.
 ## Query and Send Counts
 
 Each anchor phase reads `*IDN?` once, then reads `OUTP?`, `BSWV?`, `SWWV?`, modulation, Burst, Harmonic
-(Sine only), Combine, Noise Add, and Coupling for each channel. The Output facet reuses the matching Basic
-snapshot and issues no extra `OUTP?` query.
+(Sine only), Combine, Noise Add, and Coupling for each channel. The Output and Harmonic facets reuse the
+matching Basic snapshot and issue no extra `OUTP?` or `HARM?` query.
 
 With both fixture channels set to Sine, a complete Source V2 snapshot performs 38 queries and zero writes,
-below the descriptor limit of 42 queries. A0 tests also prove that Basic and Output MAIN writes issue no
+below the descriptor limit of 44 queries. A0 tests also prove that Basic, Output, and Harmonic-disable MAIN writes issue no
 driver query. The core validates the plan deadline and query budget after it receives the execution record;
 that validation is not A1 evidence from a real device.
 
@@ -55,10 +59,10 @@ crest-factor, or statistical Noise safety model.
 
 ## Remaining Gates
 
-- A1: confirm real V2 snapshot responses and budgets for an explicitly authorized model, firmware,
-  resource, and transport/backend.
+- A1: confirm real V2 snapshot responses, budgets, and the Harmonic-state facet for an explicitly authorized
+  model, firmware, resource, and transport/backend.
 - A2: validate V2 Output ON/OFF, independent readback, and OFF recovery; also confirm V2 Basic command
-  acceptance and readback form.
+  acceptance and readback form, plus Harmonic disable and readback on the exact runtime target.
 - A3: use a scope loopback to confirm declared V2 Basic writes for frequency, Vpp, function, and duty
   cycle, recording offset, termination, tolerance, and the final OFF state.
 

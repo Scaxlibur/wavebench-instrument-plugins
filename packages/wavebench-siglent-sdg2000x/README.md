@@ -6,8 +6,8 @@
 
 ## 当前开发基线
 
-版本 `0.8.1` 保留 8 项既有 V1 capability，并新增 `source.snapshot_v2`、`source.basic_configure_v2`
-和 `source.output_v2`。V2 当前只完成 A0 离线合同：描述符、查询预算、单写主阶段和核心 phase 授权均由
+版本 `0.8.1` 保留 8 项既有 V1 capability，并新增 `source.snapshot_v2`、`source.basic_configure_v2`、
+`source.output_v2` 和 `source.harmonics_disable_v2`。V2 当前只完成 A0 离线合同：描述符、查询预算、单写主阶段和核心 phase 授权均由
 fake transport 验证，尚未进行 Source V2 实机验收。C3 仅完成离线审计准备，不能视为发布完成。完整边界见
 [Source V2 A0 离线适配记录](doc/SDG2000X_SOURCE_V2_A0.md) 和 [Source V2 C3 发布审计准备](doc/SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
 
@@ -16,6 +16,10 @@ V1 基础接口仍包括 `source.set_frequency`、`source.set_function`、`sourc
 Sine、Square、Ramp、Pulse 的函数、频率、Vpp 和方波占空比；每次只写一个字段，`offset_v` 尚未开放。
 Noise/DC 保持输出 OFF 的 V1 配置语义：驱动不把 `STDEV` 或标称值伪装为 Vpp，核心会将无法无损表达的
 旧 `set_function` 调用留在 V1 setter。调制、Sweep、Burst、任意波上传和 Counter capability 仍未开放。
+
+`source.harmonics_disable_v2` 只关闭已读到的 Harmonic 状态，不配置或启用 Harmonic。它仅在
+`SDG2122X` 固件 `2.01.01.39R7T2` 的 Sine、目标输出 OFF 状态下对 CH1/CH2 生效；已关闭时不发送 MAIN 写入，
+已开启时只发送一条 `HARMSTATE,OFF`。核心随后独立回读 Harmonic 与输出状态。其它型号、固件和所有 Harmonic 配置写入继续拒绝。
 
 `SDG2122X` 固件 `2.01.01.39R7T2` 已完成既有 8 项 V1 capability 的实机验收。五项基础写能力均通过核心
 `SourceService` 在 CH1/CH2 闭环；Harmonic、调制、Sweep、Burst、Pulse、Noise/DC、TARB、199 项内置任意波、
@@ -73,9 +77,10 @@ max_source_vpp = 10.0
 - `source.set_function` 允许四种有界周期波实时切换；Noise/DC 必须在输出 OFF 时配置，且不会绕过输出安全门禁。
 - `source.set_square_duty_cycle` 仅适用于 FIX 模式方波；频率相关钳位必须导致回读失败关闭。
 - Source V2 的 Basic 和 Output MAIN 各只发送一个已审计写命令，最终状态由核心独立快照回读；独立通道可同时 ON。
+- Source V2 Harmonic 关闭只在精确的运行时型号/固件、Sine 和输出 OFF 条件下生效；它不会配置或启用 Harmonic，已关闭时不写入，已开启时最多发送一条 `HARMSTATE,OFF`，随后由核心独立回读 Harmonic 与输出状态。
 - Source V2 的 Noise/DC 不猜测 Vpp；无法无损表示的旧 `set_function` 仍调用 V1 setter，输出 ON 继续要求可读最终 Vpp 与 Offset。
 - 目标配置只写入一次；任何写后异常都会尝试 OFF 恢复并锁止本会话的全部配置写入。
-- 高级命令域已完成分域实机验收，但在核心缺少无损模型时继续不开放写 capability，也不提供 raw SCPI。
+- 除上述 Harmonic 关闭外，高级命令域即使已有分域实机验收，在核心缺少无损模型时仍不开放写 capability，也不提供 raw SCPI。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、输出状态、安全上限和恢复方式。
 
 ## 开发验证

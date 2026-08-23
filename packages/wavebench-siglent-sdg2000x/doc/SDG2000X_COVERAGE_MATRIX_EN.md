@@ -4,10 +4,11 @@
 
 ## Current conclusion
 
-Version `0.8.1` declares eleven capabilities: the legacy identity, status, five basic writes, and read-only
-arbitrary probe, plus `source.snapshot_v2`, `source.basic_configure_v2`, and `source.output_v2`. The first
-eight have SDG2122X core-consumer hardware evidence. The three new capabilities currently have A0 offline
-contracts only and make no Source V2 hardware claim for any model. Registered-model V1 capabilities remain
+Version `0.8.1` declares twelve capabilities: the legacy identity, status, five basic writes, and read-only
+arbitrary probe, plus `source.snapshot_v2`, `source.basic_configure_v2`, `source.output_v2`, and
+`source.harmonics_disable_v2`. The first eight have SDG2122X core-consumer hardware evidence. The four new
+capabilities currently have A0 offline contracts only and make no Source V2 hardware claim for any model.
+Harmonic disable applies only to `SDG2122X` firmware `2.01.01.39R7T2`. Registered-model V1 capabilities remain
 released under the common manual contract and offline model matrix.
 
 Source V2 C3 remains incomplete. The offline audit verifies the current package's version, declarations, and
@@ -23,7 +24,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 | Instrument identity | `source.idn` | Passed on `SDG2122X` / `2.01.01.39R7T2`; other registered models released by the common protocol | New models or response variants still need redacted evidence |
 | System error queue | None | Disabled | Confirm the query, empty-queue semantics, and whether reads consume state |
 | Basic channel status | `source.status` | Repeated SDG2122X read-only rounds are stable; CH1/CH2 have frequency, Vpp, mean, and final independent zero-write evidence | Accept new firmware response variants separately |
-| Source V2 snapshot | `source.snapshot_v2` | A0: pure-read CH1/CH2 anchor/facet/anchor plan, 38-query Sine fixture, zero writes | A1 confirms real responses, budgets, models, and firmware |
+| Source V2 snapshot | `source.snapshot_v2` | A0: pure-read CH1/CH2 anchor/facet/anchor plan, 38-query Sine fixture, zero writes, declared limit 44 | A1 confirms real responses, budgets, models, and firmware |
 | Source V2 basic configuration | `source.basic_configure_v2` | A0: CH1/CH2 one-field Basic MAIN writes, core readback, and one OFF recovery for Sine/Square/Ramp/Pulse; `offset_v` is pre-write rejected | A2 confirms hardware command acceptance and readback form; A3 uses a scope loopback for frequency, Vpp, function, and duty |
 | Source V2 output | `source.output_v2` | A0: independent CH1/CH2 ON/OFF, one-write MAIN, core readback, and one OFF recovery after a readable mismatch; independent outputs may be ON together | A2 confirms hardware transitions, independent readback, and OFF recovery |
 | Output control | `source.output` | All models pass offline; SDG2122X CH1/CH2 passed core-Service ON→A4→OFF with zero unknown writes | Add other-model A4 only when hardware is available |
@@ -32,7 +33,7 @@ Advanced command domains have the broadest practical domain-specific protocol/A4
 | Fixed-wave function | `source.set_function` | Sine/Square/Ramp pass core loops on CH1/CH2; Pulse passes on CH2; Noise/DC remain OFF-config-only publicly | Wait for a reusable Noise/DC safety model |
 | Square-wave duty cycle | `source.set_square_duty_cycle` | CH2 20%/80% measured 0.200/0.800; final CH1 30% and CH2 70% measured 0.287/0.6949 | Frequency-dependent high-rate clamping remains strict fail-closed readback |
 | Pulse parameters | No lossless capability yet | SDG2122X 25%/65% duty and 20/40 µs edges pass A4; DLY is A3 only | Declare after Source V2 supports unknown hold; add an independent delay reference |
-| Harmonics | No lossless capability yet | SDG2122X H2–H16 slots pass; H2/H3 amplitude, H2 phase, and ALL/EVEN/ODD pass A4 spectrum tests | Declare after a variable/selected-only Source V2 model exists |
+| Harmonics | `source.harmonics_disable_v2`, `SDG2122X` / `2.01.01.39R7T2` only | A0: while Sine and target output OFF are proven, an already-disabled state has zero writes and an enabled state sends only `HARMSTATE,OFF`, followed by independent core Harmonic/output readback; SDG2122X H2–H16 slots, H2/H3 amplitude, H2 phase, and ALL/EVEN/ODD remain legacy A4 evidence | A1/A2 confirm the exact runtime target; Harmonic configuration/enable remains pending a more complete Source V2 model |
 | Modulation | No lossless capability yet | SDG2122X internal AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK pass protocol and A4 waveform tests | Declare after Source V2 supports disabled-state absence and vendor ranges; wire external sources |
 | Sweep | No lossless capability yet | SDG2122X LINE/LOG/STEP, UP/DOWN/UP_DOWN, and INT/MAN pass protocol and A4 waveform tests; EXT is readback-only | Declare after Source V2 supports absent fields; wire external trigger |
 | Burst | No lossless capability yet | Finite INT/MAN pass cycle/repetition A4; `TRDUCH` CH2-to-both passes; EXT/Gate are readback-only; INF did not form a continuous carrier | Wire external trigger/gate; use a discriminated Source V2 model |
