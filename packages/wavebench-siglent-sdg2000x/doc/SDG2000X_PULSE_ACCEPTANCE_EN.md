@@ -59,4 +59,3 @@ A separate fresh session reconfirmed both outputs OFF using 13 queries and zero 
 - Hold has no authoritative query field, so no core Pulse capability is declared.
 - Parameter limits are period-dependent. This pass uses a safe 1 kHz point away from limits and is not a full-spec calibration.
 - Evidence applies only to the tested SDG2122X firmware.
-

@@ -68,4 +68,3 @@ def probe_arbitrary_queries(
 - 不发送 `ARWV`、`SRATE`、`WVDT` 或文件系统写命令。
 - 目录存在只证明设备声明了内置波形，不证明每个波形都已完成输出 A4。
 - 实机证据只适用于当前 SDG2122X 固件；SDG2042X/SDG2082X 仅按同一手册查询合同放行。
-

@@ -1,6 +1,7 @@
 # RFC: Source V2 Capability, State, and Composite-Output Safety
 
-Status: Draft  
+Status: Draft
+
 Scope: WaveBench core-interface proposal; this repository stores the draft and does not modify core
 
 ## Summary

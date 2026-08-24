@@ -68,4 +68,3 @@ A separate fresh session reconfirmed both outputs OFF using 13 queries and zero 
 - Marker, hold, and return-time fields do not read back on this firmware; no core fields were fabricated.
 - Disabled Sweep hides its configuration. Acceptance restores a known safe baseline but does not claim restoration of unknown hidden parameters.
 - Evidence applies only to the tested SDG2122X firmware.
-

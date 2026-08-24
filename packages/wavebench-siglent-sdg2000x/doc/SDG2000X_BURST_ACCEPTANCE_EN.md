@@ -75,4 +75,3 @@ A separate fresh session reconfirmed both outputs OFF using 13 queries and zero 
 - Infinity failed physical acceptance and is not exposed as a product capability.
 - Disabled Burst hides its configuration. Acceptance restores a known safe baseline but does not claim restoration of unknown hidden fields.
 - Evidence applies only to the tested SDG2122X firmware.
-

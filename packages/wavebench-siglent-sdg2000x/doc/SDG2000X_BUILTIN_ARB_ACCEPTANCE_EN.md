@@ -58,4 +58,3 @@ A separate fresh session reconfirmed both outputs OFF using 13 queries and zero 
 - No `WVDT` or local/network/USB filesystem write was sent.
 - `STL? USER` was not queried, and evidence contains no user waveform names.
 - 199/199 is selection/output smoke coverage for this firmware's built-in catalog, not 100% coverage of other models, firmware, sample-rate modes, or analog performance.
-

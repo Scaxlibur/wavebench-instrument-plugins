@@ -61,4 +61,3 @@ The 0.8.0 package suite reported `323 passed`, covering the core result type and
 - No `ARWV`, `SRATE`, `WVDT`, or filesystem write command is sent.
 - Catalog presence does not prove A4 output behavior for every built-in waveform.
 - Hardware evidence applies only to the tested SDG2122X firmware. SDG2042X/SDG2082X are enabled under the same documented query contract only.
-
