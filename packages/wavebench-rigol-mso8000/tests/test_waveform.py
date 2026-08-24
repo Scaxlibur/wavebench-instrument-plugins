@@ -443,9 +443,10 @@ def test_restore_failure_latches_and_refuses_to_return_waveform() -> None:
     transport.fail_writes.add(":WAVeform:SOURce CHAN3")
     scope = MSO8104Scope(transport=transport)
 
-    with pytest.raises(InstrumentError, match="state restoration failed"):
+    with pytest.raises(InstrumentError, match="state restoration failed") as error:
         scope.fetch_waveform(channel=2, points="DEF", check_errors=False)
 
+    assert ":WAVeform:SOURce CHAN3" in str(error.value)
     assert transport.binary_calls == 1
     assert scope.waveform_writes_blocked is True
     event_count = len(transport.events)

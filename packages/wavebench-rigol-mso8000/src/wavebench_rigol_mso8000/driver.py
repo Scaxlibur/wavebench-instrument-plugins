@@ -354,7 +354,8 @@ class MSO8104Scope:
         except Exception as exc:
             self._waveform_writes_blocked = True
             raise InstrumentError(
-                "MSO8104 waveform transfer state restoration failed; "
+                "MSO8104 waveform transfer state restoration failed: "
+                f"{exc}; "
                 "waveform transfer writes are blocked"
             ) from exc
 
