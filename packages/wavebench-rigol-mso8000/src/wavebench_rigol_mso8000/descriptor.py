@@ -89,8 +89,5 @@ def descriptor() -> InstrumentDescriptor:
             "connection.backend",
             "connection.resource",
             "scope.driver",
-            "scope.options.max_total_points",
-            "scope.options.max_chunk_points",
-            "waveform.*",
         ),
     )
