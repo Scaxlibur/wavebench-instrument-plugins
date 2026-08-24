@@ -22,7 +22,7 @@ SDG CH1 was connected to MSO CH1 and SDG CH2 to MSO CH2. The reviewed source pro
 1. A read-only Source V2 snapshot found both channels at Sine, `1 kHz`, `1 Vpp`, `0 V`, High-Z display load, harmonic OFF, and output OFF.
 2. Read-only scope status returned CH1=`DCL` and CH2=`ACL`; both are WaveBench high-impedance safety tokens.
 3. Source V2 OFF was requested separately for CH1 and CH2. A fresh read-only snapshot independently confirmed both OFF, `consistent`, and `healthy`.
-4. Only CH1 was briefly enabled; CH2 remained OFF. The outer cleanup requested CH1 OFF and CH2 OFF, then used a fresh read-only snapshot to confirm the final state.
+4. CH1 and CH2 were each enabled only briefly in separate runs. After every waveform transaction, the outer cleanup requested the enabled channel OFF and used a fresh read-only snapshot to confirm CH1 and CH2 were both OFF.
 
 Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `healthy`. This run did not write scope input impedance, timebase, trigger, or autoscale settings.
 
@@ -35,14 +35,21 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `hea
 
 These results apply only to the stated model, firmware, LAN/PyVISA transport, and controlled procedure.
 
-## Waveform blocker
+## Limited waveform acceptance
 
-With CH1 briefly enabled, the MSO returned a valid ten-field BYTE preamble for `1000` points with finite X/Y calibration. The subsequent `:WAVeform:DATA?` timed out after about `5 s` through the core `0.8.24` legacy binary path. Core marked synchronization `unproven`, poisoned the scope session, and correctly denied later waveform-transfer restore writes.
+The earlier core `0.8.24` legacy binary path timed out after about `5 s` at `:WAVeform:DATA?`. Synchronization was therefore `unproven`, and the scope session was correctly marked `poisoned` under the fail-closed rule. That historical result is not payload, frequency, Vpp, or restoration evidence.
 
-No payload, frequency, Vpp, X/Y conversion, or transfer-state restoration result was accepted. CH2, dual-channel, MAX, DMAX, and SINGLE hardware acceptance were not attempted. [RFC-0008](rfcs/0008-bounded-waveform-block-trailing-contract.md) records the missing core binary contract and the conditions for resuming acceptance.
+The current core worktree implements the standard waveform bounded-binary contract. An empty trailing profile safely rejects the extra post-payload byte with `binary_transport_trailing_error`; with exact `LF` trailing, core restores and freshly verifies the five `source`, `mode`, `format`, `points`, and `window` fields.
 
-## Core-contract follow-up
+After confirming SDG CH1 to MSO CH1 and SDG CH2 to MSO CH2, separate short source runs used the `1 kHz / 1 Vpp / 0 V` profile:
 
-The current core worktree now implements the standard waveform bounded-binary contract. The first bounded attempt used an empty trailing profile; core safely rejected one extra post-payload byte with `binary_transport_trailing_error` and poisoned the scope session before recovery writes. A second attempt with exact `LF` trailing successfully read 1000 CH1 samples and completed core-owned source/mode/format/points/window restoration and fresh verification. Both source-output sequences used EXIT cleanup to request CH1 OFF and a fresh Source V2 snapshot confirmed CH1/CH2 OFF, `consistent`, and `healthy`.
+- CH1 returned `1000` samples from `-2.5 ms` to `2.495 ms` at `5 µs` spacing, with a `1.05713 Vpp / 1000 Hz` summary;
+- CH2 returned `1000` samples from `-2.5 ms` to `2.495 ms` at `5 µs` spacing, with a `1.0705 Vpp / 999.167 Hz` summary.
 
-The second read covered `-25 ms` through `24.95 ms` at `50 µs` spacing, but its summary was about `5.25 mVpp / 8.89 kHz`. It does not match the temporarily enabled `1 Vpp / 1 kHz` source and may involve front-panel acquisition, probe ratio, channel display, or physical connection state. It is not accepted as known-signal conversion or measurement-accuracy evidence.
+After each read, EXIT cleanup disabled the enabled source channel and a fresh Source V2 snapshot confirmed CH1 and CH2 OFF, `consistent`, and `healthy`.
+
+## Acceptance boundary and next conditions
+
+This record covers only the current-screen `DEF + LF`, 1000-point path for the stated model, firmware, transport, and source condition. It is not general X/Y-conversion or measurement-accuracy evidence across ranges, timebases, or probe conditions.
+
+`MAX`, `DMAX`, `SINGLE`, `scope.capture_waveform`, and `scope.capture_waveforms` have no hardware acceptance from this work and remain default denied. Advancing them requires their own bounded profile, acquisition-state recovery, offline fault contracts, and a separate low-voltage hardware procedure; each step must still begin with both source outputs OFF.

@@ -16,7 +16,7 @@ The audited source is RIGOL MSO8000 Programming Guide `PGA26006-1110`, which cov
 | Existing acquisition configuration | type, averages, depth, rate, run/stop/single | fetch/capture preconditions | M4 offline complete; preserve current settings, and do not expose unrestricted setters |
 | Acquisition status | averages and trigger status | `scope.acquisition_status` | RFC and skip; no average-complete or segmented status, and trigger STOP is not average completion; see RFC-0006 |
 | Average capture transaction | global acquisition type and average count | `scope.capture_average` | RFC and skip; the core requires single count/channel arithmetic and the device has no average-complete query; see RFC-0006 |
-| Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | Transport/recovery hardware pass; signal closure pending | The bounded profile in the current core worktree permits only `DEF`; exact `LF` trailing, `1,000` bytes, and one binary query pass on hardware, and core completes restore/fresh verification; returned data does not match the enabled source |
+| Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | Hardware complete for limited `DEF`: the bounded profile in the current core worktree permits only `DEF`; exact `LF` trailing, `1,000` bytes, and one binary query pass on hardware, and core completes restore/fresh verification. Under the recorded `1 kHz / 1 Vpp / 0 V` source condition, CH1 returned `1.05713 Vpp / 1000 Hz` and CH2 returned `1.0705 Vpp / 999.167 Hz` |
 | Deep waveform | MAX/RAW and chunk ranges | fetch/capture | Default deny | MAX/DMAX have not completed bounded-profile and hardware acceptance; offline per-block and total limits remain documented |
 | Single and multi-channel capture | SINGLE, trigger status, and per-source waveform | capture protocols | Default deny | capture still lacks complete acquisition, trigger, timebase, and channel-state recovery evidence; do not represent SINGLE or OPC as completed waveform acceptance |
 | Math waveform metadata | MATH display and waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | Offline complete for displayed slots in MAIN mode; restore six transfer fields and read no data; hardware restoration remains unverified |
@@ -47,4 +47,4 @@ The driver requires exact payload length, finite axes, and finite converted samp
 
 ## Explicitly unverified
 
-USB/GPIB behavior, the no-error sentinel, OPC acquisition semantics, `DEF` known-signal closure, X/Y conversion and measurement accuracy, MAX/DMAX chunking and throughput, WORD byte order, LA hardware/options, and all measurement accuracy remain unverified.
+USB/GPIB behavior, the no-error sentinel, OPC acquisition semantics, X/Y conversion and measurement accuracy beyond the recorded `DEF + LF` `1 kHz / 1 Vpp / 0 V` condition, MAX/DMAX chunking and throughput, WORD byte order, LA hardware/options, and all other measurement accuracy remain unverified.

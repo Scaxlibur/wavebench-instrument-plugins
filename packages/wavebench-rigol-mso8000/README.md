@@ -6,7 +6,7 @@
 
 `0.9.0` 开发版本保留 MSO8104 身份与 CH1/CH2 高阻输入的受控实机证据，并在当前 WaveBench core 工作树的有界二进制合同下声明 `scope.fetch_waveform`。该入口当前只接受 `DEF`：精确声明 `LF` trailing、单响应和单操作均最多 `1,000` bytes、最多一次 binary query，并由 core 负责恢复和新鲜验证。`scope.capture_waveform` 与 `scope.capture_waveforms` 继续暂停；见 [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md)。
 
-实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。CH1 `DEF` 的 block 读取与 core-owned transfer-state restore 已通过；但返回读数与已启用的 `1 kHz / 1 Vpp` source 不符，频率、Vpp、X/Y 换算和测量准确度仍未获得信号源闭环证据。
+实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。在 `DEF + LF` profile 下，CH1 返回 `1.05713 Vpp / 1000 Hz`，CH2 返回 `1.0705 Vpp / 999.167 Hz`；两路均使用 `1 kHz / 1 Vpp / 0 V` 信号源，并在每次读取后独立确认两路输出关闭。该结果只证明记录条件下的数据换算、摘要与五字段恢复，不构成通用测量准确度、探头校准、MAX/DMAX 或 capture 的证据。
 
 当前身份信息：
 
@@ -62,7 +62,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 
-`scope.fetch_waveform` 的有界路径只支持 `DEF`。它使用 core 的 `query_binary()`，不再调用 legacy `query_bin_block()`；`LF` trailing、`1,000`-byte 上限和 no-replay 均由 descriptor profile 约束。CH1 已成功读取 1000 个样本，core 也完成五字段 transfer-state restore 与新鲜验证；但读数约为 `5.25 mVpp / 8.89 kHz`，不能作为 `1 Vpp / 1 kHz` source 的闭环结果。MAX、DMAX、CH2 和双通道结论均不从本轮外推。
+`scope.fetch_waveform` 的有界路径只支持 `DEF`。它使用 core 的 `query_binary()`，不再调用 legacy `query_bin_block()`；`LF` trailing、`1,000`-byte 上限和 no-replay 均由 descriptor profile 约束。在记录的 `1 kHz / 1 Vpp / 0 V` 信号源条件下，CH1 读取 `1.05713 Vpp / 1000 Hz`，CH2 读取 `1.0705 Vpp / 999.167 Hz`，每次均返回 1000 个样本并完成五字段 transfer-state restore 与新鲜验证。该证据不外推到 MAX、DMAX、单次/多通道 capture 或其他量程、时基和探头条件。
 
 离线设计仍保留每块 `250,000` 点、每次调用总计 `4,000,000` 点的长记录边界。MAX、DMAX、单次和多通道 capture 需要各自的有界 profile 与 acquisition 恢复证据，当前不构成公开能力或实机采集结论。
 

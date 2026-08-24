@@ -46,7 +46,7 @@
 | M0 | 完成 | 手册审计、核心合同、证据规则、永久拒绝区和发行隔离 |
 | M1 | 离线完成 | 最小身份插件与安装生命周期 |
 | M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
-| M3 | transport/恢复实机通过；信号闭环待排查 | 当前屏幕 `NORMal + BYTE` 的 `DEF` 波形；使用 RFC-0008 的 bounded binary 合同 |
+| M3 | 实机通过（受限 `DEF` 已知信号） | 当前屏幕 `NORMal + BYTE` 的 `DEF` 波形；使用 RFC-0008 的 bounded binary 合同 |
 | M4 | 默认拒绝 | 单次、多通道与有界 MAX/DMAX；仍缺 acquisition 恢复和实机证据 |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | RFC/证据缺口后跳过 | 数字状态模型不完整；数字 payload 编码未定义 |
@@ -91,7 +91,7 @@
 
 离线证据：`0.3.0` 覆盖通道显示预检、严格 10 字段 preamble、1000 字节 payload、X/Y 换算、六字段写后回读与恢复、二进制失败不重放、写入歧义与恢复失败锁存，以及双线程事务不交织。66 项包测试通过。
 
-开发补充：core 当前工作树已实现 RFC-0008 的标准 waveform bounded executor。插件 `0.9.0` 仅为 `DEF` 声明 `LF` trailing、`1,000` bytes 和一次 binary query，并将恢复与新鲜验证交给 core。171 项包测试包含该 executor 集成测试。CH1 新一轮实机读取成功返回 1000 个样本，且 core 完成五字段恢复与验证；但读数约为 `5.25 mVpp / 8.89 kHz`，不符合已启用的 `1 Vpp / 1 kHz` source，信号闭环仍待排查，不能外推为换算准确度或其他 point mode。
+开发补充：core 当前工作树已实现 RFC-0008 的标准 waveform bounded executor。插件 `0.9.0` 仅为 `DEF` 声明 `LF` trailing、`1,000` bytes 和一次 binary query，并将恢复与新鲜验证交给 core。171 项包测试包含该 executor 集成测试。确认 CH1/CH2 接线后，两个独立的 `1 kHz / 1 Vpp / 0 V` source 步骤均返回 1000 个样本：CH1 为 `1.05713 Vpp / 1000 Hz`，CH2 为 `1.0705 Vpp / 999.167 Hz`。两次读取均完成五字段恢复与验证，并在退出清理后确认 source 两路 OFF。该结果只覆盖受限 `DEF` 条件，不外推为其他 point mode、通用测量准确度或 capture 证据。
 
 ## M4：单次、多通道与有界长记录
 
