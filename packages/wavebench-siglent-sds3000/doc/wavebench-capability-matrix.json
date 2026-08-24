@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "wavebench_version": "0.8.24",
+  "scope_capability_count": 26,
+  "declared_capability_count": 6,
+  "counts_by_disposition": {
+    "contract-incompatible": 1,
+    "core-gap-rfc": 2,
+    "firmware-unverified": 12,
+    "implemented": 6,
+    "option-unconfirmed": 2,
+    "unsafe-quarantined": 3
+  },
+  "capabilities": [
+    {
+      "capability": "scope.idn",
+      "disposition": "implemented",
+      "declared": true,
+      "evidence": "hardware-accepted",
+      "manual_entities": [
+        "legacy:*IDN?"
+      ]
+    },
+    {
+      "capability": "scope.errors",
+      "disposition": "implemented",
+      "declared": true,
+      "evidence": "offline-tested",
+      "manual_entities": [
+        "legacy:CMR?",
+        "legacy:DDR?",
+        "legacy:EXR?"
+      ]
+    },
+    {
+      "capability": "scope.autoscale",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "legacy:AUTO_SETUP",
+        "automation-action:app.AutoSetup"
+      ]
+    },
+    {
+      "capability": "scope.fetch_waveform",
+      "disposition": "implemented",
+      "declared": true,
+      "evidence": "hardware-accepted",
+      "manual_entities": [
+        "legacy:WAVEFORM",
+        "legacy:WAVEFORM_SETUP",
+        "legacy:COMM_FORMAT",
+        "legacy:COMM_HEADER",
+        "legacy:COMM_ORDER"
+      ]
+    },
+    {
+      "capability": "scope.capture_waveform",
+      "disposition": "implemented",
+      "declared": true,
+      "evidence": "hardware-accepted",
+      "manual_entities": [
+        "legacy:ARM_ACQUISITION",
+        "legacy:WAIT",
+        "legacy:*OPC",
+        "legacy:STOP",
+        "legacy:WAVEFORM"
+      ]
+    },
+    {
+      "capability": "scope.capture_waveforms",
+      "disposition": "implemented",
+      "declared": true,
+      "evidence": "hardware-accepted",
+      "manual_entities": [
+        "legacy:ARM_ACQUISITION",
+        "legacy:WAIT",
+        "legacy:*OPC",
+        "legacy:STOP",
+        "legacy:WAVEFORM"
+      ]
+    },
+    {
+      "capability": "scope.screenshot",
+      "disposition": "unsafe-quarantined",
+      "declared": false,
+      "evidence": "manual-contract-mismatch",
+      "manual_entities": [
+        "legacy:SCREEN_DUMP",
+        "legacy:HARDCOPY_SETUP"
+      ]
+    },
+    {
+      "capability": "scope.channel_coupling",
+      "disposition": "implemented",
+      "declared": true,
+      "evidence": "hardware-accepted",
+      "manual_entities": [
+        "legacy:COUPLING"
+      ]
+    },
+    {
+      "capability": "scope.snapshot",
+      "disposition": "core-gap-rfc",
+      "declared": false,
+      "evidence": "manual-and-core-review",
+      "manual_entities": [
+        "legacy:ATTENUATION",
+        "legacy:BANDWIDTH_LIMIT",
+        "legacy:COUPLING",
+        "legacy:OFFSET",
+        "legacy:TIME_DIV",
+        "legacy:TRIG_LEVEL",
+        "legacy:TRIG_MODE",
+        "legacy:VOLT_DIV"
+      ]
+    },
+    {
+      "capability": "scope.acquisition_status",
+      "disposition": "core-gap-rfc",
+      "declared": false,
+      "evidence": "manual-and-core-review",
+      "manual_entities": [
+        "automation-cvar:app.Acquisition.IsTriggerReady",
+        "legacy:SEQUENCE",
+        "legacy:TRIG_MODE"
+      ]
+    },
+    {
+      "capability": "scope.capture_average",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "automation-action:app.ClearSweeps",
+        "legacy:CLEAR_SWEEPS",
+        "legacy:WAVEFORM"
+      ]
+    },
+    {
+      "capability": "scope.digital_status",
+      "disposition": "option-unconfirmed",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "result-property:Levels",
+        "result-property:LineName",
+        "result-property:Lines",
+        "result-property:Status"
+      ]
+    },
+    {
+      "capability": "scope.digital_waveform",
+      "disposition": "option-unconfirmed",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "result-property:DataArray",
+        "result-property:HorizontalResolution",
+        "result-property:Samples"
+      ]
+    },
+    {
+      "capability": "scope.history_timestamps",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "automation-object:app.History",
+        "legacy:SEQUENCE",
+        "result-property:FirstEventTime",
+        "result-property:LastEventTime"
+      ]
+    },
+    {
+      "capability": "scope.measurement_statistics",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "legacy:PARAMETER_STATISTICS?",
+        "result-property:Max",
+        "result-property:Mean",
+        "result-property:Min",
+        "result-property:Sdev",
+        "result-property:Sweeps"
+      ]
+    },
+    {
+      "capability": "scope.math_metadata",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "automation-object:app.Math.Fn",
+        "result-property:DataArray",
+        "result-property:HorizontalResolution",
+        "result-property:VerticalResolution"
+      ]
+    },
+    {
+      "capability": "scope.fft_status",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "automation-object:app.Math.Fn",
+        "result-property:HorizontalUnits",
+        "result-property:Sweeps"
+      ]
+    },
+    {
+      "capability": "scope.reference_metadata",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "automation-object:app.Memory.Mn",
+        "result-property:HorizontalResolution",
+        "result-property:VerticalResolution"
+      ]
+    },
+    {
+      "capability": "scope.cursor_readout",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-only",
+      "manual_entities": [
+        "automation-object:app.Cursors",
+        "legacy:CURSOR_VALUE?"
+      ]
+    },
+    {
+      "capability": "scope.screenshot_profile",
+      "disposition": "unsafe-quarantined",
+      "declared": false,
+      "evidence": "manual-contract-mismatch",
+      "manual_entities": [
+        "legacy:SCREEN_DUMP",
+        "legacy:HARDCOPY_SETUP"
+      ]
+    },
+    {
+      "capability": "scope.screenshot_v2",
+      "disposition": "unsafe-quarantined",
+      "declared": false,
+      "evidence": "manual-contract-mismatch",
+      "manual_entities": [
+        "legacy:SCREEN_DUMP",
+        "legacy:HARDCOPY_SETUP"
+      ]
+    },
+    {
+      "capability": "scope.acquisition_run_state",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-and-driver-review",
+      "manual_entities": [
+        "legacy:TRIG_MODE",
+        "legacy:SEQUENCE"
+      ]
+    },
+    {
+      "capability": "scope.acquisition_control",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "partial-hardware-evidence-contract-incomplete",
+      "manual_entities": [
+        "legacy:ARM_ACQUISITION",
+        "legacy:WAIT",
+        "legacy:*OPC",
+        "legacy:STOP",
+        "legacy:TRIG_MODE"
+      ]
+    },
+    {
+      "capability": "scope.trace_metadata",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "analog-waveform-path-only",
+      "manual_entities": [
+        "legacy:WAVEFORM",
+        "legacy:WAVEFORM_SETUP",
+        "automation-object:app.Math.Fn",
+        "automation-object:app.Memory.Mn"
+      ]
+    },
+    {
+      "capability": "scope.fetch_trace",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "analog-transfer-path-only-contract-incomplete",
+      "manual_entities": [
+        "legacy:WAVEFORM",
+        "legacy:WAVEFORM_SETUP",
+        "legacy:COMM_FORMAT",
+        "legacy:COMM_HEADER",
+        "legacy:COMM_ORDER"
+      ]
+    },
+    {
+      "capability": "scope.error_drain_v1",
+      "disposition": "contract-incompatible",
+      "declared": false,
+      "evidence": "fixed-register-contract-mismatch",
+      "manual_entities": [
+        "legacy:CMR?",
+        "legacy:DDR?",
+        "legacy:EXR?"
+      ]
+    }
+  ]
+}
