@@ -4,6 +4,7 @@ import pytest
 
 from wavebench.errors import ConfigError, DataError, InstrumentError
 from wavebench.instruments import DriverContext
+from wavebench.instruments.scope_extensions import ScopeWaveformBinaryProfile
 from wavebench.logging import CommandLogger
 from wavebench.services.scope_service import assert_scope_high_impedance
 from wavebench_rigol_mso8000 import descriptor as plugin_descriptor
@@ -34,6 +35,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.aliases == ()
     assert descriptor.capabilities == (
         "scope.idn",
+        "scope.fetch_waveform",
         "scope.channel_coupling",
         "scope.autoscale",
         "scope.math_metadata",
@@ -42,9 +44,26 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb", "gpib")
     assert descriptor.scope_coupling_policy == "switchable-termination"
-    assert descriptor.wavebench_min_version == "0.8.22"
+    assert descriptor.wavebench_min_version == "0.8.24"
     assert descriptor.wavebench_max_version == "0.9.0"
-    assert descriptor.version == "0.8.0"
+    assert descriptor.version == "0.9.0"
+    assert descriptor.scope_extensions is not None
+    profile = descriptor.scope_extensions.waveform_binary_profile
+    assert isinstance(profile, ScopeWaveformBinaryProfile)
+    assert profile.transport_trailing == b"\n"
+    assert len(profile.operations) == 1
+    assert profile.operations[0].operation_kind == "fetch"
+    assert profile.operations[0].response_max_bytes == 1_000
+    assert profile.operations[0].operation_max_bytes == 1_000
+    assert profile.operations[0].query_max_count == 1
+    assert profile.operations[0].resynchronization_max_bytes == 65_536
+    assert profile.operations[0].restore_order == (
+        "scope.waveform_source",
+        "scope.waveform_mode",
+        "scope.waveform_format",
+        "scope.waveform_points",
+        "scope.waveform_transfer_window",
+    )
     assert descriptor.validate_options({}) == {
         "max_total_points": 4_000_000,
         "max_chunk_points": 250_000,

@@ -15,7 +15,14 @@ from wavebench.instruments.models import (
     WaveformData,
     WaveformHeader,
 )
+from wavebench.instruments.scope_extensions import (
+    ScopeWaveformTransferBaseline,
+    ScopeWaveformTransferField,
+    ScopeWaveformTransferRestoreResult,
+    ScopeWaveformTransferStateSnapshot,
+)
 from wavebench.transport.base import InstrumentTransport
+from wavebench.transport.contracts import BinaryResponseFraming, ReplayPolicy
 
 from .parsers import (
     normalize_channel_input,
@@ -48,6 +55,13 @@ _POINT_MODE_TO_TRANSFER = {
     "MAX": ("MAX", 1),
     "DMAX": ("RAW", 2),
 }
+_WAVEFORM_BINARY_FETCH_RESTORE_ORDER: tuple[ScopeWaveformTransferField, ...] = (
+    "scope.waveform_source",
+    "scope.waveform_mode",
+    "scope.waveform_format",
+    "scope.waveform_points",
+    "scope.waveform_transfer_window",
+)
 
 
 @dataclass(frozen=True)
@@ -243,6 +257,129 @@ class MSO8104Scope:
             stop=stop,
         )
 
+    @staticmethod
+    def _waveform_transfer_snapshot(
+        state: WaveformTransferState,
+    ) -> ScopeWaveformTransferStateSnapshot:
+        return ScopeWaveformTransferStateSnapshot(
+            captured_fields=_WAVEFORM_BINARY_FETCH_RESTORE_ORDER,
+            waveform_source_token=state.source,
+            waveform_mode_token=state.mode,
+            waveform_format_token=state.data_format,
+            waveform_points_token=str(state.points),
+            waveform_transfer_window_token=f"{state.start}:{state.stop}",
+        )
+
+    @staticmethod
+    def _validate_waveform_transfer_baseline(
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> None:
+        if not isinstance(baseline, ScopeWaveformTransferBaseline):
+            raise DataError("MSO8104 bounded waveform baseline has an invalid type")
+        if (
+            baseline.restore_order != _WAVEFORM_BINARY_FETCH_RESTORE_ORDER
+            or baseline.snapshot.captured_fields != _WAVEFORM_BINARY_FETCH_RESTORE_ORDER
+        ):
+            raise DataError(
+                "MSO8104 bounded waveform baseline does not match the fetch transfer profile"
+            )
+
+    @classmethod
+    def _waveform_state_from_baseline(
+        cls,
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> WaveformTransferState:
+        cls._validate_waveform_transfer_baseline(baseline)
+        snapshot = baseline.snapshot
+        try:
+            source = parse_waveform_source(snapshot.waveform_source_token or "")
+            mode = parse_waveform_mode(snapshot.waveform_mode_token or "")
+            data_format = parse_waveform_format(snapshot.waveform_format_token or "")
+            points = parse_positive_integer(
+                snapshot.waveform_points_token or "",
+                field="waveform points",
+                maximum=_MAX_WAVEFORM_STATE_POINTS,
+            )
+            window = snapshot.waveform_transfer_window_token or ""
+            start_text, separator, stop_text = window.partition(":")
+            if not separator:
+                raise DataError("MSO8104 bounded waveform baseline has an invalid window")
+            start = parse_positive_integer(
+                start_text,
+                field="waveform start",
+                maximum=_MAX_WAVEFORM_STATE_POINTS,
+            )
+            stop = parse_positive_integer(
+                stop_text,
+                field="waveform stop",
+                maximum=_MAX_WAVEFORM_STATE_POINTS,
+            )
+        except (DataError, ValueError) as exc:
+            raise DataError("MSO8104 bounded waveform baseline contains invalid state") from exc
+        if start > stop:
+            raise DataError(
+                "MSO8104 bounded waveform baseline has a start point after its stop point"
+            )
+        return WaveformTransferState(
+            source=source,
+            mode=mode,
+            data_format=data_format,
+            points=points,
+            start=start,
+            stop=stop,
+        )
+
+    def snapshot_waveform_transfer_state(
+        self,
+        fields: tuple[ScopeWaveformTransferField, ...],
+    ) -> ScopeWaveformTransferStateSnapshot:
+        if fields != _WAVEFORM_BINARY_FETCH_RESTORE_ORDER:
+            raise DataError(
+                "MSO8104 bounded waveform snapshot fields do not match the fetch profile"
+            )
+        with self._io_lock:
+            self._require_open()
+            self._require_waveform_writes_allowed()
+            return self._waveform_transfer_snapshot(self._snapshot_waveform_state())
+
+    def _write_waveform_state_without_readback(self, state: WaveformTransferState) -> None:
+        for command in (
+            f":WAVeform:SOURce {state.source}",
+            f":WAVeform:MODE {state.mode}",
+            f":WAVeform:FORMat {state.data_format}",
+            f":WAVeform:POINts {state.points}",
+            f":WAVeform:STOP {state.stop}",
+            f":WAVeform:STARt {state.start}",
+        ):
+            self.transport.write(command)
+
+    def restore_waveform_transfer_state(
+        self,
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> ScopeWaveformTransferRestoreResult:
+        with self._io_lock:
+            self._require_open()
+            state = self._waveform_state_from_baseline(baseline)
+            try:
+                self._write_waveform_state_without_readback(state)
+            except Exception:
+                self._waveform_writes_blocked = True
+                raise
+            return ScopeWaveformTransferRestoreResult(
+                status="completed",
+                attempted_fields=baseline.restore_order,
+                restored_fields=baseline.restore_order,
+            )
+
+    def verify_waveform_transfer_state_restored(
+        self,
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> ScopeWaveformTransferStateSnapshot:
+        with self._io_lock:
+            self._require_open()
+            self._validate_waveform_transfer_baseline(baseline)
+            return self._waveform_transfer_snapshot(self._snapshot_waveform_state())
+
     def _write_and_verify(
         self,
         *,
@@ -417,12 +554,29 @@ class MSO8104Scope:
             raise DataError("MSO8104 waveform voltage conversion produced non-finite values")
         return voltages
 
+    def _read_waveform_binary_payload(
+        self,
+        *,
+        expected_length: int,
+        bounded: bool,
+    ) -> bytes:
+        if bounded:
+            result = self.transport.query_binary(
+                ":WAVeform:DATA?",
+                framing=BinaryResponseFraming.DEFINITE_BLOCK,
+                max_bytes=expected_length,
+                replay=ReplayPolicy.NO_REPLAY,
+            )
+            return result.data
+        return self.transport.query_bin_block(":WAVeform:DATA?")
+
     def _read_byte_waveform(
         self,
         channel: int,
         *,
         point_mode: str,
         remaining_points: int,
+        bounded: bool = False,
     ) -> WaveformData:
         _, expected_type_code = _POINT_MODE_TO_TRANSFER[point_mode]
         maximum_points = min(remaining_points, self.max_total_waveform_points)
@@ -437,7 +591,10 @@ class MSO8104Scope:
                 f"the requested {_NORMAL_WAVEFORM_POINTS} points: {preamble.points}"
             )
         if point_mode == "DEF":
-            payload = self.transport.query_bin_block(":WAVeform:DATA?")
+            payload = self._read_waveform_binary_payload(
+                expected_length=preamble.points,
+                bounded=bounded,
+            )
             if len(payload) != preamble.points:
                 raise DataError(
                     "MSO8104 waveform payload length mismatch: "
@@ -490,8 +647,11 @@ class MSO8104Scope:
                         ),
                         phase="setup",
                     )
-                payload = self.transport.query_bin_block(":WAVeform:DATA?")
                 expected_length = stop - start + 1
+                payload = self._read_waveform_binary_payload(
+                    expected_length=expected_length,
+                    bounded=bounded,
+                )
                 if len(payload) != expected_length:
                     raise DataError(
                         "MSO8104 waveform chunk length mismatch for "
@@ -532,20 +692,8 @@ class MSO8104Scope:
                 "MSO8104 waveform total point budget is below the 1000-point DEF transfer"
             )
         previous = self._snapshot_waveform_state()
-        mode, _ = _POINT_MODE_TO_TRANSFER[point_mode]
         try:
-            if point_mode == "DEF":
-                transfer = WaveformTransferState(
-                    source=f"CHAN{channel}",
-                    mode=mode,
-                    data_format="BYTE",
-                    points=_NORMAL_WAVEFORM_POINTS,
-                    start=1,
-                    stop=_NORMAL_WAVEFORM_POINTS,
-                )
-                self._apply_waveform_state(transfer, phase="setup")
-            else:
-                self._apply_waveform_prefix(channel=channel, mode=mode)
+            self._configure_waveform_transfer(channel=channel, point_mode=point_mode)
             return self._read_byte_waveform(
                 channel,
                 point_mode=point_mode,
@@ -553,6 +701,49 @@ class MSO8104Scope:
             )
         finally:
             self._restore_waveform_state(previous)
+
+    def _configure_waveform_transfer(self, *, channel: int, point_mode: str) -> None:
+        mode, _ = _POINT_MODE_TO_TRANSFER[point_mode]
+        if point_mode == "DEF":
+            transfer = WaveformTransferState(
+                source=f"CHAN{channel}",
+                mode=mode,
+                data_format="BYTE",
+                points=_NORMAL_WAVEFORM_POINTS,
+                start=1,
+                stop=_NORMAL_WAVEFORM_POINTS,
+            )
+            self._apply_waveform_state(transfer, phase="setup")
+            return
+        self._apply_waveform_prefix(channel=channel, mode=mode)
+
+    def fetch_waveform_bounded(
+        self,
+        channel: int,
+        points: str = "dmax",
+        *,
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> WaveformData:
+        self._validate_analog_channel(channel)
+        point_mode = self._normalize_point_mode(points)
+        if point_mode != "DEF":
+            raise ConfigError(
+                "MSO8104 bounded waveform fetch currently supports only DEF; "
+                "MAX and DMAX require separate hardware acceptance"
+            )
+        self._validate_waveform_transfer_baseline(baseline)
+        with self._io_lock:
+            self._require_open()
+            self._require_waveform_writes_allowed()
+            self._require_displayed_channels([channel])
+            self._require_main_timebase()
+            self._configure_waveform_transfer(channel=channel, point_mode=point_mode)
+            return self._read_byte_waveform(
+                channel,
+                point_mode=point_mode,
+                remaining_points=self.max_total_waveform_points,
+                bounded=True,
+            )
 
     def get_math_waveform_metadata(
         self,

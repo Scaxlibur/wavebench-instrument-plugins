@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.8.0"
+PACKAGE_VERSION = "0.9.0"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -82,7 +82,7 @@ def test_wheel_metadata_license_and_single_entry_point(tmp_path: Path) -> None:
     assert distribution.metadata["License-Expression"] == "MIT"
     assert distribution.version == PACKAGE_VERSION
     assert (distribution.metadata.get_all("Requires-Dist") or []).count(
-        "wavebench<0.9,>=0.8.22"
+        "wavebench<0.9,>=0.8.24"
     ) == 1
     assert [(item.name, item.value) for item in entry_points] == [
         ("rigol.mso8104", "wavebench_rigol_mso8000:descriptor")
@@ -163,6 +163,7 @@ assert descriptor.driver_id == "rigol.mso8104"
 assert descriptor.distribution == "wavebench-rigol-mso8000"
 assert descriptor.capabilities == (
     "scope.idn",
+    "scope.fetch_waveform",
     "scope.channel_coupling",
     "scope.autoscale",
     "scope.math_metadata",

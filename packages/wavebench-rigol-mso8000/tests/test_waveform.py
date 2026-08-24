@@ -9,6 +9,15 @@ import pytest
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import ScopeDerivedWaveformMetadata
+from wavebench.services.scope_waveform_executor import BoundedWaveformExecutor
+from wavebench.transport.contracts import (
+    BinaryQueryResult,
+    BinaryResponseFraming,
+    ReplayPolicy,
+)
+from wavebench.transport.guarded import GuardedAuditedTransport
+from wavebench.transport.session import InstrumentSessionState, SessionHealth
+from wavebench_rigol_mso8000 import descriptor as plugin_descriptor
 from wavebench_rigol_mso8000.driver import MSO8104Scope, WaveformTransferState
 from wavebench_rigol_mso8000.parsers import parse_rigol_waveform_preamble
 
@@ -37,6 +46,9 @@ def _long_preamble(*, type_code: int, points: int, x_increment: float = 0.5) -> 
 
 
 class WaveformTransport:
+    resource = "TCPIP::192.0.2.10::INSTR"
+    _wavebench_binary_budget_parameters = True
+
     def __init__(
         self,
         *,
@@ -60,10 +72,23 @@ class WaveformTransport:
         self.binary_entered: Event | None = None
         self.binary_release: Event | None = None
         self.binary_calls = 0
+        self.binary_requests: list[
+            tuple[str, BinaryResponseFraming, int, ReplayPolicy, bytes, int]
+        ] = []
         self.close_calls = 0
 
-    def query(self, command: str) -> str:
+    def record_event(self, direction: str, text: str) -> None:
+        return None
+
+    def query(
+        self,
+        command: str,
+        *,
+        replay: ReplayPolicy = ReplayPolicy.NO_REPLAY,
+    ) -> str:
         self.events.append(("query", command))
+        if command == "*IDN?":
+            return "RIGOL TECHNOLOGIES,MSO8104,MSO8A000000000,00.02.02"
         for channel in range(1, 5):
             if command == f":CHANnel{channel}:DISPlay?":
                 return "1" if self.displayed[channel] else "0"
@@ -118,8 +143,8 @@ class WaveformTransport:
             self.fail_writes.remove(command)
             raise InstrumentError(f"injected ambiguous write: {command}")
 
-    def query_bin_block(self, command: str) -> bytes:
-        self.events.append(("query_bin_block", command))
+    def _next_binary_payload(self, command: str, *, event_name: str) -> bytes:
+        self.events.append((event_name, command))
         self.binary_calls += 1
         if self.binary_calls == 1 and self.binary_entered is not None:
             self.binary_entered.set()
@@ -134,6 +159,68 @@ class WaveformTransport:
         start = int(self.state["start"])
         stop = int(self.state["stop"])
         return payload[start - 1 : stop]
+
+    def query_bin_block(
+        self,
+        command: str,
+        *,
+        replay: ReplayPolicy = ReplayPolicy.NO_REPLAY,
+    ) -> bytes:
+        return self._next_binary_payload(command, event_name="query_bin_block")
+
+    def query_binary(
+        self,
+        command: str,
+        *,
+        framing: BinaryResponseFraming,
+        max_bytes: int,
+        timeout_ms: int | None = None,
+        replay: ReplayPolicy = ReplayPolicy.NO_REPLAY,
+        _transport_trailing: bytes = b"",
+        _resynchronization_max_bytes: int = 0,
+    ) -> BinaryQueryResult:
+        self.binary_requests.append(
+            (
+                command,
+                framing,
+                max_bytes,
+                replay,
+                _transport_trailing,
+                _resynchronization_max_bytes,
+            )
+        )
+        assert framing is BinaryResponseFraming.DEFINITE_BLOCK
+        assert replay is ReplayPolicy.NO_REPLAY
+        payload = self._next_binary_payload(command, event_name="query_binary")
+        assert len(payload) <= max_bytes
+        header_bytes = len(f"#{len(str(len(payload)))}{len(payload)}")
+        return BinaryQueryResult(
+            data=payload,
+            framing=framing,
+            declared_length=len(payload),
+            framing_header_bytes=header_bytes,
+            consumed_bytes=header_bytes + len(payload) + len(_transport_trailing),
+            transport_trailing_bytes=_transport_trailing,
+        )
+
+    def query_float_list(
+        self,
+        command: str,
+        *,
+        timeout_ms: int | None = None,
+        replay: ReplayPolicy = ReplayPolicy.NO_REPLAY,
+    ) -> list[float]:
+        raise AssertionError(f"unexpected float query: {command}")
+
+    def query_opc(
+        self,
+        *,
+        replay: ReplayPolicy = ReplayPolicy.NO_REPLAY,
+    ) -> str:
+        raise AssertionError("unexpected OPC query")
+
+    def write_bytes(self, command: bytes) -> None:
+        raise AssertionError("unexpected binary write")
 
     def close(self) -> None:
         self.close_calls += 1
@@ -877,3 +964,92 @@ def test_long_chunk_mismatch_is_not_replayed_and_restores_state() -> None:
 def test_waveform_memory_limits_are_hard_bounded(kwargs: dict[str, Any]) -> None:
     with pytest.raises(DataError):
         MSO8104Scope(transport=WaveformTransport(), **kwargs)
+
+
+def _bounded_executor(
+    transport: WaveformTransport,
+    *,
+    max_total_waveform_points: int = 4_000_000,
+    max_byte_points_per_read: int = 250_000,
+) -> tuple[BoundedWaveformExecutor, MSO8104Scope, InstrumentSessionState]:
+    session_state = InstrumentSessionState(epoch_id="mso8104-bounded-test")
+    guarded = GuardedAuditedTransport(transport, session_state=session_state)
+    guarded._mark_bounded_waveform_backend_verified()
+    scope = MSO8104Scope(
+        transport=guarded,
+        max_total_waveform_points=max_total_waveform_points,
+        max_byte_points_per_read=max_byte_points_per_read,
+    )
+    return (
+        BoundedWaveformExecutor(
+            driver=scope,
+            descriptor=plugin_descriptor(),
+            session_state=session_state,
+            connection_timeout_ms=5_000,
+            transport=guarded,
+        ),
+        scope,
+        session_state,
+    )
+
+
+def test_bounded_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous)
+    executor, scope, session_state = _bounded_executor(transport)
+
+    result = executor.fetch(channel=2, points="DEF", check_errors=False)
+
+    assert result.value.channel == 2
+    assert transport.state == asdict(previous)
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 1
+    assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
+    assert transport.binary_requests == [
+        (
+            ":WAVeform:DATA?",
+            BinaryResponseFraming.DEFINITE_BLOCK,
+            1000,
+            ReplayPolicy.NO_REPLAY,
+            b"\n",
+            65_536,
+        )
+    ]
+    assert scope.waveform_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+    assert result.diagnostics["scope_operation"]["binary_budget"]["remaining_query_count"] == 0
+
+
+def test_bounded_fetch_data_error_restores_and_verifies_before_raising() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous, payload=b"short")
+    executor, scope, session_state = _bounded_executor(transport)
+
+    with pytest.raises(DataError, match="payload length mismatch"):
+        executor.fetch(channel=1, points="DEF", check_errors=False)
+
+    assert transport.state == asdict(previous)
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 1
+    assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
+    assert scope.waveform_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_fetch_rejects_max_and_dmax_until_their_hardware_acceptance() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(
+        state=previous,
+        preamble=_long_preamble(type_code=2, points=257),
+        payload=bytes(128 + index % 4 for index in range(257)),
+    )
+    executor, _, session_state = _bounded_executor(
+        transport,
+        max_total_waveform_points=1_000,
+        max_byte_points_per_read=1,
+    )
+
+    with pytest.raises(ConfigError, match="supports only DEF"):
+        executor.fetch(channel=1, points="DMAX", check_errors=False)
+
+    assert transport.binary_calls == 0
+    assert transport.state == asdict(previous)
+    assert session_state.health is SessionHealth.HEALTHY
