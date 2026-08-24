@@ -47,6 +47,21 @@ Every channel returned 100,002 points with no quality warning. Each round audite
 
 `scope.capture_waveform` delegates to the single-channel form of this transaction. The dual-channel `scope.capture_waveforms` path was exercised directly on hardware.
 
+## P0 adoption revalidation
+
+After the WaveBench `0.8.24` release, transport/session P0 adoption was revalidated with SDG2000X CH1 connected to SDS3054 CH1 and SDG2000X CH2 connected to SDS3054 CH2. The configured source ceiling was 5 Vpp, below the authorized 10 Vpp limit. The actual operating point remained `SINE / 1 kHz / 1 Vpp / 0 V offset` on each channel.
+
+Before capture, `source.output_v2` disabled and read back both outputs. `source.snapshot_v2` then confirmed OFF state, high-impedance display load, 0 V offset, 1 Vpp, and disabled Harmonic mode on both channels. SDS3054 CH1 and CH2 were read-only verified as `DCL`; input termination was not changed remotely.
+
+One acquisition produced both channels:
+
+| Channel | Points | Frequency | Vpp | Mean voltage |
+| ---: | ---: | ---: | ---: | ---: |
+| CH1 | 100,002 | 1000.100 Hz | 1.008000 V | 0.005733 V |
+| CH2 | 100,002 | 1000.000 Hz | 1.013335 V | 0.000388 V |
+
+The capture transaction returned no restoration error. An outer `finally` requested OFF on both outputs regardless of primary success or failure, and a fresh Source V2 snapshot independently read back CH1 and CH2 as OFF. No raw waveform, resource address, serial number, screenshot, or command log was retained.
+
 ## Independent postcheck
 
 A fresh read-only session verified the result instead of trusting the acceptance session itself:

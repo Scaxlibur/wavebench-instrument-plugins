@@ -142,7 +142,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
 
     assert descriptor.driver_id == "siglent.sds3000"
     assert descriptor.api_version == "wavebench.instrument.v2"
-    assert descriptor.wavebench_min_version == "0.8.22"
+    assert descriptor.wavebench_min_version == "0.8.24"
     assert descriptor.wavebench_max_version == "0.9.0"
     assert descriptor.kind == "scope"
     assert descriptor.models == ("SDS3054",)

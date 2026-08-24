@@ -39,7 +39,7 @@ def descriptor() -> InstrumentDescriptor:
             "Teledyne LeCroy MAUI platform."
         ),
         api_version="wavebench.instrument.v2",
-        wavebench_min_version="0.8.22",
+        wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sds3000",
         version="0.1.0",

@@ -108,6 +108,51 @@
       "minimum_correlation": 0.98
     }
   },
+  "p0_adoption_validation": {
+    "date": "2026-08-24",
+    "wavebench_version": "0.8.24",
+    "wavebench_release_commit": "dc7ce5b",
+    "source_family": "SDG2000X",
+    "same_acquisition_dual_channel": true,
+    "acceptance_signal_per_channel": {
+      "function": "SINE",
+      "frequency_hz": 1000.0,
+      "amplitude_vpp": 1.0,
+      "offset_v": 0.0,
+      "configured_max_source_vpp": 5.0,
+      "authorized_maximum_vpp": 10.0
+    },
+    "source_preflight": {
+      "ch1_output": "OFF",
+      "ch2_output": "OFF",
+      "ch1_display_load": "high_impedance",
+      "ch2_display_load": "high_impedance"
+    },
+    "scope_input_preflight": {
+      "ch1": "DCL",
+      "ch2": "DCL"
+    },
+    "channels": {
+      "1": {
+        "samples": 100002,
+        "frequency_hz": 1000.0999983137341,
+        "vpp_v": 1.0080000087618828,
+        "mean_v": 0.005733485069689963
+      },
+      "2": {
+        "samples": 100002,
+        "frequency_hz": 999.9999883139027,
+        "vpp_v": 1.0133346319198608,
+        "mean_v": 0.0003876195583058232
+      }
+    },
+    "scope_transaction_completed_without_restoration_error": true,
+    "source_final_output": {
+      "ch1": "OFF",
+      "ch2": "OFF",
+      "independent_readback_verified": true
+    }
+  },
   "postconditions": {
     "source_output": "OFF",
     "source_amplitude_setting_vpp": 5.0,

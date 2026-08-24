@@ -42,6 +42,33 @@ def test_redacted_hardware_acceptance_meets_m5_limits() -> None:
     assert evidence["postconditions"]["source_profile_restored"] is True
     assert evidence["postconditions"]["independent_read_only_postcheck_writes"] == 0
 
+    adoption = evidence["p0_adoption_validation"]
+    assert adoption["wavebench_version"] == "0.8.24"
+    assert adoption["wavebench_release_commit"] == "dc7ce5b"
+    assert adoption["source_family"] == "SDG2000X"
+    assert adoption["same_acquisition_dual_channel"] is True
+    assert adoption["acceptance_signal_per_channel"] == {
+        "function": "SINE",
+        "frequency_hz": 1000.0,
+        "amplitude_vpp": 1.0,
+        "offset_v": 0.0,
+        "configured_max_source_vpp": 5.0,
+        "authorized_maximum_vpp": 10.0,
+    }
+    assert adoption["scope_input_preflight"] == {"ch1": "DCL", "ch2": "DCL"}
+    for channel in ("1", "2"):
+        result = adoption["channels"][channel]
+        assert result["samples"] == 100002
+        assert abs(result["frequency_hz"] - 1000.0) / 1000.0 <= 0.02
+        assert 0.8 <= result["vpp_v"] <= 1.2
+        assert abs(result["mean_v"]) <= 0.2
+    assert adoption["scope_transaction_completed_without_restoration_error"] is True
+    assert adoption["source_final_output"] == {
+        "ch1": "OFF",
+        "ch2": "OFF",
+        "independent_readback_verified": True,
+    }
+
 
 def test_public_hardware_evidence_contains_no_private_artifacts() -> None:
     serialized = EVIDENCE_PATH.read_text(encoding="utf-8")

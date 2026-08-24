@@ -3,23 +3,26 @@
   "document_kind": "wavebench-core-rfc",
   "status": "draft-needs-revision",
   "revision": "R1",
-  "wavebench_baseline": "0.8.22",
+  "wavebench_baseline": "0.8.24",
   "core_changed_by_this_plugin": false,
   "decision": "assessment-only",
   "core_contract_reference": {
     "document": "WaveBench_transport重放与session健康RFC.md",
     "revision": "R1",
     "status": "accepted",
-    "implementation": "M1-M7-implemented-unreleased",
+    "implementation": "M1-M7-released",
     "implementation_baseline": "a8e6b59",
-    "release_required_for_plugin_adoption": true
+    "release_version": "0.8.24",
+    "release_commit": "dc7ce5b",
+    "release_required_for_plugin_adoption": true,
+    "release_gate_satisfied": true
   },
   "milestones": {
     "plugin": "M8-functional-complete",
-    "p0_safety_hardening": "migration-implemented-offline-tested",
+    "p0_safety_hardening": "adopted",
     "rfc": "R1-draft-needs-revision",
-    "core_implementation": "M1-M7-implemented-unreleased",
-    "plugin_adoption": "blocked-until-core-release"
+    "core_implementation": "M1-M7-released-in-0.8.24",
+    "plugin_adoption": "adopted"
   },
   "scope": {
     "current_plugin_capabilities": [
@@ -35,13 +38,14 @@
     "p0_call_site_migration_complete": true,
     "p0_structured_exception_handling_complete": true,
     "p0_fault_injection_complete": true,
-    "p0_runtime_adoption_pending": true,
-    "migration_branch_release_blocked": true,
+    "p0_runtime_adoption_pending": false,
+    "p0_runtime_adopted": true,
+    "migration_branch_release_blocked": false,
     "transport_session_api_frozen": true,
     "typed_scope_api_frozen": false
   },
   "plugin_migration_evidence": {
-    "status": "implemented-and-offline-tested-not-adopted",
+    "status": "adopted-on-wavebench-0.8.24",
     "core_baseline_commit": "a8e6b59",
     "plugin_implementation_commit": "480eaec",
     "replay_policy": "every SDS3000 transport query explicitly uses ReplayPolicy.NO_REPLAY",
@@ -68,16 +72,18 @@
     },
     "verification": {
       "plugin_package_tests": "80 passed",
-      "core_focused_contract_tests": "40 passed",
+      "plugin_repository_tests": "627 passed, 2 skipped",
+      "core_focused_contract_tests": "71 passed",
       "ruff": "passed",
       "manual_catalog_check": "passed",
-      "hardware_connected": false
+      "hardware_connected": true,
+      "hardware_acceptance": "WaveBench 0.8.24 with an SDG2000X source passed same-acquisition SDS3054 CH1/CH2 capture at 1 kHz, 1 Vpp, and 0 V offset; both scope inputs were DCL and both source outputs were independently read back OFF"
     }
   },
   "specification_freeze_gates": [
     {
       "id": "transport-replay-session-rfc",
-      "status": "completed-in-core-development-release-gated-for-plugin",
+      "status": "released-in-core-and-adopted-by-plugin",
       "must_define": [
         "default replay policy for existing query()",
         "legacy call-site migration inventory",
@@ -135,7 +141,7 @@
     {
       "id": "transport-replay-contract",
       "priority": "P0",
-      "status": "implemented-unreleased",
+      "status": "released-in-0.8.24",
       "replay_policies": [
         "safe_to_replay",
         "no_replay",
@@ -176,7 +182,7 @@
     {
       "id": "shared-session-health-and-poison",
       "priority": "P0",
-      "status": "implemented-unreleased",
+      "status": "released-in-0.8.24",
       "states": [
         "healthy",
         "uncertain",
@@ -319,35 +325,44 @@
     {
       "id": "scope-acquisition-run-state",
       "priority": "P1",
-      "status": "design-required",
-      "compatibility": "not-frozen",
-      "capabilities": [],
-      "candidate_capability": "scope.acquisition_run_state",
+      "status": "released-core-contract-plugin-firmware-unverified",
+      "compatibility": "frozen-in-wavebench-0.8.24",
+      "capabilities": [
+        "scope.acquisition_run_state",
+        "scope.acquisition_control"
+      ],
       "public_contract": {
-        "model": "not frozen; a single run/stop/wait/armed enum is rejected as the current model",
-        "candidate_axes": {
-          "execution_state": [
-            "running",
-            "stopped",
-            "unknown"
-          ],
-          "trigger_phase": [
-            "idle",
-            "waiting",
-            "armed",
-            "triggered",
-            "unknown"
-          ],
-          "trigger_mode": [
-            "auto",
-            "normal",
-            "single",
-            "unknown"
-          ]
-        },
-        "scope": "execution, trigger phase, and trigger mode must be assessed separately; average, segmented, and option inventory stay separate",
+        "model": "WaveBench 0.8.24 freezes typed acquisition run-state and control contracts; SDS3000 does not declare them without complete per-value readback evidence",
+        "acquisition_phase": [
+          "unknown",
+          "stopped",
+          "ready",
+          "arming",
+          "waiting",
+          "acquiring",
+          "rolling",
+          "stopping",
+          "complete",
+          "error"
+        ],
+        "trigger_mode": [
+          "auto",
+          "normal",
+          "single",
+          "roll",
+          "unknown"
+        ],
+        "control_methods": [
+          "start_continuous",
+          "stop_acquisition",
+          "acquire_single",
+          "snapshot_acquisition_control",
+          "restore_acquisition_control",
+          "verify_acquisition_control_restored"
+        ],
+        "scope": "run state and trigger mode remain separate typed values; average, segmented, and option inventory stay separate",
         "failure": "query failure is an operation error, not an unavailable device state",
-        "service": "no ScopeService method or JSON representation is frozen by R1"
+        "service": "core Service and operation contracts exist; SDS3000 remains undeclared until its firmware mapping, recovery, and verification evidence is complete"
       },
       "vendors": [
         {
@@ -392,7 +407,7 @@
           ]
         }
       ],
-      "freeze_gate": "the typed-scope RFC must provide per-value mappings and verifiable readback for at least one axis on all three vendors before any public capability is frozen"
+      "freeze_gate": "the core contract is released; SDS3000 adoption requires per-value firmware mappings, verifiable readback, failure recovery, and hardware acceptance"
     },
     {
       "id": "scope-configuration-patch",
@@ -502,8 +517,8 @@
   },
   "release_version_gates": {
     "current_plugin": {
-      "wheel_requires_dist": "wavebench>=0.8.22,<0.9",
-      "descriptor_wavebench_min_version": "0.8.22",
+      "wheel_requires_dist": "wavebench>=0.8.24,<0.9",
+      "descriptor_wavebench_min_version": "0.8.24",
       "descriptor_wavebench_max_version": "0.9.0",
       "descriptor_api_version": "wavebench.instrument.v2"
     },
@@ -515,14 +530,14 @@
       "the atomic adoption commit runs isolated wheel tests for Requires-Dist, descriptor bounds, api_version, and entry point before marking the plugin adopted"
     ],
     "plugin_adoption_checklist": [
-      "pending: wait for the first released core containing R1 and leave every version gate unchanged before that release",
+      "complete: WaveBench 0.8.24 containing R1 is released on master at dc7ce5b",
       "complete on the migration branch: classify every plugin transport query explicitly; CMR?, EXR?, DDR?, and acquisition-bound *OPC? use no_replay",
       "complete on the migration branch: preserve TransportIOError and SessionHealthError through _acquire_once, OPC waits, and temporary restoration context managers",
       "complete on the migration branch: prove zero secondary recovery or validation I/O after structured transport/session failure",
       "complete across plugin and core baseline tests: assert transmission counts, uncertain/poisoned latching, on_failure=continue blocking, and new epoch_id after reconnect",
-      "pending: in one atomic adoption commit, update the wheel and descriptor lower bounds, review the upper bound, confirm wavebench.instrument.v2, run isolated compatibility tests, and only then mark the plugin adopted"
+      "complete in this atomic adoption commit: update the wheel and descriptor lower bounds to 0.8.24, retain the reviewed 0.9 upper bound and wavebench.instrument.v2, run isolated compatibility tests, and mark the plugin adopted"
     ],
-    "changed_by_r1": false
+    "changed_by_r1": true
   },
   "test_matrix": [
     {
@@ -610,10 +625,10 @@
     }
   ],
   "implementation_order": [
-    "keep M8-functional-complete, plugin-P0-migration-prepared-not-adopted, accepted RFC R1, and core-M1-M7-implemented-unreleased labels distinct",
-    "use core baseline commit a8e6b59 for migration tests without raising the plugin version floor",
+    "record M8-functional-complete, plugin-P0-adopted, accepted RFC R1, and core-M1-M7-released-in-0.8.24 as distinct facts",
+    "adopt the released core at dc7ce5b while retaining a8e6b59 as the original migration baseline",
     "complete before release: call-site migration, structured-exception handling, fault-injection tests, and verification that the core M7 OperationSpec audit for scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform covers SDS3000 CHDR, CFMT, CORD, and WFSU temporary state",
-    "after a released P0 core, create one atomic adoption commit that updates wheel and descriptor version gates together, confirms wavebench.instrument.v2, runs isolated compatibility tests, and marks the plugin adopted only after every check passes",
+    "complete one atomic adoption commit that updates wheel and descriptor version gates together to 0.8.24, confirms wavebench.instrument.v2, runs isolated compatibility tests, and marks the plugin adopted only after every check passes",
     "freeze a separate typed-scope state RFC with exact fields, consumers, v1 precedence, and three-vendor mappings",
     "implement only frozen typed read-only state and continue collecting acquisition-state evidence",
     "consider narrow scale/offset/timebase patches in a separate RFC after the safety gate",

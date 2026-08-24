@@ -1,14 +1,15 @@
 {
   "schema_version": 1,
-  "wavebench_version": "0.8.22",
-  "scope_capability_count": 19,
+  "wavebench_version": "0.8.24",
+  "scope_capability_count": 26,
   "declared_capability_count": 6,
   "counts_by_disposition": {
+    "contract-incompatible": 1,
     "core-gap-rfc": 2,
-    "firmware-unverified": 8,
+    "firmware-unverified": 12,
     "implemented": 6,
     "option-unconfirmed": 2,
-    "unsafe-quarantined": 1
+    "unsafe-quarantined": 3
   },
   "capabilities": [
     {
@@ -228,6 +229,85 @@
       "manual_entities": [
         "automation-object:app.Cursors",
         "legacy:CURSOR_VALUE?"
+      ]
+    },
+    {
+      "capability": "scope.screenshot_profile",
+      "disposition": "unsafe-quarantined",
+      "declared": false,
+      "evidence": "manual-contract-mismatch",
+      "manual_entities": [
+        "legacy:SCREEN_DUMP",
+        "legacy:HARDCOPY_SETUP"
+      ]
+    },
+    {
+      "capability": "scope.screenshot_v2",
+      "disposition": "unsafe-quarantined",
+      "declared": false,
+      "evidence": "manual-contract-mismatch",
+      "manual_entities": [
+        "legacy:SCREEN_DUMP",
+        "legacy:HARDCOPY_SETUP"
+      ]
+    },
+    {
+      "capability": "scope.acquisition_run_state",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "manual-and-driver-review",
+      "manual_entities": [
+        "legacy:TRIG_MODE",
+        "legacy:SEQUENCE"
+      ]
+    },
+    {
+      "capability": "scope.acquisition_control",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "partial-hardware-evidence-contract-incomplete",
+      "manual_entities": [
+        "legacy:ARM_ACQUISITION",
+        "legacy:WAIT",
+        "legacy:*OPC",
+        "legacy:STOP",
+        "legacy:TRIG_MODE"
+      ]
+    },
+    {
+      "capability": "scope.trace_metadata",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "analog-waveform-path-only",
+      "manual_entities": [
+        "legacy:WAVEFORM",
+        "legacy:WAVEFORM_SETUP",
+        "automation-object:app.Math.Fn",
+        "automation-object:app.Memory.Mn"
+      ]
+    },
+    {
+      "capability": "scope.fetch_trace",
+      "disposition": "firmware-unverified",
+      "declared": false,
+      "evidence": "analog-transfer-path-only-contract-incomplete",
+      "manual_entities": [
+        "legacy:WAVEFORM",
+        "legacy:WAVEFORM_SETUP",
+        "legacy:COMM_FORMAT",
+        "legacy:COMM_HEADER",
+        "legacy:COMM_ORDER"
+      ]
+    },
+    {
+      "capability": "scope.error_drain_v1",
+      "disposition": "contract-incompatible",
+      "declared": false,
+      "evidence": "fixed-register-contract-mismatch",
+      "manual_entities": [
+        "legacy:CMR?",
+        "legacy:DDR?",
+        "legacy:EXR?"
       ]
     }
   ]

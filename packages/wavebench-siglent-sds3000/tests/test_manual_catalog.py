@@ -207,8 +207,8 @@ def test_m6_matrix_disposes_every_wavebench_scope_capability() -> None:
     ]
 
     assert matrix["schema_version"] == 1
-    assert matrix["wavebench_version"] == "0.8.22"
-    assert matrix["scope_capability_count"] == len(scope_capabilities) == 19
+    assert matrix["wavebench_version"] == "0.8.24"
+    assert matrix["scope_capability_count"] == len(scope_capabilities) == 26
     assert [entry["capability"] for entry in entries] == scope_capabilities
     assert len({entry["capability"] for entry in entries}) == len(entries)
 

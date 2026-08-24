@@ -4,9 +4,9 @@
 
 ## Conclusion
 
-This matrix covers all 19 `scope` capabilities in WaveBench `0.8.22`. The plugin implements and declares six. Each of the remaining 13 has an explicit disposition. No capability outside WaveBench is invented, and neither raw SCPI nor arbitrary VBS is exposed to bypass the capability boundary.
+This matrix covers all 26 `scope` capabilities in WaveBench `0.8.24`. The plugin implements and declares six. Each of the remaining 20 has an explicit disposition. No capability outside WaveBench is invented, and neither raw SCPI nor arbitrary VBS is exposed to bypass the capability boundary.
 
-The machine-readable source of truth is [`wavebench-capability-matrix.json`](wavebench-capability-matrix.json). Tests compare its 19 entries with WaveBench `CAPABILITY_METHODS` and require every manual anchor to exist in [`command-catalog.json`](command-catalog.json).
+The machine-readable source of truth is [`wavebench-capability-matrix.json`](wavebench-capability-matrix.json). Tests compare its 26 entries with WaveBench `CAPABILITY_METHODS` and require every manual anchor to exist in [`command-catalog.json`](command-catalog.json).
 
 Disposition meanings:
 
@@ -14,9 +14,10 @@ Disposition meanings:
 - `firmware-unverified`: the manual provides a candidate path, but SDS3054 firmware `8.4.1` has not been shown to satisfy the complete capability contract.
 - `option-unconfirmed`: required hardware, probe, or licensed option has not been confirmed.
 - `core-gap-rfc`: the instrument can provide some information, but the current WaveBench model requires fields that cannot be filled honestly; only a cross-vendor RFC is proposed.
+- `contract-incompatible`: WaveBench has an optional contract, but this device cannot satisfy it honestly. The existing capability that accurately represents the device remains in place.
 - `unsafe-quarantined`: the candidate path depends on external hardcopy, instrument files, or another path without safe restoration.
 
-## All 19 capabilities
+## All 26 capabilities
 
 | Capability | Disposition | Evidence | Current boundary |
 | --- | --- | --- | --- |
@@ -39,9 +40,16 @@ Disposition meanings:
 | `scope.fft_status` | `firmware-unverified` | Manual only | The contract requires RBW, sample rate, and averaging completion; no verified path fills all fields. |
 | `scope.reference_metadata` | `firmware-unverified` | Manual only | Memory traces and result-axis properties exist; reference storage is not created or overwritten merely to produce acceptance evidence. |
 | `scope.cursor_readout` | `firmware-unverified` | Manual only | `CRVA?` reads configured cursors, but the response format and complete WaveBench mapping are not hardware verified. |
+| `scope.screenshot_profile` | `unsafe-quarantined` | Manual contract review | `SCDP?` returns hardcopy status and cannot establish PNG format, menu state, or color mode. The plugin does not fabricate a profile through the filesystem or arbitrary VBS. |
+| `scope.screenshot_v2` | `unsafe-quarantined` | Manual contract review | The core contract requires a PNG payload plus display-state snapshot, restoration, and independent verification. The existing `SCDP` path does not satisfy that transaction. |
+| `scope.acquisition_run_state` | `firmware-unverified` | Manual and driver review | `TRMD?` values `AUTO/NORM/SINGLE` describe trigger mode more closely; only `STOP` proves stopped state, and ready, arming, waiting, or acquiring cannot be distinguished. |
+| `scope.acquisition_control` | `firmware-unverified` | Partial hardware evidence | Existing capture validates `STOP → ARM → WAIT → *OPC?`, but not the typed baselines, failure recovery, and independent readback required for generic continuous start, stop, and single acquisition. |
+| `scope.trace_metadata` | `firmware-unverified` | Analog-channel candidate only | `WAVEDESC` already supports analog waveform conversion, but `ScopeTraceRef` and typed metadata are not implemented; digital, math, and reference traces also lack complete firmware evidence. |
+| `scope.fetch_trace` | `firmware-unverified` | Partial transfer hardware evidence | `CHDR/CFMT/CORD/WFSU` transfer state is verified, but the new contract also requires trace source/mode, run state, typed baseline, and independent restoration verification. Legacy `fetch_waveform` is not presented as the complete contract. |
+| `scope.error_drain_v1` | `contract-incompatible` | Fixed-register contract review | `CMR?`, `EXR?`, and `DDR?` are three fixed read-to-clear registers and cannot honestly satisfy one termination sentinel, an overflow record, and `query_count == records + 1`. Existing `scope.errors` remains in place. |
 
 ## Relationship to 100% manual coverage
 
-This matrix answers whether each current WaveBench interface can be represented. [`COMMAND_COVERAGE_EN.md`](COMMAND_COVERAGE_EN.md) and the machine catalog answer how every explicit manual entity is disposed. Their denominators differ: 19 capabilities here and 578 explicit manual entities in the command catalog.
+This matrix answers whether each current WaveBench interface can be represented. [`COMMAND_COVERAGE_EN.md`](COMMAND_COVERAGE_EN.md) and the machine catalog answer how every explicit manual entity is disposed. Their denominators differ: 26 capabilities here and 578 explicit manual entities in the command catalog.
 
 One hundred percent coverage therefore does not mean executing every instruction on hardware. Reset, calibration, filesystem, network, hardcopy, option activation, shutdown, and arbitrary-script paths remain quarantined. Missing options, model exclusions, unverified firmware behavior, and core-model gaps remain auditable coverage outcomes.

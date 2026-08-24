@@ -12,44 +12,48 @@ def _assessment() -> dict[str, object]:
     return json.loads(RFC_PATH.read_text(encoding="utf-8"))
 
 
-def test_rfc_is_explicitly_a_draft_and_milestones_are_aligned() -> None:
+def test_rfc_records_released_core_and_adopted_p0_milestones() -> None:
     assessment = _assessment()
 
     assert assessment["schema_version"] == 2
     assert assessment["document_kind"] == "wavebench-core-rfc"
     assert assessment["status"] == "draft-needs-revision"
     assert assessment["revision"] == "R1"
-    assert assessment["wavebench_baseline"] == "0.8.22"
+    assert assessment["wavebench_baseline"] == "0.8.24"
     assert assessment["core_changed_by_this_plugin"] is False
     assert assessment["decision"] == "assessment-only"
     assert assessment["core_contract_reference"] == {
         "document": "WaveBench_transport重放与session健康RFC.md",
         "revision": "R1",
         "status": "accepted",
-        "implementation": "M1-M7-implemented-unreleased",
+        "implementation": "M1-M7-released",
         "implementation_baseline": "a8e6b59",
+        "release_version": "0.8.24",
+        "release_commit": "dc7ce5b",
         "release_required_for_plugin_adoption": True,
+        "release_gate_satisfied": True,
     }
     assert assessment["milestones"] == {
         "plugin": "M8-functional-complete",
-        "p0_safety_hardening": "migration-implemented-offline-tested",
+        "p0_safety_hardening": "adopted",
         "rfc": "R1-draft-needs-revision",
-        "core_implementation": "M1-M7-implemented-unreleased",
-        "plugin_adoption": "blocked-until-core-release",
+        "core_implementation": "M1-M7-released-in-0.8.24",
+        "plugin_adoption": "adopted",
     }
     scope = assessment["scope"]
     assert scope["p0_safety_hardening_pending"] is False
     assert scope["p0_call_site_migration_complete"] is True
     assert scope["p0_structured_exception_handling_complete"] is True
     assert scope["p0_fault_injection_complete"] is True
-    assert scope["p0_runtime_adoption_pending"] is True
-    assert scope["migration_branch_release_blocked"] is True
+    assert scope["p0_runtime_adoption_pending"] is False
+    assert scope["p0_runtime_adopted"] is True
+    assert scope["migration_branch_release_blocked"] is False
     assert scope["transport_session_api_frozen"] is True
     assert scope["typed_scope_api_frozen"] is False
     assert "public_api_frozen" not in scope
 
     evidence = assessment["plugin_migration_evidence"]
-    assert evidence["status"] == "implemented-and-offline-tested-not-adopted"
+    assert evidence["status"] == "adopted-on-wavebench-0.8.24"
     assert evidence["core_baseline_commit"] == "a8e6b59"
     assert evidence["plugin_implementation_commit"] == "480eaec"
     assert "ReplayPolicy.NO_REPLAY" in evidence["replay_policy"]
@@ -64,7 +68,9 @@ def test_rfc_is_explicitly_a_draft_and_milestones_are_aligned() -> None:
         "plugin_can_transition_uncertain_to_healthy": False,
         "owner": "WaveBench core SessionTransactionCoordinator",
     }
-    assert evidence["verification"]["hardware_connected"] is False
+    assert evidence["verification"]["hardware_connected"] is True
+    assert "SDG2000X" in evidence["verification"]["hardware_acceptance"]
+    assert "independently read back OFF" in evidence["verification"]["hardware_acceptance"]
 
 
 def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
@@ -77,7 +83,7 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
     }
     replay = foundations["transport-replay-contract"]
     assert replay["priority"] == "P0"
-    assert replay["status"] == "implemented-unreleased"
+    assert replay["status"] == "released-in-0.8.24"
     assert set(replay["replay_policies"]) == {
         "safe_to_replay",
         "no_replay",
@@ -104,7 +110,7 @@ def test_p0_foundations_define_replay_and_shared_session_contracts() -> None:
     assert any("before transmission with attempts=0" in item for item in replay["acceptance"])
 
     session = foundations["shared-session-health-and-poison"]
-    assert session["status"] == "implemented-unreleased"
+    assert session["status"] == "released-in-0.8.24"
     assert set(session["states"]) == {"healthy", "uncertain", "poisoned", "closed"}
     assert session["configuration_trust"] == {
         "representation": "epoch-scoped verified_fields set",
@@ -148,7 +154,7 @@ def test_transport_spec_is_complete_and_typed_scope_spec_remains_required() -> N
     }
     assert (
         gates["transport-replay-session-rfc"]["status"]
-        == "completed-in-core-development-release-gated-for-plugin"
+        == "released-in-core-and-adopted-by-plugin"
     )
     transport = " ".join(gates["transport-replay-session-rfc"]["must_define"])
     assert "default replay policy" in transport
@@ -205,21 +211,47 @@ def test_active_proposals_are_typed_read_only_first_and_cross_vendor() -> None:
     assert "operation-error envelope" in state_contract["query_failure"]
 
     run_state = proposals["scope-acquisition-run-state"]
-    assert run_state["status"] == "design-required"
-    assert run_state["compatibility"] == "not-frozen"
-    assert run_state["capabilities"] == []
-    assert run_state["candidate_capability"] == "scope.acquisition_run_state"
-    assert set(run_state["public_contract"]["candidate_axes"]) == {
-        "execution_state",
-        "trigger_phase",
-        "trigger_mode",
+    assert run_state["status"] == "released-core-contract-plugin-firmware-unverified"
+    assert run_state["compatibility"] == "frozen-in-wavebench-0.8.24"
+    assert run_state["capabilities"] == [
+        "scope.acquisition_run_state",
+        "scope.acquisition_control",
+    ]
+    run_contract = run_state["public_contract"]
+    assert set(run_contract["acquisition_phase"]) == {
+        "unknown",
+        "stopped",
+        "ready",
+        "arming",
+        "waiting",
+        "acquiring",
+        "rolling",
+        "stopping",
+        "complete",
+        "error",
+    }
+    assert set(run_contract["trigger_mode"]) == {
+        "auto",
+        "normal",
+        "single",
+        "roll",
+        "unknown",
+    }
+    assert set(run_contract["control_methods"]) == {
+        "start_continuous",
+        "stop_acquisition",
+        "acquire_single",
+        "snapshot_acquisition_control",
+        "restore_acquisition_control",
+        "verify_acquisition_control_restored",
     }
     assert len(run_state["vendors"]) == 3
     vendor_text = json.dumps(run_state["vendors"])
     assert "SEQ is firmware-unverified" in vendor_text
     assert "no read-only acquisition or trigger-status query" in vendor_text
     assert "STATUS:OPERation:CONDITION? bit 3" in vendor_text
-    assert "all three vendors" in run_state["freeze_gate"]
+    assert "core contract is released" in run_state["freeze_gate"]
+    assert "hardware acceptance" in run_state["freeze_gate"]
 
     patch = proposals["scope-configuration-patch"]
     assert patch["priority"] == "P2"
@@ -315,12 +347,12 @@ def test_release_gates_cover_wheel_descriptor_api_and_implementation_order() -> 
     gates = assessment["release_version_gates"]
 
     assert gates["current_plugin"] == {
-        "wheel_requires_dist": "wavebench>=0.8.22,<0.9",
-        "descriptor_wavebench_min_version": "0.8.22",
+        "wheel_requires_dist": "wavebench>=0.8.24,<0.9",
+        "descriptor_wavebench_min_version": "0.8.24",
         "descriptor_wavebench_max_version": "0.9.0",
         "descriptor_api_version": "wavebench.instrument.v2",
     }
-    assert gates["changed_by_r1"] is False
+    assert gates["changed_by_r1"] is True
     adoption = " ".join(gates["p0_adoption"])
     assert "atomic adoption commit" in adoption
     assert "wavebench.instrument.v2" in adoption
@@ -328,7 +360,8 @@ def test_release_gates_cover_wheel_descriptor_api_and_implementation_order() -> 
     adoption_checklist = gates["plugin_adoption_checklist"]
     assert any("TransportIOError" in item for item in adoption_checklist)
     assert any("zero secondary" in item for item in adoption_checklist)
-    assert any("one atomic adoption commit" in item for item in adoption_checklist)
+    assert all(item.startswith("complete") for item in adoption_checklist)
+    assert any("this atomic adoption commit" in item for item in adoption_checklist)
 
     implementation_order = assessment["implementation_order"]
     operation_audit = next(item for item in implementation_order if "OperationSpec" in item)
@@ -340,7 +373,7 @@ def test_release_gates_cover_wheel_descriptor_api_and_implementation_order() -> 
         "scope.fetch_waveform",
     ):
         assert operation in operation_audit
-    assert any("released P0 core" in item for item in implementation_order)
+    assert any("released core at dc7ce5b" in item for item in implementation_order)
     atomic_adoption = next(item for item in implementation_order if "atomic adoption" in item)
     assert "wheel and descriptor version gates together" in atomic_adoption
     assert "marks the plugin adopted only after every check passes" in atomic_adoption

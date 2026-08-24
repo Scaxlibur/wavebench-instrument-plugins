@@ -18,16 +18,18 @@
 
 ## 当前状态
 
-- 阶段：M8 功能完成；P0 调用点迁移和离线故障注入已完成，正式采用等待核心发布；
+- 阶段：M8 功能完成；已采用 WaveBench `0.8.24` 的 transport/session P0 合同；
 - distribution：`wavebench-siglent-sds3000`；
 - canonical driver ID：`siglent.sds3000`；
 - 仪器类型：`scope`；
 - 首版型号：`SDS3054`；
-- WaveBench 兼容范围：`>=0.8.22,<0.9`；
+- WaveBench 兼容范围：`>=0.8.24,<0.9`；
 - transport：WaveBench `pyvisa`；已验证 `VICP::<host>::INSTR`，使用 `PyVICP>=1.1,<2`；
 - 已声明 capability：`scope.idn`、`scope.errors`、`scope.channel_coupling`、`scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`。
 
-M8「功能完成」表示上述能力已经实现并通过既定验收。P0 迁移准备已基于 WaveBench 核心提交 `a8e6b59` 完成，包括显式不可重放策略、结构化异常传播和共享 session health 故障注入；该核心合同尚未正式发布，因此插件仍未标记为 adopted，wheel、descriptor 和 `api_version` 版本门保持不变。影响评估、证据和正式采用条件见[核心 RFC](doc/WAVEBENCH_CORE_RFC.md)。
+M8「功能完成」表示上述能力已经实现并通过既定验收。插件已采用 WaveBench `0.8.24` 的 transport/session P0 合同，包括显式不可重放策略、结构化异常传播和共享 session health 故障注入。wheel 与 descriptor 下限已同步提高到 `0.8.24`，上限保持 `0.9`，`api_version` 保持 `wavebench.instrument.v2`。影响评估和验证证据见[核心 RFC](doc/WAVEBENCH_CORE_RFC.md)。
+
+P0 采用后已使用 SDG2000X 双通道在每路 1 kHz、1 Vpp、0 V offset 的工作点完成 SDS3054 CH1/CH2 同次采集复测；两路示波器输入均为 `DCL`，收尾独立回读确认发生器两路 OFF。脱敏结果见[实机验收](doc/HARDWARE_ACCEPTANCE.md)。
 
 descriptor 加载和 driver 工厂阶段均不执行仪器 I/O。调用 `scope.idn` 时只发送一次 `*IDN?`，并严格接受 `*IDN LECROY,SDS3054,<serial>,8.4.1`；当 `CHDR OFF` 省略响应头时，也接受对应的裸身份形式。其他厂商、型号或固件均在零写入的情况下拒绝。
 
@@ -59,7 +61,7 @@ Oscilloscopes_Remote_Control_and_Automation_Manual_2026-02.pdf
 
 完整指令分母和处置状态见 [`doc/COMMAND_COVERAGE.md`](doc/COMMAND_COVERAGE.md)。当前目录已固定 578 个明确实体，其中 478 个可调用实体，未分类数量为 0。
 
-WaveBench `0.8.22` 的 19 项 `scope` capability 全量处置见 [`doc/WAVEBENCH_CAPABILITY_MATRIX.md`](doc/WAVEBENCH_CAPABILITY_MATRIX.md)；当前声明 6 项，其余均有固件、选件、核心模型或安全边界结论。跨厂商核心影响 RFC 目前为 `Draft / Needs revision`，见 [`doc/WAVEBENCH_CORE_RFC.md`](doc/WAVEBENCH_CORE_RFC.md)；本插件分支没有修改 WaveBench 核心。
+WaveBench `0.8.24` 的 26 项 `scope` capability 全量处置见 [`doc/WAVEBENCH_CAPABILITY_MATRIX.md`](doc/WAVEBENCH_CAPABILITY_MATRIX.md)；当前声明 6 项，其余均有固件、选件、核心模型或安全边界结论。跨厂商核心影响 RFC 目前为 `Draft / Needs revision`，见 [`doc/WAVEBENCH_CORE_RFC.md`](doc/WAVEBENCH_CORE_RFC.md)；transport/session P0 已采用，typed scope 与通用写入提案仍可修订。本插件分支没有修改 WaveBench 核心。
 
 脱敏实机结果见 [`doc/HARDWARE_ACCEPTANCE.md`](doc/HARDWARE_ACCEPTANCE.md)。该记录不含资源地址、序列号、原始波形、截图或命令日志。
 

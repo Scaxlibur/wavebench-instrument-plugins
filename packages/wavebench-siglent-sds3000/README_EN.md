@@ -18,16 +18,18 @@ This identity constrains only the SDS3054 driver. It does not permit arbitrary L
 
 ## Current status
 
-- Stage: M8 functionally complete; P0 call-site migration and offline fault injection are complete, while formal adoption awaits a core release.
+- Stage: M8 functionally complete; WaveBench `0.8.24` transport/session P0 is adopted.
 - Distribution: `wavebench-siglent-sds3000`.
 - Canonical driver ID: `siglent.sds3000`.
 - Instrument kind: `scope`.
 - Initial model: `SDS3054`.
-- WaveBench compatibility: `>=0.8.22,<0.9`.
+- WaveBench compatibility: `>=0.8.24,<0.9`.
 - Transport: WaveBench `pyvisa`; `VICP::<host>::INSTR` is verified using `PyVICP>=1.1,<2`.
 - Declared capabilities: `scope.idn`, `scope.errors`, `scope.channel_coupling`, `scope.fetch_waveform`, `scope.capture_waveform`, and `scope.capture_waveforms`.
 
-“M8 functionally complete” means that these capabilities are implemented and passed their defined acceptance gates. P0 migration preparation is complete against WaveBench core commit `a8e6b59`, including explicit non-replay policies, structured-error propagation, and shared-session-health fault injection. The core contract is not released, so the plugin is not marked adopted and its wheel, descriptor, and `api_version` gates remain unchanged. See the [core RFC](doc/WAVEBENCH_CORE_RFC_EN.md) for evidence and formal adoption gates.
+“M8 functionally complete” means that these capabilities are implemented and passed their defined acceptance gates. The plugin adopts the WaveBench `0.8.24` transport/session P0 contract, including explicit non-replay policies, structured-error propagation, and shared-session-health fault injection. The wheel and descriptor minimum versions are both `0.8.24`; the upper bound remains `0.9`, and `api_version` remains `wavebench.instrument.v2`. See the [core RFC](doc/WAVEBENCH_CORE_RFC_EN.md) for the impact assessment and verification evidence.
+
+P0 adoption was revalidated with dual-channel SDG2000X input at 1 kHz, 1 Vpp, and 0 V offset per channel. SDS3054 CH1 and CH2 were both `DCL`, and the final independent readback confirmed both generator outputs OFF. See the redacted [hardware acceptance](doc/HARDWARE_ACCEPTANCE_EN.md).
 
 Descriptor loading and driver construction perform no instrument I/O. Calling `scope.idn` sends exactly one `*IDN?` and accepts only `*IDN LECROY,SDS3054,<serial>,8.4.1`, plus the corresponding bare identity when `CHDR OFF` suppresses the response header. Other manufacturers, models, or firmware revisions are rejected without writes.
 
@@ -59,7 +61,7 @@ See [`doc/MANUAL_BASELINE_EN.md`](doc/MANUAL_BASELINE_EN.md) for source hashes, 
 
 See [`doc/COMMAND_COVERAGE_EN.md`](doc/COMMAND_COVERAGE_EN.md) for the complete denominator and dispositions. The current catalog freezes 578 explicit entities, including 478 callable entities, with zero unclassified entries.
 
-See [`doc/WAVEBENCH_CAPABILITY_MATRIX_EN.md`](doc/WAVEBENCH_CAPABILITY_MATRIX_EN.md) for all 19 WaveBench `0.8.22` scope capabilities. Six are declared; every other item has an explicit firmware, option, core-model, or safety disposition. The cross-vendor core RFC is currently `Draft / Needs revision`; see [`doc/WAVEBENCH_CORE_RFC_EN.md`](doc/WAVEBENCH_CORE_RFC_EN.md). This plugin branch does not modify WaveBench core.
+See [`doc/WAVEBENCH_CAPABILITY_MATRIX_EN.md`](doc/WAVEBENCH_CAPABILITY_MATRIX_EN.md) for all 26 WaveBench `0.8.24` scope capabilities. Six are declared; every other item has an explicit firmware, option, core-model, or safety disposition. The cross-vendor core impact RFC remains `Draft / Needs revision`; transport/session P0 is adopted, while typed-scope and generic-write proposals remain open. This plugin branch does not modify WaveBench core.
 
 Redacted hardware results are in [`doc/HARDWARE_ACCEPTANCE_EN.md`](doc/HARDWARE_ACCEPTANCE_EN.md). They contain no resource address, serial number, raw waveform, screenshot, or command log.
 

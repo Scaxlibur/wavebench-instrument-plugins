@@ -81,7 +81,7 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
     assert distribution.version == PACKAGE_VERSION
     requirements = distribution.metadata.get_all("Requires-Dist") or []
     assert any(
-        requirement.replace(" ", "") == "wavebench<0.9,>=0.8.22" for requirement in requirements
+        requirement.replace(" ", "") == "wavebench<0.9,>=0.8.24" for requirement in requirements
     )
     assert any(
         requirement.replace(" ", "").lower() == "pyvicp<2,>=1.1" for requirement in requirements
@@ -175,7 +175,7 @@ descriptor = points[0].load()()
 assert descriptor.driver_id == "siglent.sds3000"
 assert descriptor.distribution == "wavebench-siglent-sds3000"
 assert descriptor.api_version == "wavebench.instrument.v2"
-assert descriptor.wavebench_min_version == "0.8.22"
+assert descriptor.wavebench_min_version == "0.8.24"
 assert descriptor.wavebench_max_version == "0.9.0"
 assert descriptor.capabilities == (
     "scope.idn",

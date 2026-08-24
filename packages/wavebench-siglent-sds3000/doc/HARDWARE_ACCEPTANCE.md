@@ -47,6 +47,21 @@ CH1 和 CH2 的实际 `WAVEDESC`、100,002 点 payload、缩放与时间轴均�
 
 `scope.capture_waveform` 委托给同一事务的单通道形式；`scope.capture_waveforms` 的双通道路径已直接实机验收。
 
+## P0 采用复测
+
+WaveBench `0.8.24` 发布后，使用 SDG2000X 的 CH1→SDS3054 CH1、CH2→SDS3054 CH2 接线复测 transport/session P0 采用结果。配置允许的源幅度上限为 5 Vpp，低于本次授权的 10 Vpp；实际工作点保持为每路 `SINE / 1 kHz / 1 Vpp / 0 V offset`。
+
+测试前先通过 `source.output_v2` 分别关闭两路输出并回读，再通过 `source.snapshot_v2` 确认两路均为 OFF、高阻 display load、0 V offset、1 Vpp，且 Harmonic 关闭。SDS3054 CH1/CH2 均只读确认是 `DCL`，未远程改变输入阻抗。
+
+一次 acquisition 后的双通道结果如下：
+
+| 通道 | 点数 | 频率 | Vpp | 均值电压 |
+| ---: | ---: | ---: | ---: | ---: |
+| CH1 | 100,002 | 1000.100 Hz | 1.008000 V | 0.005733 V |
+| CH2 | 100,002 | 1000.000 Hz | 1.013335 V | 0.000388 V |
+
+采集事务没有返回恢复错误。无论主事务成功或失败，外层 `finally` 都分别请求两路输出 OFF；本次收尾通过新的 Source V2 快照独立回读确认 CH1/CH2 均为 OFF。测试未保存原始波形、资源地址、序列号、截图或命令日志。
+
 ## 独立收尾复核
 
 验收脚本结束后使用新的只读会话复核，而不是依赖原会话自报：
