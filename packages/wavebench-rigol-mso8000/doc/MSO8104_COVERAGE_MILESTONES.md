@@ -46,8 +46,8 @@
 | M0 | 完成 | 手册审计、核心合同、证据规则、永久拒绝区和发行隔离 |
 | M1 | 离线完成 | 最小身份插件与安装生命周期 |
 | M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
-| M3 | RFC 后暂停 | 当前屏幕 `NORMal + BYTE` 波形；等待 RFC-0008 binary trailing 合同 |
-| M4 | RFC 后暂停 | 单次、多通道与有界 MAX/DMAX；等待 RFC-0008 binary trailing 合同 |
+| M3 | transport/恢复实机通过；信号闭环待排查 | 当前屏幕 `NORMal + BYTE` 的 `DEF` 波形；使用 RFC-0008 的 bounded binary 合同 |
+| M4 | 默认拒绝 | 单次、多通道与有界 MAX/DMAX；仍缺 acquisition 恢复和实机证据 |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | RFC/证据缺口后跳过 | 数字状态模型不完整；数字 payload 编码未定义 |
 | M7 | 离线完成 | autoscale、Math metadata、受限 cursor；其余能力按 RFC/证据缺口跳过 |
@@ -91,7 +91,7 @@
 
 离线证据：`0.3.0` 覆盖通道显示预检、严格 10 字段 preamble、1000 字节 payload、X/Y 换算、六字段写后回读与恢复、二进制失败不重放、写入歧义与恢复失败锁存，以及双线程事务不交织。66 项包测试通过。
 
-实机补充：MSO8104 固件 `00.02.02` 经 LAN/PyVISA 返回有效 1000 点 BYTE preamble，但 core `0.8.24` 的 legacy binary read 在 `:WAVeform:DATA?` 约 5 s 后超时，并将 session 标为 `poisoned`；恢复写被 core 正确拒绝。该问题属于 binary trailing/大小合同缺口，见 [RFC-0008](rfcs/0008-bounded-waveform-block-trailing-contract.md)。`scope.fetch_waveform` 暂不声明。
+开发补充：core 当前工作树已实现 RFC-0008 的标准 waveform bounded executor。插件 `0.9.0` 仅为 `DEF` 声明 `LF` trailing、`1,000` bytes 和一次 binary query，并将恢复与新鲜验证交给 core。171 项包测试包含该 executor 集成测试。CH1 新一轮实机读取成功返回 1000 个样本，且 core 完成五字段恢复与验证；但读数约为 `5.25 mVpp / 8.89 kHz`，不符合已启用的 `1 Vpp / 1 kHz` source，信号闭环仍待排查，不能外推为换算准确度或其他 point mode。
 
 ## M4：单次、多通道与有界长记录
 
@@ -101,7 +101,7 @@
 
 离线证据：`0.4.0` 在 `0.3.1` 的单次采集合同上补齐 MAX/DMAX。BYTE block 最大 250,000 点，每次调用全部通道总计最大 4,000,000 点；超限在 binary query 和数组分配前拒绝。106 项包测试覆盖长记录状态恢复、block 长度、失败不重放、总预算部分结果、MAX 状态相关语义、DMAX STOP 前提与严格整数 option。
 
-实机状态：由于 M3 的 `:WAVeform:DATA?` binary trailing 合同缺口，`scope.capture_waveform` 与 `scope.capture_waveforms` 一并暂停；不能把 SINGLE 触发或 trigger STOP 当成完整的波形采集证据。
+实机状态：有界 binary 合同已不再是唯一阻断项，但 `scope.capture_waveform` 与 `scope.capture_waveforms` 仍暂停。capture profile 必须完整恢复 run state、acquisition、trigger、timebase、channel display 和 channel vertical；当前 MSO8104 没有相应的实机证据。不能把 SINGLE 触发或 trigger STOP 当成完整的波形采集证据。
 
 ## M5：截图
 
@@ -159,3 +159,5 @@ M7 退出证据：descriptor 只新增三项已经实现的 capability，三份�
 - 所有实机相关结论明确标记为「未验证」。
 
 离线证据：`0.7.0` 的 168 项包测试与 Ruff 通过；在 WaveBench core 位于同级目录的一次性仓库布局中，根测试为 715 项通过、2 项因缺少 SP3000A 私有实机证据而按预期跳过。WaveBench `0.8.22` 的源码目录与真实 wheel package check 均通过。wheel 仅包含一个 `wavebench.instruments` entry point、一个有效 WaveBench runtime dependency、MIT 许可证和插件代码；sdist 包含公开 README、矩阵、里程碑、RFC、测试与许可证。两种制品均不包含 vendor-local。一次性虚拟环境中的 wheel 安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过；61 个受跟踪 Markdown 文件的本地链接有效。全程未连接真实仪器。
+
+`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中新增 3 项 bounded waveform 集成测试，合计 171 项包测试与 Ruff 通过；源码目录和真实 wheel 的 package check 也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。

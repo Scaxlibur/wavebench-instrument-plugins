@@ -41,12 +41,20 @@ CH1 短时开启后，MSO 返回了有效的 10 字段 preamble：BYTE、`1000` 
 
 因此本轮没有接受 payload、频率、Vpp、X/Y 换算或 transfer-state restore 的成功结果，也没有执行 CH2、双通道、MAX、DMAX 或 SINGLE 的实机验收。问题和恢复条件见 [RFC-0008](rfcs/0008-bounded-waveform-block-trailing-contract.md)。
 
+## 核心合同跟进
+
+core 当前工作树已实现标准 waveform bounded binary 合同。第一次按空 trailing profile 读取时，core
+以 `binary_transport_trailing_error` 安全拒绝并在恢复写前 poison session；计数证明 payload 后还有一个字节。
+随后以精确 `LF` trailing 的 profile 重试，CH1 `DEF` 成功读取 `1000` 个样本，core 也完成 source、mode、format、points 和 window 五字段的恢复与新鲜验证。两次外部 source 步骤均在 `EXIT` 清理中请求 CH1 OFF，并以新的 Source V2 snapshot 确认 CH1/CH2 OFF、`consistent`、`healthy`。
+
+第二次读取的时间轴为 `-25 ms` 到 `24.95 ms`、采样间隔 `50 µs`，但波形摘要约为 `5.25 mVpp / 8.89 kHz`。该值不符合本轮临时启用的 `1 Vpp / 1 kHz` source，可能涉及前面板 acquisition、探头倍率、通道显示或物理接线状态；本记录不把它作为已知信号的换算或测量准确度证据。
+
 ## 后续条件
 
-WaveBench core 提供可声明的 definite-block trailing 和大小合同后，再以新的 session 重做以下验收：
+以新的 session 重做以下验收：
 
-1. CH1 `DEF` 无 trailing block 读取；
-2. CH1 payload、`1 kHz`、`1 Vpp` 和 transfer-state restore；
+1. 在人工确认 acquisition、探头倍率、通道显示和接线后，重做 CH1 `DEF` 的 `1 kHz / 1 Vpp` 闭环；
+2. CH1 payload、X/Y 换算和测量阈值；
 3. CH2 单路，再到双路顺序验收；
 4. `MAX`、`DMAX` 的单块、总预算和 no-replay 行为。
 

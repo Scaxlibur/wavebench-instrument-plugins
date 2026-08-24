@@ -30,9 +30,9 @@
 | acquisition 状态 | averages 与 trigger status | `scope.acquisition_status` | RFC 后跳过 | 没有 average-complete 或 segmented 状态；trigger STOP 不替代平均完成；见 RFC-0006 |
 | 平均采集事务 | global acquisition type 与 averages | `scope.capture_average` | RFC 后跳过 | 公共配置要求 single count/逐通道 arithmetic；设备也没有平均完成位；见 RFC-0006 |
 | 时基与 edge trigger | main offset/scale、MAIN/XY/ROLL、edge settings/status | capture 前提 | 部分离线通过 | capture 只读前提并沿用配置；任意 setter 不开放，完整 snapshot 见 RFC-0005 |
-| 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | RFC 后暂停 | MSO8104 固件 `00.02.02` 的 `:WAVeform:DATA?` 在 core `0.8.24` legacy binary 路径超时并 poison session；见 RFC-0008 |
-| 深存储波形 | MAX/RAW、start/stop 分块 | fetch/capture | RFC 后暂停 | 同一 binary trailing/大小合同缺口阻断；每块和总点数离线边界保留，等待 RFC-0008 |
-| 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | RFC 后暂停 | 采集后的二进制读取被 RFC-0008 阻断；不以 SINGLE 或 `*OPC?` 冒充完整验收 |
+| 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | transport/恢复实机通过；信号闭环待排查 | 当前 core 工作树的 bounded profile 只开放 `DEF`；`LF` trailing、`1,000` bytes 和一次 binary query 已实机通过，core 已完成恢复与新鲜验证；返回读数不匹配已启用 source |
+| 深存储波形 | MAX/RAW、start/stop 分块 | fetch/capture | 默认拒绝 | MAX/DMAX 尚未通过有界 profile 与实机验收；每块和总点数离线边界保留 |
+| 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | 默认拒绝 | capture 还缺 acquisition、trigger、timebase 与通道状态的完整恢复证据；不以 SINGLE 或 `*OPC?` 冒充完整验收 |
 | 数学波形元数据 | `:MATH<n>:DISPlay?`、waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | 离线通过 | 仅已显示槽位与 MAIN 时基；恢复六项传输状态，不读取 data；实机恢复仍未验证 |
 | 手动光标读数 | cursor mode/type/source/unit/delta queries | `scope.cursor_readout` | 受限离线通过 | 仅 index 1、A/B 同源的 TIME+SEC 或 AMPL+SOUR；不移动光标；准确度未实机验证 |
 | 截图 | `:DISPlay:DATA?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot` | RFC 后跳过 | DISPLAY 路径未声明 block framing；SAVE DATA 路径不能证明 `include_menu=False`；见 RFC-0003 |
@@ -70,7 +70,8 @@ payload 必须与点数精确一致；所有轴参数与换算结果必须为有
 - USB 和 GPIB 资源的连接与终止符；
 - 错误队列无错误哨兵；
 - `*OPC?` 是否等待目标 single acquisition；
-- waveform binary trailing/同步、payload、换算、恢复、MAX/DMAX 吞吐和 timeout；
+- `DEF` waveform 的已知 `1 kHz / 1 Vpp` 信号闭环、X/Y 换算与测量准确度；
+- MAX/DMAX 的 binary 吞吐、分块和 timeout；
 - screenshot framing；
 - RAW chunk 上限、吞吐和 timeout；
 - WORD 字节序与有效位宽；

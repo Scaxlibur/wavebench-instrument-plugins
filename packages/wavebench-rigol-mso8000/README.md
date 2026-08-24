@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-`0.8.0` 已完成 MSO8104 身份与 CH1/CH2 高阻输入的受控实机验证。当前公开 `scope.idn`、`scope.channel_coupling`、`scope.autoscale`、`scope.math_metadata` 与受限 `scope.cursor_readout`。M3/M4 的 waveform 和 capture 因 core binary trailing 合同缺口暂停，不再声明对应 capability；见 [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md)。
+`0.9.0` 开发版本保留 MSO8104 身份与 CH1/CH2 高阻输入的受控实机证据，并在当前 WaveBench core 工作树的有界二进制合同下声明 `scope.fetch_waveform`。该入口当前只接受 `DEF`：精确声明 `LF` trailing、单响应和单操作均最多 `1,000` bytes、最多一次 binary query，并由 core 负责恢复和新鲜验证。`scope.capture_waveform` 与 `scope.capture_waveforms` 继续暂停；见 [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md)。
 
-实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。payload、频率、Vpp、X/Y 换算、恢复、MAX/DMAX 吞吐和测量准确度仍未实机验证。
+实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。CH1 `DEF` 的 block 读取与 core-owned transfer-state restore 已通过；但返回读数与已启用的 `1 kHz / 1 Vpp` source 不符，频率、Vpp、X/Y 换算和测量准确度仍未获得信号源闭环证据。
 
 当前身份信息：
 
@@ -15,7 +15,9 @@
 - kind：`scope`
 - 目标型号：`MSO8104`
 - Python：`>=3.11`
-- WaveBench：`>=0.8.22,<0.9`
+- WaveBench：`>=0.8.24,<0.9`
+
+本轮依赖的标准 waveform bounded API 尚在当前 core 工作树中，尚未形成独立 core 发布版本。因此 `0.9.0` 仅用于开发与受控验收，不能据此发布兼容性 wheel。
 
 ## 目录说明
 
@@ -33,9 +35,9 @@
 
 ## M8 离线发行证据
 
-- MSO8104 包测试：168 项通过；全仓 Ruff 通过。
+- MSO8104 包测试：171 项通过；全仓 Ruff 通过。
 - 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
-- WaveBench `0.8.22` package check：源码目录和真实 wheel 均通过。
+- 当前 WaveBench `0.8.24` 开发环境的 package check：源码目录和真实 wheel 均通过。
 - wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。
 - 一次性虚拟环境：安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过。
 - 文档：61 个受跟踪 Markdown 文件的本地链接有效。
@@ -60,9 +62,9 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 
-离线 driver 保留 `DEF`、`MAX` 与 `DMAX` 的严格实现和测试，但 `0.8.0` 不声明 waveform/capture capability。实机 MSO8104 在 `:WAVeform:DATA?` 进入 core legacy binary read 后超时，session 随即 poison；继续 restore 或重试都不安全。等待 RFC-0008 提供可声明的 trailing 与大小合同后，再重新验收。
+`scope.fetch_waveform` 的有界路径只支持 `DEF`。它使用 core 的 `query_binary()`，不再调用 legacy `query_bin_block()`；`LF` trailing、`1,000`-byte 上限和 no-replay 均由 descriptor profile 约束。CH1 已成功读取 1000 个样本，core 也完成五字段 transfer-state restore 与新鲜验证；但读数约为 `5.25 mVpp / 8.89 kHz`，不能作为 `1 Vpp / 1 kHz` source 的闭环结果。MAX、DMAX、CH2 和双通道结论均不从本轮外推。
 
-离线设计的长记录上限为每块 `250,000` 点、每次调用总计 `4,000,000` 点；单次和多通道设计仍只执行一次 `:SINGle` 并等待 trigger STOP。它们不构成当前版本的公开能力，也不构成实机采集结论。
+离线设计仍保留每块 `250,000` 点、每次调用总计 `4,000,000` 点的长记录边界。MAX、DMAX、单次和多通道 capture 需要各自的有界 profile 与 acquisition 恢复证据，当前不构成公开能力或实机采集结论。
 
 ```toml
 [connection]

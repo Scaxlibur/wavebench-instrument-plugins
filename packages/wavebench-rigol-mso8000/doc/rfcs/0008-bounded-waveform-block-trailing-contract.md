@@ -1,8 +1,13 @@
 # RFC-0008：有界示波器波形块的尾随字节合同
 
-状态：提议
+状态：核心开发工作树已实现；插件实机验收待完成
 
 目标仓库：WaveBench core
+
+2026-08-24 更新：core 当前工作树已实现标准 waveform 的
+`ScopeWaveformBinaryProfile`、bounded driver Protocol、factory barrier 和 core-owned
+restore/verify。实现使用 `query_binary()` 与 descriptor-owned profile，不采用本文早期的
+`query_bin_block()` 新关键字草案。core 尚未形成独立发布版本；MSO8104 仍须重新完成受控实机验收。
 
 ## 问题
 
@@ -29,7 +34,8 @@ MSO8104 实机验收在 WaveBench `0.8.24`、LAN/PyVISA、固件 `00.02.02` 上�
 
 ## 建议合同
 
-为 driver 可声明的 legacy definite-block 读取增加显式 trailing 策略，默认保持现有行为。例如：
+以下 legacy `query_bin_block()` 关键字是历史候选方案，保留用于说明被拒绝的边界；当前 core
+实现采用 descriptor profile 和受预算的 `query_binary()`：
 
 ```python
 class InstrumentTransport(Protocol):
@@ -51,24 +57,29 @@ class InstrumentTransport(Protocol):
 - 任一 framing、长度或同步不确定都保留 `poisoned` 语义，不重放 binary query；
 - 审计记录实际策略、声明长度、消费字节和同步结果。
 
-长期更合适的方向是让标准 waveform Service 也能在带 binary budget 的操作上下文中使用
-`query_binary(... framing=definite_block, max_bytes=..., transport_trailing=...)`。该路径已经具备长度和 trailing 合同，但当前只对 R1.3 scope extension operation 开放，不能由既有 `scope.fetch_waveform` 直接调用。
+core 当前工作树已让标准 waveform Service 在 binary budget 的操作上下文中使用
+`query_binary(... framing=definite_block, max_bytes=...)`；trailing 由 descriptor profile 注入，driver
+不能自行放宽。MSO8104 的受控实机读取确认 payload 后为一个 `LF` byte，而空 trailing profile 会安全失败。
 
 ## capability 影响
 
-在上述 core 合同发布且 MSO8104 通过新的实机验收前，插件 `0.8.0` 不声明：
+`0.9.0` 开发版本只声明 `scope.fetch_waveform` 的 `DEF` 子集：`LF` trailing、`1,000`
+bytes、一次 binary query，以及 source/mode/format/points/window 五字段恢复。该声明只用于当前
+core 工作树的离线和受控验收，不构成发布版兼容性结论。
 
-- `scope.fetch_waveform`；
+插件继续不声明：
+
 - `scope.capture_waveform`；
 - `scope.capture_waveforms`。
 
-driver 保留严格的 preamble、payload、恢复和锁存代码供离线回归，但不向 WaveBench 调用方承诺可完成二进制读取。恢复 capability 前至少需验证：
+driver 保留严格的 preamble、payload、恢复和锁存代码供离线回归。完成 `scope.fetch_waveform`
+的发布前至少需验证：
 
-1. `DEF` 无 trailing block 成功读取，session 保持 healthy；
-2. payload 长度、X/Y 换算和 `1 kHz / 1 Vpp` 闭环在阈值内；
-3. 六字段 transfer state 恢复被独立回读；
-4. CH1、CH2 单路与双路顺序验收后，source 输出都能独立确认 OFF；
-5. `MAX/DMAX` 每块上限、总预算和失败后的 no-replay/poison 行为仍成立。
+1. `DEF` + `LF` trailing block 成功读取，session 保持 healthy；
+2. 1000-sample payload 与五字段 transfer state 恢复已由 core fresh readback 证明；
+3. 在人工确认 acquisition、探头倍率、通道显示和接线后，完成 `1 kHz / 1 Vpp` 的 X/Y 换算和测量闭环；
+4. 每轮开始和结束都独立确认 source 两路 OFF；
+5. CH2、MAX、DMAX、双通道和 capture 作为后续独立 capability 验收，不从 CH1 `DEF` 外推。
 
 ## 不采用的方案
 

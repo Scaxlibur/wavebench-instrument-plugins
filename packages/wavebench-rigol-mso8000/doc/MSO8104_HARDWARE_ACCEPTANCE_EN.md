@@ -40,3 +40,9 @@ These results apply only to the stated model, firmware, LAN/PyVISA transport, an
 With CH1 briefly enabled, the MSO returned a valid ten-field BYTE preamble for `1000` points with finite X/Y calibration. The subsequent `:WAVeform:DATA?` timed out after about `5 s` through the core `0.8.24` legacy binary path. Core marked synchronization `unproven`, poisoned the scope session, and correctly denied later waveform-transfer restore writes.
 
 No payload, frequency, Vpp, X/Y conversion, or transfer-state restoration result was accepted. CH2, dual-channel, MAX, DMAX, and SINGLE hardware acceptance were not attempted. [RFC-0008](rfcs/0008-bounded-waveform-block-trailing-contract.md) records the missing core binary contract and the conditions for resuming acceptance.
+
+## Core-contract follow-up
+
+The current core worktree now implements the standard waveform bounded-binary contract. The first bounded attempt used an empty trailing profile; core safely rejected one extra post-payload byte with `binary_transport_trailing_error` and poisoned the scope session before recovery writes. A second attempt with exact `LF` trailing successfully read 1000 CH1 samples and completed core-owned source/mode/format/points/window restoration and fresh verification. Both source-output sequences used EXIT cleanup to request CH1 OFF and a fresh Source V2 snapshot confirmed CH1/CH2 OFF, `consistent`, and `healthy`.
+
+The second read covered `-25 ms` through `24.95 ms` at `50 µs` spacing, but its summary was about `5.25 mVpp / 8.89 kHz`. It does not match the temporarily enabled `1 Vpp / 1 kHz` source and may involve front-panel acquisition, probe ratio, channel display, or physical connection state. It is not accepted as known-signal conversion or measurement-accuracy evidence.
