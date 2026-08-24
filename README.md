@@ -2,14 +2,14 @@
 
 [English](doc/README_EN.md)
 
-WaveBench 仪器插件的独立源码仓库。仓库计划按“一台仪器或一个仪器系列一个包”的方式，维护可由 WaveBench 发现和加载的外置仪器驱动。
+WaveBench 仪器插件的独立源码仓库。仓库计划按「一台仪器或一个仪器系列一个包」的方式，维护可由 WaveBench 发现和加载的外置仪器驱动。
 
 ## 当前状态
 
-正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 M3.5，保留最小 query-only descriptor 并提供五项经认证的厂商专用 RF-OFF 控制；`wavebench-siglent-sdg2000x` 已进入 M3，`SDG2122X` 的身份、CH1/CH2 状态和 `source.output` 已通过实机验收，两路 4 Vpp 信号均完成 RTM2032 闭环测量并以 OFF 收尾。前五个包是 WaveBench 预装驱动的可选外置发行版，用于独立升级、特定 transport 或后续扩展，并不替代或淘汰主包的开箱即用基线。WaveBench v0.8.0 已提供本地 package check、受管安装、状态查询、升级/降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 M3.5，保留最小 query-only descriptor 并提供五项经认证的厂商专用 RF-OFF 控制；`wavebench-siglent-sdg2000x` 已完成 Source V2 A0、A1、有限 A2、Basic A3 与 C3 候选包审计；`wavebench-siglent-sds800x-hd` `0.6.0` 已提供 Scope R1.3 PNG 截图与独立采集控制，并完成 SDS804X HD 实机恢复验收。前五个包是 WaveBench 预装驱动的可选外置发行版，用于独立升级、特定 transport 或后续扩展，并不替代主包的开箱即用基线。WaveBench 提供本地 package check、受管安装、状态查询、升级／降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 > [!IMPORTANT]
-> WaveBench `v0.7.0` 尚不包含 Instrument API V2、受管插件生命周期或覆盖槽位。本仓库当前包面向 WaveBench `v0.8.0` release，并统一要求 `wavebench>=0.8,<0.9`；它们不能与 `v0.7.0` 配套运行，也不能自动假定兼容未来 `0.9`。
+> WaveBench `v0.7.0` 尚不包含 Instrument API V2、受管插件生命周期或覆盖槽位。本仓库各包分别声明自身的 `0.8.x` 最低版本；SDS800X HD `0.6.0` 因使用 Scope R1.3 要求 `wavebench>=0.8.23,<0.9`，SDG2000X `0.8.2` 因使用 Source V2 要求 `wavebench>=0.8.24,<0.9`。所有包都不自动假定兼容未来 `0.9`。
 
 ## 计划结构
 
@@ -22,6 +22,7 @@ packages/
 ├── wavebench-rohde-schwarz-rtm2000/
 ├── wavebench-shengpu-sp3000a/
 ├── wavebench-siglent-sdg2000x/
+├── wavebench-siglent-sds800x-hd/
 └── wavebench-<vendor>-<instrument>/
     ├── pyproject.toml
     ├── README.md
@@ -33,7 +34,7 @@ packages/
 
 ## 预装基线与外置发行
 
-WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五个仪器族。外置包只在用户显式安装并配置 canonical ID 时提供可选实现；内置短 alias 始终留在主包。DG4000、DM3000、DP800 与 RTM2000 通过核心按 canonical ID + distribution 双重白名单控制的覆盖槽位切换，卸载后 canonical ID 自动恢复到内置实现。DS1000Z 外置包使用独立 canonical `rigol.ds1000z`，内置 `ds1104` / `ds1000z` alias 不受影响。源码历史中仍可能使用“迁移槽位”一词，它只表示受限覆盖机制，不表示预装驱动计划移除。
+WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五个仪器族。外置包只在用户显式安装并配置 canonical ID 时提供可选实现；内置短 alias 始终留在主包。DG4000、DM3000、DP800 与 RTM2000 通过核心按 canonical ID + distribution 双重白名单控制的覆盖槽位切换，卸载后 canonical ID 自动恢复到内置实现。DS1000Z 外置包使用独立 canonical `rigol.ds1000z`，内置 `ds1104` / `ds1000z` alias 不受影响。源码历史中仍可能使用「迁移槽位」一词，它只表示受限覆盖机制，不表示预装驱动计划移除。
 
 ## 当前插件
 
@@ -43,7 +44,13 @@ WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五�
 - [`wavebench-rigol-dp800`](packages/wavebench-rigol-dp800/README.md)：RIGOL DP800 / DP832 / DP832A 可编程直流电源，canonical ID `rigol.dp800`；短 alias 保留内建 fallback。
 - [`wavebench-rohde-schwarz-rtm2000`](packages/wavebench-rohde-schwarz-rtm2000/README.md)：R&S RTM2000 / RTM2032 示波器，canonical ID `rohde-schwarz.rtm2032`；双通道 `DEF` / `MAX` / `DMAX`、autoscale、截图与恢复实机验收已完成。
 - [`wavebench-shengpu-sp3000a`](packages/wavebench-shengpu-sp3000a/README.md)：Shengpu SP30120 扫频仪驱动，canonical ID `shengpu.sp30120`；descriptor 只声明身份能力，另有五项经认证、类型化、RF-OFF 的厂商专用控制，曲线及通用配置仍关闭。
-- [`wavebench-siglent-sdg2000x`](packages/wavebench-siglent-sdg2000x/README.md)：SIGLENT SDG2042X / SDG2082X / SDG2122X 函数/任意波形发生器，canonical ID `siglent.sdg2000x`；M3 声明身份、CH1/CH2 状态和带安全恢复的 `source.output`，`SDG2122X` 双通道实机闭环验收通过。
+- [`wavebench-siglent-sdg2000x`](packages/wavebench-siglent-sdg2000x/README.md)：SIGLENT SDG2042X／SDG2082X／SDG2122X 函数／任意波形发生器，canonical ID `siglent.sdg2000x`；保留 V1 基础能力，并在精确 SDG2122X 型号／固件范围内声明 Source V2 snapshot、Basic、Output 与 Harmonic Disable。
+- [`wavebench-siglent-sds800x-hd`](packages/wavebench-siglent-sds800x-hd/README.md)：SIGLENT SDS800X HD 系列示波器 `0.6.0` 驱动，canonical ID `siglent.sds800x-hd`；声明身份、coupling、波形与单次/多通道采集、只读测量统计、PNG 截图和独立采集控制，已完成 SDS804X HD 实机验收。
+
+## 接口提案
+
+插件侧发现但无法由单一 driver 安全解决的跨仪器问题记录在[接口 RFC](doc/rfcs/README.md)。
+每份 RFC 的当前合同状态以核心仓库为准；插件侧副本保留评审与证据历史。
 
 ## 安全边界
 
