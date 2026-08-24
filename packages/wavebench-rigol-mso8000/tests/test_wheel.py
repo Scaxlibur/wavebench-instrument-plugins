@@ -13,7 +13,7 @@ import wavebench
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-PACKAGE_VERSION = "0.7.0"
+PACKAGE_VERSION = "0.8.0"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -116,6 +116,8 @@ def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) 
         "MSO8104_COVERAGE_MATRIX_EN.md",
         "MSO8104_COVERAGE_MILESTONES.md",
         "MSO8104_COVERAGE_MILESTONES_EN.md",
+        "MSO8104_HARDWARE_ACCEPTANCE.md",
+        "MSO8104_HARDWARE_ACCEPTANCE_EN.md",
     ):
         assert any(name.endswith(f"/doc/{public_doc}") for name in names)
 
@@ -163,9 +165,6 @@ assert descriptor.capabilities == (
     "scope.idn",
     "scope.channel_coupling",
     "scope.autoscale",
-    "scope.fetch_waveform",
-    "scope.capture_waveform",
-    "scope.capture_waveforms",
     "scope.math_metadata",
     "scope.cursor_readout",
 )

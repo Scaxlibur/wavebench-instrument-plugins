@@ -36,9 +36,6 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.idn",
         "scope.channel_coupling",
         "scope.autoscale",
-        "scope.fetch_waveform",
-        "scope.capture_waveform",
-        "scope.capture_waveforms",
         "scope.math_metadata",
         "scope.cursor_readout",
     )
@@ -47,7 +44,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.wavebench_min_version == "0.8.22"
     assert descriptor.wavebench_max_version == "0.9.0"
-    assert descriptor.version == "0.7.0"
+    assert descriptor.version == "0.8.0"
     assert descriptor.validate_options({}) == {
         "max_total_points": 4_000_000,
         "max_chunk_points": 250_000,

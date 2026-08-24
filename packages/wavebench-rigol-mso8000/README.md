@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-M0～M4、M7 与 M8 已离线完成，M5 截图和 M6 数字通道经 RFC/证据评审后跳过。当前 `0.7.0` 已新增 `scope.autoscale`、`scope.math_metadata` 与受限 `scope.cursor_readout`；其余高级能力按核心模型或厂商证据缺口保持未声明。M8 发行审计已收口。
+`0.8.0` 已完成 MSO8104 身份与 CH1/CH2 高阻输入的受控实机验证。当前公开 `scope.idn`、`scope.channel_coupling`、`scope.autoscale`、`scope.math_metadata` 与受限 `scope.cursor_readout`。M3/M4 的 waveform 和 capture 因 core binary trailing 合同缺口暂停，不再声明对应 capability；见 [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md)。
 
-本轮开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期验证，不连接真实仪器。所有型号、固件、transport、吞吐、恢复和测量结论均保持「未实机验证」。
+实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。payload、频率、Vpp、X/Y 换算、恢复、MAX/DMAX 吞吐和测量准确度仍未实机验证。
 
 当前身份信息：
 
@@ -29,6 +29,7 @@ M0～M4、M7 与 M8 已离线完成，M5 截图和 M6 数字通道经 RFC/证据
 
 - [MSO8104 功能覆盖里程碑](doc/MSO8104_COVERAGE_MILESTONES.md)
 - [MSO8104 编程手册功能覆盖矩阵](doc/MSO8104_COVERAGE_MATRIX.md)
+- [MSO8104 受控实机验收记录](doc/MSO8104_HARDWARE_ACCEPTANCE.md)
 
 ## M8 离线发行证据
 
@@ -59,11 +60,9 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 
-波形能力接受 `DEF`、`MAX` 与 `DMAX`。`DEF` 使用 `NORMal + BYTE + 1000` 点；`MAX` 保留手册定义的运行/停止状态相关语义；`DMAX` 使用 RAW，`fetch_waveform()` 仅在 acquisition 已经 STOP 时放行。driver 保存、逐字段回读并恢复 SOURCE、MODE、FORMAT、POINTS、START 与 STOP；不发送 STOP 或 AUTOSCALE。恢复失败或写入结果不明会锁存波形写域，后续调用必须关闭并重新打开会话。
+离线 driver 保留 `DEF`、`MAX` 与 `DMAX` 的严格实现和测试，但 `0.8.0` 不声明 waveform/capture capability。实机 MSO8104 在 `:WAVeform:DATA?` 进入 core legacy binary read 后超时，session 随即 poison；继续 restore 或重试都不安全。等待 RFC-0008 提供可声明的 trailing 与大小合同后，再重新验收。
 
-长记录按不超过 250,000 点的 BYTE block 读取，每次调用的全部通道总计最多 4,000,000 点。`scope.options.max_chunk_points` 与 `scope.options.max_total_points` 可以向下收紧，不能突破上述硬上限。超出总点数预算会在分配数组和发送 binary query 前拒绝；每个 block 只调用一次核心 `query_bin_block()`，插件不解析或重放 TMC framing。
-
-`capture_waveform(s)` 要求全部目标通道已经显示且时基为 MAIN。多通道调用只发送一次 `:SINGle`，随后轮询 `:TRIGger:STATus?` 直到 STOP，再逐通道读取并校验 X 轴一致；不使用 `*OPC?` 代替采集完成，不自动强制 STOP、RUN 或重新触发。超时或状态不明会锁存 acquisition 写域。当前不接受 `time_range_s` 或 `vertical_scale_v_per_div`，相关状态须预先配置；完成后仪器保持 SINGLE 自然结束的 STOP 状态。
+离线设计的长记录上限为每块 `250,000` 点、每次调用总计 `4,000,000` 点；单次和多通道设计仍只执行一次 `:SINGle` 并等待 trigger STOP。它们不构成当前版本的公开能力，也不构成实机采集结论。
 
 ```toml
 [connection]
@@ -76,14 +75,6 @@ default_channel = 1
 check_errors = false
 access = "read_write"
 
-[scope.options]
-max_total_points = 4000000
-max_chunk_points = 250000
-
-[waveform]
-format = "real"
-byte_order = "lsbf"
-points = "def"
 ```
 
 示例地址属于 RFC 5737 文档网段，不是实验室资源。

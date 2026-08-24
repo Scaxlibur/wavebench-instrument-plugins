@@ -106,7 +106,7 @@ class ScopeAverageCaptureResultV2:
 
 ## capability 影响
 
-核心合同补齐前，MSO8104 descriptor 不声明 `scope.acquisition_status` 或 `scope.capture_average`。现有 `scope.capture_waveform(s)` 可以读取调用前已经配置好的 acquisition type，但不会设置或声称验证平均次数。
+核心合同补齐前，MSO8104 descriptor 不声明 `scope.acquisition_status` 或 `scope.capture_average`。`0.8.0` 还因 RFC-0008 暂停了 waveform/capture capability；保留的离线 capture 实现曾只读取调用前已经配置好的 acquisition type，不会设置或声称验证平均次数。
 
 核心发布 V2 后，`scope.capture_average` 仍需 RIGOL 官方文档或后续获批的实机证据证明平均采集的完成条件，才能离线加实机 fixture 后启用。接口可表达不等于设备语义已经得到证明。
 

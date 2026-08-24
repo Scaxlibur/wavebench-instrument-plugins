@@ -6,11 +6,11 @@
 
 本文把 RIGOL MSO8000 编程手册中与 MSO8104 相关的命令面拆为 M0～M8。里程碑按风险排序，不按命令数量或完成率排序。
 
-本轮开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期测试，不连接真实仪器。因此：
+初始开发只使用手册审计、FakeTransport、故障注入、构建和安装生命周期测试。后续受控实机验收只使用明确的高阻输入、`1 kHz / 1 Vpp / 0 V` 信号和独立 source OFF 复核。因此：
 
 - 「离线通过」表示代码与 E1 测试存在；
 - 「手册声明」只表示 E0 证据；
-- 所有型号、固件、transport、吞吐、测量准确度和状态恢复结论均保持「未实机验证」；
+- 实机结论只适用于明确记录的型号、固件、transport 和步骤，不外推；
 - 不会为了完成里程碑而伪造 E2、E3 或 E4 证据。
 
 当前目标仅为 `MSO8104`。distribution 使用系列名 `wavebench-rigol-mso8000`，canonical driver ID 使用 `rigol.mso8104`。MSO8064 与 MSO8204 不从共用手册自动获得兼容声明。
@@ -46,8 +46,8 @@
 | M0 | 完成 | 手册审计、核心合同、证据规则、永久拒绝区和发行隔离 |
 | M1 | 离线完成 | 最小身份插件与安装生命周期 |
 | M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
-| M3 | 离线完成 | 当前屏幕 `NORMal + BYTE` 波形 |
-| M4 | 离线完成 | 单次、多通道与有界 MAX/DMAX |
+| M3 | RFC 后暂停 | 当前屏幕 `NORMal + BYTE` 波形；等待 RFC-0008 binary trailing 合同 |
+| M4 | RFC 后暂停 | 单次、多通道与有界 MAX/DMAX；等待 RFC-0008 binary trailing 合同 |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | RFC/证据缺口后跳过 | 数字状态模型不完整；数字 payload 编码未定义 |
 | M7 | 离线完成 | autoscale、Math metadata、受限 cursor；其余能力按 RFC/证据缺口跳过 |
@@ -85,19 +85,23 @@
 
 ## M3：当前屏幕波形
 
-公开 `scope.fetch_waveform` 的 `DEF` 路径：目标通道必须已显示，使用 `NORMal + BYTE`，保存并恢复波形传输设置，不隐式 STOP、SINGLE 或 AUTOSCALE。
+离线实现过 `scope.fetch_waveform` 的 `DEF` 路径：目标通道必须已显示，使用 `NORMal + BYTE`，保存并恢复波形传输设置，不隐式 STOP、SINGLE 或 AUTOSCALE。
 
 退出门：严格 preamble、payload 长度、X/Y 轴、有限值、恢复失败锁存和并发不交织测试通过。
 
-离线证据：`0.3.0` 覆盖通道显示预检、严格 10 字段 preamble、1000 字节 payload、X/Y 换算、六字段写后回读与恢复、二进制失败不重放、写入歧义与恢复失败锁存，以及双线程事务不交织。66 项包测试通过；没有发送真实波形查询。
+离线证据：`0.3.0` 覆盖通道显示预检、严格 10 字段 preamble、1000 字节 payload、X/Y 换算、六字段写后回读与恢复、二进制失败不重放、写入歧义与恢复失败锁存，以及双线程事务不交织。66 项包测试通过。
+
+实机补充：MSO8104 固件 `00.02.02` 经 LAN/PyVISA 返回有效 1000 点 BYTE preamble，但 core `0.8.24` 的 legacy binary read 在 `:WAVeform:DATA?` 约 5 s 后超时，并将 session 标为 `poisoned`；恢复写被 core 正确拒绝。该问题属于 binary trailing/大小合同缺口，见 [RFC-0008](rfcs/0008-bounded-waveform-block-trailing-contract.md)。`scope.fetch_waveform` 暂不声明。
 
 ## M4：单次、多通道与有界长记录
 
-公开 `scope.capture_waveform` 与 `scope.capture_waveforms`。多通道必须先配置全部通道，只执行一次 `:SINGle` 与一次完成等待，再逐通道读取并校验 X 轴一致。
+离线实现过 `scope.capture_waveform` 与 `scope.capture_waveforms`。多通道必须先配置全部通道，只执行一次 `:SINGle` 与一次完成等待，再逐通道读取并校验 X 轴一致。
 
 `MAX/DMAX` 具备停止状态前提、总点数硬上限、保守 chunk、总内存预算、失败不重放、部分结果回调和状态恢复责任。公共 `WaveformData` 不是流式模型，超大记录保持显式拒绝。
 
-离线证据：`0.4.0` 在 `0.3.1` 的单次采集合同上补齐 MAX/DMAX。BYTE block 最大 250,000 点，每次调用全部通道总计最大 4,000,000 点；超限在 binary query 和数组分配前拒绝。106 项包测试覆盖长记录状态恢复、block 长度、失败不重放、总预算部分结果、MAX 状态相关语义、DMAX STOP 前提与严格整数 option；未验证实机点数、吞吐或 timeout。
+离线证据：`0.4.0` 在 `0.3.1` 的单次采集合同上补齐 MAX/DMAX。BYTE block 最大 250,000 点，每次调用全部通道总计最大 4,000,000 点；超限在 binary query 和数组分配前拒绝。106 项包测试覆盖长记录状态恢复、block 长度、失败不重放、总预算部分结果、MAX 状态相关语义、DMAX STOP 前提与严格整数 option。
+
+实机状态：由于 M3 的 `:WAVeform:DATA?` binary trailing 合同缺口，`scope.capture_waveform` 与 `scope.capture_waveforms` 一并暂停；不能把 SINGLE 触发或 trigger STOP 当成完整的波形采集证据。
 
 ## M5：截图
 

@@ -52,9 +52,6 @@ def descriptor() -> InstrumentDescriptor:
             "scope.idn",
             "scope.channel_coupling",
             "scope.autoscale",
-            "scope.fetch_waveform",
-            "scope.capture_waveform",
-            "scope.capture_waveforms",
             "scope.math_metadata",
             "scope.cursor_readout",
         ),
@@ -80,12 +77,12 @@ def descriptor() -> InstrumentDescriptor:
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary=(
-            "Offline-validated RIGOL MSO8104 identity, safety, autoscale, waveform, math, and cursor driver."
+            "Hardware-identified RIGOL MSO8104 identity, safety, autoscale, math, and cursor driver."
         ),
         wavebench_min_version="0.8.22",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-mso8000",
-        version="0.7.0",
+        version="0.8.0",
         source="entry_point:rigol.mso8104",
         scope_coupling_policy="switchable-termination",
         config_fields=(

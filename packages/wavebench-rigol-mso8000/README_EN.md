@@ -4,9 +4,9 @@ This directory is the starting point for a WaveBench plugin for the RIGOL MSO800
 
 ## Current status
 
-M0 through M4, M7, and M8 are offline complete. M5 screenshot and M6 digital support were reviewed then skipped under RFC/evidence gaps. Version `0.7.0` adds `scope.autoscale`, `scope.math_metadata`, and a restricted `scope.cursor_readout`; other advanced capabilities remain undeclared under explicit core-model or vendor-evidence gaps. The M8 package audit is complete.
+Version `0.8.0` adds controlled hardware evidence for MSO8104 identity and high-impedance CH1/CH2 input reads. It declares `scope.idn`, `scope.channel_coupling`, `scope.autoscale`, `scope.math_metadata`, and restricted `scope.cursor_readout`. M3/M4 waveform and capture capabilities are paused and no longer declared because the core lacks a safe binary-trailing contract; see [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md).
 
-This development pass is offline-only. It uses the manual, FakeTransport tests, fault injection, builds, and installation lifecycle checks, and does not connect to hardware. Model, firmware, transport, throughput, restoration, and measurement claims remain unverified.
+Hardware findings apply only to MSO8104 firmware `00.02.02`, LAN/PyVISA, and the controlled procedure. Payload, frequency, Vpp, X/Y conversion, restoration, MAX/DMAX throughput, and measurement accuracy remain hardware-unverified.
 
 Current identity:
 
@@ -40,6 +40,7 @@ This evidence covers offline contracts and distribution integrity only. Model, f
 
 - [MSO8104 coverage milestones](doc/MSO8104_COVERAGE_MILESTONES_EN.md)
 - [MSO8104 programming-guide coverage matrix](doc/MSO8104_COVERAGE_MATRIX_EN.md)
+- [MSO8104 controlled hardware acceptance](doc/MSO8104_HARDWARE_ACCEPTANCE_EN.md)
 
 ## Safety boundary
 
@@ -59,6 +60,4 @@ The descriptor also omits `scope.digital_status` and `scope.digital_waveform`. T
 
 `channel_coupling()` combines channel coupling and input impedance. `AC/DC + OMEG` maps to the core high-impedance tokens `ACL/DCL`, while `AC/DC + FIFT` maps to the low-impedance tokens `AC/DC`; the core rejects 50 ohms, `GND`, and unknown states by default. The plugin does not declare `scope.errors` because `:SYSTem:ERRor?` consumes an entry while ordinary core text queries may replay. Future waveform service calls must explicitly set `scope.check_errors=false` until [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) is implemented.
 
-The waveform path accepts `DEF`, `MAX`, and `DMAX`. DEF uses `NORMal + BYTE + 1000` points; MAX retains its manual-defined running/stopped semantics; DMAX uses RAW and fetch requires an already stopped acquisition. The driver restores SOURCE, MODE, FORMAT, POINTS, START, and STOP. Long records use BYTE blocks of at most 250,000 points and a hard four-million-point total across all channels in one call. `scope.options.max_chunk_points` and `scope.options.max_total_points` may only tighten these limits. A block is queried exactly once through the core `query_bin_block()` API.
-
-`capture_waveform(s)` requires every target channel to be displayed and MAIN timebase mode. A multi-channel call sends one `:SINGle`, polls `:TRIGger:STATus?` until STOP, then reads channels and checks X-axis consistency. It does not use `*OPC?` as acquisition evidence and never forces STOP, RUN, or another trigger. Timeout or uncertain status latches acquisition writes. Time-range and vertical-scale arguments remain unsupported, and capture leaves the scope in the natural STOP state reached by SINGLE.
+The offline driver retains strict DEF/MAX/DMAX implementation and tests, but `0.8.0` does not declare waveform or capture capabilities. On the real MSO8104, `:WAVeform:DATA?` times out through the core legacy binary read and poisons the session; retrying or forcing restoration would not be safe. Resume acceptance only after RFC-0008 provides declared trailing and size contracts.

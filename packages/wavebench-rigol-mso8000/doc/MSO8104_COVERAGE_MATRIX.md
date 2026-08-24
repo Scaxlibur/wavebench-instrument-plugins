@@ -8,31 +8,32 @@
 
 审计输入为 RIGOL MSO8000 中文编程手册 `PGA26006-1110`。手册同时覆盖 MSO8064、MSO8104 与 MSO8204，并主要使用 MSO8204 举例；本插件首轮只声明 MSO8104。
 
-当前开发限定为离线验证：
+当前证据同时包含离线验证和受控实机验收：
 
 - **手册声明**：命令和返回域来自手册；
 - **离线通过**：代码与 FakeTransport/故障注入测试存在；
 - **RFC 后跳过**：WaveBench 核心缺少必要的安全接口或公共模型；
 - **默认拒绝**：基础插件不开放该高风险命令域；
-- **未实机验证**：没有型号、固件、transport、吞吐或测量准确度结论。
+- **实机通过**：只表示记录的型号、固件、transport 和限定步骤通过，不外推到其他固件、资源、负载或能力；
+- **未实机验证**：当前没有对应受控实机结论。
 
 ## 功能矩阵
 
 | 功能域 | 手册命令面 | WaveBench 接口 | 当前状态 | 边界与建议 |
 | --- | --- | --- | --- | --- |
-| 身份 | `*IDN?` | `scope.idn` | 离线通过 | 严格接受 RIGOL/MSO8104；FakeTransport 使用虚构序列号，未实机验证 |
+| 身份 | `*IDN?` | `scope.idn` | 实机通过 | MSO8104 固件 `00.02.02` 经 LAN/PyVISA 严格识别；不外推到其他型号或固件 |
 | 错误队列 | `:SYSTem:ERRor[:NEXT]?` | `scope.errors` | RFC 后跳过 | 查询会消费队首；核心普通文本 query 允许重放 |
-| 输入安全 | `:CHANnel<n>:COUPling?`、`:CHANnel<n>:IMPedance?` | `scope.channel_coupling` | 离线通过 | 联合映射 ACL/DCL/AC/DC；核心默认拒绝 50 Ω、GND 与未知组合 |
+| 输入安全 | `:CHANnel<n>:COUPling?`、`:CHANnel<n>:IMPedance?` | `scope.channel_coupling` | 实机通过 | CH1=`DCL`、CH2=`ACL`，均为 core 高阻安全 token；核心默认拒绝 50 Ω、GND 与未知组合 |
 | 自动设置 | `:SYSTem:AUToscale?`、`:AUToscale` | `scope.autoscale` | 离线通过 | 预检系统使能；明确改变垂直、时基和触发；写入或 OPC 不确定时锁存，效果未实机验证 |
 | 完整状态快照 | channel/timebase/probe/waveform/trigger 与部分 health | `scope.snapshot` | RFC 后跳过 | 公共快照强制要求设备无法查询的字段；`*STB?` 还会清零；见 RFC-0005 |
 | acquisition 基础配置 | type、averages、memory depth、sample rate、run/stop/single | fetch/capture 的既有状态 | M4 离线通过 | capture 沿用既有配置；深度最高 500 Mpts；设置深度会改变采样率 |
 | acquisition 状态 | averages 与 trigger status | `scope.acquisition_status` | RFC 后跳过 | 没有 average-complete 或 segmented 状态；trigger STOP 不替代平均完成；见 RFC-0006 |
 | 平均采集事务 | global acquisition type 与 averages | `scope.capture_average` | RFC 后跳过 | 公共配置要求 single count/逐通道 arithmetic；设备也没有平均完成位；见 RFC-0006 |
 | 时基与 edge trigger | main offset/scale、MAIN/XY/ROLL、edge settings/status | capture 前提 | 部分离线通过 | capture 只读前提并沿用配置；任意 setter 不开放，完整 snapshot 见 RFC-0005 |
-| 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | 离线通过 | 固定 1000 点；目标通道须已显示；恢复六项传输状态，不隐式停止 acquisition |
-| 深存储波形 | MAX/RAW、start/stop 分块 | fetch/capture | 离线通过 | 每块最多 250,000 点、每次调用总计最多 4,000,000 点；超大流式输出需核心 RFC |
-| 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | 离线通过 | 一次 SINGLE 后轮询 STOP 并读多通道；DEF/MAX/DMAX；X 轴一致；不使用 `*OPC?` 冒充采集完成 |
-| 数学波形元数据 | `:MATH<n>:DISPlay?`、waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | 离线通过 | 仅已显示槽位与 MAIN 时基；恢复六项传输状态，不读取 data；数学结果未实机验证 |
+| 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | RFC 后暂停 | MSO8104 固件 `00.02.02` 的 `:WAVeform:DATA?` 在 core `0.8.24` legacy binary 路径超时并 poison session；见 RFC-0008 |
+| 深存储波形 | MAX/RAW、start/stop 分块 | fetch/capture | RFC 后暂停 | 同一 binary trailing/大小合同缺口阻断；每块和总点数离线边界保留，等待 RFC-0008 |
+| 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | RFC 后暂停 | 采集后的二进制读取被 RFC-0008 阻断；不以 SINGLE 或 `*OPC?` 冒充完整验收 |
+| 数学波形元数据 | `:MATH<n>:DISPlay?`、waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | 离线通过 | 仅已显示槽位与 MAIN 时基；恢复六项传输状态，不读取 data；实机恢复仍未验证 |
 | 手动光标读数 | cursor mode/type/source/unit/delta queries | `scope.cursor_readout` | 受限离线通过 | 仅 index 1、A/B 同源的 TIME+SEC 或 AMPL+SOUR；不移动光标；准确度未实机验证 |
 | 截图 | `:DISPlay:DATA?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot` | RFC 后跳过 | DISPLAY 路径未声明 block framing；SAVE DATA 路径不能证明 `include_menu=False`；见 RFC-0003 |
 | 数字通道状态 | `:SYSTem:MODules?`、`:LA:*?` | `scope.digital_status` | RFC 后跳过 | 核心模型必填 activity、technology、hysteresis 等设备无法查询的字段；见 RFC-0004 |
@@ -66,10 +67,10 @@ payload 必须与点数精确一致；所有轴参数与换算结果必须为有
 
 ## 未实机验证项
 
-- `*IDN?` 的目标固件实际格式；
-- USB、LAN 和 GPIB 资源的连接与终止符；
+- USB 和 GPIB 资源的连接与终止符；
 - 错误队列无错误哨兵；
 - `*OPC?` 是否等待目标 single acquisition；
+- waveform binary trailing/同步、payload、换算、恢复、MAX/DMAX 吞吐和 timeout；
 - screenshot framing；
 - RAW chunk 上限、吞吐和 timeout；
 - WORD 字节序与有效位宽；
