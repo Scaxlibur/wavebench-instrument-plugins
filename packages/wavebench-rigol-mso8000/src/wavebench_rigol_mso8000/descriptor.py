@@ -3,6 +3,7 @@ from __future__ import annotations
 from wavebench.errors import DataError
 from wavebench.instruments import InstrumentDescriptor, OptionSpec
 from wavebench.instruments.scope_extensions import (
+    ScopeCursorReadoutProfileV2,
     ScopeDescriptorExtensions,
     ScopeWaveformBinaryOperationProfile,
     ScopeWaveformBinaryProfile,
@@ -31,6 +32,30 @@ _WAVEFORM_BINARY_PROFILE = ScopeWaveformBinaryProfile(
         ),
     ),
     transport_trailing_hex="0a",
+)
+_CURSOR_READOUT_PROFILE_V2 = ScopeCursorReadoutProfileV2(
+    readable_fields=(
+        "source_a",
+        "source_b",
+        "x_a",
+        "x_b",
+        "x_delta",
+        "inverse_x_delta",
+        "y_a",
+        "y_b",
+        "y_delta",
+    ),
+    conditionally_applicable_fields=(
+        "x_a",
+        "x_b",
+        "x_delta",
+        "inverse_x_delta",
+        "y_a",
+        "y_b",
+        "y_delta",
+    ),
+    addressing="global",
+    max_queries=9,
 )
 
 
@@ -86,6 +111,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.autoscale",
             "scope.math_metadata",
             "scope.cursor_readout",
+            "scope.cursor_readout_v2",
         ),
         idn_patterns=("RIGOL TECHNOLOGIES,MSO8104",),
         backends=("pyvisa",),
@@ -125,5 +151,6 @@ def descriptor() -> InstrumentDescriptor:
         ),
         scope_extensions=ScopeDescriptorExtensions(
             waveform_binary_profile=_WAVEFORM_BINARY_PROFILE,
+            cursor_readout_profile_v2=_CURSOR_READOUT_PROFILE_V2,
         ),
     )

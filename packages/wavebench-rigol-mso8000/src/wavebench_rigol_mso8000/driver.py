@@ -12,6 +12,8 @@ from wavebench.errors import ConfigError, DataError, InstrumentError, OperationT
 from wavebench.instruments.models import (
     ScopeChannelInputStateV2,
     ScopeCursorReadout,
+    ScopeCursorReadoutV2,
+    ScopeCursorQuantity,
     ScopeDerivedWaveformMetadata,
     WaveformData,
     WaveformHeader,
@@ -64,6 +66,16 @@ _WAVEFORM_BINARY_FETCH_RESTORE_ORDER: tuple[ScopeWaveformTransferField, ...] = (
     "scope.waveform_points",
     "scope.waveform_transfer_window",
 )
+_CURSOR_TIME_UNITS = {
+    "SEC": ("s", "Hz"),
+    "HZ": ("Hz", "s"),
+    "DEGR": ("degree", None),
+    "PERC": ("percent", None),
+}
+_CURSOR_VERTICAL_UNITS = {
+    "SOUR": "source",
+    "PERC": "percent",
+}
 
 
 @dataclass(frozen=True)
@@ -906,6 +918,146 @@ class MSO8104Scope:
             raise ConfigError(
                 "MSO8104 cursor readout supports only preconfigured TIME or AMPL manual "
                 f"cursor types, got {cursor_type}"
+            )
+
+    def get_cursor_readout_v2(
+        self,
+        cursor_index: int | None,
+        *,
+        configured_cursor: bool,
+    ) -> ScopeCursorReadoutV2:
+        if cursor_index is not None:
+            raise DataError("MSO8104 cursor readout V2 uses global addressing and requires None")
+        if type(configured_cursor) is not bool:
+            raise DataError("MSO8104 configured_cursor must be a boolean")
+        if not configured_cursor:
+            raise ConfigError(
+                "reading an MSO8104 cursor requires explicit confirmation that it is "
+                "already configured"
+            )
+        with self._io_lock:
+            self._require_open()
+            mode = parse_cursor_mode(self.transport.query(":CURSor:MODE?"))
+            if mode != "MAN":
+                raise ConfigError(
+                    "MSO8104 cursor readout V2 supports only the preconfigured manual mode; "
+                    f"current mode is {mode}"
+                )
+            cursor_type = parse_manual_cursor_type(
+                self.transport.query(":CURSor:MANual:TYPE?")
+            )
+            if cursor_type not in {"TIME", "AMPL"}:
+                raise ConfigError(
+                    "MSO8104 cursor readout V2 supports only preconfigured TIME or AMPL "
+                    f"manual cursor types, got {cursor_type}"
+                )
+            source_a = parse_cursor_source(
+                self.transport.query(":CURSor:MANual:SOURce1?")
+            )
+            source_b = parse_cursor_source(
+                self.transport.query(":CURSor:MANual:SOURce2?")
+            )
+            if source_a == "NONE" or source_b == "NONE":
+                raise ConfigError(
+                    "MSO8104 cursor readout V2 requires non-NONE manual cursor sources, "
+                    f"got {source_a} and {source_b}"
+                )
+            if cursor_type == "TIME":
+                unit_token = parse_cursor_time_unit(
+                    self.transport.query(":CURSor:MANual:TUNit?")
+                )
+                value_unit, inverse_unit = _CURSOR_TIME_UNITS[unit_token]
+                x_a = ScopeCursorQuantity(
+                    parse_finite_float(
+                        self.transport.query(":CURSor:MANual:AXValue?"),
+                        field="manual cursor A X value",
+                    ),
+                    value_unit,
+                )
+                x_b = ScopeCursorQuantity(
+                    parse_finite_float(
+                        self.transport.query(":CURSor:MANual:BXValue?"),
+                        field="manual cursor B X value",
+                    ),
+                    value_unit,
+                )
+                x_delta = ScopeCursorQuantity(
+                    parse_finite_float(
+                        self.transport.query(":CURSor:MANual:XDELta?"),
+                        field="manual cursor X delta",
+                    ),
+                    value_unit,
+                )
+                inverse_x_delta = (
+                    None
+                    if inverse_unit is None
+                    else ScopeCursorQuantity(
+                        parse_finite_float(
+                            self.transport.query(":CURSor:MANual:IXDelta?"),
+                            field="manual cursor inverse X delta",
+                        ),
+                        inverse_unit,
+                    )
+                )
+                not_applicable = (
+                    ("cursor_index", "y_a", "y_b", "y_delta")
+                    if inverse_x_delta is not None
+                    else ("cursor_index", "inverse_x_delta", "y_a", "y_b", "y_delta")
+                )
+                return ScopeCursorReadoutV2(
+                    cursor_index=None,
+                    mode=mode,
+                    function=cursor_type,
+                    source_a=source_a,
+                    source_b=source_b,
+                    x_a=x_a,
+                    x_b=x_b,
+                    x_delta=x_delta,
+                    inverse_x_delta=inverse_x_delta,
+                    not_applicable_fields=not_applicable,
+                )
+            if source_a == "LA" or source_b == "LA":
+                raise ConfigError(
+                    "MSO8104 AMPL cursor readout V2 does not support the LA source"
+                )
+            unit_token = parse_cursor_vertical_unit(
+                self.transport.query(":CURSor:MANual:VUNit?")
+            )
+            value_unit = _CURSOR_VERTICAL_UNITS[unit_token]
+            return ScopeCursorReadoutV2(
+                cursor_index=None,
+                mode=mode,
+                function=cursor_type,
+                source_a=source_a,
+                source_b=source_b,
+                y_a=ScopeCursorQuantity(
+                    parse_finite_float(
+                        self.transport.query(":CURSor:MANual:AYValue?"),
+                        field="manual cursor A Y value",
+                    ),
+                    value_unit,
+                ),
+                y_b=ScopeCursorQuantity(
+                    parse_finite_float(
+                        self.transport.query(":CURSor:MANual:BYValue?"),
+                        field="manual cursor B Y value",
+                    ),
+                    value_unit,
+                ),
+                y_delta=ScopeCursorQuantity(
+                    parse_finite_float(
+                        self.transport.query(":CURSor:MANual:YDELta?"),
+                        field="manual cursor Y delta",
+                    ),
+                    value_unit,
+                ),
+                not_applicable_fields=(
+                    "cursor_index",
+                    "x_a",
+                    "x_b",
+                    "x_delta",
+                    "inverse_x_delta",
+                ),
             )
 
     @staticmethod

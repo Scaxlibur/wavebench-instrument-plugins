@@ -169,6 +169,7 @@ assert descriptor.capabilities == (
     "scope.autoscale",
     "scope.math_metadata",
     "scope.cursor_readout",
+    "scope.cursor_readout_v2",
 )
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)

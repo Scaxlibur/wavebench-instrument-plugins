@@ -6,7 +6,10 @@ from wavebench.errors import ConfigError, DataError, InstrumentError
 from wavebench.instruments import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import ScopeChannelInputStateV2
-from wavebench.instruments.scope_extensions import ScopeWaveformBinaryProfile
+from wavebench.instruments.scope_extensions import (
+    ScopeCursorReadoutProfileV2,
+    ScopeWaveformBinaryProfile,
+)
 from wavebench.logging import CommandLogger
 from wavebench.services.scope_service import assert_scope_high_impedance
 from wavebench_rigol_mso8000 import descriptor as plugin_descriptor
@@ -43,6 +46,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.autoscale",
         "scope.math_metadata",
         "scope.cursor_readout",
+        "scope.cursor_readout_v2",
     )
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb", "gpib")
@@ -71,6 +75,30 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "max_total_points": 4_000_000,
         "max_chunk_points": 250_000,
     }
+    cursor_profile = descriptor.scope_extensions.cursor_readout_profile_v2
+    assert isinstance(cursor_profile, ScopeCursorReadoutProfileV2)
+    assert cursor_profile.addressing == "global"
+    assert cursor_profile.max_queries == 9
+    assert cursor_profile.readable_fields == (
+        "source_a",
+        "source_b",
+        "x_a",
+        "x_b",
+        "x_delta",
+        "inverse_x_delta",
+        "y_a",
+        "y_b",
+        "y_delta",
+    )
+    assert cursor_profile.conditionally_applicable_fields == (
+        "x_a",
+        "x_b",
+        "x_delta",
+        "inverse_x_delta",
+        "y_a",
+        "y_b",
+        "y_delta",
+    )
 
 
 def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> None:
