@@ -85,7 +85,7 @@ legacy `scope.errors` 不公开。当前 Core 通过 `query(..., replay=ReplayPo
 
 开发补充：core 当前开发分支已提供 `scope.channel_input_state_v2`。插件新增无损 V2 映射，保留 AC/DC/GND、high_z/50_ohm 与 `1_000_000/50` Ω，不从 legacy token 反推。199 项包测试、Ruff 与 package check 通过；只读实机查询确认 CH1/CH2 都是 `dc + high_z + 1 MΩ`，查询前后 source 两路均 OFF、`consistent`、`healthy`。
 
-错误队列开发补充：Core 当前开发分支通过 `query(..., replay=ReplayPolicy.NO_REPLAY)` 提供单发文本读取与 `scope.error_drain_v1` 合同。插件严格解析手册格式 `<integer>,"<message>"`，只接受实机观察到的 `0,"No error"` 终止；达到 `max_records` 后再读取一条 overflow 记录。366 项包测试、Ruff 和构建检查通过。公开 `1 Vpp / 0.25 Hz` SINGLE capture 在 `scope.check_errors=true` 下前后 drain 空队列、返回 1000 样本并恢复 13 个字段；非零记录、FIFO 顺序和 overflow 仍只有离线证据。
+错误队列开发补充：Core 当前开发分支通过 `query(..., replay=ReplayPolicy.NO_REPLAY)` 提供单发文本读取与 `scope.error_drain_v1` 合同。插件严格解析手册格式 `<integer>,"<message>"`，只接受实机观察到的 `0,"No error"` 终止；达到 `max_records` 后再读取一条 overflow 记录。362 项包测试、Ruff 和构建检查通过。公开 `1 Vpp / 0.25 Hz` SINGLE capture 在 `scope.check_errors=true` 下前后 drain 空队列、返回 1000 样本并恢复 13 个字段；非零记录、FIFO 顺序和 overflow 仍只有离线证据。
 
 ## M3：当前屏幕波形
 
@@ -149,7 +149,7 @@ legacy `scope.digital_status` 继续跳过：其公共模型要求 activity、te
 
 公共模型缺少字段、设备查询具有消费性、命令语义无法恢复或核心没有 capability 时，结果为「RFC 后跳过」，不得以默认值补齐模型。DVM、counter、AWG/source、协议解码、mask、search 与 record/playback 不通过基础 scope driver 的私有 API 暴露。
 
-`0.5.0` 已公开 `scope.autoscale`。调用前查询 `:SYSTem:AUToscale?`，系统禁用 AUTO 时不发送写命令；当前必须设置 `check_errors=false`。该操作按核心合同明确改变垂直、时基和触发，不承诺恢复。`wait_opc=true` 将 `*OPC? = 0` 视为未完成并在配置超时内轮询，只有 `1` 成功；写入、异常回包或超时仅锁存 autoscale 写域，禁止盲目重试。CH1 `1 Vpp / 1 kHz` 的受控 probe 在 `15 s` 内未取得完成态，因而没有发起后续波形读取；`wait_opc=false` 和自动设置效果继续没有实机证据。
+`0.5.0` 已公开 `scope.autoscale`。调用前查询 `:SYSTem:AUToscale?`，系统禁用 AUTO 时不发送写命令；当前必须设置 `check_errors=false`。该操作按核心合同明确改变垂直、时基和触发，不承诺恢复。对 MSO8104，遗留参数 `wait_opc=true` 表示写入一次后固定 `3 s` settle，而不是查询 `*OPC?`；随后本次操作视为完成。写入或等待异常仅锁存 autoscale 写域，禁止盲目重试。CH1 `1 Vpp / 1 kHz` 的受控 probe 在此策略后以公开 bounded fetch 返回 1000 样本且幅度有效，最终 source 双路 OFF、scope STOP、CH1/CH2 high_z。该策略不证明内部自动设置效果或恢复；`wait_opc=false` 仍无实机完成验收。
 
 `0.6.0` 已公开 `scope.math_metadata`。核心将该操作定义为 `stateful_read`；MSO8104 没有独立的 Math metadata query，因此 driver 仅在目标 MATH 槽位已显示且时基为 MAIN 时，保存 waveform SOURCE、MODE、FORMAT、POINTS、START 与 STOP，先切换 NORM 再选择 MATH 源与 BYTE 格式，查询十字段 preamble 后恢复。该路径不发送 `:WAVeform:DATA?`。受控实机的 MATH1 调用在 source 双路 OFF、scope STOP／高阻下返回 1000 点、有限 X/Y 轴、`values_per_sample=None` 与 8 位 BYTE 元数据，并完成六字段最终恢复复核。数学内容、MATH2～MATH4、其他 operator 的轴语义与 FFT 精度仍未验证。
 
@@ -192,4 +192,4 @@ M7 退出证据：当前 Core 开发分支的受控 descriptor 声明 bounded fe
 
 离线证据：`0.7.0` 的 168 项包测试与 Ruff 通过；在 WaveBench core 位于同级目录的一次性仓库布局中，根测试为 715 项通过、2 项因缺少 SP3000A 私有实机证据而按预期跳过。WaveBench `0.8.22` 的源码目录与真实 wheel package check 均通过。wheel 仅包含一个 `wavebench.instruments` entry point、一个有效 WaveBench runtime dependency、MIT 许可证和插件代码；sdist 包含公开 README、矩阵、里程碑、RFC、测试与许可证。两种制品均不包含 vendor-local。一次性虚拟环境中的 wheel 安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过；61 个受跟踪 Markdown 文件的本地链接有效。全程未连接真实仪器。
 
-`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、control/capture、math metadata、error drain、input、cursor、measurement-statistics、FFT status、acquisition status/run-state、digital status 和 snapshot V2 集成测试，合计 366 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 Core API 尚未单独发布，该结果不构成公开 wheel 发布。
+`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、control/capture、math metadata、error drain、input、cursor、measurement-statistics、FFT status、acquisition status/run-state、digital status 和 snapshot V2 集成测试，合计 362 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 Core API 尚未单独发布，该结果不构成公开 wheel 发布。

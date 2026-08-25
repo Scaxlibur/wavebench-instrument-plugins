@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、数学波形元数据、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2、错误队列 drain V1，以及 autoscale 完成探测。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、数学波形元数据、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2、错误队列 drain V1，以及 autoscale 固定 settle 验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -24,7 +24,7 @@
 3. 对 CH1、CH2 分别请求 `source.output_v2 OFF`，随后以新的只读 Source V2 snapshot 独立确认两路 OFF、snapshot `consistent`、session `healthy`。
 4. 每次受控波形事务结束后，外层清理都会分别请求 CH1、CH2 OFF，再以新的只读 snapshot 确认两路均为 OFF。
 
-最终复核为 CH1 OFF、CH2 OFF、snapshot `consistent`、session `healthy`，scope 为 STOP，CH1/CH2 均为 high_z。本轮没有写入示波器输入阻抗；另有一次 fail-closed autoscale completion probe，结果见下文。
+最终复核为 CH1 OFF、CH2 OFF、snapshot `consistent`、session `healthy`，scope 为 STOP，CH1/CH2 均为 high_z。本轮没有写入示波器输入阻抗；autoscale 固定 settle 的受控验收见下文。
 
 ## 已通过的实机证据
 
@@ -40,6 +40,7 @@
 - `scope.capture_waveforms`：一次 SINGLE 读取 CH1/CH2 两路，各返回 `1,000` 样本，完成相同恢复与新鲜验证；
 - `scope.math_metadata`：已显示 MATH1、MAIN 时基下返回 `1,000` 点、有限轴与 8 位 BYTE 元数据，并完成六项 waveform transfer 状态恢复／最终复核；
 - `scope.error_drain_v1`：公开 capture 在 `scope.check_errors=true` 下于主操作前后各完成一次空队列 drain，返回 `1,000` 样本并完成原 capture 的 13 字段恢复与新鲜验证；
+- `scope.autoscale`：CH1 `1 kHz / 1 Vpp` 受控步骤按固定 `3 s` settle 返回，随后的公开 bounded fetch 返回 `1,000` 样本并具备幅度证据；
 - `scope.digital_status_v2`：D0、D8 均返回显示、标签、所属 POD 范围与 `1.4 V` 阈值，以及共享 `0 s` timing calibration 和 `MEDIUM` size；
 - `scope.snapshot_v2`：同次读取 identity 和 13 种授权选件状态；其余 55 个字段明确 unavailable；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
@@ -47,13 +48,13 @@
 
 上述结论只覆盖本记录中的型号、固件、LAN/PyVISA 和受控步骤。
 
-## autoscale 完成探测
+## autoscale 固定 settle 验收
 
-该步骤以 scope STOP、CH1/CH2 high_z、source 双路 OFF 为基线；随后只开启 CH1 的 `1 kHz / 1 Vpp` 正弦输出。公开 `ScopeService.autoscale()` 使用 `wait_opc=true` 与 `check_errors=false`：后者是因为当前 Core 的 legacy autoscale 路径仍要求未声明的 `scope.errors`，不能改用 `scope.error_drain_v1`。driver 已先读取系统 AUTO 使能，并仅发送一次 `:AUToscale`。
+该步骤以 scope STOP、CH1/CH2 high_z、source 双路 OFF 为基线；随后只开启 CH1 的 `1 kHz / 1 Vpp` 正弦输出。公开 `ScopeService.autoscale()` 使用 `wait_opc=true` 与 `check_errors=false`：后者是因为当前 Core 的 legacy autoscale 路径仍要求未声明的 `scope.errors`，不能改用 `scope.error_drain_v1`。driver 先读取系统 AUTO 使能，仅发送一次 `:AUToscale`；对 MSO8104，遗留参数 `wait_opc=true` 明确定义为写入后的固定 `3 s` settle，不发送 `*OPC?`。
 
-`*OPC?` 的有界完成路径在 `15 s` 内未取得 `1`，因此 driver 按设计锁存 autoscale 写域并 fail closed；没有在未确认完成时发送波形读取、状态恢复或第二次 autoscale。随后独立清理确认 source 双路 OFF、scope STOP、CH1/CH2 high_z。另一次尝试先经公开 API 启动 NORMAL，也在 autoscale 前以采集写结果不确定而失败，不能为 autoscale 补充完成证据。
+此前的 `*OPC?` 诊断在 `15 s` 内未取得 `1`，因此不再作为本命令的完成机制。最终受控步骤在固定 `3 s` 后通过公开 bounded fetch 读取 CH1，返回 `1,000` 样本且幅度有效；随后独立清理确认 source 双路 OFF、scope STOP、CH1/CH2 high_z。
 
-这不证明设备没有接受或执行 `:AUToscale`，但没有可证明的完成、实际显示效果或恢复证据。`wait_opc=false` 没有作为绕过方案执行或验收。故 `scope.autoscale` 继续只有离线合同和 fail-closed 实机边界，不标为实机通过。
+这将固定 `3 s` 视为本插件的运行完成准则，不证明设备内部自动设置算法、可见效果或设置恢复；autoscale 按 Core 合同可改变垂直、时基和触发。`wait_opc=false` 明确跳过等待，尚无实机完成验收。
 
 ## math waveform metadata 受限验收
 

@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-26
 
 ## Scope
 
-This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, math-waveform metadata, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, error-drain V1, and an autoscale completion probe. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, math-waveform metadata, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, error-drain V1, and fixed-settle autoscale acceptance. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -24,7 +24,7 @@ SDG CH1 was connected to MSO CH1 and SDG CH2 to MSO CH2. Earlier `DEF` fetch use
 3. Source V2 OFF was requested separately for CH1 and CH2. A fresh read-only snapshot independently confirmed both OFF, `consistent`, and `healthy`.
 4. After every controlled waveform transaction, outer cleanup separately requested CH1 and CH2 OFF and used a fresh read-only snapshot to confirm both were OFF.
 
-Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy`, scope STOP, and CH1/CH2 high-impedance inputs. This work did not write scope input impedance; one fail-closed autoscale completion probe is recorded below.
+Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy`, scope STOP, and CH1/CH2 high-impedance inputs. This work did not write scope input impedance; controlled fixed-settle autoscale acceptance is recorded below.
 
 ## Hardware evidence obtained
 
@@ -40,6 +40,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy
 - `scope.capture_waveforms` verified one SINGLE and two binary reads for CH1/CH2, at `1,000` samples per channel with the same recovery/fresh verification;
 - `scope.math_metadata` returned `1,000` points, finite axes, and eight-bit BYTE metadata for displayed MATH1 in MAIN mode, with final six-field waveform-transfer restoration verification;
 - `scope.error_drain_v1` completed one empty-queue drain before and after public capture with `scope.check_errors=true`; capture returned `1,000` samples with its existing 13-field recovery/fresh verification;
+- `scope.autoscale` returned after a fixed `3 s` settle in the controlled CH1 `1 kHz / 1 Vpp` procedure, followed by public bounded fetch returning `1,000` samples with amplitude evidence;
 - `scope.digital_status_v2` returned display, label, POD range and `1.4 V` threshold, plus shared `0 s` timing calibration and `MEDIUM` size for D0 and D8;
 - `scope.snapshot_v2` read identity and 13 licensed-option states in one call, with the other 55 fields explicitly unavailable;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
@@ -47,13 +48,13 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy
 
 These results apply only to the stated model, firmware, LAN/PyVISA transport, and controlled procedure.
 
-## Autoscale completion probe
+## Fixed-settle autoscale acceptance
 
-The probe began with scope STOP, high-impedance CH1/CH2, and both source outputs OFF, then enabled only CH1 Sine at `1 kHz / 1 Vpp`. Public `ScopeService.autoscale()` used `wait_opc=true` and `check_errors=false`: the latter is required because the current Core legacy autoscale route still demands undeclared `scope.errors` rather than `scope.error_drain_v1`. The driver read the system AUTO enable state first and sent only one `:AUToscale` write.
+The procedure began with scope STOP, high-impedance CH1/CH2, and both source outputs OFF, then enabled only CH1 Sine at `1 kHz / 1 Vpp`. Public `ScopeService.autoscale()` used `wait_opc=true` and `check_errors=false`: the latter is required because the current Core legacy autoscale route still demands undeclared `scope.errors` rather than `scope.error_drain_v1`. The driver read the system AUTO enable state first and sent only one `:AUToscale` write. For MSO8104, legacy `wait_opc=true` explicitly means a fixed `3 s` settle after that write and sends no `*OPC?` query.
 
-The bounded `*OPC?` completion route did not obtain `1` within `15 s`, so the driver latched the autoscale write domain and failed closed. It sent no waveform read, restoration, or second autoscale while completion was unproven. Independent cleanup then verified both source outputs OFF, scope STOP, and high-impedance CH1/CH2. A separate attempt to enter NORMAL through the public API failed with an uncertain acquisition-write result before autoscale, so it adds no autoscale completion evidence.
+The earlier `*OPC?` diagnostic did not obtain `1` within `15 s`, so it is no longer the completion mechanism for this command. After the fixed `3 s`, the final controlled procedure used public bounded fetch on CH1 and returned `1,000` samples with amplitude evidence. Independent cleanup then verified both source outputs OFF, scope STOP, and high-impedance CH1/CH2.
 
-This does not prove that the instrument did not accept or execute `:AUToscale`, but it does not establish completion, visible effect, or restoration. `wait_opc=false` was not run or accepted as a workaround. `scope.autoscale` therefore remains an offline contract with a fail-closed hardware boundary, not hardware complete.
+This accepts the fixed `3 s` as the plugin's operational-completion criterion; it does not prove the instrument's internal autoscale algorithm, visible effect, or setting restoration. Autoscale may change vertical, timebase, and trigger settings under the Core contract. `wait_opc=false` explicitly skips the wait and has no hardware-completion acceptance.
 
 ## Restricted math-waveform metadata acceptance
 

@@ -659,38 +659,28 @@ class AutoscaleTransport(FakeTransport):
     def __init__(self, enabled_response: str = "1") -> None:
         super().__init__({":SYSTem:AUToscale?": enabled_response})
         self.writes: list[str] = []
-        self.opc_calls = 0
-        self.opc_responses = ["1"]
         self.write_error: Exception | None = None
-        self.opc_error: Exception | None = None
 
     def write(self, command: str) -> None:
         self.writes.append(command)
         if self.write_error is not None:
             raise self.write_error
 
-    def query_opc(self) -> str:
-        self.opc_calls += 1
-        if self.opc_error is not None:
-            raise self.opc_error
-        if len(self.opc_responses) > 1:
-            return self.opc_responses.pop(0)
-        return self.opc_responses[0]
-
-
-def test_autoscale_preflights_enable_and_waits_once() -> None:
+def test_autoscale_preflights_enable_and_uses_fixed_settle_period() -> None:
     transport = AutoscaleTransport()
     scope = MSO8104Scope(transport=transport)
+    pauses: list[float] = []
+    scope._sleep = pauses.append
 
     scope.autoscale(wait_opc=True, check_errors=False)
 
     assert transport.queries == [":SYSTem:AUToscale?"]
     assert transport.writes == [":AUToscale"]
-    assert transport.opc_calls == 1
+    assert pauses == [3.0]
     assert scope.autoscale_writes_blocked is False
 
 
-def test_autoscale_can_explicitly_skip_opc_wait() -> None:
+def test_autoscale_can_explicitly_skip_fixed_settle_wait() -> None:
     transport = AutoscaleTransport()
 
     MSO8104Scope(transport=transport).autoscale(
@@ -699,22 +689,6 @@ def test_autoscale_can_explicitly_skip_opc_wait() -> None:
     )
 
     assert transport.writes == [":AUToscale"]
-    assert transport.opc_calls == 0
-
-
-def test_autoscale_polls_nonterminal_opc_until_complete() -> None:
-    transport = AutoscaleTransport()
-    transport.opc_responses = ["0", "0", "1"]
-    pauses: list[float] = []
-
-    MSO8104Scope(transport=transport, _sleep=pauses.append).autoscale(
-        wait_opc=True,
-        check_errors=False,
-    )
-
-    assert transport.writes == [":AUToscale"]
-    assert transport.opc_calls == 3
-    assert pauses == [0.25, 0.25]
 
 
 @pytest.mark.parametrize(
@@ -735,7 +709,6 @@ def test_autoscale_rejects_unsupported_arguments_before_io(
 
     assert transport.queries == []
     assert transport.writes == []
-    assert transport.opc_calls == 0
 
 
 @pytest.mark.parametrize("enabled_response", ["0", "OFF", "", "2"])
@@ -751,7 +724,6 @@ def test_autoscale_refuses_disabled_or_invalid_preflight_without_write(
         )
 
     assert transport.writes == []
-    assert transport.opc_calls == 0
 
 
 def test_autoscale_ambiguous_write_latches_only_autoscale_domain() -> None:
@@ -772,55 +744,19 @@ def test_autoscale_ambiguous_write_latches_only_autoscale_domain() -> None:
     assert transport.writes == [":AUToscale"]
 
 
-@pytest.mark.parametrize("bad_opc", ["", " 2 "])
-def test_autoscale_invalid_completion_latches_without_replay(bad_opc: str) -> None:
+def test_autoscale_settle_failure_latches_without_reissuing_write() -> None:
     transport = AutoscaleTransport()
-    transport.opc_responses = [bad_opc]
-    scope = MSO8104Scope(transport=transport)
 
-    with pytest.raises(InstrumentError, match="completion is uncertain"):
+    def fail_settle(_: float) -> None:
+        raise InstrumentError("injected settle failure")
+
+    scope = MSO8104Scope(transport=transport, _sleep=fail_settle)
+
+    with pytest.raises(InstrumentError, match="settle wait failed"):
         scope.autoscale(wait_opc=True, check_errors=False)
 
     assert scope.autoscale_writes_blocked is True
     assert transport.writes == [":AUToscale"]
-    assert transport.opc_calls == 1
-
-
-def test_autoscale_timeout_latches_without_reissuing_write() -> None:
-    transport = AutoscaleTransport()
-    transport.opc_responses = ["0"]
-    current_time = [0.0]
-
-    def advance_clock(delay_s: float) -> None:
-        current_time[0] += delay_s
-
-    scope = MSO8104Scope(
-        transport=transport,
-        acquisition_timeout_s=0.5,
-        trigger_poll_interval_s=0.25,
-        _clock=lambda: current_time[0],
-        _sleep=advance_clock,
-    )
-
-    with pytest.raises(InstrumentError, match="completion is uncertain"):
-        scope.autoscale(wait_opc=True, check_errors=False)
-
-    assert scope.autoscale_writes_blocked is True
-    assert transport.writes == [":AUToscale"]
-    assert transport.opc_calls == 3
-
-
-def test_autoscale_opc_failure_latches_without_reissuing_write() -> None:
-    transport = AutoscaleTransport()
-    transport.opc_error = InstrumentError("injected OPC failure")
-    scope = MSO8104Scope(transport=transport)
-
-    with pytest.raises(InstrumentError, match="completion is uncertain"):
-        scope.autoscale(wait_opc=True, check_errors=False)
-
-    assert scope.autoscale_writes_blocked is True
-    assert transport.writes == [":AUToscale"]
-    assert transport.opc_calls == 1
 
 
 def test_close_is_idempotent_and_blocks_later_queries() -> None:

@@ -24,7 +24,7 @@
 | 身份 | `*IDN?` | `scope.idn` | 实机通过 | MSO8104 固件 `00.02.02` 经 LAN/PyVISA 严格识别；不外推到其他型号或固件 |
 | 错误队列 | `:SYSTem:ERRor[:NEXT]?` | `scope.error_drain_v1` | 实机通过（受限空队列） | 每条消费型读取显式为 `NO_REPLAY`，严格解析 `<integer>,"<message>"`，仅 `0,"No error"` 终止。公开 bounded capture 的前后各完成一次空 drain 并返回 1000 样本；非零记录和 overflow 仅有离线故障注入证据。legacy `scope.errors` 仍不声明 |
 | 输入安全 | `:CHANnel<n>:COUPling?`、`:CHANnel<n>:IMPedance?` | `scope.channel_coupling`、`scope.channel_input_state_v2` | 实机通过 | legacy 接口继续返回 core 高阻安全 token；V2 分别返回 coupling、termination 与阻抗。CH1/CH2 的 V2 结果均为 `dc + high_z + 1 MΩ`；核心默认拒绝 50 Ω、GND 与未知组合 |
-| 自动设置 | `:SYSTem:AUToscale?`、`:AUToscale` | `scope.autoscale` | 实机完成未获证 | 预检系统使能；明确改变垂直、时基和触发；`wait_opc=true` 将 `0` 有界轮询至 `1`，异常或超时锁存。记录固件的 CH1 `1 Vpp / 1 kHz` probe 在 `15 s` 内未得完成态，未执行后续波形读取；`wait_opc=false` 仍无实机证据 |
+| 自动设置 | `:SYSTem:AUToscale?`、`:AUToscale` | `scope.autoscale` | 实机通过（固定 `3 s` settle） | 预检系统使能；明确改变垂直、时基和触发且不承诺恢复。对 MSO8104，`wait_opc=true` 不查询 `*OPC?`，写入一次后固定等待 `3 s` 并视为操作完成；写入或等待异常锁存。受控 CH1 `1 Vpp / 1 kHz` probe 随后公开 bounded fetch 返回 1000 样本且幅度有效，最终 source 双路 OFF、scope STOP、CH1/CH2 high_z。该策略不证明内部算法、可见效果或恢复；`wait_opc=false` 无实机完成验收 |
 | 完整状态快照 | channel/timebase/probe/waveform/trigger 与部分 health | `scope.snapshot` | RFC 后跳过 | 公共快照强制要求设备无法查询的字段；`*STB?` 还会清零；见 RFC-0005 |
 | 状态快照 V2 | `*IDN?`、13 种 `:SYSTem:OPTion:STATus? <type>` | `scope.snapshot_v2` | 实机通过（受限 identity/选件） | 固定 14 条纯文本 query；同次读取 identity 与手册列出的全部授权选件状态，空 options 仅在全部 13 项明确未安装时成立。health、channel、timebase、probe、waveform、trigger 的 55 个字段按稳定顺序 unavailable；不读状态寄存器、错误队列、trigger、波形或二进制 |
 | acquisition 基础配置 | type、averages、memory depth、sample rate、run/stop/single | fetch/capture 的既有状态 | M4 离线通过 | capture 沿用既有配置；深度最高 500 Mpts；设置深度会改变采样率 |
