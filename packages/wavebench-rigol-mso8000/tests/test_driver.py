@@ -4,6 +4,8 @@ import pytest
 
 from wavebench.errors import ConfigError, DataError, InstrumentError
 from wavebench.instruments import DriverContext
+from wavebench.instruments.capabilities import validate_declared_capabilities
+from wavebench.instruments.models import ScopeChannelInputStateV2
 from wavebench.instruments.scope_extensions import ScopeWaveformBinaryProfile
 from wavebench.logging import CommandLogger
 from wavebench.services.scope_service import assert_scope_high_impedance
@@ -37,6 +39,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.idn",
         "scope.fetch_waveform",
         "scope.channel_coupling",
+        "scope.channel_input_state_v2",
         "scope.autoscale",
         "scope.math_metadata",
         "scope.cursor_readout",
@@ -99,6 +102,7 @@ def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> Non
     assert driver.max_total_waveform_points == 4_000_000
     assert driver.max_byte_points_per_read == 250_000
     assert transport.queries == []
+    validate_declared_capabilities(descriptor, driver)
 
 
 @pytest.mark.parametrize(
@@ -210,6 +214,90 @@ def test_channel_coupling_combines_coupling_and_termination(
     ]
 
 
+@pytest.mark.parametrize(
+    ("coupling", "impedance", "expected"),
+    [
+        (
+            "AC",
+            "OMEG",
+            ScopeChannelInputStateV2(
+                channel=2,
+                coupling="ac",
+                termination="high_z",
+                impedance_ohm=1_000_000.0,
+            ),
+        ),
+        (
+            "DC",
+            "OMEG",
+            ScopeChannelInputStateV2(
+                channel=2,
+                coupling="dc",
+                termination="high_z",
+                impedance_ohm=1_000_000.0,
+            ),
+        ),
+        (
+            "GND",
+            "OMEG",
+            ScopeChannelInputStateV2(
+                channel=2,
+                coupling="gnd",
+                termination="high_z",
+                impedance_ohm=1_000_000.0,
+            ),
+        ),
+        (
+            "AC",
+            "FIFT",
+            ScopeChannelInputStateV2(
+                channel=2,
+                coupling="ac",
+                termination="50_ohm",
+                impedance_ohm=50.0,
+            ),
+        ),
+        (
+            "DC",
+            "FIFT",
+            ScopeChannelInputStateV2(
+                channel=2,
+                coupling="dc",
+                termination="50_ohm",
+                impedance_ohm=50.0,
+            ),
+        ),
+        (
+            "GND",
+            "FIFT",
+            ScopeChannelInputStateV2(
+                channel=2,
+                coupling="gnd",
+                termination="50_ohm",
+                impedance_ohm=50.0,
+            ),
+        ),
+    ],
+)
+def test_channel_input_state_v2_preserves_coupling_and_termination(
+    coupling: str,
+    impedance: str,
+    expected: ScopeChannelInputStateV2,
+) -> None:
+    transport = FakeTransport(
+        {
+            ":CHANnel2:COUPling?": coupling,
+            ":CHANnel2:IMPedance?": impedance,
+        }
+    )
+
+    assert MSO8104Scope(transport=transport).get_channel_input_state_v2(2) == expected
+    assert transport.queries == [
+        ":CHANnel2:COUPling?",
+        ":CHANnel2:IMPedance?",
+    ]
+
+
 @pytest.mark.parametrize("channel", [0, 5, -1, 1.0, True, "1", None])
 def test_channel_coupling_rejects_invalid_channel_without_io(channel: object) -> None:
     transport = FakeTransport()
@@ -217,6 +305,16 @@ def test_channel_coupling_rejects_invalid_channel_without_io(channel: object) ->
 
     with pytest.raises(DataError, match="integer from 1 through 4"):
         scope.channel_coupling(channel)  # type: ignore[arg-type]
+
+    assert transport.queries == []
+
+
+@pytest.mark.parametrize("channel", [0, 5, -1, 1.0, True, "1", None])
+def test_channel_input_state_v2_rejects_invalid_channel_without_io(channel: object) -> None:
+    transport = FakeTransport()
+
+    with pytest.raises(DataError, match="integer from 1 through 4"):
+        MSO8104Scope(transport=transport).get_channel_input_state_v2(channel)  # type: ignore[arg-type]
 
     assert transport.queries == []
 
@@ -254,6 +352,34 @@ def test_channel_coupling_rejects_unknown_impedance(response: str) -> None:
     assert transport.queries == [
         ":CHANnel3:COUPling?",
         ":CHANnel3:IMPedance?",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("coupling", "impedance", "message"),
+    [
+        ("UNKNOWN", "OMEG", "channel coupling"),
+        ("DC", "UNKNOWN", "channel impedance"),
+    ],
+)
+def test_channel_input_state_v2_rejects_unknown_response(
+    coupling: str,
+    impedance: str,
+    message: str,
+) -> None:
+    transport = FakeTransport(
+        {
+            ":CHANnel1:COUPling?": coupling,
+            ":CHANnel1:IMPedance?": impedance,
+        }
+    )
+
+    with pytest.raises(DataError, match=message):
+        MSO8104Scope(transport=transport).get_channel_input_state_v2(1)
+
+    assert transport.queries == [
+        ":CHANnel1:COUPling?",
+        ":CHANnel1:IMPedance?",
     ]
 
 

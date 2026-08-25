@@ -5,6 +5,7 @@ import math
 import re
 
 from wavebench.errors import DataError
+from wavebench.instruments.models import ScopeChannelInputStateV2
 
 
 @dataclass(frozen=True)
@@ -271,3 +272,27 @@ def normalize_channel_input(*, coupling: str, impedance: str) -> str:
     if normalized_impedance == "OMEG":
         return f"{normalized_coupling}L"
     return normalized_coupling
+
+
+def parse_channel_input_state_v2(
+    *,
+    channel: int,
+    coupling: str,
+    impedance: str,
+) -> ScopeChannelInputStateV2:
+    normalized_coupling = _parse_enum(
+        coupling,
+        field="channel coupling",
+        allowed=frozenset({"AC", "DC", "GND"}),
+    )
+    normalized_impedance = _parse_enum(
+        impedance,
+        field="channel impedance",
+        allowed=frozenset({"OMEG", "FIFT"}),
+    )
+    return ScopeChannelInputStateV2(
+        channel=channel,
+        coupling={"AC": "ac", "DC": "dc", "GND": "gnd"}[normalized_coupling],
+        termination={"OMEG": "high_z", "FIFT": "50_ohm"}[normalized_impedance],
+        impedance_ohm={"OMEG": 1_000_000.0, "FIFT": 50.0}[normalized_impedance],
+    )

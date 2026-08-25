@@ -10,6 +10,7 @@ import numpy as np
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import (
+    ScopeChannelInputStateV2,
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
     WaveformData,
@@ -25,6 +26,7 @@ from wavebench.transport.base import InstrumentTransport
 from wavebench.transport.contracts import BinaryResponseFraming, ReplayPolicy
 
 from .parsers import (
+    parse_channel_input_state_v2,
     normalize_channel_input,
     parse_boolean_state,
     parse_cursor_mode,
@@ -144,6 +146,18 @@ class MSO8104Scope:
             coupling = self.transport.query(f":CHANnel{channel}:COUPling?")
             impedance = self.transport.query(f":CHANnel{channel}:IMPedance?")
             return normalize_channel_input(coupling=coupling, impedance=impedance)
+
+    def get_channel_input_state_v2(self, channel: int) -> ScopeChannelInputStateV2:
+        self._validate_analog_channel(channel)
+        with self._io_lock:
+            self._require_open()
+            coupling = self.transport.query(f":CHANnel{channel}:COUPling?")
+            impedance = self.transport.query(f":CHANnel{channel}:IMPedance?")
+            return parse_channel_input_state_v2(
+                channel=channel,
+                coupling=coupling,
+                impedance=impedance,
+            )
 
     def autoscale(self, wait_opc: bool = True, check_errors: bool = True) -> None:
         if type(wait_opc) is not bool:

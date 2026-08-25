@@ -82,6 +82,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.idn",
             "scope.fetch_waveform",
             "scope.channel_coupling",
+            "scope.channel_input_state_v2",
             "scope.autoscale",
             "scope.math_metadata",
             "scope.cursor_readout",
