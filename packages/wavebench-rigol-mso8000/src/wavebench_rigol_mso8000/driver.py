@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from hashlib import sha256
 import math
 from threading import RLock
 import time
@@ -109,6 +110,23 @@ _WAVEFORM_BINARY_FETCH_RESTORE_ORDER: tuple[ScopeWaveformTransferField, ...] = (
     "scope.waveform_points",
     "scope.waveform_transfer_window",
 )
+_WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER: tuple[ScopeWaveformTransferField, ...] = (
+    "scope.acquisition",
+    "scope.trigger",
+    "scope.timebase",
+    "scope.channel_display",
+    "scope.channel_vertical",
+    "scope.waveform_source",
+    "scope.waveform_mode",
+    "scope.query_response_header",
+    "scope.waveform_format",
+    "scope.waveform_byte_order",
+    "scope.waveform_points",
+    "scope.waveform_transfer_window",
+    "scope.run_state",
+)
+_WAVEFORM_CAPTURE_RESPONSE_HEADER_TOKEN = "definite-block-lf"
+_WAVEFORM_CAPTURE_BYTE_ORDER_TOKEN = "not-applicable-byte"
 _CURSOR_TIME_UNITS = {
     "SEC": ("s", "Hz"),
     "HZ": ("Hz", "s"),
@@ -209,6 +227,18 @@ class WaveformTransferState:
     stop: int
 
 
+@dataclass(frozen=True)
+class CaptureRecoveryState:
+    run_state: str
+    acquisition_type: str
+    trigger_sweep: str
+    timebase_scale_s_per_div: float
+    timebase_offset_s: float
+    channel_display: tuple[bool, bool, bool, bool]
+    channel_vertical: tuple[tuple[float, float], tuple[float, float], tuple[float, float], tuple[float, float]]
+    waveform: WaveformTransferState
+
+
 @dataclass
 class MSO8104Scope:
     transport: InstrumentTransport
@@ -223,6 +253,11 @@ class MSO8104Scope:
     _waveform_writes_blocked: bool = field(default=False, init=False, repr=False)
     _acquisition_writes_blocked: bool = field(default=False, init=False, repr=False)
     _autoscale_writes_blocked: bool = field(default=False, init=False, repr=False)
+    _capture_recovery_states: dict[str, CaptureRecoveryState] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.acquisition_timeout_s) or self.acquisition_timeout_s <= 0:
@@ -662,61 +697,15 @@ class MSO8104Scope:
             if deadline <= self._clock():
                 raise OperationTimeout("MSO8104 single-acquisition deadline expired before arming")
             try:
-                self.transport.write(":SINGle")
-                remaining_s = deadline - self._clock()
-                if remaining_s <= 0:
-                    raise OperationTimeout(
-                        "MSO8104 single-acquisition deadline expired before initial status"
-                    )
-                self._sleep(min(self.trigger_poll_interval_s, remaining_s))
-                if deadline <= self._clock():
-                    raise OperationTimeout(
-                        "MSO8104 single-acquisition deadline expired before initial status"
-                    )
-                observed_states: list[ScopeAcquisitionRunState] = []
-                while True:
-                    if deadline <= self._clock():
-                        raise OperationTimeout(
-                            "MSO8104 single acquisition did not reach STOP before the "
-                            "operation deadline"
-                        )
-                    status = parse_trigger_status(
-                        self.transport.query(":TRIGger:STATus?")
-                    )
-                    state = self._run_state_from_trigger_status(
-                        status,
-                        trigger_mode="single",
-                    )
-                    observed_states.append(state)
-                    if state.phase == "stopped":
-                        if not any(
-                            item.phase in {"arming", "waiting", "acquiring"}
-                            for item in observed_states[:-1]
-                        ):
-                            raise DataError(
-                                "MSO8104 single acquisition completion is unproven: no "
-                                "post-arm transition was observed before STOP"
-                            )
-                        return ScopeAcquisitionCompletion(
-                            state=state,
-                            original_state=baseline.snapshot.run_state,
-                            proof_baseline_state=baseline.snapshot.run_state,
-                            proof_baseline_stage="original_atomic_arm",
-                            proof="state_transition",
-                            observed_states=tuple(observed_states),
-                        )
-                    if state.phase == "unknown":
-                        raise DataError(
-                            "MSO8104 single acquisition completion is unproven for trigger "
-                            f"status {status!r}"
-                        )
-                    remaining_s = deadline - self._clock()
-                    if remaining_s <= 0:
-                        raise OperationTimeout(
-                            "MSO8104 single acquisition did not reach STOP before the "
-                            "operation deadline"
-                        )
-                    self._sleep(min(self.trigger_poll_interval_s, remaining_s))
+                observed_states = self._arm_single_and_wait_for_transition(deadline)
+                return ScopeAcquisitionCompletion(
+                    state=observed_states[-1],
+                    original_state=baseline.snapshot.run_state,
+                    proof_baseline_state=baseline.snapshot.run_state,
+                    proof_baseline_stage="original_atomic_arm",
+                    proof="state_transition",
+                    observed_states=observed_states,
+                )
             except (DataError, OperationTimeout):
                 self._acquisition_writes_blocked = True
                 raise
@@ -726,6 +715,52 @@ class MSO8104Scope:
                     "MSO8104 single-acquisition outcome is uncertain; acquisition writes are "
                     "blocked"
                 ) from exc
+
+    def _arm_single_and_wait_for_transition(
+        self,
+        deadline: float,
+    ) -> tuple[ScopeAcquisitionRunState, ...]:
+        self.transport.write(":SINGle")
+        remaining_s = deadline - self._clock()
+        if remaining_s <= 0:
+            raise OperationTimeout(
+                "MSO8104 single-acquisition deadline expired before initial status"
+            )
+        self._sleep(min(self.trigger_poll_interval_s, remaining_s))
+        if deadline <= self._clock():
+            raise OperationTimeout(
+                "MSO8104 single-acquisition deadline expired before initial status"
+            )
+        observed_states: list[ScopeAcquisitionRunState] = []
+        while True:
+            if deadline <= self._clock():
+                raise OperationTimeout(
+                    "MSO8104 single acquisition did not reach STOP before the operation deadline"
+                )
+            status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+            state = self._run_state_from_trigger_status(status, trigger_mode="single")
+            observed_states.append(state)
+            if state.phase == "stopped":
+                if not any(
+                    item.phase in {"arming", "waiting", "acquiring"}
+                    for item in observed_states[:-1]
+                ):
+                    raise DataError(
+                        "MSO8104 single acquisition completion is unproven: no "
+                        "post-arm transition was observed before STOP"
+                    )
+                return tuple(observed_states)
+            if state.phase == "unknown":
+                raise DataError(
+                    "MSO8104 single acquisition completion is unproven for trigger "
+                    f"status {status!r}"
+                )
+            remaining_s = deadline - self._clock()
+            if remaining_s <= 0:
+                raise OperationTimeout(
+                    "MSO8104 single acquisition did not reach STOP before the operation deadline"
+                )
+            self._sleep(min(self.trigger_poll_interval_s, remaining_s))
 
     def _require_main_timebase(self) -> None:
         mode = parse_timebase_mode(self.transport.query(":TIMebase:MODE?"))
@@ -780,6 +815,152 @@ class MSO8104Scope:
         )
 
     @staticmethod
+    def _capture_recovery_field_tokens(
+        state: CaptureRecoveryState,
+    ) -> dict[ScopeWaveformTransferField, str]:
+        def float_token(value: float) -> str:
+            return value.hex().replace("+", "")
+
+        def token(label: str, *pieces: str) -> str:
+            return sha256("|".join((label, *pieces)).encode("ascii")).hexdigest()
+
+        return {
+            "scope.run_state": token("run_state", state.run_state),
+            "scope.acquisition": token("acquisition", state.acquisition_type),
+            "scope.trigger": token("trigger", state.trigger_sweep),
+            "scope.timebase": token(
+                "timebase",
+                float_token(state.timebase_scale_s_per_div),
+                float_token(state.timebase_offset_s),
+            ),
+            "scope.channel_display": token(
+                "channel_display",
+                *("1" if displayed else "0" for displayed in state.channel_display),
+            ),
+            "scope.channel_vertical": token(
+                "channel_vertical",
+                *(
+                    float_token(value)
+                    for scale, offset in state.channel_vertical
+                    for value in (scale, offset)
+                ),
+            ),
+            "scope.waveform_source": token("waveform_source", state.waveform.source),
+            "scope.waveform_mode": token("waveform_mode", state.waveform.mode),
+            "scope.query_response_header": token(
+                "query_response_header",
+                _WAVEFORM_CAPTURE_RESPONSE_HEADER_TOKEN,
+            ),
+            "scope.waveform_format": token(
+                "waveform_format",
+                state.waveform.data_format,
+            ),
+            "scope.waveform_byte_order": token(
+                "waveform_byte_order",
+                _WAVEFORM_CAPTURE_BYTE_ORDER_TOKEN,
+            ),
+            "scope.waveform_points": token(
+                "waveform_points",
+                str(state.waveform.points),
+            ),
+            "scope.waveform_transfer_window": token(
+                "waveform_transfer_window",
+                str(state.waveform.start),
+                str(state.waveform.stop),
+            ),
+        }
+
+    @staticmethod
+    def _capture_recovery_state_key(
+        tokens: dict[ScopeWaveformTransferField, str],
+    ) -> str:
+        return sha256(
+            "|".join(
+                f"{field_name}={tokens[field_name]}"
+                for field_name in _WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER
+            ).encode("ascii")
+        ).hexdigest()
+
+    def _capture_recovery_snapshot(
+        self,
+        state: CaptureRecoveryState,
+    ) -> ScopeWaveformTransferStateSnapshot:
+        tokens = self._capture_recovery_field_tokens(state)
+        self._capture_recovery_states[self._capture_recovery_state_key(tokens)] = state
+        return ScopeWaveformTransferStateSnapshot(
+            captured_fields=_WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER,
+            run_state_token=tokens["scope.run_state"],
+            acquisition_token=tokens["scope.acquisition"],
+            trigger_token=tokens["scope.trigger"],
+            timebase_token=tokens["scope.timebase"],
+            channel_display_token=tokens["scope.channel_display"],
+            channel_vertical_token=tokens["scope.channel_vertical"],
+            waveform_source_token=tokens["scope.waveform_source"],
+            waveform_mode_token=tokens["scope.waveform_mode"],
+            query_response_header_token=tokens["scope.query_response_header"],
+            waveform_format_token=tokens["scope.waveform_format"],
+            waveform_byte_order_token=tokens["scope.waveform_byte_order"],
+            waveform_points_token=tokens["scope.waveform_points"],
+            waveform_transfer_window_token=tokens["scope.waveform_transfer_window"],
+        )
+
+    def _snapshot_capture_recovery_state(self) -> CaptureRecoveryState:
+        status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+        if status != "STOP":
+            raise ConfigError(
+                "MSO8104 bounded capture requires an already stopped baseline; "
+                f"got trigger status {status!r}"
+            )
+        acquisition_type = parse_acquisition_type(self.transport.query(":ACQuire:TYPE?"))
+        trigger_sweep = parse_trigger_sweep(self.transport.query(":TRIGger:SWEep?"))
+        timebase_mode = parse_timebase_mode(self.transport.query(":TIMebase:MODE?"))
+        if timebase_mode != "MAIN":
+            raise ConfigError(
+                "MSO8104 bounded capture requires MAIN timebase for a restorable baseline"
+            )
+        timebase_scale_s_per_div = parse_positive_finite_float(
+            self.transport.query(":TIMebase:MAIN:SCALe?"),
+            field="main timebase scale",
+        )
+        timebase_offset_s = parse_finite_float(
+            self.transport.query(":TIMebase:MAIN:OFFSet?"),
+            field="main timebase offset",
+        )
+        displayed = tuple(
+            parse_display_state(self.transport.query(f":CHANnel{channel}:DISPlay?"))
+            for channel in range(1, 5)
+        )
+        vertical = tuple(
+            (
+                parse_positive_finite_float(
+                    self.transport.query(f":CHANnel{channel}:SCALe?"),
+                    field=f"CH{channel} vertical scale",
+                ),
+                parse_finite_float(
+                    self.transport.query(f":CHANnel{channel}:OFFSet?"),
+                    field=f"CH{channel} vertical offset",
+                ),
+            )
+            for channel in range(1, 5)
+        )
+        waveform = self._snapshot_waveform_state()
+        if waveform.data_format != "BYTE":
+            raise ConfigError(
+                "MSO8104 bounded capture requires a BYTE waveform-transfer baseline; "
+                "the programming guide does not define a queryable waveform byte-order state"
+            )
+        return CaptureRecoveryState(
+            run_state=status,
+            acquisition_type=acquisition_type,
+            trigger_sweep=trigger_sweep,
+            timebase_scale_s_per_div=timebase_scale_s_per_div,
+            timebase_offset_s=timebase_offset_s,
+            channel_display=(displayed[0], displayed[1], displayed[2], displayed[3]),
+            channel_vertical=(vertical[0], vertical[1], vertical[2], vertical[3]),
+            waveform=waveform,
+        )
+
+    @staticmethod
     def _validate_waveform_transfer_baseline(
         baseline: ScopeWaveformTransferBaseline,
     ) -> None:
@@ -792,6 +973,54 @@ class MSO8104Scope:
             raise DataError(
                 "MSO8104 bounded waveform baseline does not match the fetch transfer profile"
             )
+
+    @staticmethod
+    def _validate_capture_waveform_transfer_baseline(
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> None:
+        if not isinstance(baseline, ScopeWaveformTransferBaseline):
+            raise DataError("MSO8104 bounded capture baseline has an invalid type")
+        if (
+            baseline.restore_order != _WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER
+            or baseline.snapshot.captured_fields != _WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER
+        ):
+            raise DataError(
+                "MSO8104 bounded capture baseline does not match the capture transfer profile"
+            )
+
+    def _capture_recovery_state_from_baseline(
+        self,
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> CaptureRecoveryState:
+        self._validate_capture_waveform_transfer_baseline(baseline)
+        tokens = {
+            "scope.run_state": baseline.snapshot.run_state_token,
+            "scope.acquisition": baseline.snapshot.acquisition_token,
+            "scope.trigger": baseline.snapshot.trigger_token,
+            "scope.timebase": baseline.snapshot.timebase_token,
+            "scope.channel_display": baseline.snapshot.channel_display_token,
+            "scope.channel_vertical": baseline.snapshot.channel_vertical_token,
+            "scope.waveform_source": baseline.snapshot.waveform_source_token,
+            "scope.waveform_mode": baseline.snapshot.waveform_mode_token,
+            "scope.query_response_header": baseline.snapshot.query_response_header_token,
+            "scope.waveform_format": baseline.snapshot.waveform_format_token,
+            "scope.waveform_byte_order": baseline.snapshot.waveform_byte_order_token,
+            "scope.waveform_points": baseline.snapshot.waveform_points_token,
+            "scope.waveform_transfer_window": baseline.snapshot.waveform_transfer_window_token,
+        }
+        if any(value is None for value in tokens.values()):
+            raise DataError("MSO8104 bounded capture baseline is missing state tokens")
+        expected_tokens = {field_name: value for field_name, value in tokens.items() if value is not None}
+        key = self._capture_recovery_state_key(expected_tokens)
+        try:
+            state = self._capture_recovery_states[key]
+        except KeyError as exc:
+            raise DataError(
+                "MSO8104 bounded capture baseline state is unavailable in this session"
+            ) from exc
+        if self._capture_recovery_field_tokens(state) != expected_tokens:
+            raise DataError("MSO8104 bounded capture baseline state token is invalid")
+        return state
 
     @classmethod
     def _waveform_state_from_baseline(
@@ -842,14 +1071,20 @@ class MSO8104Scope:
         self,
         fields: tuple[ScopeWaveformTransferField, ...],
     ) -> ScopeWaveformTransferStateSnapshot:
-        if fields != _WAVEFORM_BINARY_FETCH_RESTORE_ORDER:
-            raise DataError(
-                "MSO8104 bounded waveform snapshot fields do not match the fetch profile"
-            )
         with self._io_lock:
             self._require_open()
-            self._require_waveform_writes_allowed()
-            return self._waveform_transfer_snapshot(self._snapshot_waveform_state())
+            if fields == _WAVEFORM_BINARY_FETCH_RESTORE_ORDER:
+                self._require_waveform_writes_allowed()
+                return self._waveform_transfer_snapshot(self._snapshot_waveform_state())
+            if fields == _WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER:
+                self._require_waveform_writes_allowed()
+                self._require_acquisition_writes_allowed()
+                return self._capture_recovery_snapshot(
+                    self._snapshot_capture_recovery_state()
+                )
+            raise DataError(
+                "MSO8104 bounded waveform snapshot fields do not match a supported profile"
+            )
 
     def _write_waveform_state_without_readback(self, state: WaveformTransferState) -> None:
         for command in (
@@ -862,23 +1097,134 @@ class MSO8104Scope:
         ):
             self.transport.write(command)
 
+    @staticmethod
+    def _scpi_float(value: float) -> str:
+        return format(value, ".17g")
+
+    def _restore_capture_recovery_state(
+        self,
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> ScopeWaveformTransferRestoreResult:
+        state = self._capture_recovery_state_from_baseline(baseline)
+        attempted: list[ScopeWaveformTransferField] = []
+        restored: list[ScopeWaveformTransferField] = []
+
+        def restore_field(
+            field_name: ScopeWaveformTransferField,
+            commands: tuple[str, ...],
+        ) -> None:
+            attempted.append(field_name)
+            for command in commands:
+                self.transport.write(command)
+            restored.append(field_name)
+
+        try:
+            # A failed capture can still be armed or acquiring.  Force a quiet state before
+            # replaying any configuration, then restore the requested run state last.
+            self.transport.write(":STOP")
+            restore_field(
+                "scope.acquisition",
+                (self._acquisition_type_command(state.acquisition_type),),
+            )
+            restore_field(
+                "scope.trigger",
+                (self._trigger_sweep_command(state.trigger_sweep),),
+            )
+            restore_field(
+                "scope.timebase",
+                (
+                    ":TIMebase:MODE MAIN",
+                    ":TIMebase:MAIN:SCALe "
+                    + self._scpi_float(state.timebase_scale_s_per_div),
+                    ":TIMebase:MAIN:OFFSet " + self._scpi_float(state.timebase_offset_s),
+                ),
+            )
+            restore_field(
+                "scope.channel_display",
+                tuple(
+                    f":CHANnel{channel}:DISPlay {'ON' if displayed else 'OFF'}"
+                    for channel, displayed in enumerate(state.channel_display, start=1)
+                ),
+            )
+            restore_field(
+                "scope.channel_vertical",
+                tuple(
+                    command
+                    for channel, (scale, offset) in enumerate(
+                        state.channel_vertical,
+                        start=1,
+                    )
+                    for command in (
+                        f":CHANnel{channel}:SCALe {self._scpi_float(scale)}",
+                        f":CHANnel{channel}:OFFSet {self._scpi_float(offset)}",
+                    )
+                ),
+            )
+            restore_field(
+                "scope.waveform_source",
+                (f":WAVeform:SOURce {state.waveform.source}",),
+            )
+            restore_field(
+                "scope.waveform_mode",
+                (f":WAVeform:MODE {state.waveform.mode}",),
+            )
+            restore_field("scope.query_response_header", ())
+            restore_field(
+                "scope.waveform_format",
+                (f":WAVeform:FORMat {state.waveform.data_format}",),
+            )
+            restore_field("scope.waveform_byte_order", ())
+            restore_field(
+                "scope.waveform_points",
+                (f":WAVeform:POINts {state.waveform.points}",),
+            )
+            restore_field(
+                "scope.waveform_transfer_window",
+                (
+                    f":WAVeform:STOP {state.waveform.stop}",
+                    f":WAVeform:STARt {state.waveform.start}",
+                ),
+            )
+            restore_field(
+                "scope.run_state",
+                (":STOP",),
+            )
+        except Exception:
+            self._waveform_writes_blocked = True
+            self._acquisition_writes_blocked = True
+            return ScopeWaveformTransferRestoreResult(
+                status="failed",
+                attempted_fields=tuple(attempted),
+                restored_fields=tuple(restored),
+                error_code="capture_restore_write_failed",
+            )
+        return ScopeWaveformTransferRestoreResult(
+            status="completed",
+            attempted_fields=tuple(attempted),
+            restored_fields=tuple(restored),
+        )
+
     def restore_waveform_transfer_state(
         self,
         baseline: ScopeWaveformTransferBaseline,
     ) -> ScopeWaveformTransferRestoreResult:
         with self._io_lock:
             self._require_open()
-            state = self._waveform_state_from_baseline(baseline)
-            try:
-                self._write_waveform_state_without_readback(state)
-            except Exception:
-                self._waveform_writes_blocked = True
-                raise
-            return ScopeWaveformTransferRestoreResult(
-                status="completed",
-                attempted_fields=baseline.restore_order,
-                restored_fields=baseline.restore_order,
-            )
+            if baseline.restore_order == _WAVEFORM_BINARY_FETCH_RESTORE_ORDER:
+                state = self._waveform_state_from_baseline(baseline)
+                try:
+                    self._write_waveform_state_without_readback(state)
+                except Exception:
+                    self._waveform_writes_blocked = True
+                    raise
+                return ScopeWaveformTransferRestoreResult(
+                    status="completed",
+                    attempted_fields=baseline.restore_order,
+                    restored_fields=baseline.restore_order,
+                )
+            if baseline.restore_order == _WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER:
+                return self._restore_capture_recovery_state(baseline)
+            raise DataError("MSO8104 bounded waveform restore baseline is unsupported")
 
     def verify_waveform_transfer_state_restored(
         self,
@@ -886,8 +1232,15 @@ class MSO8104Scope:
     ) -> ScopeWaveformTransferStateSnapshot:
         with self._io_lock:
             self._require_open()
-            self._validate_waveform_transfer_baseline(baseline)
-            return self._waveform_transfer_snapshot(self._snapshot_waveform_state())
+            if baseline.restore_order == _WAVEFORM_BINARY_FETCH_RESTORE_ORDER:
+                self._validate_waveform_transfer_baseline(baseline)
+                return self._waveform_transfer_snapshot(self._snapshot_waveform_state())
+            if baseline.restore_order == _WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER:
+                self._validate_capture_waveform_transfer_baseline(baseline)
+                return self._capture_recovery_snapshot(
+                    self._snapshot_capture_recovery_state()
+                )
+            raise DataError("MSO8104 bounded waveform verification baseline is unsupported")
 
     def _write_and_verify(
         self,
@@ -1870,6 +2223,20 @@ class MSO8104Scope:
                 )
             self._sleep(min(self.trigger_poll_interval_s, remaining_s))
 
+    def _capture_single_and_wait_for_transition(self) -> None:
+        deadline = self._clock() + self.acquisition_timeout_s
+        try:
+            self._arm_single_and_wait_for_transition(deadline)
+        except (DataError, OperationTimeout):
+            self._acquisition_writes_blocked = True
+            raise
+        except Exception as exc:
+            self._acquisition_writes_blocked = True
+            raise InstrumentError(
+                "MSO8104 bounded capture SINGLE outcome is uncertain; acquisition writes are "
+                "blocked"
+            ) from exc
+
     @staticmethod
     def _assert_matching_x_axis(
         reference: WaveformData,
@@ -1992,9 +2359,90 @@ class MSO8104Scope:
                     on_waveform(channel, waveform)
             return waveforms
 
+    def capture_waveform_bounded(
+        self,
+        channel: int,
+        points: str = "dmax",
+        *,
+        time_range_s: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> WaveformData:
+        waveforms = self.capture_waveforms_bounded(
+            channels=[channel],
+            points=points,
+            time_range_s=time_range_s,
+            vertical_scale_v_per_div=vertical_scale_v_per_div,
+            baseline=baseline,
+        )
+        return waveforms[channel]
+
+    def capture_waveforms_bounded(
+        self,
+        channels: list[int],
+        points: str = "dmax",
+        *,
+        time_range_s: float | None = None,
+        vertical_scale_v_per_div: float | None = None,
+        on_channel_start: Callable[[int | None], None] | None = None,
+        on_waveform: Callable[[int, WaveformData], None] | None = None,
+        baseline: ScopeWaveformTransferBaseline,
+    ) -> dict[int, WaveformData]:
+        if not isinstance(channels, list) or not channels:
+            raise DataError("MSO8104 bounded capture channels must be a non-empty list")
+        for channel in channels:
+            self._validate_analog_channel(channel)
+        if len(set(channels)) != len(channels):
+            raise DataError("MSO8104 bounded capture channels must be unique")
+        point_mode = self._normalize_point_mode(points)
+        if point_mode != "DEF":
+            raise ConfigError(
+                "MSO8104 bounded capture candidate supports only DEF pending independent "
+                "MAX and DMAX capture acceptance"
+            )
+        self._validate_capture_adjustments(
+            time_range_s=time_range_s,
+            vertical_scale_v_per_div=vertical_scale_v_per_div,
+        )
+        if on_channel_start is not None and not callable(on_channel_start):
+            raise DataError("MSO8104 on_channel_start must be callable or None")
+        if on_waveform is not None and not callable(on_waveform):
+            raise DataError("MSO8104 on_waveform must be callable or None")
+        self._validate_capture_waveform_transfer_baseline(baseline)
+        with self._io_lock:
+            self._require_open()
+            self._require_waveform_writes_allowed()
+            self._require_acquisition_writes_allowed()
+            self._require_displayed_channels(channels)
+            self._require_main_timebase()
+            self._capture_single_and_wait_for_transition()
+            waveforms: dict[int, WaveformData] = {}
+            reference: WaveformData | None = None
+            remaining_points = self.max_total_waveform_points
+            for channel in channels:
+                if on_channel_start is not None:
+                    on_channel_start(channel)
+                self._configure_waveform_transfer(channel=channel, point_mode=point_mode)
+                waveform = self._read_byte_waveform(
+                    channel,
+                    point_mode=point_mode,
+                    remaining_points=remaining_points,
+                    bounded=True,
+                )
+                if reference is None:
+                    reference = waveform
+                else:
+                    self._assert_matching_x_axis(reference, waveform)
+                waveforms[channel] = waveform
+                remaining_points -= waveform.sample_count
+                if on_waveform is not None:
+                    on_waveform(channel, waveform)
+            return waveforms
+
     def close(self) -> None:
         with self._io_lock:
             if self._closed:
                 return
             self._closed = True
+            self._capture_recovery_states.clear()
             self.transport.close()

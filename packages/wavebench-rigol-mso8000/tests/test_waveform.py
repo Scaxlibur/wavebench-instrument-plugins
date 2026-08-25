@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from threading import Event, Thread
 from typing import Any
 
@@ -9,6 +9,10 @@ import pytest
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import ScopeDerivedWaveformMetadata
+from wavebench.instruments.scope_extensions import (
+    ScopeWaveformBinaryOperationProfile,
+    ScopeWaveformBinaryProfile,
+)
 from wavebench.services.scope_waveform_executor import BoundedWaveformExecutor
 from wavebench.transport.contracts import (
     BinaryQueryResult,
@@ -31,6 +35,10 @@ def _initial_state() -> WaveformTransferState:
         start=101,
         stop=4096,
     )
+
+
+def _capture_initial_state() -> WaveformTransferState:
+    return replace(_initial_state(), data_format="BYTE")
 
 
 def _normal_preamble(*, points: int = 1000) -> str:
@@ -64,6 +72,12 @@ class WaveformTransport:
         self.displayed = {channel: True for channel in range(1, 5)}
         self.math_display_responses = {index: "1" for index in range(1, 5)}
         self.timebase_mode = "MAIN"
+        self.timebase_scale_s_per_div = 1e-3
+        self.timebase_offset_s = 0.0
+        self.channel_scales = {channel: 0.5 for channel in range(1, 5)}
+        self.channel_offsets = {channel: 0.0 for channel in range(1, 5)}
+        self.acquisition_type = "NORM"
+        self.trigger_sweep = "NORM"
         self.memory_depth = 10_000
         self.trigger_statuses = ["STOP"]
         self.events: list[tuple[str, str]] = []
@@ -93,6 +107,10 @@ class WaveformTransport:
         for channel in range(1, 5):
             if command == f":CHANnel{channel}:DISPlay?":
                 return "1" if self.displayed[channel] else "0"
+            if command == f":CHANnel{channel}:SCALe?":
+                return str(self.channel_scales[channel])
+            if command == f":CHANnel{channel}:OFFSet?":
+                return str(self.channel_offsets[channel])
         for math_index in range(1, 5):
             if command == f":MATH{math_index}:DISPlay?":
                 return self.math_display_responses[math_index]
@@ -108,6 +126,14 @@ class WaveformTransport:
             return str(self.state[queries[command]])
         if command == ":TIMebase:MODE?":
             return self.timebase_mode
+        if command == ":TIMebase:MAIN:SCALe?":
+            return str(self.timebase_scale_s_per_div)
+        if command == ":TIMebase:MAIN:OFFSet?":
+            return str(self.timebase_offset_s)
+        if command == ":ACQuire:TYPE?":
+            return self.acquisition_type
+        if command == ":TRIGger:SWEep?":
+            return self.trigger_sweep
         if command == ":ACQuire:MDEPth?":
             return str(self.memory_depth)
         if command == ":TRIGger:STATus?":
@@ -121,27 +147,70 @@ class WaveformTransport:
     def write(self, command: str) -> None:
         self.events.append(("write", command))
         if command == ":SINGle":
+            self.trigger_sweep = "SING"
             if command in self.fail_writes:
                 self.fail_writes.remove(command)
                 raise InstrumentError(f"injected ambiguous write: {command}")
             return
-        prefixes = {
-            ":WAVeform:SOURce ": "source",
-            ":WAVeform:MODE ": "mode",
-            ":WAVeform:FORMat ": "data_format",
-            ":WAVeform:POINts ": "points",
-            ":WAVeform:STARt ": "start",
-            ":WAVeform:STOP ": "stop",
-        }
-        for prefix, field_name in prefixes.items():
-            if command.startswith(prefix):
-                value: str | int = command.removeprefix(prefix)
-                if field_name in {"points", "start", "stop"}:
-                    value = int(value)
-                self.state[field_name] = value
-                break
+        if command == ":STOP":
+            self.trigger_statuses = ["STOP"]
+        elif command == ":RUN":
+            self.trigger_statuses = ["RUN"]
+        elif command.startswith(":TRIGger:SWEep "):
+            self.trigger_sweep = {
+                "AUTO": "AUTO",
+                "NORMal": "NORM",
+                "SINGle": "SING",
+            }[command.removeprefix(":TRIGger:SWEep ")]
+        elif command.startswith(":ACQuire:TYPE "):
+            self.acquisition_type = {
+                "NORMal": "NORM",
+                "PEAK": "PEAK",
+                "AVERages": "AVER",
+                "HRESolution": "HRES",
+            }[command.removeprefix(":ACQuire:TYPE ")]
+        elif command == ":TIMebase:MODE MAIN":
+            self.timebase_mode = "MAIN"
+        elif command.startswith(":TIMebase:MAIN:SCALe "):
+            self.timebase_scale_s_per_div = float(
+                command.removeprefix(":TIMebase:MAIN:SCALe ")
+            )
+        elif command.startswith(":TIMebase:MAIN:OFFSet "):
+            self.timebase_offset_s = float(
+                command.removeprefix(":TIMebase:MAIN:OFFSet ")
+            )
         else:
-            raise AssertionError(f"unexpected write: {command}")
+            for channel in range(1, 5):
+                display_prefix = f":CHANnel{channel}:DISPlay "
+                scale_prefix = f":CHANnel{channel}:SCALe "
+                offset_prefix = f":CHANnel{channel}:OFFSet "
+                if command.startswith(display_prefix):
+                    self.displayed[channel] = command.removeprefix(display_prefix) == "ON"
+                    break
+                if command.startswith(scale_prefix):
+                    self.channel_scales[channel] = float(command.removeprefix(scale_prefix))
+                    break
+                if command.startswith(offset_prefix):
+                    self.channel_offsets[channel] = float(command.removeprefix(offset_prefix))
+                    break
+            else:
+                prefixes = {
+                    ":WAVeform:SOURce ": "source",
+                    ":WAVeform:MODE ": "mode",
+                    ":WAVeform:FORMat ": "data_format",
+                    ":WAVeform:POINts ": "points",
+                    ":WAVeform:STARt ": "start",
+                    ":WAVeform:STOP ": "stop",
+                }
+                for prefix, field_name in prefixes.items():
+                    if command.startswith(prefix):
+                        value: str | int = command.removeprefix(prefix)
+                        if field_name in {"points", "start", "stop"}:
+                            value = int(value)
+                        self.state[field_name] = value
+                        break
+                else:
+                    raise AssertionError(f"unexpected write: {command}")
         if command in self.fail_writes:
             self.fail_writes.remove(command)
             raise InstrumentError(f"injected ambiguous write: {command}")
@@ -997,6 +1066,106 @@ def _bounded_executor(
     )
 
 
+_CAPTURE_RECOVERY_FIELDS = (
+    "scope.acquisition",
+    "scope.trigger",
+    "scope.timebase",
+    "scope.channel_display",
+    "scope.channel_vertical",
+    "scope.waveform_source",
+    "scope.waveform_mode",
+    "scope.query_response_header",
+    "scope.waveform_format",
+    "scope.waveform_byte_order",
+    "scope.waveform_points",
+    "scope.waveform_transfer_window",
+    "scope.run_state",
+)
+
+
+def _capture_candidate_descriptor():
+    descriptor = plugin_descriptor()
+    assert descriptor.scope_extensions is not None
+    fetch_profile = descriptor.scope_extensions.waveform_binary_profile
+    assert fetch_profile is not None
+    return replace(
+        descriptor,
+        capabilities=(
+            *descriptor.capabilities,
+            "scope.capture_waveform",
+            "scope.capture_waveforms",
+        ),
+        scope_extensions=replace(
+            descriptor.scope_extensions,
+            waveform_binary_profile=ScopeWaveformBinaryProfile(
+                operations=(
+                    *fetch_profile.operations,
+                    ScopeWaveformBinaryOperationProfile(
+                        operation_kind="capture_single",
+                        response_max_bytes=1_000,
+                        operation_max_bytes=1_000,
+                        query_max_count=1,
+                        resynchronization_max_bytes=65_536,
+                        restore_order=_CAPTURE_RECOVERY_FIELDS,
+                        snapshot_max_steps=32,
+                        restore_max_steps=32,
+                        verify_max_steps=32,
+                    ),
+                    ScopeWaveformBinaryOperationProfile(
+                        operation_kind="capture_multiple",
+                        response_max_bytes=1_000,
+                        operation_max_bytes=4_000,
+                        query_max_count=4,
+                        resynchronization_max_bytes=65_536,
+                        restore_order=_CAPTURE_RECOVERY_FIELDS,
+                        snapshot_max_steps=32,
+                        restore_max_steps=32,
+                        verify_max_steps=32,
+                    ),
+                ),
+                transport_trailing_hex=fetch_profile.transport_trailing_hex,
+            ),
+        ),
+    )
+
+
+def _capture_bounded_executor(
+    transport: WaveformTransport,
+) -> tuple[BoundedWaveformExecutor, MSO8104Scope, InstrumentSessionState]:
+    session_state = InstrumentSessionState(epoch_id="mso8104-capture-candidate-test")
+    guarded = GuardedAuditedTransport(transport, session_state=session_state)
+    guarded._mark_bounded_waveform_backend_verified()
+    scope = MSO8104Scope(
+        transport=guarded,
+        trigger_poll_interval_s=0.0,
+    )
+    return (
+        BoundedWaveformExecutor(
+            driver=scope,
+            descriptor=_capture_candidate_descriptor(),
+            session_state=session_state,
+            connection_timeout_ms=5_000,
+            transport=guarded,
+        ),
+        scope,
+        session_state,
+    )
+
+
+def _capture_state(transport: WaveformTransport) -> tuple[object, ...]:
+    return (
+        dict(transport.state),
+        transport.trigger_sweep,
+        transport.acquisition_type,
+        transport.timebase_mode,
+        transport.timebase_scale_s_per_div,
+        transport.timebase_offset_s,
+        dict(transport.displayed),
+        dict(transport.channel_scales),
+        dict(transport.channel_offsets),
+    )
+
+
 def test_bounded_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
     previous = _initial_state()
     transport = WaveformTransport(state=previous)
@@ -1021,6 +1190,205 @@ def test_bounded_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
     assert scope.waveform_writes_blocked is False
     assert session_state.health is SessionHealth.HEALTHY
     assert result.diagnostics["scope_operation"]["binary_budget"]["remaining_query_count"] == 15
+
+
+def test_bounded_capture_candidate_uses_strict_single_and_restores_full_baseline() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
+    previous = _capture_state(transport)
+    executor, scope, session_state = _capture_bounded_executor(transport)
+
+    result = executor.capture_single(
+        channel=1,
+        points="DEF",
+        time_range_s=None,
+        vertical_scale_v_per_div=None,
+        check_errors=False,
+    )
+
+    assert result.value.channel == 1
+    assert _capture_state(transport) == previous
+    assert transport.trigger_statuses == ["STOP"]
+    assert transport.events.count(("write", ":SINGle")) == 1
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 1
+    assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
+    assert scope.waveform_writes_blocked is False
+    assert scope.acquisition_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_candidate_rejects_first_stop_and_core_restores() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["STOP", "STOP"]
+    previous = _capture_state(transport)
+    executor, scope, session_state = _capture_bounded_executor(transport)
+
+    with pytest.raises(DataError, match="completion is unproven"):
+        executor.capture_single(
+            channel=1,
+            points="DEF",
+            time_range_s=None,
+            vertical_scale_v_per_div=None,
+            check_errors=False,
+        )
+
+    assert _capture_state(transport) == previous
+    assert transport.binary_calls == 0
+    assert scope.acquisition_writes_blocked is True
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_candidate_rejects_non_stopped_baseline_before_single() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["WAIT"]
+    executor, _, session_state = _capture_bounded_executor(transport)
+
+    with pytest.raises(ConfigError, match="already stopped baseline"):
+        executor.capture_single(
+            channel=1,
+            points="DEF",
+            time_range_s=None,
+            vertical_scale_v_per_div=None,
+            check_errors=False,
+        )
+
+    assert transport.events.count(("write", ":SINGle")) == 0
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_multi_capture_candidate_uses_one_single_and_one_baseline() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
+    previous = _capture_state(transport)
+    executor, scope, session_state = _capture_bounded_executor(transport)
+    started: list[int | None] = []
+    received: list[tuple[int, int]] = []
+
+    result = executor.capture_multiple(
+        channels=[1, 2],
+        points="DEF",
+        time_range_s=None,
+        vertical_scale_v_per_div=None,
+        check_errors=False,
+        on_channel_start=started.append,
+        on_waveform=lambda channel, waveform: received.append(
+            (channel, waveform.sample_count)
+        ),
+    )
+
+    assert tuple(result.value) == (1, 2)
+    assert started == [1, 2]
+    assert received == [(1, 1000), (2, 1000)]
+    assert _capture_state(transport) == previous
+    assert transport.events.count(("write", ":SINGle")) == 1
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 2
+    assert scope.waveform_writes_blocked is False
+    assert scope.acquisition_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_candidate_rejects_non_byte_transfer_baseline_before_single() -> None:
+    transport = WaveformTransport(state=_initial_state())
+    executor, _, session_state = _capture_bounded_executor(transport)
+
+    with pytest.raises(ConfigError, match="BYTE waveform-transfer baseline"):
+        executor.capture_single(
+            channel=1,
+            points="DEF",
+            time_range_s=None,
+            vertical_scale_v_per_div=None,
+            check_errors=False,
+        )
+
+    assert transport.events.count(("write", ":SINGle")) == 0
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_candidate_rejects_long_point_modes_before_single() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    executor, _, session_state = _capture_bounded_executor(transport)
+
+    with pytest.raises(ConfigError, match="supports only DEF"):
+        executor.capture_single(
+            channel=1,
+            points="DMAX",
+            time_range_s=None,
+            vertical_scale_v_per_div=None,
+            check_errors=False,
+        )
+
+    assert transport.events.count(("write", ":SINGle")) == 0
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_candidate_binary_failure_restores_full_baseline() -> None:
+    transport = WaveformTransport(state=_capture_initial_state(), payload=b"short")
+    transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
+    previous = _capture_state(transport)
+    executor, scope, session_state = _capture_bounded_executor(transport)
+
+    with pytest.raises(DataError, match="payload length mismatch"):
+        executor.capture_single(
+            channel=1,
+            points="DEF",
+            time_range_s=None,
+            vertical_scale_v_per_div=None,
+            check_errors=False,
+        )
+
+    assert _capture_state(transport) == previous
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 1
+    assert scope.waveform_writes_blocked is False
+    assert scope.acquisition_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_multi_capture_candidate_callback_failure_restores_full_baseline() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
+    previous = _capture_state(transport)
+    executor, scope, session_state = _capture_bounded_executor(transport)
+
+    def fail_callback(channel: int, waveform) -> None:
+        del channel, waveform
+        raise RuntimeError("injected callback failure")
+
+    with pytest.raises(RuntimeError, match="injected callback failure"):
+        executor.capture_multiple(
+            channels=[1, 2],
+            points="DEF",
+            time_range_s=None,
+            vertical_scale_v_per_div=None,
+            check_errors=False,
+            on_channel_start=None,
+            on_waveform=fail_callback,
+        )
+
+    assert _capture_state(transport) == previous
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 1
+    assert scope.waveform_writes_blocked is False
+    assert scope.acquisition_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_candidate_restore_failure_rejects_success_value() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
+    transport.fail_writes.add(":ACQuire:TYPE NORMal")
+    executor, scope, session_state = _capture_bounded_executor(transport)
+
+    with pytest.raises(InstrumentError, match="restore did not complete"):
+        executor.capture_single(
+            channel=1,
+            points="DEF",
+            time_range_s=None,
+            vertical_scale_v_per_div=None,
+            check_errors=False,
+        )
+
+    assert scope.waveform_writes_blocked is True
+    assert scope.acquisition_writes_blocked is True
+    assert session_state.health is SessionHealth.POISONED
 
 
 def test_bounded_fetch_data_error_restores_and_verifies_before_raising() -> None:
