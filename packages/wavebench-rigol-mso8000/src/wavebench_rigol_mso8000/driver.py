@@ -663,6 +663,12 @@ class MSO8104Scope:
                 raise OperationTimeout("MSO8104 single-acquisition deadline expired before arming")
             try:
                 self.transport.write(":SINGle")
+                remaining_s = deadline - self._clock()
+                if remaining_s <= 0:
+                    raise OperationTimeout(
+                        "MSO8104 single-acquisition deadline expired before arm readback"
+                    )
+                self._sleep(min(self.trigger_poll_interval_s, remaining_s))
                 trigger_sweep = parse_trigger_sweep(
                     self.transport.query(":TRIGger:SWEep?")
                 )

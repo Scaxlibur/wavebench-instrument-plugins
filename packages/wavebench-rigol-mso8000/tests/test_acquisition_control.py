@@ -248,6 +248,38 @@ def test_single_requires_post_arm_transition_before_terminal_stop() -> None:
     ]
 
 
+def test_single_waits_one_bounded_interval_before_sweep_readback() -> None:
+    transport = AcquisitionControlTransport(statuses=["WAIT", "STOP"])
+    sleeps: list[float] = []
+    scope = MSO8104Scope(
+        transport=transport,
+        trigger_poll_interval_s=0.05,
+        _clock=lambda: 0.0,
+        _sleep=sleeps.append,
+    )
+
+    completion = scope.acquire_single(baseline=_baseline(), deadline=1.0)
+
+    assert completion.state.phase == "stopped"
+    assert sleeps == [0.05, 0.05]
+    assert transport.queries[:2] == [":TRIGger:SWEep?", ":TRIGger:STATus?"]
+
+
+def test_single_expires_before_arm_readback_without_a_query() -> None:
+    transport = AcquisitionControlTransport()
+    clock_values = iter((0.0, 1.0))
+    scope = MSO8104Scope(
+        transport=transport,
+        _clock=lambda: next(clock_values),
+    )
+
+    with pytest.raises(OperationTimeout, match="before arm readback"):
+        scope.acquire_single(baseline=_baseline(), deadline=0.5)
+
+    assert transport.writes == [":SINGle"]
+    assert transport.queries == []
+
+
 def test_single_fails_closed_if_stop_is_the_first_observed_status() -> None:
     transport = AcquisitionControlTransport(statuses=["STOP"])
     scope = MSO8104Scope(transport=transport, _clock=lambda: 0.0)
