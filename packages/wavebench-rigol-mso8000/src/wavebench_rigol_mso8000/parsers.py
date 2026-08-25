@@ -72,6 +72,28 @@ _DIGITAL_DISPLAY_SIZES = {
     "MED": "MEDIUM",
     "LARG": "LARGE",
 }
+MSO8104_SYSTEM_OPTION_TYPES = (
+    "BW610",
+    "BW620",
+    "BW1020",
+    "BND",
+    "COMP",
+    "EMBD",
+    "AUTO",
+    "FLEX",
+    "AUDIO",
+    "AERO",
+    "AWG",
+    "PWR",
+    "JITTER",
+)
+MSO8104_SNAPSHOT_V2_READABLE_FIELDS = (
+    "identity.manufacturer",
+    "identity.model",
+    "identity.serial_number",
+    "identity.firmware",
+    "identity.options",
+)
 MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS = (
     "acquisition_type",
     "sample_rate_hz",

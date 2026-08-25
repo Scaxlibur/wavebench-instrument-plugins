@@ -8,6 +8,7 @@ from wavebench.instruments.scope_extensions import (
     ScopeDescriptorExtensions,
     ScopeFftStatusProfileV2,
     ScopeMeasurementStatisticsProfileV2,
+    ScopeSnapshotProfileV2,
     ScopeWaveformBinaryOperationProfile,
     ScopeWaveformBinaryProfile,
 )
@@ -16,6 +17,8 @@ from .parsers import (
     MSO8104_ACQUISITION_STATUS_V2_CONDITIONALLY_APPLICABLE_FIELDS,
     MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS,
     MSO8104_MEASUREMENT_STATISTICS_ITEMS,
+    MSO8104_SNAPSHOT_V2_READABLE_FIELDS,
+    MSO8104_SYSTEM_OPTION_TYPES,
 )
 
 
@@ -88,6 +91,10 @@ _ACQUISITION_STATUS_PROFILE_V2 = ScopeAcquisitionStatusProfileV2(
     max_queries=4,
     conditionally_applicable_fields=MSO8104_ACQUISITION_STATUS_V2_CONDITIONALLY_APPLICABLE_FIELDS,
 )
+_SNAPSHOT_PROFILE_V2 = ScopeSnapshotProfileV2(
+    readable_fields=MSO8104_SNAPSHOT_V2_READABLE_FIELDS,
+    max_queries=1 + len(MSO8104_SYSTEM_OPTION_TYPES),
+)
 
 
 def _strict_bounded_option(
@@ -145,6 +152,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.fft_status_v2",
             "scope.acquisition_status_v2",
             "scope.digital_status_v2",
+            "scope.snapshot_v2",
             "scope.cursor_readout",
             "scope.cursor_readout_v2",
         ),
@@ -171,7 +179,7 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "Hardware-identified RIGOL MSO8104 identity, safety, bounded DEF waveform fetch, "
-            "autoscale, math, read-only acquisition, digital state, and cursor driver."
+            "autoscale, math, read-only acquisition, digital state, snapshot, and cursor driver."
         ),
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",
@@ -189,6 +197,7 @@ def descriptor() -> InstrumentDescriptor:
             measurement_statistics_profile_v2=_MEASUREMENT_STATISTICS_PROFILE_V2,
             fft_status_profile_v2=_FFT_STATUS_PROFILE_V2,
             acquisition_status_profile_v2=_ACQUISITION_STATUS_PROFILE_V2,
+            snapshot_profile_v2=_SNAPSHOT_PROFILE_V2,
             cursor_readout_profile_v2=_CURSOR_READOUT_PROFILE_V2,
         ),
     )

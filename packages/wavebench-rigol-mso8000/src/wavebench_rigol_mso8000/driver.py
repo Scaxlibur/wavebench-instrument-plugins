@@ -19,8 +19,12 @@ from wavebench.instruments.models import (
     ScopeDigitalSharedStatusV2,
     ScopeDerivedWaveformMetadata,
     ScopeFftStatusV2,
+    ScopeIdentitySnapshot,
     ScopeMeasurementStatisticsRequestV2,
     ScopeMeasurementStatisticsV2,
+    ScopeSnapshotFieldV2,
+    ScopeSnapshotV2,
+    SCOPE_SNAPSHOT_V2_FIELD_ORDER,
     WaveformData,
     WaveformHeader,
 )
@@ -43,6 +47,8 @@ from .parsers import (
     MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCES,
     MSO8104_MEASUREMENT_STATISTICS_ITEMS,
     MSO8104_MEASUREMENT_STATISTICS_TWO_SOURCE_ITEMS,
+    MSO8104_SNAPSHOT_V2_READABLE_FIELDS,
+    MSO8104_SYSTEM_OPTION_TYPES,
     parse_channel_input_state_v2,
     parse_acquisition_type,
     parse_average_acquisition_count,
@@ -142,6 +148,16 @@ _DIGITAL_STATUS_V2_NO_LA_UNAVAILABLE_FIELDS = (
     "pod",
     "shared.timing_calibration_s",
     "shared.size",
+)
+_SNAPSHOT_V2_FIELDS: tuple[ScopeSnapshotFieldV2, ...] = (
+    "identity.manufacturer",
+    "identity.model",
+    "identity.serial_number",
+    "identity.firmware",
+    "identity.options",
+)
+_SNAPSHOT_V2_UNAVAILABLE_FIELDS: tuple[ScopeSnapshotFieldV2, ...] = tuple(
+    field_name for field_name in SCOPE_SNAPSHOT_V2_FIELD_ORDER if field_name not in _SNAPSHOT_V2_FIELDS
 )
 
 
@@ -292,6 +308,39 @@ class MSO8104Scope:
                     size=size,
                 ),
                 unavailable_fields=_DIGITAL_STATUS_V2_LA_UNAVAILABLE_FIELDS,
+            )
+
+    def get_snapshot_v2(
+        self,
+        channel: int,
+        *,
+        fields: tuple[ScopeSnapshotFieldV2, ...],
+    ) -> ScopeSnapshotV2:
+        self._validate_analog_channel(channel)
+        if fields != MSO8104_SNAPSHOT_V2_READABLE_FIELDS:
+            raise ConfigError(
+                "MSO8104 snapshot V2 supports only its descriptor's exact readable field profile"
+            )
+        with self._io_lock:
+            self._require_open()
+            identity = parse_mso8104_identity(self.transport.query("*IDN?"))
+            options = tuple(
+                option
+                for option in MSO8104_SYSTEM_OPTION_TYPES
+                if parse_boolean_state(
+                    self.transport.query(f":SYSTem:OPTion:STATus? {option}"),
+                    field=f"system option {option} status",
+                )
+            )
+            return ScopeSnapshotV2(
+                identity=ScopeIdentitySnapshot(
+                    manufacturer=identity.manufacturer,
+                    model=identity.model,
+                    serial_number=identity.serial_number,
+                    firmware=identity.firmware,
+                    options=options,
+                ),
+                unavailable_fields=_SNAPSHOT_V2_UNAVAILABLE_FIELDS,
             )
 
     def autoscale(self, wait_opc: bool = True, check_errors: bool = True) -> None:

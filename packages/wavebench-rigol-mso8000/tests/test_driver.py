@@ -11,6 +11,7 @@ from wavebench.instruments.scope_extensions import (
     ScopeCursorReadoutProfileV2,
     ScopeFftStatusProfileV2,
     ScopeMeasurementStatisticsProfileV2,
+    ScopeSnapshotProfileV2,
     ScopeWaveformBinaryProfile,
 )
 from wavebench.logging import CommandLogger
@@ -52,6 +53,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.fft_status_v2",
         "scope.acquisition_status_v2",
         "scope.digital_status_v2",
+        "scope.snapshot_v2",
         "scope.cursor_readout",
         "scope.cursor_readout_v2",
     )
@@ -137,6 +139,18 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert acquisition_profile.conditionally_applicable_fields == ("average",)
     assert acquisition_profile.max_queries == 4
     assert acquisition_profile.allowed_effect == "pure_read"
+    snapshot_profile = descriptor.scope_extensions.snapshot_profile_v2
+    assert isinstance(snapshot_profile, ScopeSnapshotProfileV2)
+    assert snapshot_profile.readable_fields == (
+        "identity.manufacturer",
+        "identity.model",
+        "identity.serial_number",
+        "identity.firmware",
+        "identity.options",
+    )
+    assert snapshot_profile.conditionally_applicable_fields == ()
+    assert snapshot_profile.max_queries == 14
+    assert snapshot_profile.allowed_effect == "pure_read"
 
 
 def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> None:
