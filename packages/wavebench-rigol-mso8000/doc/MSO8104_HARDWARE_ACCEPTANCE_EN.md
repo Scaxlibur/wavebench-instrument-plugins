@@ -2,7 +2,7 @@
 
 [中文](MSO8104_HARDWARE_ACCEPTANCE.md)
 
-Acceptance date: 2026-08-24
+Acceptance dates: 2026-08-24 through 2026-08-25
 
 ## Scope
 
@@ -30,6 +30,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `hea
 
 - `scope.idn` strictly identified RIGOL MSO8104;
 - `scope.channel_coupling` returned CH1=`DCL` and CH2=`ACL`;
+- `scope.channel_input_state_v2` returned `dc + high_z + 1 MΩ` for both CH1 and CH2;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
 - core preflight confirmed the safety limit, High-Z display load, and no active cross-channel relation before enable.
 
@@ -47,6 +48,12 @@ After confirming SDG CH1 to MSO CH1 and SDG CH2 to MSO CH2, separate short sourc
 - CH2 returned `1000` samples from `-2.5 ms` to `2.495 ms` at `5 µs` spacing, with a `1.0705 Vpp / 999.167 Hz` summary.
 
 After each read, EXIT cleanup disabled the enabled source channel and a fresh Source V2 snapshot confirmed CH1 and CH2 OFF, `consistent`, and `healthy`.
+
+## Portability V2 read-only follow-up
+
+With both source outputs OFF, `scope.channel_input_state_v2` successfully read independent coupling, termination, and impedance for CH1 and CH2. This step did not write input settings.
+
+`scope.cursor_readout_v2` accepts only a preconfigured global manual `TIME/AMPL` cursor and never moves or reconfigures it. The device returned `VBA`; the driver correctly rejected before any value query, so this is not cursor-readout acceptance. The final source snapshot again confirmed both outputs OFF, `consistent`, and `healthy`.
 
 ## Acceptance boundary and next conditions
 

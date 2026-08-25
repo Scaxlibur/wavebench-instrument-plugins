@@ -2,7 +2,7 @@
 
 [English](MSO8104_HARDWARE_ACCEPTANCE_EN.md)
 
-验收日期：2026-08-24
+验收日期：2026-08-24 至 2026-08-25
 
 ## 范围
 
@@ -30,6 +30,7 @@
 
 - `scope.idn`：严格识别 RIGOL MSO8104；
 - `scope.channel_coupling`：CH1=`DCL`、CH2=`ACL`；
+- `scope.channel_input_state_v2`：CH1/CH2 均返回 `dc + high_z + 1 MΩ`；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
 - 启用前 safety limit、High-Z display load 和无 active cross-channel relation 的 core preflight。
 
@@ -47,6 +48,12 @@
 - CH2：返回 `1000` 个样本，时间为 `-2.5 ms` 到 `2.495 ms`、采样间隔 `5 µs`，摘要为 `1.0705 Vpp / 999.167 Hz`。
 
 每次读取后都通过 `EXIT` 清理关闭已启用的 source 通道，并以新的 Source V2 snapshot 确认 CH1、CH2 均为 OFF、`consistent`、`healthy`。
+
+## portability V2 只读跟进
+
+在 source 两路 OFF 的只读步骤中，`scope.channel_input_state_v2` 成功读取 CH1、CH2 的独立 coupling、termination 和阻抗。该步骤未写入输入设置。
+
+`scope.cursor_readout_v2` 只接受预配置的全局手动 `TIME/AMPL` 光标，且不移动或重配光标。本次设备返回 `VBA`，driver 在读取任意数值前按预期拒绝；该结果不构成光标读数验收。步骤结束后再次确认 source 两路 OFF、`consistent`、`healthy`。
 
 ## 验收范围与后续条件
 

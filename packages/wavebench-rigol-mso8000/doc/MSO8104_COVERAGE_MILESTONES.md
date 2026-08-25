@@ -83,6 +83,8 @@
 
 离线证据：`0.2.0` 覆盖 4 个模拟通道的严格参数校验、耦合与端接枚举、六种已知组合、未知回包、关闭状态和核心高阻保护；没有发送真实通道查询。
 
+开发补充：core 当前开发分支已提供 `scope.channel_input_state_v2`。插件新增无损 V2 映射，保留 AC/DC/GND、high_z/50_ohm 与 `1_000_000/50` Ω，不从 legacy token 反推。199 项包测试、Ruff 与 package check 通过；只读实机查询确认 CH1/CH2 都是 `dc + high_z + 1 MΩ`，查询前后 source 两路均 OFF、`consistent`、`healthy`。
+
 ## M3：当前屏幕波形
 
 离线实现过 `scope.fetch_waveform` 的 `DEF` 路径：目标通道必须已显示，使用 `NORMal + BYTE`，保存并恢复波形传输设置，不隐式 STOP、SINGLE 或 AUTOSCALE。
@@ -92,6 +94,8 @@
 离线证据：`0.3.0` 覆盖通道显示预检、严格 10 字段 preamble、1000 字节 payload、X/Y 换算、六字段写后回读与恢复、二进制失败不重放、写入歧义与恢复失败锁存，以及双线程事务不交织。66 项包测试通过。
 
 开发补充：core 当前工作树已实现 RFC-0008 的标准 waveform bounded executor。插件 `0.9.0` 仅为 `DEF` 声明 `LF` trailing、`1,000` bytes 和一次 binary query，并将恢复与新鲜验证交给 core。171 项包测试包含该 executor 集成测试。确认 CH1/CH2 接线后，两个独立的 `1 kHz / 1 Vpp / 0 V` source 步骤均返回 1000 个样本：CH1 为 `1.05713 Vpp / 1000 Hz`，CH2 为 `1.0705 Vpp / 999.167 Hz`。两次读取均完成五字段恢复与验证，并在退出清理后确认 source 两路 OFF。该结果只覆盖受限 `DEF` 条件，不外推为其他 point mode、通用测量准确度或 capture 证据。
+
+M7 开发补充：core 当前开发分支另提供 `scope.cursor_readout_v2`。插件以全局寻址实现手动 `TIME/AMPL` 的独立 A/B source、秒/赫兹/角度/百分比或 source/百分比单位，以及 A、B、差值读数；不移动任何光标。追踪、XY、测量模式、NONE 和 LA 幅度在读取结果前拒绝。实机当前为 `VBA`，V2 因此前置条件拒绝，光标读数准确度仍未实机验证。
 
 ## M4：单次、多通道与有界长记录
 
