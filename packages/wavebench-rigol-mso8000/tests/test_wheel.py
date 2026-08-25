@@ -170,6 +170,7 @@ assert descriptor.capabilities == (
     "scope.math_metadata",
     "scope.measurement_statistics_v2",
     "scope.fft_status_v2",
+    "scope.acquisition_status_v2",
     "scope.cursor_readout",
     "scope.cursor_readout_v2",
 )

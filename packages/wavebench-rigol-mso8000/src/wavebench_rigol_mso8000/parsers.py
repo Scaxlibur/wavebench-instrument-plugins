@@ -66,6 +66,15 @@ _MATH_OPERATORS = frozenset(
 _FFT_SOURCES = frozenset(f"CHAN{index}" for index in range(1, 5))
 _FFT_WINDOWS = frozenset({"RECT", "BLAC", "HANN", "HAMM", "FLAT", "TRI"})
 _FFT_VERTICAL_UNITS = frozenset({"VRMS", "DB"})
+_ACQUISITION_TYPES = frozenset({"NORM", "PEAK", "AVER", "HRES"})
+MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS = (
+    "acquisition_type",
+    "sample_rate_hz",
+    "memory_depth",
+    "average",
+    "average.configured_count",
+)
+MSO8104_ACQUISITION_STATUS_V2_CONDITIONALLY_APPLICABLE_FIELDS = ("average",)
 MSO8104_MEASUREMENT_STATISTICS_ITEMS = (
     "VMAX",
     "VMIN",
@@ -190,6 +199,10 @@ def parse_fft_vertical_unit(response: str) -> str:
     return _parse_enum(response, field="FFT vertical unit", allowed=_FFT_VERTICAL_UNITS)
 
 
+def parse_acquisition_type(response: str) -> str:
+    return _parse_enum(response, field="acquisition type", allowed=_ACQUISITION_TYPES)
+
+
 def parse_waveform_mode(response: str) -> str:
     return _parse_enum(
         response,
@@ -290,6 +303,20 @@ def parse_finite_float(response: str, *, field: str) -> float:
     return value
 
 
+def parse_positive_finite_float(response: str, *, field: str) -> float:
+    value = parse_finite_float(response, field=field)
+    if value <= 0:
+        raise DataError(f"MSO8104 {field} must be positive, got {response!r}")
+    return value
+
+
+def parse_positive_scientific_integer(response: str, *, field: str) -> int:
+    value = parse_positive_finite_float(response, field=field)
+    if not value.is_integer():
+        raise DataError(f"MSO8104 {field} must be an integer, got {response!r}")
+    return int(value)
+
+
 def parse_nonnegative_statistic_count(response: str, *, field: str) -> int:
     value = parse_finite_float(response, field=field)
     if value < 0 or not value.is_integer():
@@ -324,6 +351,21 @@ def parse_positive_integer(response: str, *, field: str, maximum: int) -> int:
         minimum=1,
         maximum=maximum,
     )
+
+
+def parse_average_acquisition_count(response: str) -> int:
+    value = _parse_bounded_integer(
+        response,
+        field="acquisition average count",
+        minimum=2,
+        maximum=65_536,
+    )
+    if value & (value - 1):
+        raise DataError(
+            "MSO8104 acquisition average count must be a power of two, "
+            f"got {response!r}"
+        )
+    return value
 
 
 def parse_rigol_waveform_preamble(

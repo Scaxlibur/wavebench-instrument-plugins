@@ -7,6 +7,7 @@ from wavebench.instruments import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import ScopeChannelInputStateV2
 from wavebench.instruments.scope_extensions import (
+    ScopeAcquisitionStatusProfileV2,
     ScopeCursorReadoutProfileV2,
     ScopeFftStatusProfileV2,
     ScopeMeasurementStatisticsProfileV2,
@@ -49,6 +50,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.math_metadata",
         "scope.measurement_statistics_v2",
         "scope.fft_status_v2",
+        "scope.acquisition_status_v2",
         "scope.cursor_readout",
         "scope.cursor_readout_v2",
     )
@@ -122,6 +124,18 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     )
     assert fft_profile.max_queries == 6
     assert fft_profile.allowed_effect == "pure_read"
+    acquisition_profile = descriptor.scope_extensions.acquisition_status_profile_v2
+    assert isinstance(acquisition_profile, ScopeAcquisitionStatusProfileV2)
+    assert acquisition_profile.readable_fields == (
+        "acquisition_type",
+        "sample_rate_hz",
+        "memory_depth",
+        "average",
+        "average.configured_count",
+    )
+    assert acquisition_profile.conditionally_applicable_fields == ("average",)
+    assert acquisition_profile.max_queries == 4
+    assert acquisition_profile.allowed_effect == "pure_read"
 
 
 def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> None:

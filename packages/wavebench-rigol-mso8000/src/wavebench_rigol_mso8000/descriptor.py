@@ -3,6 +3,7 @@ from __future__ import annotations
 from wavebench.errors import DataError
 from wavebench.instruments import InstrumentDescriptor, OptionSpec
 from wavebench.instruments.scope_extensions import (
+    ScopeAcquisitionStatusProfileV2,
     ScopeCursorReadoutProfileV2,
     ScopeDescriptorExtensions,
     ScopeFftStatusProfileV2,
@@ -11,7 +12,11 @@ from wavebench.instruments.scope_extensions import (
     ScopeWaveformBinaryProfile,
 )
 
-from .parsers import MSO8104_MEASUREMENT_STATISTICS_ITEMS
+from .parsers import (
+    MSO8104_ACQUISITION_STATUS_V2_CONDITIONALLY_APPLICABLE_FIELDS,
+    MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS,
+    MSO8104_MEASUREMENT_STATISTICS_ITEMS,
+)
 
 
 _WAVEFORM_FETCH_RESTORE_ORDER = (
@@ -78,6 +83,11 @@ _FFT_STATUS_PROFILE_V2 = ScopeFftStatusProfileV2(
     ),
     max_queries=6,
 )
+_ACQUISITION_STATUS_PROFILE_V2 = ScopeAcquisitionStatusProfileV2(
+    readable_fields=MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS,
+    max_queries=4,
+    conditionally_applicable_fields=MSO8104_ACQUISITION_STATUS_V2_CONDITIONALLY_APPLICABLE_FIELDS,
+)
 
 
 def _strict_bounded_option(
@@ -133,6 +143,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.math_metadata",
             "scope.measurement_statistics_v2",
             "scope.fft_status_v2",
+            "scope.acquisition_status_v2",
             "scope.cursor_readout",
             "scope.cursor_readout_v2",
         ),
@@ -159,7 +170,7 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "Hardware-identified RIGOL MSO8104 identity, safety, bounded DEF waveform fetch, "
-            "autoscale, math, and cursor driver."
+            "autoscale, math, read-only acquisition, and cursor driver."
         ),
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",
@@ -176,6 +187,7 @@ def descriptor() -> InstrumentDescriptor:
             waveform_binary_profile=_WAVEFORM_BINARY_PROFILE,
             measurement_statistics_profile_v2=_MEASUREMENT_STATISTICS_PROFILE_V2,
             fft_status_profile_v2=_FFT_STATUS_PROFILE_V2,
+            acquisition_status_profile_v2=_ACQUISITION_STATUS_PROFILE_V2,
             cursor_readout_profile_v2=_CURSOR_READOUT_PROFILE_V2,
         ),
     )

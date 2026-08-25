@@ -22,6 +22,9 @@ from wavebench.instruments.models import (
     WaveformHeader,
 )
 from wavebench.instruments.scope_extensions import (
+    ScopeAcquisitionStatusFieldV2,
+    ScopeAcquisitionStatusV2,
+    ScopeAverageStatusV2,
     ScopeWaveformTransferBaseline,
     ScopeWaveformTransferField,
     ScopeWaveformTransferRestoreResult,
@@ -31,12 +34,15 @@ from wavebench.transport.base import InstrumentTransport
 from wavebench.transport.contracts import BinaryResponseFraming, ReplayPolicy
 
 from .parsers import (
+    MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS,
     MSO8104_MEASUREMENT_STATISTICS_ANALOG_MATH_SOURCES,
     MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCE_ITEMS,
     MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCES,
     MSO8104_MEASUREMENT_STATISTICS_ITEMS,
     MSO8104_MEASUREMENT_STATISTICS_TWO_SOURCE_ITEMS,
     parse_channel_input_state_v2,
+    parse_acquisition_type,
+    parse_average_acquisition_count,
     normalize_channel_input,
     parse_boolean_state,
     parse_cursor_mode,
@@ -52,7 +58,9 @@ from .parsers import (
     parse_math_operator,
     parse_mso8104_identity,
     parse_nonnegative_statistic_count,
+    parse_positive_finite_float,
     parse_positive_integer,
+    parse_positive_scientific_integer,
     parse_rigol_waveform_preamble,
     parse_timebase_mode,
     parse_trigger_status,
@@ -94,6 +102,19 @@ _FFT_STATUS_V2_UNAVAILABLE_FIELDS = (
     "resolution_bandwidth_hz",
     "sample_rate_hz",
 )
+_ACQUISITION_STATUS_V2_FIELDS: tuple[ScopeAcquisitionStatusFieldV2, ...] = (
+    "acquisition_type",
+    "sample_rate_hz",
+    "memory_depth",
+    "average",
+    "average.configured_count",
+)
+_ACQUISITION_STATUS_V2_STATIC_UNAVAILABLE_FIELDS: tuple[
+    ScopeAcquisitionStatusFieldV2, ...
+] = ("run_state", "segmented")
+_ACQUISITION_STATUS_V2_AVERAGE_UNAVAILABLE_FIELDS: tuple[
+    ScopeAcquisitionStatusFieldV2, ...
+] = ("run_state", "average.complete", "segmented")
 
 
 @dataclass(frozen=True)
@@ -1230,6 +1251,54 @@ class MSO8104Scope:
                 frequency_start_hz=frequency_start_hz,
                 frequency_stop_hz=frequency_stop_hz,
                 unavailable_fields=_FFT_STATUS_V2_UNAVAILABLE_FIELDS,
+            )
+
+    def get_acquisition_status_v2(
+        self,
+        *,
+        fields: tuple[ScopeAcquisitionStatusFieldV2, ...],
+    ) -> ScopeAcquisitionStatusV2:
+        if fields != MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS:
+            raise ConfigError(
+                "MSO8104 acquisition status V2 supports only its descriptor's exact "
+                "readable field profile"
+            )
+        with self._io_lock:
+            self._require_open()
+            acquisition_type = parse_acquisition_type(
+                self.transport.query(":ACQuire:TYPE?")
+            )
+            sample_rate_hz = parse_positive_finite_float(
+                self.transport.query(":ACQuire:SRATe?"),
+                field="acquisition sample rate",
+            )
+            memory_depth = parse_positive_scientific_integer(
+                self.transport.query(":ACQuire:MDEPth?"),
+                field="acquisition memory depth",
+            )
+            if memory_depth > _MAX_WAVEFORM_STATE_POINTS:
+                raise DataError(
+                    "MSO8104 acquisition memory depth exceeds the documented 500000000 "
+                    f"points: {memory_depth}"
+                )
+            if acquisition_type != "AVER":
+                return ScopeAcquisitionStatusV2(
+                    acquisition_type=acquisition_type,
+                    sample_rate_hz=sample_rate_hz,
+                    memory_depth=memory_depth,
+                    unavailable_fields=_ACQUISITION_STATUS_V2_STATIC_UNAVAILABLE_FIELDS,
+                    not_applicable_fields=("average",),
+                )
+            return ScopeAcquisitionStatusV2(
+                acquisition_type=acquisition_type,
+                sample_rate_hz=sample_rate_hz,
+                memory_depth=memory_depth,
+                average=ScopeAverageStatusV2(
+                    configured_count=parse_average_acquisition_count(
+                        self.transport.query(":ACQuire:AVERages?")
+                    )
+                ),
+                unavailable_fields=_ACQUISITION_STATUS_V2_AVERAGE_UNAVAILABLE_FIELDS,
             )
 
     @staticmethod
