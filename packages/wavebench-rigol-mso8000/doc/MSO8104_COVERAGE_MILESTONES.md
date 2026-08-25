@@ -101,7 +101,7 @@ M7 开发补充：core 当前开发分支还提供 `scope.measurement_statistics
 
 M7 开发补充：core 当前开发分支还提供 `scope.fft_status_v2`。插件先以 `OPERator? == FFT` 证明目标 math slot 当前为 FFT，再读取 source、window、vertical unit、起始频率与终止频率；6 条 text query 以外不执行 I/O。average-complete、RBW 与 FFT sample rate 固定 unavailable，不由全局 acquisition 值推导。238 项包测试、Ruff 和 wheel 生命周期测试通过；前面板预配置的 MATH1 受控实机返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`，前后 source 两路 OFF、`consistent`、`healthy`。该结果不构成 FFT 精度证据。
 
-M7 开发补充：core 当前开发分支还提供 `scope.acquisition_status_v2`。插件固定读取 acquisition type、sample rate 与 memory depth；仅在 `AVER` 模式下读取 configured average count。average 在非 AVER 模式为 not applicable；`average.complete`、run state 与 segmented 分区不报告，不能由 trigger STOP、OPC 或已配置次数推导。253 项包测试、Ruff 和 wheel 生命周期测试通过；受控实机当前返回 `NORM + 500 kSa/s + 10 kpts`，前后 source 两路 OFF、`consistent`、`healthy`。AVER 语义和所有完成状态仍未验证。
+M7 开发补充：core 当前开发分支还提供 `scope.acquisition_status_v2`。插件固定读取 acquisition type、sample rate 与 memory depth；仅在 `AVER` 模式下读取 configured average count。average 在非 AVER 模式为 not applicable；`average.complete`、run state 与 segmented 分区不报告，不能由 trigger STOP、OPC 或已配置次数推导。253 项包测试、Ruff 和 wheel 生命周期测试通过；受控实机当前返回 `NORM + 500 kSa/s + 10 kpts`，前后 source 两路 OFF、`consistent`、`healthy`。随后受控 `scope.capture_average_v2` probe 对 AVERages、AVER 和 PEAK/NORM 设置均回读 NORM，错误队列为 `0,"No error"`，所以平均模式当前没有远程可达性证据，所有 average capture capability 继续不声明。
 
 M7 开发补充：core 当前开发分支还提供 `scope.digital_status_v2`。插件先读取 LA 模块位；LA 缺席时只报告 `shared.module_present=false`，不读取任何 `:LA:*?`。LA 存在时，D0～D15 以固定 POD1（D0～D7）或 POD2（D8～D15）范围读取 display、label、POD 阈值、全局 timing calibration 和 size，共 6 条文本 query。position、label-enabled、activity、technology 与 hysteresis 维持 unavailable，不读取 digital waveform。268 项包测试、Ruff 和 wheel 生命周期测试通过；受控实机 D0/D8 均返回 displayed、对应 label/POD、`1.4 V`、`0 s` 和 `MEDIUM`，前后 source 两路 OFF、`consistent`、`healthy`。数字探头、电气阈值、逻辑活动与编码语义仍未验证。
 
@@ -165,7 +165,7 @@ legacy `scope.digital_status` 继续跳过：其公共模型要求 activity、te
 | `scope.acquisition_run_state` | 实机通过（受限观察） | 单条 trigger-status query；AUTO→acquiring、STOP→stopped、NORMAL/RUN→WAIT 已验证。SINGLE completion 不由该观察推导 |
 | `scope.acquisition_control` | 实机通过（受限） | `start(normal)`、`stop` 与 post-arm `SING` 模式读回后的 terminal STOP 或 `WAIT/TD → STOP` 已验证；completion proof 不自动证明波形新鲜性 |
 | `scope.capture_waveform`、`scope.capture_waveforms` | 实机通过（受限 bounded `DEF + BYTE`） | 已停止 MAIN baseline；单／双通道每通道 1000 样本，双通道一次 SINGLE，两种调用均完成 13 字段恢复/新鲜验证 |
-| `scope.capture_average` | RFC 后跳过 | 配置模型要求设备不存在的 single count 与逐通道 arithmetic，也没有平均完成位；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
+| `scope.capture_average_v2` | 实机前提失败后跳过 | Core 已提供 V2 合同，但 AVERages/AVER 与 PEAK/NORM 对照写入同步后都回读 NORM，错误队列为 `0,"No error"`；设备当前无法远程进入平均模式，且没有平均完成位；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
 | `scope.measurement_statistics` | RFC 后跳过 | legacy 核心按 slot 寻址，设备按 item/source 查询且不能反查界面 slot；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |
 | `scope.measurement_statistics_v2` | 受控开发 | 显式 item/source、6 条纯读取查询、无统计 buffer。`VPP,CHAN1/CHAN2` 已完成受控实机回包验证；其他 item/source 和统计准确度未验证 |
 | `scope.fft_status` | RFC 后跳过 | legacy 模型强制要求 average-complete、RBW 与 FFT sample rate，设备没有这些 query；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |

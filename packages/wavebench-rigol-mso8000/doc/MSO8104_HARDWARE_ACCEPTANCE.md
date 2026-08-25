@@ -100,6 +100,10 @@ bounded `scope.fetch_waveform` 使用 `LF` trailing、no-replay、每响应最�
 
 该证据只覆盖记录条件下的静态 NORM 采集状态。AVER 配置次数、average completion、segmented 状态以及此只读 profile 本身的 capture completion 语义均未验证；尤其不能由 trigger STOP 推导 average complete。
 
+随后通过临时 `scope.capture_average_v2` descriptor 进行受控前提探测，正式插件 descriptor 未改变。基线为 scope STOP、CH1/CH2 high_z，CH1 接受 1 Vpp、1 Hz 方波；每次 `:ACQuire:TYPE` 写入后仅以有界 `*OPC?` 轮询同步配置写，再读取 type。`AVERages`、合法缩写 `AVER` 及 PEAK/NORM 对照均回读 `NORM`。随后读取并消费的一条错误队列记录为 `0,"No error"`。Core 在 count、SINGLE、preamble 或 binary 读取前拒绝事务并恢复基线；最终新会话再次确认 source 两路 OFF、scope STOP、CH1/CH2 high_z。`*OPC?` 在此只同步配置写，不作为采集或平均完成证据。
+
+因此本固件／配置下，平均模式的远程进入前提没有通过实机验证，`scope.capture_average_v2` 不声明。即使远程模式切换日后可用，手册仍没有把 trigger STOP、`*OPC?` 或 preamble count 绑定为平均完成，不能据此伪造 `device_average_complete`。
+
 `scope.acquisition_run_state` 单次只读取 `:TRIGger:STATus?`。记录条件下，初始 AUTO 被保守映射为 acquiring；随后在 source 两路 OFF、CH1/CH2 均为 `dc + high_z + 1 MΩ` 的条件下，受管 STOP 返回 stopped，NORMAL/RUN 返回 waiting，最终 STOP 再次返回 stopped。没有读取波形、OPC、状态寄存器或错误队列，也没有改动时基、垂直或采样类型。
 
 Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_control` capability。Core 当前开发分支已实现 [RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md) 的受限 terminal-STOP proof，MSO8104 descriptor 已显式 opt in。它不放宽 capture：capture 仍只接受非终态到 STOP 的新鲜性证据，并要求独立的 13 字段恢复和 fresh verification。

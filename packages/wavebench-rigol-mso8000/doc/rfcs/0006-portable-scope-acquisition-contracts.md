@@ -106,9 +106,11 @@ class ScopeAverageCaptureResultV2:
 
 ## capability 影响
 
-core 当前开发分支已实现 acquisition status V2。MSO8104 在受控开发中声明 `scope.acquisition_status_v2`：读取 type、sample rate、memory depth，并仅在 AVER 模式下读取 configured count；average complete、run state 与 segmented 分区保持 unavailable 或 not applicable。legacy `scope.acquisition_status` 与 `scope.capture_average` 仍不声明。当前 `0.9.0` 开发版本已受控声明普通 waveform/capture；这不提供平均采集完成条件，也不会设置或声称验证平均次数。
+core 当前开发分支已实现 acquisition status V2 与 `scope.capture_average_v2`。MSO8104 在受控开发中声明 `scope.acquisition_status_v2`：读取 type、sample rate、memory depth，并仅在 AVER 模式下读取 configured count；average complete、run state 与 segmented 分区保持 unavailable 或 not applicable。legacy `scope.acquisition_status` 与所有 average capture capability 仍不声明。当前 `0.9.0` 开发版本已受控声明普通 waveform/capture；这不提供平均采集完成条件，也不会设置或声称验证平均次数。
 
-核心发布 V2 后，`scope.capture_average` 仍需 RIGOL 官方文档或后续获批的实机证据证明平均采集的完成条件，才能离线加实机 fixture 后启用。接口可表达不等于设备语义已经得到证明。
+在 Core V2 已可调用的受控实机 probe 中，MSO8104 处于 STOP、高阻与 1 Vpp 方波条件时，对 `:ACQuire:TYPE AVERages`、合法缩写 `AVER` 及 PEAK/NORM 对照写入均先完成有界配置同步，再读回 type；四次读回都为 `NORM`，随后消费的错误记录为 `0,"No error"`。probe 在设置 average count、SINGLE、preamble 与 binary 读取前由配置回读 fail closed，并恢复基线。故当前固件／配置连进入平均模式的前提也尚未证明，不能声明 `scope.capture_average_v2`。
+
+即使远程模式切换日后可用，仍需 RIGOL 官方文档或后续获批的实机证据证明平均采集的完成条件，才能补充离线与实机 fixture 后启用。接口可表达不等于设备语义已经得到证明；尤其不能用 trigger STOP、`*OPC?` 或 preamble count 代替 `device_average_complete`。
 
 ## 替代方案
 

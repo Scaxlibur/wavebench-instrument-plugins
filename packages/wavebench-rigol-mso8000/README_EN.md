@@ -10,6 +10,8 @@ Hardware findings apply only to MSO8104 firmware `00.02.02`, LAN/PyVISA, and the
 
 The restricted acquisition-control acceptance covers `start(normal)`→`stop`, plus post-arm `SING` readback followed by either terminal `STOP` or `WAIT`/`TD` progressing to `STOP`. Recovery `*OPC?` is used only to synchronize recovery writes; it is not acquisition-completion or waveform-freshness evidence.
 
+Average capture remains undeclared. A controlled `capture_average_v2` probe used a stopped, high-impedance baseline and a 1 Vpp square signal. It wrote `:ACQuire:TYPE AVERages`, its legal `AVER` abbreviation, and PEAK/NORM controls, synchronizing each setting write before its type readback. Every readback remained `NORM`, and the subsequently consumed error record was `0,"No error"`. The current firmware/configuration therefore cannot enter average mode through this remote path. Even if that prerequisite changes, the manual does not bind trigger STOP, `*OPC?`, or preamble count to average completion. The production descriptor does not declare `scope.capture_average_v2`.
+
 Current identity:
 
 - Distribution: `wavebench-rigol-mso8000`
@@ -23,7 +25,7 @@ The required standard-waveform bounded API and portability V2 APIs are committed
 
 ## M8 offline release evidence
 
-- All 327 MSO8104 package tests and repository-wide Ruff checks pass.
+- All 337 MSO8104 package tests and repository-wide Ruff checks pass.
 - In a disposable sibling WaveBench-core layout, 715 root tests pass and two SP3000A private-hardware-evidence tests skip as expected.
 - Package checks pass for both the source directory and the real wheel in the current WaveBench `0.8.24` development environment.
 - The wheel/sdist contracts cover the single instrument entry point, WaveBench runtime dependency, MIT license, and public content; vendor-local material is absent.
@@ -66,7 +68,7 @@ The descriptor still omits legacy `scope.digital_status` and `scope.digital_wave
 
 `scope.fft_status_v2` accepts only MATH1-MATH4 FFT state already configured at the front panel. The driver queries `OPERator?` and requires `FFT`, then reads the FFT source, window, vertical unit, start frequency, and stop frequency; every step is a text query. The manual provides no provable query for `average_complete`, RBW, or FFT sample rate, so they are always listed in `unavailable_fields` and are never inferred from global acquisition sample rate, frequency range, or waveform points. Controlled MATH1 hardware reads confirmed `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`; source CH1/CH2 were OFF, `consistent`, and `healthy` before and after. This is not FFT amplitude, frequency, or frequency-axis accuracy evidence.
 
-`scope.acquisition_status_v2` always reads `:ACQuire:TYPE?`, `:ACQuire:SRATe?`, and `:ACQuire:MDEPth?`; it reads `:ACQuire:AVERages?` only when type is `AVER`. The average partition is explicitly not applicable outside AVER mode; in AVER mode it reports only the configured count, while `average.complete` remains unavailable. Run state and segmented status are outside the profile. The driver does not send `:TRIGger:STATus?`, `*OPC?`, `*STB?`, or `*ESR?`, and never infers completion from STOP. Controlled hardware returned `NORM + 500 kSa/s + 10 kpts`; source CH1/CH2 were OFF, `consistent`, and `healthy` before and after. Legacy `scope.acquisition_status` and average capture remain undeclared.
+`scope.acquisition_status_v2` always reads `:ACQuire:TYPE?`, `:ACQuire:SRATe?`, and `:ACQuire:MDEPth?`; it reads `:ACQuire:AVERages?` only when type is `AVER`. The average partition is explicitly not applicable outside AVER mode; in AVER mode it reports only the configured count, while `average.complete` remains unavailable. Run state and segmented status are outside the profile. The driver does not send `:TRIGger:STATus?`, `*OPC?`, `*STB?`, or `*ESR?`, and never infers completion from STOP. Controlled hardware returned `NORM + 500 kSa/s + 10 kpts`; the later average-mode write probe also read back `NORM` throughout, so the AVER branch has no reachable-hardware evidence. Source CH1/CH2 were OFF, `consistent`, and `healthy` before and after. Legacy `scope.acquisition_status` and average capture remain undeclared.
 
 `scope.acquisition_run_state` reads only `:TRIGger:STATus?`: STOP maps to stopped, WAIT maps to waiting, RUN and the recorded AUTO state map to acquiring, and TD normally remains unknown. Only in a just-read-back SINGLE transaction can TD be represented as a nonterminal arming observation, and it must be followed by STOP to form a state-transition proof. `scope.acquisition_control` is declared for `start(normal)`, `stop`, and restricted SINGLE completion. Bounded capture is independent from the terminal control proof: it rejects first STOP, requires `WAIT`/`TD → STOP`, and uses Core-owned 13-field recovery/fresh verification. Running-state MAX and capture lengths, timebases, channel sets, and transports outside the controlled procedure remain unverified.
 

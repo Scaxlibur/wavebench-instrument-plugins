@@ -10,6 +10,8 @@
 
 采集控制的实机边界仍受限：`start(normal)`→`stop` 已形成 active/stopped 过程；SINGLE 在模式读回为 `SING` 后，首条 `STOP` 和 `WAIT/TD → STOP` 都已完成受控验证。`*OPC?` 只用于 capture 恢复写批次的通信同步，不能替代 SINGLE completion 或波形新鲜性证明。
 
+平均采集仍不声明。受控 `capture_average_v2` 探测在已停止、高阻、1 Vpp 方波条件下，对 `:ACQuire:TYPE AVERages`、其合法缩写 `AVER` 以及 PEAK/NORM 对照均完成有界写入同步后立即读回 type；设备始终返回 `NORM`，且随后读取的错误队列为 `0,"No error"`。因此当前固件／配置无法通过远程接口进入平均模式；即使该前提解决，手册也没有把 trigger STOP、`*OPC?` 或 preamble count 绑定为平均完成。正式 descriptor 不声明 `scope.capture_average_v2`。
+
 当前身份信息：
 
 - distribution：`wavebench-rigol-mso8000`
@@ -66,7 +68,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `scope.fft_status_v2` 只接受调用方已在前面板配置的 MATH1～MATH4 FFT。driver 先查询 `OPERator?` 并要求回包为 `FFT`，再读取 FFT source、window、vertical unit、起始频率和终止频率；所有步骤均为文本 query。`average_complete`、RBW 和 FFT sample rate 没有手册可证明的 query，因此固定列入 `unavailable_fields`，不会从全局 acquisition sample rate、频率范围或波形点数推导。受控实机 MATH1 已确认 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`，前后 source 两路均 OFF、`consistent`、`healthy`；该结果不构成 FFT 振幅、频率或频率轴准确度证据。
 
-`scope.acquisition_status_v2` 固定读取 `:ACQuire:TYPE?`、`:ACQuire:SRATe?` 和 `:ACQuire:MDEPth?`；仅当 type 为 `AVER` 时才读取 `:ACQuire:AVERages?`。average 分区在非 AVER 模式下明确为 not applicable；AVER 模式下只报告配置次数，`average.complete` 仍为 unavailable。run state 和 segmented 分区没有进入 profile，不发送 `:TRIGger:STATus?`、`*OPC?`、`*STB?` 或 `*ESR?`，也不从 STOP 推导完成状态。受控实机当前返回 `NORM + 500 kSa/s + 10 kpts`；前后 source 两路均 OFF、`consistent`、`healthy`。legacy `scope.acquisition_status` 与平均采集仍不声明。
+`scope.acquisition_status_v2` 固定读取 `:ACQuire:TYPE?`、`:ACQuire:SRATe?` 和 `:ACQuire:MDEPth?`；仅当 type 为 `AVER` 时才读取 `:ACQuire:AVERages?`。average 分区在非 AVER 模式下明确为 not applicable；AVER 模式下只报告配置次数，`average.complete` 仍为 unavailable。run state 和 segmented 分区没有进入 profile，不发送 `:TRIGger:STATus?`、`*OPC?`、`*STB?` 或 `*ESR?`，也不从 STOP 推导完成状态。受控实机当前返回 `NORM + 500 kSa/s + 10 kpts`；后续平均模式写入探测也始终回读 `NORM`，所以 AVER 分支继续没有实机可达性证据。前后 source 两路均 OFF、`consistent`、`healthy`。legacy `scope.acquisition_status` 与平均采集仍不声明。
 
 `scope.acquisition_run_state` 只读取 `:TRIGger:STATus?`：`STOP` 映射为 stopped，`WAIT` 映射为 waiting，`RUN` 和记录条件下经 STOP 验证的 `AUTO` 映射为 acquiring；通常 `TD` 保持 unknown。仅在刚完成 `SING` 模式读回的 SINGLE 事务中，`TD` 被保守表示为非终态 arming，并且必须后续读到 `STOP` 才能构成 state-transition proof。`scope.acquisition_control` 已声明；它支持 `start(normal)`、`stop` 与受限 SINGLE completion。bounded capture 与 control proof 相互独立：capture 不接受首条 STOP，仍要求 `WAIT/TD → STOP`，并恢复和新鲜验证 13 个字段。运行态 MAX、其他 capture 点数/时基/通道组合仍未验收。
 
