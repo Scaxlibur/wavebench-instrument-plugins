@@ -4,7 +4,7 @@
 
 | RFC | 状态 | 影响 |
 | --- | --- | --- |
-| [RFC-0001：非重放文本查询](0001-nonreplayable-text-query.md) | 提议 | `scope.errors` 暂不声明 |
+| [RFC-0001：非重放文本查询](0001-nonreplayable-text-query.md) | core R1 已实现（未发布） | 受控声明 `scope.error_drain_v1`；legacy `scope.errors` 继续不声明 |
 | [RFC-0002：示波器通道输入状态](0002-scope-channel-input-state.md) | core R1 已实现（未发布） | 插件受控声明 `scope.channel_input_state_v2` |
 | [RFC-0003：示波器截图 framing 与菜单合同](0003-scope-screenshot-framing-and-menu-contract.md) | 提议 | `scope.screenshot` 暂不声明 |
 | [RFC-0004：可移植的示波器数字通道状态模型](0004-portable-scope-digital-status.md) | core R1 已实现（未发布） | 受控声明 `scope.digital_status_v2`；D0/D8 静态状态回包已验证，digital waveform 暂不声明 |

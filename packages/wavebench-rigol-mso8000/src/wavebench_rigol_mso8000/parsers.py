@@ -31,6 +31,7 @@ class RigolWaveformPreamble:
 
 
 _STRICT_INTEGER = re.compile(r"[0-9]+")
+_SIGNED_INTEGER = re.compile(r"[+-]?[0-9]+")
 _WAVEFORM_SOURCES = frozenset(
     (
         *(f"D{index}" for index in range(16)),
@@ -441,6 +442,35 @@ def parse_average_acquisition_count(response: str) -> int:
             f"got {response!r}"
         )
     return value
+
+
+def parse_mso8104_error_queue_record(response: str) -> tuple[int, str]:
+    """Parse one consumed ``:SYSTem:ERRor?`` response without guessing escapes."""
+
+    if not isinstance(response, str):
+        raise DataError("invalid MSO8104 error queue response type")
+    normalized = response.strip(" \t\r\n")
+    code_text, separator, message_field = normalized.partition(",")
+    if not separator or _SIGNED_INTEGER.fullmatch(code_text) is None:
+        raise DataError(f"invalid MSO8104 error queue response: {response!r}")
+    if (
+        len(message_field) < 2
+        or message_field[0] != '"'
+        or message_field[-1] != '"'
+    ):
+        raise DataError(f"invalid MSO8104 error queue response: {response!r}")
+    message = message_field[1:-1]
+    if (
+        not message
+        or '"' in message
+        or any(not 0x20 <= ord(character) <= 0x7E for character in message)
+    ):
+        raise DataError(f"invalid MSO8104 error queue response: {response!r}")
+    try:
+        code = int(code_text, 10)
+    except ValueError as exc:
+        raise DataError(f"invalid MSO8104 error queue response: {response!r}") from exc
+    return code, message
 
 
 def parse_rigol_waveform_preamble(

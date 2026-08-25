@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-25
 
 ## Scope
 
-This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, and Snapshot V2 acceptance. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, and error-drain V1 acceptance. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -38,6 +38,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy
 - `scope.acquisition_control` verified `start(normal)`→`stop`, plus post-readback SINGLE terminal STOP and `WAIT`/`TD → STOP`;
 - `scope.capture_waveform` verified bounded `DEF + BYTE` capture at `1,000` samples with 13-field recovery/fresh verification;
 - `scope.capture_waveforms` verified one SINGLE and two binary reads for CH1/CH2, at `1,000` samples per channel with the same recovery/fresh verification;
+- `scope.error_drain_v1` completed one empty-queue drain before and after public capture with `scope.check_errors=true`; capture returned `1,000` samples with its existing 13-field recovery/fresh verification;
 - `scope.digital_status_v2` returned display, label, POD range and `1.4 V` threshold, plus shared `0 s` timing calibration and `MEDIUM` size for D0 and D8;
 - `scope.snapshot_v2` read identity and 13 licensed-option states in one call, with the other 55 fields explicitly unavailable;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
@@ -103,6 +104,8 @@ This evidence covers only static NORM acquisition status for the recorded condit
 A temporary `scope.capture_average_v2` descriptor then ran a controlled prerequisite probe; the production descriptor was unchanged. The baseline was scope STOP with high-impedance CH1/CH2, while CH1 received a 1 Vpp, 1 Hz square signal. After each `:ACQuire:TYPE` write, bounded `*OPC?` polling synchronized only the configuration write before type readback. `AVERages`, its legal `AVER` abbreviation, and PEAK/NORM controls all read back `NORM`. The subsequently consumed error record was `0,"No error"`. Core rejected the transaction before count setting, SINGLE, preamble, or binary I/O and restored the baseline; a new session again confirmed both source outputs OFF, scope STOP, and high-impedance CH1/CH2. `*OPC?` here synchronized configuration writes only, not acquisition or average completion.
 
 The remote-entry prerequisite for average mode therefore has no hardware evidence on this firmware/configuration, and `scope.capture_average_v2` remains undeclared. Even if remote mode switching later works, the manual does not bind trigger STOP, `*OPC?`, or preamble count to average completion, so none can fabricate `device_average_complete`.
+
+`scope.error_drain_v1` is declared through the production descriptor and enters Core's before/after error policy. Every `:SYSTem:ERRor?` query explicitly uses `ReplayPolicy.NO_REPLAY` and accepts only the strict `<integer>,"<message>"` grammar; hardware observed the terminal record `0,"No error"`. In a public `ScopeService.capture_waveform()` call with CH1 at `1 Vpp`, `0.25 Hz` square wave and `scope.check_errors=true`, Core completed one empty drain before and after the main operation, reconciled query counts, and returned `1,000` samples. It then completed 13-field recovery/fresh verification. The final state was both source channels OFF, scope STOP, and CH1/CH2 high_z. Nonzero records, FIFO order, and overflow have offline fault-injection evidence only.
 
 `scope.acquisition_run_state` issued only `:TRIGger:STATus?`. The initial AUTO state was conservatively mapped to acquiring; with both source outputs OFF and CH1/CH2 at `dc + high_z + 1 MΩ`, managed STOP returned stopped, NORMAL/RUN returned waiting, and final STOP returned stopped. No waveform, OPC, status-register, or error-queue read occurred, and no timebase, vertical, or acquisition-type setting changed.
 

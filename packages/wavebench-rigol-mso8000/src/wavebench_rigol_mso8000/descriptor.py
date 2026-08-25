@@ -195,6 +195,7 @@ def descriptor() -> InstrumentDescriptor:
         aliases=(),
         capabilities=(
             "scope.idn",
+            "scope.error_drain_v1",
             "scope.fetch_waveform",
             "scope.capture_waveform",
             "scope.capture_waveforms",
@@ -234,9 +235,9 @@ def descriptor() -> InstrumentDescriptor:
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary=(
-            "Hardware-identified RIGOL MSO8104 identity, safety, bounded DEF waveform "
-            "fetch/capture, autoscale, math, acquisition control, digital state, snapshot, "
-            "and cursor driver."
+            "Hardware-identified RIGOL MSO8104 identity, safety, bounded waveform "
+            "fetch/capture with non-replayed error drain, autoscale, math, acquisition "
+            "control, digital state, snapshot, and cursor driver."
         ),
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",

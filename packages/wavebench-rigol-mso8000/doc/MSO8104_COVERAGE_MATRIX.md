@@ -22,7 +22,7 @@
 | 功能域 | 手册命令面 | WaveBench 接口 | 当前状态 | 边界与建议 |
 | --- | --- | --- | --- | --- |
 | 身份 | `*IDN?` | `scope.idn` | 实机通过 | MSO8104 固件 `00.02.02` 经 LAN/PyVISA 严格识别；不外推到其他型号或固件 |
-| 错误队列 | `:SYSTem:ERRor[:NEXT]?` | `scope.errors` | RFC 后跳过 | 查询会消费队首；核心普通文本 query 允许重放 |
+| 错误队列 | `:SYSTem:ERRor[:NEXT]?` | `scope.error_drain_v1` | 实机通过（受限空队列） | 每条消费型读取显式为 `NO_REPLAY`，严格解析 `<integer>,"<message>"`，仅 `0,"No error"` 终止。公开 bounded capture 的前后各完成一次空 drain 并返回 1000 样本；非零记录和 overflow 仅有离线故障注入证据。legacy `scope.errors` 仍不声明 |
 | 输入安全 | `:CHANnel<n>:COUPling?`、`:CHANnel<n>:IMPedance?` | `scope.channel_coupling`、`scope.channel_input_state_v2` | 实机通过 | legacy 接口继续返回 core 高阻安全 token；V2 分别返回 coupling、termination 与阻抗。CH1/CH2 的 V2 结果均为 `dc + high_z + 1 MΩ`；核心默认拒绝 50 Ω、GND 与未知组合 |
 | 自动设置 | `:SYSTem:AUToscale?`、`:AUToscale` | `scope.autoscale` | 离线通过 | 预检系统使能；明确改变垂直、时基和触发；写入或 OPC 不确定时锁存，效果未实机验证 |
 | 完整状态快照 | channel/timebase/probe/waveform/trigger 与部分 health | `scope.snapshot` | RFC 后跳过 | 公共快照强制要求设备无法查询的字段；`*STB?` 还会清零；见 RFC-0005 |
@@ -73,7 +73,7 @@ payload 必须与点数精确一致；所有轴参数与换算结果必须为有
 ## 未实机验证项
 
 - USB 和 GPIB 资源的连接与终止符；
-- 错误队列无错误哨兵；
+- 错误队列的非零记录、队列顺序和 overflow；
 - `*OPC?` 在两次 source 双路 OFF 的 SINGLE 探测中返回成功后仍可读到 WAIT；它不能作为目标采集完成证据；
 - 运行态 MAX、其他 memory depth/点数下的 MAX/DMAX 吞吐、分块和 timeout；
 - 除记录的 `DEF + LF`、`1 kHz / 1 Vpp / 0 V` 条件外的 X/Y 换算与测量准确度；

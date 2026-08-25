@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2 和快照 V2 的验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2 和错误队列 drain V1 的验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -38,6 +38,7 @@
 - `scope.acquisition_control`：`start(normal)`→`stop`，以及模式读回后的 SINGLE terminal-STOP 与 `WAIT/TD → STOP` 均通过受控验收；
 - `scope.capture_waveform`：受限 `DEF + BYTE` capture 返回 `1,000` 样本，完成 13 字段恢复与新鲜验证；
 - `scope.capture_waveforms`：一次 SINGLE 读取 CH1/CH2 两路，各返回 `1,000` 样本，完成相同恢复与新鲜验证；
+- `scope.error_drain_v1`：公开 capture 在 `scope.check_errors=true` 下于主操作前后各完成一次空队列 drain，返回 `1,000` 样本并完成原 capture 的 13 字段恢复与新鲜验证；
 - `scope.digital_status_v2`：D0、D8 均返回显示、标签、所属 POD 范围与 `1.4 V` 阈值，以及共享 `0 s` timing calibration 和 `MEDIUM` size；
 - `scope.snapshot_v2`：同次读取 identity 和 13 种授权选件状态；其余 55 个字段明确 unavailable；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
@@ -103,6 +104,8 @@ bounded `scope.fetch_waveform` 使用 `LF` trailing、no-replay、每响应最�
 随后通过临时 `scope.capture_average_v2` descriptor 进行受控前提探测，正式插件 descriptor 未改变。基线为 scope STOP、CH1/CH2 high_z，CH1 接受 1 Vpp、1 Hz 方波；每次 `:ACQuire:TYPE` 写入后仅以有界 `*OPC?` 轮询同步配置写，再读取 type。`AVERages`、合法缩写 `AVER` 及 PEAK/NORM 对照均回读 `NORM`。随后读取并消费的一条错误队列记录为 `0,"No error"`。Core 在 count、SINGLE、preamble 或 binary 读取前拒绝事务并恢复基线；最终新会话再次确认 source 两路 OFF、scope STOP、CH1/CH2 high_z。`*OPC?` 在此只同步配置写，不作为采集或平均完成证据。
 
 因此本固件／配置下，平均模式的远程进入前提没有通过实机验证，`scope.capture_average_v2` 不声明。即使远程模式切换日后可用，手册仍没有把 trigger STOP、`*OPC?` 或 preamble count 绑定为平均完成，不能据此伪造 `device_average_complete`。
+
+`scope.error_drain_v1` 已通过正式 descriptor 接入 Core 的 before/after 错误策略。每次 `:SYSTem:ERRor?` 查询都显式使用 `ReplayPolicy.NO_REPLAY`，只接受严格的 `<integer>,"<message>"` 结构；实机已观察到终止记录 `0,"No error"`。在 CH1 `1 Vpp`、`0.25 Hz` 方波的公开 `ScopeService.capture_waveform()` 调用中，配置 `scope.check_errors=true` 后，Core 在主操作前后各完成一次空 drain、核对 query 数，并返回 `1,000` 样本；随后完成 13 字段恢复与新鲜验证。最终 Source 双路 OFF、scope STOP、CH1/CH2 high_z。非零记录、FIFO 顺序和 overflow 仍只有离线故障注入证据。
 
 `scope.acquisition_run_state` 单次只读取 `:TRIGger:STATus?`。记录条件下，初始 AUTO 被保守映射为 acquiring；随后在 source 两路 OFF、CH1/CH2 均为 `dc + high_z + 1 MΩ` 的条件下，受管 STOP 返回 stopped，NORMAL/RUN 返回 waiting，最终 STOP 再次返回 stopped。没有读取波形、OPC、状态寄存器或错误队列，也没有改动时基、垂直或采样类型。
 

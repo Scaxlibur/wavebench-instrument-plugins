@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-`0.9.0` 开发版本在当前 WaveBench Core 开发分支的有界二进制与 portability V2 合同下声明 `scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`、`scope.acquisition_control`、`scope.channel_input_state_v2`、`scope.measurement_statistics_v2`、`scope.fft_status_v2`、`scope.acquisition_status_v2`、`scope.acquisition_run_state`、`scope.digital_status_v2`、`scope.snapshot_v2` 和 `scope.cursor_readout_v2`。waveform 入口支持 `DEF`、停止态 `MAX` 与停止态 `DMAX`；descriptor 精确声明 `LF` trailing、单响应最多 `250,000` bytes、单操作最多 `4,000,000` bytes 与最多 16 次 binary query。`scope.capture_waveform` 和 `scope.capture_waveforms` 仅接受已停止、MAIN 时基下的 `DEF + BYTE` 基线；单通道最多 1 次、双通道最多 4 次 binary query，均由 Core 恢复并新鲜验证 acquisition、trigger、时基、四路 display/vertical 与 transfer 的 13 个字段。SINGLE 写入后必须读回 `SING`：首条 `STOP` 使用受限 completion proof，`WAIT` 或 `TD` 到 `STOP` 使用状态迁移 proof；capture 仅接受后者作为波形新鲜性证据。
+`0.9.0` 开发版本在当前 WaveBench Core 开发分支的有界二进制与 portability V2 合同下声明 `scope.error_drain_v1`、`scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`、`scope.acquisition_control`、`scope.channel_input_state_v2`、`scope.measurement_statistics_v2`、`scope.fft_status_v2`、`scope.acquisition_status_v2`、`scope.acquisition_run_state`、`scope.digital_status_v2`、`scope.snapshot_v2` 和 `scope.cursor_readout_v2`。waveform 入口支持 `DEF`、停止态 `MAX` 与停止态 `DMAX`；descriptor 精确声明 `LF` trailing、单响应最多 `250,000` bytes、单操作最多 `4,000,000` bytes 与最多 16 次 binary query。`scope.capture_waveform` 和 `scope.capture_waveforms` 仅接受已停止、MAIN 时基下的 `DEF + BYTE` 基线；单通道最多 1 次、双通道最多 4 次 binary query，均由 Core 恢复并新鲜验证 acquisition、trigger、时基、四路 display/vertical 与 transfer 的 13 个字段。SINGLE 写入后必须读回 `SING`：首条 `STOP` 使用受限 completion proof，`WAIT` 或 `TD` 到 `STOP` 使用状态迁移 proof；capture 仅接受后者作为波形新鲜性证据。
 
 实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。单通道和双通道 bounded `DEF + BYTE` capture 都在 1 Vpp 安全限制内返回每通道 `1,000` 样本并具备有效幅度；两者均观察到 `WAIT → STOP`，恢复后 `*OPC?` 由 `0` 轮询至 `1`，随后完成 Core 的 13 字段新鲜验证。`TD → STOP` 已在独立的 SINGLE control 验收中观察到。每轮结束均以新会话确认 source CH1/CH2 OFF、scope STOP、CH1/CH2 为 high_z。此前 `DEF + LF` fetch、停止态 MAX/DMAX、统计、FFT、静态 acquisition/digital 状态与 snapshot 的受限实机证据保持有效。该结果不外推到运行态 MAX、其他点数、时基、通道组合、transport 或一般测量准确度。
 
@@ -39,7 +39,7 @@
 
 ## M8 离线发行证据
 
-- MSO8104 包测试：337 项通过；全仓 Ruff 通过。
+- MSO8104 包测试：355 项通过；全仓 Ruff 通过。
 - 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
 - 当前 WaveBench `0.8.24` 开发环境的 package check：源码目录和真实 wheel 均通过。
 - wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。
@@ -76,7 +76,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `scope.snapshot_v2` 只接受 CH1～CH4 请求，但当前 profile 只读当前 identity 与授权选件状态：先执行 `*IDN?`，再按手册枚举读取 13 种 `:SYSTem:OPTion:STATus? <type>`。空 options 仅在本次全部 13 项都明确返回未安装时出现；不从 descriptor、缓存或型号常量补齐。health、channel、timebase、probe、waveform 和 trigger 的 55 个字段均按稳定顺序列为 unavailable。受控实机完成全部 14 条 query；前后 source 两路均 OFF、`consistent`、`healthy`。该能力不读取状态寄存器、错误队列、trigger、波形或二进制数据，也不构成各未读分区的状态或准确度证据。
 
-`channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。新增 `scope.channel_input_state_v2` 不使用上述兼容 token，而是分别返回 `ac/dc/gnd`、`high_z/50_ohm` 和可证明阻抗。实机 CH1/CH2 均读为 `dc + high_z + 1 MΩ`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
+`scope.error_drain_v1` 对 `:SYSTem:ERRor?` 的每次读取都显式使用 Core 的 `ReplayPolicy.NO_REPLAY`，并严格解析 `<integer>,"<message>"`；`0,"No error"` 是已实机观察的唯一终止记录，非零记录、格式异常和队列 overflow 都 fail closed。Core 对有界 fetch/capture 在 `scope.check_errors=true` 时于主操作前后执行有限 drain，并核对实际 query 数。受控实机的公开单通道 capture 在此前后各完成一次空队列 drain，仍返回 1000 样本并恢复安全状态。非空记录和 overflow 目前只有离线故障注入证据。legacy `scope.errors` 仍不声明；autoscale 等旧路径仍必须使用 `check_errors=false`。
 
 `scope.fetch_waveform` 的有界路径支持 `DEF`、停止态 `MAX` 与停止态 `DMAX`。它使用 Core 的 `query_binary()`，不再调用 legacy `query_bin_block()`；`LF` trailing、`250,000`-byte 单响应上限、`4,000,000`-byte 单操作上限、最多 16 次 binary query 与 no-replay 均由 descriptor profile 约束。MAX/DMAX 在任何 transfer setup 前都要求 scope 已停止。该 fetch 证据不外推到运行态 MAX、其他量程、时基、深度和探头条件；受限 capture 的独立验收见上文。
 

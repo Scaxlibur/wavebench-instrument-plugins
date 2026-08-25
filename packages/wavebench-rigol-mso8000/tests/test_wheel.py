@@ -163,6 +163,7 @@ assert descriptor.driver_id == "rigol.mso8104"
 assert descriptor.distribution == "wavebench-rigol-mso8000"
 assert descriptor.capabilities == (
     "scope.idn",
+    "scope.error_drain_v1",
     "scope.fetch_waveform",
     "scope.capture_waveform",
     "scope.capture_waveforms",

@@ -15,7 +15,7 @@ The first canonical target is `rigol.mso8104` in the `wavebench-rigol-mso8000` d
 - Declare only capabilities backed by implementation and offline contract tests.
 - Serialize all transport I/O with one reentrant lock.
 - Reject non-finite values, inexact integers, unknown enums, ambiguous writes, and uncertain restoration.
-- Do not declare `scope.errors` until the core can express a non-replayable consuming text query.
+- Treat `:SYSTem:ERRor?` as consuming: use only Core `scope.error_drain_v1` with explicit `ReplayPolicy.NO_REPLAY`, and do not declare legacy `scope.errors`.
 - Let the core transport decode IEEE/TMC blocks; the driver validates payloads.
 - Exclude vendor material and laboratory data from wheels and sdists.
 
@@ -41,7 +41,7 @@ The base plugin does not expose raw SCPI, reset or setup slots, option installat
 
 - **M0:** Freeze `rigol.mso8104`, `pyvisa`, switchable termination, coupling-plus-impedance normalization, point-mode mapping, block ownership, RFC topics, and package exclusions.
 - **M1:** Provide zero-I/O descriptor import, exactly one core transport, strict MSO8104 identity, idempotent close, and wheel/sdist lifecycle tests.
-- **M2:** Provide `scope.channel_coupling` through combined coupling and impedance reads. Keep `scope.errors` disabled and document `scope.check_errors=false` until the RFC is resolved.
+- **M2:** Provide `scope.channel_coupling` through combined coupling and impedance reads. Legacy `scope.errors` stays disabled; `scope.error_drain_v1` now uses Core's explicit non-replay policy, while legacy paths retain `scope.check_errors=false`.
 - **M3:** The current core worktree implements the RFC-0008 bounded standard-waveform executor. The plugin declares bounded fetch recovery and a separate 13-field capture profile. The recorded known-signal `DEF` fetch and the low-voltage capture procedure are distinct evidence sets; neither establishes general conversion accuracy or unrecorded capture conditions.
 - **M4:** Restricted control and capture are hardware verified. Capture requires an already-stopped MAIN `DEF + BYTE` baseline and `WAIT`/`TD → STOP`, then Core-owned 13-field recovery/fresh verification.
 - **M5:** RFC and skip. `:DISPlay:DATA?` has no documented IEEE/TMC block framing, while `:SAVE:IMAGe:DATA?` is a documented block but cannot prove the core's `include_menu=False` contract. [RFC-0003](rfcs/0003-scope-screenshot-framing-and-menu-contract.md) proposes a non-replayed raw-byte query and an explicit unknown-menu result. Do not declare `scope.screenshot`, guess framing, ignore parameters, or create instrument files.
@@ -51,9 +51,11 @@ The base plugin does not expose raw SCPI, reset or setup slots, option installat
 
 M1 offline evidence: version `0.1.0` passed package tests, Ruff, source package check, wheel/sdist content checks, and disposable-environment install/discovery/removal. No real `*IDN?` query was sent.
 
-M2 offline evidence: version `0.2.0` covers strict four-channel validation, coupling and termination enums, all six known combinations, unknown responses, closed state, and the core high-impedance guard. No real channel query was sent; `scope.errors` remains skipped under RFC-0001.
+M2 offline evidence: version `0.2.0` covers strict four-channel validation, coupling and termination enums, all six known combinations, unknown responses, closed state, and the core high-impedance guard. No real channel query was sent; legacy `scope.errors` remains skipped under RFC-0001.
 
 Development follow-up: the current core development branch provides `scope.channel_input_state_v2`. The plugin adds a lossless V2 mapping that preserves AC/DC/GND, high_z/50_ohm, and `1_000_000/50` ohms without reverse-mapping legacy tokens. All 199 package tests, Ruff, and package check pass. Read-only hardware queries confirmed CH1/CH2 as `dc + high_z + 1 MΩ`; source CH1/CH2 were OFF, `consistent`, and `healthy` before and after.
+
+Error-drain follow-up: the current Core development branch provides one-shot text reads through `query(..., replay=ReplayPolicy.NO_REPLAY)` and the `scope.error_drain_v1` contract. The plugin strictly parses the manual grammar `<integer>,"<message>"`, accepts only the hardware-observed `0,"No error"` terminator, and reads one overflow record after `max_records`. All 355 package tests, Ruff, and build checks pass. A public `1 Vpp / 0.25 Hz` SINGLE capture with `scope.check_errors=true` drained the empty queue before and after the operation, returned 1,000 samples, and restored 13 fields. Nonzero records, FIFO order, and overflow still have offline evidence only.
 
 M3 offline evidence: version `0.3.0` covers displayed-channel preflight, the strict ten-field preamble, an exact 1000-byte payload, X/Y conversion, six-field write/readback/restoration, non-replayed binary failure, ambiguous-write and restore-failure latches, and non-interleaving threaded transactions. The MSO8104 `0.9.0` development integration adds a bounded `DEF` driver method, a five-field core-owned recovery proof, and executor integration tests; 171 package tests pass. With corrected CH1/CH2 wiring, independent `1 kHz / 1 Vpp / 0 V` source runs returned 1000 samples: CH1 `1.05713 Vpp / 1000 Hz` and CH2 `1.0705 Vpp / 999.167 Hz`. Both reads completed core-owned restoration and fresh verification; EXIT cleanup then confirmed both source outputs OFF. This is limited `DEF` evidence, not general conversion accuracy or any other point mode.
 
@@ -81,4 +83,4 @@ M4 capture follow-up: the Core bounded executor is used through declared `scope.
 
 M8 offline evidence: all 168 package tests and Ruff pass for version `0.7.0`. In a disposable sibling-repository layout containing WaveBench core, the root suite passes 715 tests and skips two SP3000A tests as expected because private hardware evidence is absent. WaveBench `0.8.22` validates both the source directory and the real wheel. The wheel contains one `wavebench.instruments` entry point, one valid WaveBench runtime dependency, the MIT license, and plugin code. The sdist contains the public READMEs, matrices, milestones, RFCs, tests, and license. Neither artifact contains vendor-local material. A disposable virtual environment passes wheel installation, zero-I/O descriptor discovery, uninstall, and canonical-ID fallback. Local links in all 61 tracked Markdown files resolve. No real instrument was connected.
 
-The `0.9.0` development regression in the current WaveBench `0.8.24` worktree includes bounded waveform, control/capture, input, cursor, measurement-statistics, FFT-status, acquisition-status/run-state, digital-status, and snapshot V2 integration tests: all 337 package tests, Ruff checks, and source/wheel lifecycle tests pass. The required core API is not separately released, so this is not a public wheel-release claim.
+The `0.9.0` development regression in the current WaveBench `0.8.24` worktree includes bounded waveform, control/capture, error drain, input, cursor, measurement-statistics, FFT-status, acquisition-status/run-state, digital-status, and snapshot V2 integration tests: all 355 package tests, Ruff checks, and source/wheel lifecycle tests pass. The required Core API is not separately released, so this is not a public wheel-release claim.

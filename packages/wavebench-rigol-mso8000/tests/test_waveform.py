@@ -77,6 +77,8 @@ class WaveformTransport:
         self.memory_depth = 10_000
         self.trigger_statuses = ["STOP"]
         self.opc_responses = ["1"]
+        self.error_records = ['0,"No error"']
+        self.error_query_replays: list[ReplayPolicy] = []
         self.events: list[tuple[str, str]] = []
         self.fail_writes: set[str] = set()
         self.binary_error: Exception | None = None
@@ -133,6 +135,11 @@ class WaveformTransport:
             return self.trigger_sweep
         if command == ":ACQuire:MDEPth?":
             return str(self.memory_depth)
+        if command == ":SYSTem:ERRor?":
+            self.error_query_replays.append(replay)
+            if len(self.error_records) > 1:
+                return self.error_records.pop(0)
+            return self.error_records[0]
         if command == "*OPC?":
             if len(self.opc_responses) > 1:
                 return self.opc_responses.pop(0)
@@ -1129,6 +1136,37 @@ def test_bounded_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
     assert scope.waveform_writes_blocked is False
     assert session_state.health is SessionHealth.HEALTHY
     assert result.diagnostics["scope_operation"]["binary_budget"]["remaining_query_count"] == 15
+
+
+def test_bounded_fetch_drains_nonreplayed_errors_before_and_after() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous)
+    executor, _, session_state = _bounded_executor(transport)
+
+    result = executor.fetch(channel=2, points="DEF", check_errors=True)
+
+    assert result.value.channel == 2
+    assert transport.state == asdict(previous)
+    assert transport.events.count(("query", ":SYSTem:ERRor?")) == 2
+    assert transport.error_query_replays == [ReplayPolicy.NO_REPLAY, ReplayPolicy.NO_REPLAY]
+    assert result.diagnostics["error_check"]["completed_phases"] == ["before", "after"]
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_fetch_rejects_preexisting_error_before_binary_io() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous)
+    transport.error_records = ['-222,"Data, out of range"', '0,"No error"']
+    executor, _, session_state = _bounded_executor(transport)
+
+    with pytest.raises(InstrumentError, match="instrument error records"):
+        executor.fetch(channel=2, points="DEF", check_errors=True)
+
+    assert transport.state == asdict(previous)
+    assert transport.binary_calls == 0
+    assert transport.events.count(("query", ":SYSTem:ERRor?")) == 2
+    assert transport.error_query_replays == [ReplayPolicy.NO_REPLAY, ReplayPolicy.NO_REPLAY]
+    assert session_state.health is SessionHealth.HEALTHY
 
 
 def test_bounded_capture_uses_strict_single_and_restores_full_baseline() -> None:

@@ -7,6 +7,8 @@ from wavebench.instruments import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import ScopeChannelInputStateV2
 from wavebench.instruments.scope_extensions import (
+    DriverErrorRecord,
+    ErrorDrainResult,
     ScopeAcquisitionControlProfile,
     ScopeAcquisitionStatusProfileV2,
     ScopeCursorReadoutProfileV2,
@@ -17,9 +19,14 @@ from wavebench.instruments.scope_extensions import (
 )
 from wavebench.logging import CommandLogger
 from wavebench.services.scope_service import assert_scope_high_impedance
+from wavebench.transport.contracts import ReplayPolicy
 from wavebench_rigol_mso8000 import descriptor as plugin_descriptor
 from wavebench_rigol_mso8000.driver import MSO8104Scope
-from wavebench_rigol_mso8000.parsers import RigolIdentity, parse_mso8104_identity
+from wavebench_rigol_mso8000.parsers import (
+    RigolIdentity,
+    parse_mso8104_error_queue_record,
+    parse_mso8104_identity,
+)
 
 
 class FakeTransport:
@@ -28,7 +35,13 @@ class FakeTransport:
         self.queries: list[str] = []
         self.close_calls = 0
 
-    def query(self, command: str) -> str:
+    def query(
+        self,
+        command: str,
+        *,
+        replay: ReplayPolicy = ReplayPolicy.NO_REPLAY,
+    ) -> str:
+        del replay
         self.queries.append(command)
         return self.responses[command]
 
@@ -45,6 +58,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.aliases == ()
     assert descriptor.capabilities == (
         "scope.idn",
+        "scope.error_drain_v1",
         "scope.fetch_waveform",
         "scope.capture_waveform",
         "scope.capture_waveforms",
@@ -300,6 +314,122 @@ def test_identity_parser_rejects_malformed_or_wrong_instruments(
 ) -> None:
     with pytest.raises(DataError, match=message):
         parse_mso8104_identity(response)
+
+
+class ErrorQueueTransport(FakeTransport):
+    def __init__(self, records: list[str]) -> None:
+        super().__init__()
+        self.records = list(records)
+        self.replays: list[ReplayPolicy] = []
+        self.error: Exception | None = None
+
+    def query(
+        self,
+        command: str,
+        *,
+        replay: ReplayPolicy = ReplayPolicy.NO_REPLAY,
+    ) -> str:
+        assert command == ":SYSTem:ERRor?"
+        self.queries.append(command)
+        self.replays.append(replay)
+        if self.error is not None:
+            raise self.error
+        try:
+            return self.records.pop(0)
+        except IndexError as exc:
+            raise AssertionError("error queue queried after its configured records") from exc
+
+
+def test_error_queue_parser_retains_signed_code_and_comma_message() -> None:
+    assert parse_mso8104_error_queue_record(' -222,"Data, out of range"\n') == (
+        -222,
+        "Data, out of range",
+    )
+
+
+@pytest.mark.parametrize(
+    "response",
+    (
+        "",
+        "0,No error",
+        "zero,\"No error\"",
+        '0,"unterminated',
+        '0,"embedded \" quote"',
+        '0,"non-ascii é"',
+        '0,"trailing" extra',
+    ),
+)
+def test_error_queue_parser_rejects_ambiguous_response(response: str) -> None:
+    with pytest.raises(DataError, match="error queue"):
+        parse_mso8104_error_queue_record(response)
+
+
+def test_error_drain_uses_no_replay_and_retains_consumed_records() -> None:
+    transport = ErrorQueueTransport(
+        ['-222,"Data, out of range"', '0,"No error"']
+    )
+
+    result = MSO8104Scope(transport=transport).drain_errors(max_records=16)
+
+    assert result == ErrorDrainResult(
+        records=(
+            DriverErrorRecord(
+                code=-222,
+                message="Data, out of range",
+                severity="error",
+                source="mso8104",
+            ),
+        ),
+        terminated=True,
+        query_count=2,
+    )
+    assert transport.queries == [":SYSTem:ERRor?", ":SYSTem:ERRor?"]
+    assert transport.replays == [ReplayPolicy.NO_REPLAY, ReplayPolicy.NO_REPLAY]
+
+
+def test_error_drain_reports_overflow_with_required_extra_query() -> None:
+    transport = ErrorQueueTransport(
+        [
+            '-100,"First"',
+            '-200,"Second"',
+            '-300,"Third"',
+        ]
+    )
+
+    result = MSO8104Scope(transport=transport).drain_errors(max_records=2)
+
+    assert result == ErrorDrainResult(
+        records=(
+            DriverErrorRecord(-100, "First", "error", "mso8104"),
+            DriverErrorRecord(-200, "Second", "error", "mso8104"),
+        ),
+        terminated=False,
+        query_count=3,
+        overflow_record=DriverErrorRecord(-300, "Third", "error", "mso8104"),
+    )
+    assert len(transport.queries) == 3
+    assert transport.replays == [ReplayPolicy.NO_REPLAY] * 3
+
+
+@pytest.mark.parametrize("max_records", (0, 257, True, 1.0, "1"))
+def test_error_drain_rejects_invalid_limit_without_io(max_records: object) -> None:
+    transport = ErrorQueueTransport(['0,"No error"'])
+
+    with pytest.raises(DataError, match="max_records"):
+        MSO8104Scope(transport=transport).drain_errors(max_records=max_records)  # type: ignore[arg-type]
+
+    assert transport.queries == []
+
+
+def test_error_drain_propagates_one_transport_failure_without_retry() -> None:
+    transport = ErrorQueueTransport(['0,"No error"'])
+    transport.error = InstrumentError("injected consuming-query failure")
+
+    with pytest.raises(InstrumentError, match="injected consuming-query failure"):
+        MSO8104Scope(transport=transport).drain_errors(max_records=1)
+
+    assert transport.queries == [":SYSTem:ERRor?"]
+    assert transport.replays == [ReplayPolicy.NO_REPLAY]
 
 
 @pytest.mark.parametrize(

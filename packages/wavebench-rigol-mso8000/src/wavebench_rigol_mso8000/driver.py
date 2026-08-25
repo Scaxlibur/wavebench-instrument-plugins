@@ -38,6 +38,8 @@ from wavebench.instruments.scope_extensions import (
     ScopeAcquisitionStatusV2,
     ScopeAverageStatusV2,
     ScopeBaselineRestoreResult,
+    DriverErrorRecord,
+    ErrorDrainResult,
     ScopeWaveformTransferBaseline,
     ScopeWaveformTransferField,
     ScopeWaveformTransferRestoreResult,
@@ -75,6 +77,7 @@ from .parsers import (
     parse_finite_float,
     parse_manual_cursor_type,
     parse_math_operator,
+    parse_mso8104_error_queue_record,
     parse_mso8104_identity,
     parse_nonnegative_statistic_count,
     parse_positive_finite_float,
@@ -181,6 +184,8 @@ _ACQUISITION_TYPE_TO_COMMAND = {
     "AVER": ":ACQuire:TYPE AVERages",
     "HRES": ":ACQuire:TYPE HRESolution",
 }
+_ERROR_QUEUE_COMMAND = ":SYSTem:ERRor?"
+_ERROR_QUEUE_TERMINATOR = (0, "No error")
 _TRIGGER_STATUS_TO_PHASE = {
     "STOP": "stopped",
     "WAIT": "waiting",
@@ -305,6 +310,38 @@ class MSO8104Scope:
             response = self.transport.query("*IDN?").strip()
             parse_mso8104_identity(response)
             return response
+
+    def drain_errors(self, *, max_records: int) -> ErrorDrainResult:
+        if type(max_records) is not int or not 1 <= max_records <= 256:
+            raise DataError("MSO8104 error drain max_records must be an integer from 1 through 256")
+        with self._io_lock:
+            self._require_open()
+            records: list[DriverErrorRecord] = []
+            for query_count in range(1, max_records + 2):
+                code, message = parse_mso8104_error_queue_record(
+                    self.transport.query(_ERROR_QUEUE_COMMAND, replay=ReplayPolicy.NO_REPLAY)
+                )
+                if (code, message) == _ERROR_QUEUE_TERMINATOR:
+                    return ErrorDrainResult(
+                        records=tuple(records),
+                        terminated=True,
+                        query_count=query_count,
+                    )
+                record = DriverErrorRecord(
+                    code=code,
+                    message=message,
+                    severity="error",
+                    source="mso8104",
+                )
+                if len(records) == max_records:
+                    return ErrorDrainResult(
+                        records=tuple(records),
+                        terminated=False,
+                        query_count=query_count,
+                        overflow_record=record,
+                    )
+                records.append(record)
+        raise AssertionError("MSO8104 error drain exhausted without an overflow record")
 
     @staticmethod
     def _validate_analog_channel(channel: int) -> None:
@@ -2249,8 +2286,8 @@ class MSO8104Scope:
             raise DataError("MSO8104 check_errors must be a boolean")
         if check_errors:
             raise ConfigError(
-                "MSO8104 scope.errors is unavailable until non-replayable text queries exist; "
-                "set scope.check_errors=false"
+                "MSO8104 legacy check_errors bypasses Core error-drain policy; "
+                "use the Core bounded operation or set scope.check_errors=false"
             )
 
     @staticmethod
