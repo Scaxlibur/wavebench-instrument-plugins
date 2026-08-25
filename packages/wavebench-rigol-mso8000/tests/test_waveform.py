@@ -1071,6 +1071,7 @@ def _capture_bounded_executor(
     scope = MSO8104Scope(
         transport=guarded,
         trigger_poll_interval_s=0.0,
+        capture_recovery_settle_s=0.0,
     )
     return (
         BoundedWaveformExecutor(
@@ -1152,6 +1153,40 @@ def test_bounded_capture_uses_strict_single_and_restores_full_baseline() -> None
     assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
     assert scope.waveform_writes_blocked is False
     assert scope.acquisition_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_waits_before_recovery_verification() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
+    sleeps: list[float] = []
+    session_state = InstrumentSessionState(epoch_id="mso8104-capture-settle-test")
+    guarded = GuardedAuditedTransport(transport, session_state=session_state)
+    guarded._mark_bounded_waveform_backend_verified()
+    scope = MSO8104Scope(
+        transport=guarded,
+        trigger_poll_interval_s=0.0,
+        capture_recovery_settle_s=0.5,
+        _sleep=sleeps.append,
+    )
+    executor = BoundedWaveformExecutor(
+        driver=scope,
+        descriptor=plugin_descriptor(),
+        session_state=session_state,
+        connection_timeout_ms=5_000,
+        transport=guarded,
+    )
+
+    result = executor.capture_single(
+        channel=1,
+        points="DEF",
+        time_range_s=None,
+        vertical_scale_v_per_div=None,
+        check_errors=False,
+    )
+
+    assert result.value.channel == 1
+    assert sleeps.count(0.5) == 1
     assert session_state.health is SessionHealth.HEALTHY
 
 

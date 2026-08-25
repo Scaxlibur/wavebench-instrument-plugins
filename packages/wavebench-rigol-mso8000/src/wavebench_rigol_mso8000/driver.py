@@ -244,6 +244,7 @@ class MSO8104Scope:
     transport: InstrumentTransport
     acquisition_timeout_s: float = 30.0
     trigger_poll_interval_s: float = 0.25
+    capture_recovery_settle_s: float = 0.5
     max_total_waveform_points: int = _HARD_MAX_TOTAL_WAVEFORM_POINTS
     max_byte_points_per_read: int = _HARD_MAX_BYTE_POINTS_PER_READ
     _clock: Callable[[], float] = field(default=time.monotonic, repr=False)
@@ -267,6 +268,13 @@ class MSO8104Scope:
             or self.trigger_poll_interval_s < 0
         ):
             raise DataError("MSO8104 trigger poll interval must be finite and non-negative")
+        if (
+            not math.isfinite(self.capture_recovery_settle_s)
+            or self.capture_recovery_settle_s < 0
+        ):
+            raise DataError(
+                "MSO8104 capture recovery settle interval must be finite and non-negative"
+            )
         if (
             type(self.max_total_waveform_points) is not int
             or not 1
@@ -1303,6 +1311,10 @@ class MSO8104Scope:
                 return self._waveform_transfer_snapshot(self._snapshot_waveform_state())
             if baseline.restore_order == _WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER:
                 self._validate_capture_waveform_transfer_baseline(baseline)
+                # The MSO8104 accepts the recovery write batch before its trigger
+                # status query is ready on the LAN session.  Keep verification
+                # mandatory, but let the instrument settle before issuing it.
+                self._sleep(self.capture_recovery_settle_s)
                 return self._capture_recovery_snapshot(
                     self._snapshot_capture_recovery_state()
                 )
