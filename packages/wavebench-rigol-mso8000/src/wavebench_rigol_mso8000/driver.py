@@ -1313,8 +1313,15 @@ class MSO8104Scope:
                 self._validate_capture_waveform_transfer_baseline(baseline)
                 # The MSO8104 accepts the recovery write batch before its trigger
                 # status query is ready on the LAN session.  Keep verification
-                # mandatory, but let the instrument settle before issuing it.
+                # mandatory, but let the instrument settle and synchronize the
+                # recovery writes before issuing it.  This is transport recovery
+                # only; it is not an acquisition-completion proof.
                 self._sleep(self.capture_recovery_settle_s)
+                recovery_opc = self.transport.query("*OPC?").strip()
+                if recovery_opc != "1":
+                    raise DataError(
+                        "MSO8104 capture recovery synchronization did not return OPC=1"
+                    )
                 return self._capture_recovery_snapshot(
                     self._snapshot_capture_recovery_state()
                 )

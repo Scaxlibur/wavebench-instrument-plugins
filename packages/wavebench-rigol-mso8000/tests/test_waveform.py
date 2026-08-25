@@ -76,6 +76,7 @@ class WaveformTransport:
         self.trigger_sweep = "NORM"
         self.memory_depth = 10_000
         self.trigger_statuses = ["STOP"]
+        self.opc_response = "1"
         self.events: list[tuple[str, str]] = []
         self.fail_writes: set[str] = set()
         self.binary_error: Exception | None = None
@@ -132,6 +133,8 @@ class WaveformTransport:
             return self.trigger_sweep
         if command == ":ACQuire:MDEPth?":
             return str(self.memory_depth)
+        if command == "*OPC?":
+            return self.opc_response
         if command == ":TRIGger:STATus?":
             if len(self.trigger_statuses) > 1:
                 return self.trigger_statuses.pop(0)
@@ -1187,7 +1190,27 @@ def test_bounded_capture_waits_before_recovery_verification() -> None:
 
     assert result.value.channel == 1
     assert sleeps.count(0.5) == 1
+    assert transport.events.count(("query", "*OPC?")) == 1
     assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_rejects_failed_recovery_synchronization() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
+    transport.opc_response = "0"
+    executor, _, session_state = _capture_bounded_executor(transport)
+
+    with pytest.raises(DataError, match="recovery synchronization"):
+        executor.capture_single(
+            channel=1,
+            points="DEF",
+            time_range_s=None,
+            vertical_scale_v_per_div=None,
+            check_errors=False,
+    )
+
+    assert transport.events.count(("query", "*OPC?")) == 1
+    assert session_state.health is SessionHealth.POISONED
 
 
 def test_bounded_capture_rejects_terminal_stop_after_mode_readback() -> None:
