@@ -12,5 +12,6 @@
 | [RFC-0006：可移植的示波器采集状态与平均采集合同](0006-portable-scope-acquisition-contracts.md) | core R1 已实现（未发布） | 受控声明 acquisition status V2 静态子集；average/capture 暂不声明 |
 | [RFC-0007：可移植的示波器统计、FFT 与光标读取合同](0007-portable-scope-analysis-reads.md) | core R1 已实现（未发布） | 受控声明 statistics/FFT/cursor V2；FFT MATH1 状态回包已验证 |
 | [RFC-0008：有界示波器波形块的尾随字节合同](0008-bounded-waveform-block-trailing-contract.md) | core R1 已实现（未发布） | 受控声明有界 `DEF`；capture 暂不声明 |
+| [RFC-0009：已验证 SINGLE 模式下的即时 STOP 完成合同](0009-single-mode-readback-terminal-stop.md) | 提议 | 以模式读回限定即时 STOP completion；control/capture 继续默认拒绝 |
 
 core 正式发布后，插件必须提高最低 WaveBench 版本并重新完成核心集成测试，才可发布相应 compatibility wheel。不能只根据 RFC 文本调用不存在的方法。
