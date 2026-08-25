@@ -5,6 +5,7 @@ from wavebench.instruments import InstrumentDescriptor, OptionSpec
 from wavebench.instruments.scope_extensions import (
     ScopeCursorReadoutProfileV2,
     ScopeDescriptorExtensions,
+    ScopeFftStatusProfileV2,
     ScopeMeasurementStatisticsProfileV2,
     ScopeWaveformBinaryOperationProfile,
     ScopeWaveformBinaryProfile,
@@ -67,6 +68,16 @@ _MEASUREMENT_STATISTICS_PROFILE_V2 = ScopeMeasurementStatisticsProfileV2(
     supported_items=MSO8104_MEASUREMENT_STATISTICS_ITEMS,
     item_source_count_range=(1, 2),
 )
+_FFT_STATUS_PROFILE_V2 = ScopeFftStatusProfileV2(
+    readable_fields=(
+        "source",
+        "window",
+        "vertical_unit",
+        "frequency_start_hz",
+        "frequency_stop_hz",
+    ),
+    max_queries=6,
+)
 
 
 def _strict_bounded_option(
@@ -121,6 +132,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.autoscale",
             "scope.math_metadata",
             "scope.measurement_statistics_v2",
+            "scope.fft_status_v2",
             "scope.cursor_readout",
             "scope.cursor_readout_v2",
         ),
@@ -163,6 +175,7 @@ def descriptor() -> InstrumentDescriptor:
         scope_extensions=ScopeDescriptorExtensions(
             waveform_binary_profile=_WAVEFORM_BINARY_PROFILE,
             measurement_statistics_profile_v2=_MEASUREMENT_STATISTICS_PROFILE_V2,
+            fft_status_profile_v2=_FFT_STATUS_PROFILE_V2,
             cursor_readout_profile_v2=_CURSOR_READOUT_PROFILE_V2,
         ),
     )

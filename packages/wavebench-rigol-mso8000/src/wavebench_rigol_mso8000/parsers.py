@@ -38,6 +38,34 @@ _WAVEFORM_SOURCES = frozenset(
         *(f"MATH{index}" for index in range(1, 5)),
     )
 )
+_MATH_OPERATORS = frozenset(
+    {
+        "ADD",
+        "SUBT",
+        "MULT",
+        "DIV",
+        "AND",
+        "OR",
+        "XOR",
+        "NOT",
+        "FFT",
+        "INTG",
+        "DIFF",
+        "SQRT",
+        "LOG",
+        "LN",
+        "EXP",
+        "ABS",
+        "LPAS",
+        "HPAS",
+        "BPAS",
+        "BST",
+        "AXB",
+    }
+)
+_FFT_SOURCES = frozenset(f"CHAN{index}" for index in range(1, 5))
+_FFT_WINDOWS = frozenset({"RECT", "BLAC", "HANN", "HAMM", "FLAT", "TRI"})
+_FFT_VERTICAL_UNITS = frozenset({"VRMS", "DB"})
 MSO8104_MEASUREMENT_STATISTICS_ITEMS = (
     "VMAX",
     "VMIN",
@@ -144,6 +172,22 @@ def _parse_enum(response: str, *, field: str, allowed: frozenset[str]) -> str:
 
 def parse_waveform_source(response: str) -> str:
     return _parse_enum(response, field="waveform source", allowed=_WAVEFORM_SOURCES)
+
+
+def parse_math_operator(response: str) -> str:
+    return _parse_enum(response, field="math operator", allowed=_MATH_OPERATORS)
+
+
+def parse_fft_source(response: str) -> str:
+    return _parse_enum(response, field="FFT source", allowed=_FFT_SOURCES)
+
+
+def parse_fft_window(response: str) -> str:
+    return _parse_enum(response, field="FFT window", allowed=_FFT_WINDOWS)
+
+
+def parse_fft_vertical_unit(response: str) -> str:
+    return _parse_enum(response, field="FFT vertical unit", allowed=_FFT_VERTICAL_UNITS)
 
 
 def parse_waveform_mode(response: str) -> str:

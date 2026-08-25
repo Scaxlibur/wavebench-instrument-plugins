@@ -8,6 +8,7 @@ from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import ScopeChannelInputStateV2
 from wavebench.instruments.scope_extensions import (
     ScopeCursorReadoutProfileV2,
+    ScopeFftStatusProfileV2,
     ScopeMeasurementStatisticsProfileV2,
     ScopeWaveformBinaryProfile,
 )
@@ -47,6 +48,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.autoscale",
         "scope.math_metadata",
         "scope.measurement_statistics_v2",
+        "scope.fft_status_v2",
         "scope.cursor_readout",
         "scope.cursor_readout_v2",
     )
@@ -109,6 +111,17 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert statistics_profile.item_source_count_range == (1, 2)
     assert statistics_profile.supported_items[0:3] == ("VMAX", "VMIN", "VPP")
     assert statistics_profile.supported_items[-2:] == ("FRPHASE", "FFPHASE")
+    fft_profile = descriptor.scope_extensions.fft_status_profile_v2
+    assert isinstance(fft_profile, ScopeFftStatusProfileV2)
+    assert fft_profile.readable_fields == (
+        "source",
+        "window",
+        "vertical_unit",
+        "frequency_start_hz",
+        "frequency_stop_hz",
+    )
+    assert fft_profile.max_queries == 6
+    assert fft_profile.allowed_effect == "pure_read"
 
 
 def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> None:

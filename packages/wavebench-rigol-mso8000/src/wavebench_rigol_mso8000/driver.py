@@ -15,6 +15,7 @@ from wavebench.instruments.models import (
     ScopeCursorReadoutV2,
     ScopeCursorQuantity,
     ScopeDerivedWaveformMetadata,
+    ScopeFftStatusV2,
     ScopeMeasurementStatisticsRequestV2,
     ScopeMeasurementStatisticsV2,
     WaveformData,
@@ -43,8 +44,12 @@ from .parsers import (
     parse_cursor_time_unit,
     parse_cursor_vertical_unit,
     parse_display_state,
+    parse_fft_source,
+    parse_fft_vertical_unit,
+    parse_fft_window,
     parse_finite_float,
     parse_manual_cursor_type,
+    parse_math_operator,
     parse_mso8104_identity,
     parse_nonnegative_statistic_count,
     parse_positive_integer,
@@ -84,6 +89,11 @@ _CURSOR_VERTICAL_UNITS = {
     "SOUR": "source",
     "PERC": "percent",
 }
+_FFT_STATUS_V2_UNAVAILABLE_FIELDS = (
+    "average_complete",
+    "resolution_bandwidth_hz",
+    "sample_rate_hz",
+)
 
 
 @dataclass(frozen=True)
@@ -1165,6 +1175,61 @@ class MSO8104Scope:
                 minimum=minimum,
                 maximum=maximum,
                 waveform_count=waveform_count,
+            )
+
+    def get_fft_status_v2(
+        self,
+        math_index: int,
+        *,
+        configured_fft: bool,
+    ) -> ScopeFftStatusV2:
+        self._validate_math_index(math_index)
+        if type(configured_fft) is not bool:
+            raise DataError("MSO8104 configured_fft must be a boolean")
+        if not configured_fft:
+            raise ConfigError(
+                "reading MSO8104 FFT status requires explicit confirmation that the "
+                "target math slot is already configured"
+            )
+        with self._io_lock:
+            self._require_open()
+            operator = parse_math_operator(
+                self.transport.query(f":MATH{math_index}:OPERator?")
+            )
+            if operator != "FFT":
+                raise ConfigError(
+                    f"MSO8104 MATH{math_index} is not configured for FFT, got {operator}"
+                )
+            source = parse_fft_source(
+                self.transport.query(f":MATH{math_index}:FFT:SOURce?")
+            )
+            window = parse_fft_window(
+                self.transport.query(f":MATH{math_index}:FFT:WINDow?")
+            )
+            vertical_unit = parse_fft_vertical_unit(
+                self.transport.query(f":MATH{math_index}:FFT:UNIT?")
+            )
+            frequency_start_hz = parse_finite_float(
+                self.transport.query(f":MATH{math_index}:FFT:FREQuency:STARt?"),
+                field="FFT frequency start",
+            )
+            frequency_stop_hz = parse_finite_float(
+                self.transport.query(f":MATH{math_index}:FFT:FREQuency:END?"),
+                field="FFT frequency stop",
+            )
+            if frequency_start_hz >= frequency_stop_hz:
+                raise DataError(
+                    "MSO8104 FFT frequency start must be below frequency stop, got "
+                    f"{frequency_start_hz} and {frequency_stop_hz}"
+                )
+            return ScopeFftStatusV2(
+                math_index=math_index,
+                source=source,
+                window=window,
+                vertical_unit=vertical_unit,
+                frequency_start_hz=frequency_start_hz,
+                frequency_stop_hz=frequency_stop_hz,
+                unavailable_fields=_FFT_STATUS_V2_UNAVAILABLE_FIELDS,
             )
 
     @staticmethod
