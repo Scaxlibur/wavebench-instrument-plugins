@@ -70,9 +70,9 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert profile.transport_trailing == b"\n"
     assert len(profile.operations) == 1
     assert profile.operations[0].operation_kind == "fetch"
-    assert profile.operations[0].response_max_bytes == 1_000
-    assert profile.operations[0].operation_max_bytes == 1_000
-    assert profile.operations[0].query_max_count == 1
+    assert profile.operations[0].response_max_bytes == 250_000
+    assert profile.operations[0].operation_max_bytes == 4_000_000
+    assert profile.operations[0].query_max_count == 16
     assert profile.operations[0].resynchronization_max_bytes == 65_536
     assert profile.operations[0].restore_order == (
         "scope.waveform_source",

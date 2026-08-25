@@ -1016,7 +1016,7 @@ def test_bounded_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
     ]
     assert scope.waveform_writes_blocked is False
     assert session_state.health is SessionHealth.HEALTHY
-    assert result.diagnostics["scope_operation"]["binary_budget"]["remaining_query_count"] == 0
+    assert result.diagnostics["scope_operation"]["binary_budget"]["remaining_query_count"] == 15
 
 
 def test_bounded_fetch_data_error_restores_and_verifies_before_raising() -> None:
@@ -1034,20 +1034,101 @@ def test_bounded_fetch_data_error_restores_and_verifies_before_raising() -> None
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_fetch_rejects_max_and_dmax_until_their_hardware_acceptance() -> None:
+def test_bounded_dmax_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
     previous = _initial_state()
     transport = WaveformTransport(
         state=previous,
-        preamble=_long_preamble(type_code=2, points=257),
-        payload=bytes(128 + index % 4 for index in range(257)),
+        preamble=_long_preamble(type_code=2, points=5),
+        payload=bytes([128, 129, 130, 131, 132]),
     )
+    transport.trigger_statuses = ["STOP"]
+    executor, scope, session_state = _bounded_executor(
+        transport,
+        max_total_waveform_points=10,
+        max_byte_points_per_read=2,
+    )
+
+    result = executor.fetch(channel=1, points="DMAX", check_errors=False)
+
+    assert result.value.sample_count == 5
+    assert transport.events.count(("query", ":TRIGger:STATus?")) == 1
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 3
+    assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
+    assert [request[2] for request in transport.binary_requests] == [2, 2, 1]
+    assert transport.state == asdict(previous)
+    assert scope.waveform_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+    assert result.diagnostics["scope_operation"]["binary_budget"]["remaining_query_count"] == 13
+
+
+def test_bounded_max_fetch_uses_chunks_without_acquisition_control() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(
+        state=previous,
+        preamble=_long_preamble(type_code=1, points=5),
+        payload=bytes([128, 129, 130, 131, 132]),
+    )
+    transport.trigger_statuses = ["RUN"]
+    executor, scope, session_state = _bounded_executor(
+        transport,
+        max_total_waveform_points=10,
+        max_byte_points_per_read=2,
+    )
+
+    result = executor.fetch(channel=2, points="MAX", check_errors=False)
+
+    assert result.value.sample_count == 5
+    assert ("query", ":TRIGger:STATus?") not in transport.events
+    assert ("write", ":STOP") not in transport.events
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 3
+    assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
+    assert [request[2] for request in transport.binary_requests] == [2, 2, 1]
+    assert transport.state == asdict(previous)
+    assert scope.waveform_writes_blocked is False
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_dmax_refuses_non_stopped_acquisition_before_raw_setup() -> None:
+    previous = WaveformTransferState(
+        source="CHAN3",
+        mode="NORM",
+        data_format="WORD",
+        points=4096,
+        start=101,
+        stop=4096,
+    )
+    transport = WaveformTransport(
+        state=previous,
+        preamble=_long_preamble(type_code=2, points=5),
+        payload=bytes(range(5)),
+    )
+    transport.trigger_statuses = ["RUN"]
+    executor, _, session_state = _bounded_executor(transport)
+
+    with pytest.raises(ConfigError, match="already stopped"):
+        executor.fetch(channel=1, points="DMAX", check_errors=False)
+
+    assert ("write", ":WAVeform:MODE RAW") not in transport.events
+    assert transport.binary_calls == 0
+    assert transport.state == asdict(previous)
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_long_fetch_rejects_preamble_that_exceeds_query_capacity() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(
+        state=previous,
+        preamble=_long_preamble(type_code=2, points=17),
+        payload=bytes(range(17)),
+    )
+    transport.trigger_statuses = ["STOP"]
     executor, _, session_state = _bounded_executor(
         transport,
         max_total_waveform_points=1_000,
         max_byte_points_per_read=1,
     )
 
-    with pytest.raises(ConfigError, match="supports only DEF"):
+    with pytest.raises(DataError, match="preamble points"):
         executor.fetch(channel=1, points="DMAX", check_errors=False)
 
     assert transport.binary_calls == 0

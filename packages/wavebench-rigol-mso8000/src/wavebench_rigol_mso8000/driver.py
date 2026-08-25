@@ -96,6 +96,7 @@ _NORMAL_WAVEFORM_POINTS = 1000
 _MAX_WAVEFORM_STATE_POINTS = 500_000_000
 _HARD_MAX_TOTAL_WAVEFORM_POINTS = 4_000_000
 _HARD_MAX_BYTE_POINTS_PER_READ = 250_000
+_BOUNDED_FETCH_MAX_BINARY_QUERIES = 16
 _POINT_MODE_TO_TRANSFER = {
     "DEF": ("NORM", 0),
     "MAX": ("MAX", 1),
@@ -1223,6 +1224,20 @@ class MSO8104Scope:
             return
         self._apply_waveform_prefix(channel=channel, mode=mode)
 
+    def _bounded_long_waveform_point_budget(self) -> int:
+        return min(
+            self.max_total_waveform_points,
+            _BOUNDED_FETCH_MAX_BINARY_QUERIES * self.max_byte_points_per_read,
+        )
+
+    def _require_dmax_stopped(self) -> None:
+        status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+        if status != "STOP":
+            raise ConfigError(
+                "MSO8104 DMAX fetch requires an already stopped acquisition; "
+                f"current trigger status is {status}"
+            )
+
     def fetch_waveform_bounded(
         self,
         channel: int,
@@ -1232,22 +1247,23 @@ class MSO8104Scope:
     ) -> WaveformData:
         self._validate_analog_channel(channel)
         point_mode = self._normalize_point_mode(points)
-        if point_mode != "DEF":
-            raise ConfigError(
-                "MSO8104 bounded waveform fetch currently supports only DEF; "
-                "MAX and DMAX require separate hardware acceptance"
-            )
         self._validate_waveform_transfer_baseline(baseline)
         with self._io_lock:
             self._require_open()
             self._require_waveform_writes_allowed()
             self._require_displayed_channels([channel])
             self._require_main_timebase()
+            if point_mode == "DMAX":
+                self._require_dmax_stopped()
             self._configure_waveform_transfer(channel=channel, point_mode=point_mode)
             return self._read_byte_waveform(
                 channel,
                 point_mode=point_mode,
-                remaining_points=self.max_total_waveform_points,
+                remaining_points=(
+                    self.max_total_waveform_points
+                    if point_mode == "DEF"
+                    else self._bounded_long_waveform_point_budget()
+                ),
                 bounded=True,
             )
 
@@ -1862,12 +1878,7 @@ class MSO8104Scope:
             self._require_displayed_channels([channel])
             self._require_main_timebase()
             if point_mode == "DMAX":
-                status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
-                if status != "STOP":
-                    raise ConfigError(
-                        "MSO8104 DMAX fetch requires an already stopped acquisition; "
-                        f"current trigger status is {status}"
-                    )
+                self._require_dmax_stopped()
             return self._read_waveform_transaction(
                 channel,
                 point_mode=point_mode,

@@ -29,13 +29,16 @@ _WAVEFORM_FETCH_RESTORE_ORDER = (
     "scope.waveform_points",
     "scope.waveform_transfer_window",
 )
+_WAVEFORM_FETCH_RESPONSE_MAX_BYTES = 250_000
+_WAVEFORM_FETCH_OPERATION_MAX_BYTES = 4_000_000
+_WAVEFORM_FETCH_QUERY_MAX_COUNT = 16
 _WAVEFORM_BINARY_PROFILE = ScopeWaveformBinaryProfile(
     operations=(
         ScopeWaveformBinaryOperationProfile(
             operation_kind="fetch",
-            response_max_bytes=1_000,
-            operation_max_bytes=1_000,
-            query_max_count=1,
+            response_max_bytes=_WAVEFORM_FETCH_RESPONSE_MAX_BYTES,
+            operation_max_bytes=_WAVEFORM_FETCH_OPERATION_MAX_BYTES,
+            query_max_count=_WAVEFORM_FETCH_QUERY_MAX_COUNT,
             resynchronization_max_bytes=65_536,
             restore_order=_WAVEFORM_FETCH_RESTORE_ORDER,
             snapshot_max_steps=6,
