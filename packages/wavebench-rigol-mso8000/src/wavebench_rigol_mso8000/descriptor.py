@@ -144,6 +144,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.measurement_statistics_v2",
             "scope.fft_status_v2",
             "scope.acquisition_status_v2",
+            "scope.digital_status_v2",
             "scope.cursor_readout",
             "scope.cursor_readout_v2",
         ),
@@ -170,7 +171,7 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "Hardware-identified RIGOL MSO8104 identity, safety, bounded DEF waveform fetch, "
-            "autoscale, math, read-only acquisition, and cursor driver."
+            "autoscale, math, read-only acquisition, digital state, and cursor driver."
         ),
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",

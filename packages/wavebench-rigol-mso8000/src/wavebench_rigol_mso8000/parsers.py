@@ -67,6 +67,11 @@ _FFT_SOURCES = frozenset(f"CHAN{index}" for index in range(1, 5))
 _FFT_WINDOWS = frozenset({"RECT", "BLAC", "HANN", "HAMM", "FLAT", "TRI"})
 _FFT_VERTICAL_UNITS = frozenset({"VRMS", "DB"})
 _ACQUISITION_TYPES = frozenset({"NORM", "PEAK", "AVER", "HRES"})
+_DIGITAL_DISPLAY_SIZES = {
+    "SMAL": "SMALL",
+    "MED": "MEDIUM",
+    "LARG": "LARGE",
+}
 MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS = (
     "acquisition_type",
     "sample_rate_hz",
@@ -201,6 +206,45 @@ def parse_fft_vertical_unit(response: str) -> str:
 
 def parse_acquisition_type(response: str) -> str:
     return _parse_enum(response, field="acquisition type", allowed=_ACQUISITION_TYPES)
+
+
+def parse_logic_analyzer_module_present(response: str) -> bool:
+    fields = tuple(item.strip() for item in response.strip().split(","))
+    if len(fields) < 2 or fields[0] not in {"0", "1"} or fields[1] not in {"0", "1"}:
+        raise DataError(f"invalid MSO8104 system modules response: {response!r}")
+    return fields[0] == "1"
+
+
+def parse_digital_display_size(response: str) -> str:
+    normalized = response.strip().upper()
+    try:
+        return _DIGITAL_DISPLAY_SIZES[normalized]
+    except KeyError as exc:
+        raise DataError(f"invalid MSO8104 digital display size response: {response!r}") from exc
+
+
+def parse_digital_label(response: str) -> str:
+    return response.rstrip("\r\n")
+
+
+def parse_digital_pod_threshold(response: str) -> float:
+    value = parse_finite_float(response, field="digital POD threshold")
+    if not -20.0 <= value <= 20.0:
+        raise DataError(
+            "MSO8104 digital POD threshold must be from -20.0 through 20.0 V, "
+            f"got {response!r}"
+        )
+    return value
+
+
+def parse_digital_timing_calibration(response: str) -> float:
+    value = parse_finite_float(response, field="digital timing calibration")
+    if not -100e-9 <= value <= 100e-9:
+        raise DataError(
+            "MSO8104 digital timing calibration must be from -100 ns through 100 ns, "
+            f"got {response!r}"
+        )
+    return value
 
 
 def parse_waveform_mode(response: str) -> str:

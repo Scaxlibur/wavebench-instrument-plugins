@@ -14,6 +14,9 @@ from wavebench.instruments.models import (
     ScopeCursorReadout,
     ScopeCursorReadoutV2,
     ScopeCursorQuantity,
+    ScopeDigitalChannelStatusV2,
+    ScopeDigitalPodStatusV2,
+    ScopeDigitalSharedStatusV2,
     ScopeDerivedWaveformMetadata,
     ScopeFftStatusV2,
     ScopeMeasurementStatisticsRequestV2,
@@ -49,6 +52,10 @@ from .parsers import (
     parse_cursor_source,
     parse_cursor_time_unit,
     parse_cursor_vertical_unit,
+    parse_digital_display_size,
+    parse_digital_label,
+    parse_digital_pod_threshold,
+    parse_digital_timing_calibration,
     parse_display_state,
     parse_fft_source,
     parse_fft_vertical_unit,
@@ -67,10 +74,12 @@ from .parsers import (
     parse_waveform_format,
     parse_waveform_mode,
     parse_waveform_source,
+    parse_logic_analyzer_module_present,
 )
 
 
 _ANALOG_CHANNELS = frozenset({1, 2, 3, 4})
+_DIGITAL_CHANNELS = frozenset(range(16))
 _NORMAL_WAVEFORM_POINTS = 1000
 _MAX_WAVEFORM_STATE_POINTS = 500_000_000
 _HARD_MAX_TOTAL_WAVEFORM_POINTS = 4_000_000
@@ -115,6 +124,25 @@ _ACQUISITION_STATUS_V2_STATIC_UNAVAILABLE_FIELDS: tuple[
 _ACQUISITION_STATUS_V2_AVERAGE_UNAVAILABLE_FIELDS: tuple[
     ScopeAcquisitionStatusFieldV2, ...
 ] = ("run_state", "average.complete", "segmented")
+_DIGITAL_STATUS_V2_LA_UNAVAILABLE_FIELDS = (
+    "position_div",
+    "label_enabled",
+    "activity",
+    "technology",
+    "hysteresis",
+)
+_DIGITAL_STATUS_V2_NO_LA_UNAVAILABLE_FIELDS = (
+    "displayed",
+    "position_div",
+    "label",
+    "label_enabled",
+    "activity",
+    "technology",
+    "hysteresis",
+    "pod",
+    "shared.timing_calibration_s",
+    "shared.size",
+)
 
 
 @dataclass(frozen=True)
@@ -186,6 +214,17 @@ class MSO8104Scope:
             raise DataError("MSO8104 analog channel must be an integer from 1 through 4")
 
     @staticmethod
+    def _validate_digital_channel(channel: int) -> None:
+        if type(channel) is not int or channel not in _DIGITAL_CHANNELS:
+            raise DataError("MSO8104 digital channel must be an integer from 0 through 15")
+
+    @staticmethod
+    def _digital_pod(channel: int) -> tuple[int, int, int]:
+        if channel <= 7:
+            return 1, 0, 7
+        return 2, 8, 15
+
+    @staticmethod
     def _validate_math_index(math_index: int) -> None:
         if type(math_index) is not int or math_index not in {1, 2, 3, 4}:
             raise DataError("MSO8104 math waveform index must be an integer from 1 through 4")
@@ -208,6 +247,51 @@ class MSO8104Scope:
                 channel=channel,
                 coupling=coupling,
                 impedance=impedance,
+            )
+
+    def get_digital_status_v2(self, channel: int) -> ScopeDigitalChannelStatusV2:
+        self._validate_digital_channel(channel)
+        with self._io_lock:
+            self._require_open()
+            logic_analyzer_present = parse_logic_analyzer_module_present(
+                self.transport.query(":SYSTem:MODules?")
+            )
+            if not logic_analyzer_present:
+                return ScopeDigitalChannelStatusV2(
+                    channel=channel,
+                    shared=ScopeDigitalSharedStatusV2(module_present=False),
+                    unavailable_fields=_DIGITAL_STATUS_V2_NO_LA_UNAVAILABLE_FIELDS,
+                )
+            pod_number, pod_start, pod_stop = self._digital_pod(channel)
+            displayed = parse_display_state(
+                self.transport.query(f":LA:DIGital:DISPlay? D{channel}")
+            )
+            label = parse_digital_label(
+                self.transport.query(f":LA:DIGital:LABel? D{channel}")
+            )
+            threshold_v = parse_digital_pod_threshold(
+                self.transport.query(f":LA:POD{pod_number}:THReshold?")
+            )
+            timing_calibration_s = parse_digital_timing_calibration(
+                self.transport.query(":LA:TCALibrate?")
+            )
+            size = parse_digital_display_size(self.transport.query(":LA:SIZE?"))
+            return ScopeDigitalChannelStatusV2(
+                channel=channel,
+                displayed=displayed,
+                label=label,
+                pod=ScopeDigitalPodStatusV2(
+                    start_channel=pod_start,
+                    stop_channel=pod_stop,
+                    threshold_v=threshold_v,
+                    threshold_scope="pod",
+                ),
+                shared=ScopeDigitalSharedStatusV2(
+                    module_present=True,
+                    timing_calibration_s=timing_calibration_s,
+                    size=size,
+                ),
+                unavailable_fields=_DIGITAL_STATUS_V2_LA_UNAVAILABLE_FIELDS,
             )
 
     def autoscale(self, wait_opc: bool = True, check_errors: bool = True) -> None:

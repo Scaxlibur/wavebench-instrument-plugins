@@ -51,6 +51,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.measurement_statistics_v2",
         "scope.fft_status_v2",
         "scope.acquisition_status_v2",
+        "scope.digital_status_v2",
         "scope.cursor_readout",
         "scope.cursor_readout_v2",
     )
