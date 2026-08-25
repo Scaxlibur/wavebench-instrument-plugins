@@ -8,7 +8,7 @@
 | [RFC-0002：示波器通道输入状态](0002-scope-channel-input-state.md) | core R1 已实现（未发布） | 插件受控声明 `scope.channel_input_state_v2` |
 | [RFC-0003：示波器截图 framing 与菜单合同](0003-scope-screenshot-framing-and-menu-contract.md) | 提议 | `scope.screenshot` 暂不声明 |
 | [RFC-0004：可移植的示波器数字通道状态模型](0004-portable-scope-digital-status.md) | core R1 已实现（未发布） | 受控声明 `scope.digital_status_v2`；D0/D8 静态状态回包已验证，digital waveform 暂不声明 |
-| [RFC-0005：可组合的示波器状态快照](0005-portable-scope-snapshot.md) | core R1 已实现（未发布） | 设备字段和实机证据不足，`scope.snapshot_v2` 暂不声明 |
+| [RFC-0005：可组合的示波器状态快照](0005-portable-scope-snapshot.md) | core R1 已实现（未发布） | 受控声明 `scope.snapshot_v2` 的 identity/授权选件子集；其他 55 个字段暂 unavailable |
 | [RFC-0006：可移植的示波器采集状态与平均采集合同](0006-portable-scope-acquisition-contracts.md) | core R1 已实现（未发布） | 受控声明 acquisition status V2 静态子集；average/capture 暂不声明 |
 | [RFC-0007：可移植的示波器统计、FFT 与光标读取合同](0007-portable-scope-analysis-reads.md) | core R1 已实现（未发布） | 受控声明 statistics/FFT/cursor V2；FFT MATH1 状态回包已验证 |
 | [RFC-0008：有界示波器波形块的尾随字节合同](0008-bounded-waveform-block-trailing-contract.md) | core R1 已实现（未发布） | 受控声明有界 `DEF`；capture 暂不声明 |

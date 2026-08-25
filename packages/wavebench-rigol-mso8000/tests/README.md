@@ -21,3 +21,5 @@ FFT 状态 V2 测试覆盖目标 math slot 的 `FFT` operator 前置、6 条固�
 采集状态 V2 测试覆盖固定 type/sample rate/memory depth query、AVER 模式的条件平均次数 query、父级 average 分区的 not applicable 语义、无合同字段的 unavailable、严格数值范围与幂次平均次数解析、失败后的停止查询和零写入；不读取 trigger、OPC、状态寄存器或错误队列，也不证明平均完成或采集完成。
 
 数字状态 V2 测试覆盖 D0～D15 的零 I/O 参数门、LA 模块缺席时不发送 `:LA:*?`、D0/D7/D8/D15 的 POD 映射、显示/标签/POD 阈值/timing calibration/size 的严格解析、固定查询顺序、无合同字段的精确 unavailable、非法回包后的停止查询和零写入；不读取数字 waveform，也不推断逻辑活动、电气阈值或编码。
+
+快照 V2 测试覆盖 CH1～CH4 的零 I/O 参数门、identity profile 的精确字段集、一次 `*IDN?` 与完整 13 项授权选件状态查询、空 options 只能来自全量未安装回包、稳定的 55 项 unavailable、无效 identity/选件回包后的停止查询和零写入；不读取状态寄存器、错误队列、trigger、波形或二进制数据。

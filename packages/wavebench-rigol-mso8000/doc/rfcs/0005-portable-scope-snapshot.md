@@ -1,6 +1,6 @@
 # RFC-0005：可组合的示波器状态快照
 
-状态：提议
+状态：core R1 已实现（未发布）
 
 目标仓库：WaveBench core
 
@@ -24,9 +24,9 @@ identity, health, channel, timebase, probe, waveform, trigger
 
 用 `0`、`False`、空字符串、默认探头类型或触发状态补齐这些字段，会把「设备没有报告」伪装成确定状态。插件也不能为了填满快照而改变通道、trigger 或 waveform 配置。
 
-## 建议接口
+## core R1 接口
 
-把「可取得的状态」和「完整厂商快照」分开。可新增 V2 快照，允许每个字段明确表示未知，并保留缺失路径：
+core 已把「可取得的状态」和「完整厂商快照」分开。V2 快照允许每个字段明确表示未知，并保留缺失路径：
 
 ```python
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ class ScopeSnapshotV2:
     unavailable_fields: tuple[str, ...] = ()
 ```
 
-示例只说明可空语义，具体类型名和迁移方式由 core 决定。各子模型同样需要把设备不一定具备的字段设为可空；仅把整个分区设为 `None` 会丢失 MSO8000 已能可靠查询的部分状态。
+R1 已提供 `ScopeSnapshotV2`、`ScopeSnapshotProfileV2`、独立 `ScopeSnapshotDriverV2`、`scope.snapshot_v2` 与 `ScopeService.snapshot_v2()`。profile 必须在纯文本读取 phase 中声明非空 `readable_fields`、查询上限和条件字段，并必须包含五个 identity 字段；未声明字段在稳定顺序的 `unavailable_fields` 中精确表示。各子模型把设备不一定具备的字段设为可空；仅把整个分区设为 `None` 会丢失已可靠查询的部分状态。
 
 建议满足以下规则：
 
@@ -68,9 +68,9 @@ class ScopeSnapshotV2:
 
 ## capability 影响
 
-核心发布可组合快照前，MSO8104 descriptor 不声明 `scope.snapshot`。Service 继续使用现有 partial summary，只返回已实现的 `scope.idn` 与 `scope.channel_coupling`。
+MSO8104 descriptor 继续不声明 legacy `scope.snapshot`，但在 core R1 下受控声明 `scope.snapshot_v2`。当前 profile 只读取 identity 与授权选件状态：一次 `*IDN?` 后，按手册完整枚举 13 种 `:SYSTem:OPTion:STATus? <type>`。`options=()` 只在本次 13 项明确证明均未安装时成立，不能由 descriptor、缓存或型号常量补齐。health、channel、timebase、probe、waveform 和 trigger 的 55 个字段保持 unavailable。
 
-核心发布新合同后，插件仍须逐字段严格解析，并把未查询字段保留为未知。截图、波形数据和错误队列不能为了快照便利被隐式消费。
+在记录的 MSO8104 固件、LAN/PyVISA 与只读步骤中，identity/选件 profile 已完成实机验证。`*STB?`、`*ESR?`、错误队列、截图、波形数据和任何触发/采集动作不能为了快照便利被隐式读取。后续扩展字段仍须逐字段严格解析并取得独立手册和实机证据。
 
 ## 替代方案
 

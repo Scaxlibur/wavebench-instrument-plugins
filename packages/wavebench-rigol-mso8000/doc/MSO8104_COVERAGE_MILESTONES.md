@@ -50,7 +50,7 @@
 | M4 | 默认拒绝 | 单次、多通道与有界 MAX/DMAX；仍缺 acquisition 恢复和实机证据 |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | 受控开发（数字状态 V2） | legacy 数字状态与数字 waveform 继续跳过；V2 只读静态状态有核心模型与实机证据 |
-| M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态、数字状态只读子集；其余能力按 RFC/证据缺口跳过 |
+| M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态、数字状态、快照只读子集；其余能力按 RFC/证据缺口跳过 |
 | M8 | 离线完成 | 覆盖文档、全量离线验证和发行包审计 |
 
 ## M0：合同与发行边界
@@ -105,6 +105,8 @@ M7 开发补充：core 当前开发分支还提供 `scope.acquisition_status_v2`
 
 M7 开发补充：core 当前开发分支还提供 `scope.digital_status_v2`。插件先读取 LA 模块位；LA 缺席时只报告 `shared.module_present=false`，不读取任何 `:LA:*?`。LA 存在时，D0～D15 以固定 POD1（D0～D7）或 POD2（D8～D15）范围读取 display、label、POD 阈值、全局 timing calibration 和 size，共 6 条文本 query。position、label-enabled、activity、technology 与 hysteresis 维持 unavailable，不读取 digital waveform。268 项包测试、Ruff 和 wheel 生命周期测试通过；受控实机 D0/D8 均返回 displayed、对应 label/POD、`1.4 V`、`0 s` 和 `MEDIUM`，前后 source 两路 OFF、`consistent`、`healthy`。数字探头、电气阈值、逻辑活动与编码语义仍未验证。
 
+M7 开发补充：core 当前开发分支还提供 `scope.snapshot_v2`。插件只声明 identity/授权选件静态 profile：一次 `*IDN?` 加 13 种 `:SYSTem:OPTion:STATus? <type>`，共 14 条纯文本 query；identity 与 options 均必须来自同一调用，空 options 仅在 13 项均明确未安装时成立。health、channel、timebase、probe、waveform、trigger 的 55 个字段保持 unavailable，不读取 `*STB?`、`*ESR?`、错误队列、trigger、波形或二进制。282 项包测试、Ruff 和 wheel 生命周期测试通过；受控实机完成该 profile，前后 source 两路 OFF、`consistent`、`healthy`。未读取的六个分区及其准确度仍未验证。
+
 ## M4：单次、多通道与有界长记录
 
 离线实现过 `scope.capture_waveform` 与 `scope.capture_waveforms`。多通道必须先配置全部通道，只执行一次 `:SINGle` 与一次完成等待，再逐通道读取并校验 X 轴一致。
@@ -152,6 +154,7 @@ legacy `scope.digital_status` 继续跳过：其公共模型要求 activity、te
 | capability | 结论 | 原因 |
 | --- | --- | --- |
 | `scope.digital_status_v2` | 实机通过（受限 D0/D8 静态状态） | LA 模块预检后，固定 6 条纯读取 query 返回 display、label、POD 阈值和共享 timing calibration/size；position、label-enabled、activity、technology、hysteresis 精确 unavailable，不读取数字 waveform |
+| `scope.snapshot_v2` | 实机通过（受限 identity/选件） | `*IDN?` 加 13 种授权选件状态 query；identity/options 完整可读，其他 55 个字段精确 unavailable；不读消费型状态、trigger、波形或二进制 |
 | `scope.snapshot` | RFC 后跳过 | 完整模型强制要求 MSO8000 无法查询的 health、probe 与 channel 字段；见 [RFC-0005](rfcs/0005-portable-scope-snapshot.md) |
 | `scope.acquisition_status` | RFC 后跳过 | legacy 模型把平均完成与 segmented 状态绑定，设备没有对应查询；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
 | `scope.acquisition_status_v2` | 实机通过（受限 NORM） | type/sample rate/memory depth 纯读取；AVER 时才读取配置次数。当前验证 `NORM + 500 kSa/s + 10 kpts`；不报告 run state、segmented 或 average complete |
@@ -163,7 +166,7 @@ legacy `scope.digital_status` 继续跳过：其公共模型要求 activity、te
 | `scope.reference_metadata` | 厂商证据缺口后跳过 | Reference 命令只有 source、垂直显示和标签；waveform source 不接受 REF，无法得到轴、点数和分辨率 |
 | `scope.history_timestamps` | 厂商证据缺口后跳过 | Record 命令只有 enable/start/play/current/frame count，没有逐帧相对或日历时间戳 |
 
-M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 core 开发分支的受控 descriptor 额外声明 input、cursor、measurement-statistics、FFT、acquisition-status 和 digital-status V2 子集。覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
+M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 core 开发分支的受控 descriptor 额外声明 input、cursor、measurement-statistics、FFT、acquisition-status、digital-status 和 snapshot V2 子集。覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
 
 ## M8：离线发行审计
 
@@ -178,4 +181,4 @@ M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 c
 
 离线证据：`0.7.0` 的 168 项包测试与 Ruff 通过；在 WaveBench core 位于同级目录的一次性仓库布局中，根测试为 715 项通过、2 项因缺少 SP3000A 私有实机证据而按预期跳过。WaveBench `0.8.22` 的源码目录与真实 wheel package check 均通过。wheel 仅包含一个 `wavebench.instruments` entry point、一个有效 WaveBench runtime dependency、MIT 许可证和插件代码；sdist 包含公开 README、矩阵、里程碑、RFC、测试与许可证。两种制品均不包含 vendor-local。一次性虚拟环境中的 wheel 安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过；61 个受跟踪 Markdown 文件的本地链接有效。全程未连接真实仪器。
 
-`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、input、cursor、measurement-statistics、FFT status、acquisition status 和 digital status V2 集成测试，合计 268 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。
+`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、input、cursor、measurement-statistics、FFT status、acquisition status、digital status 和 snapshot V2 集成测试，合计 282 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。

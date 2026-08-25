@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-25
 
 ## Scope
 
-This record covers the first controlled check of RIGOL MSO8104 identity, input safety, the waveform-binary path, measurement-statistics V2, FFT-status V2, acquisition-status V2, and digital-status V2. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers the first controlled check of RIGOL MSO8104 identity, input safety, the waveform-binary path, measurement-statistics V2, FFT-status V2, acquisition-status V2, digital-status V2, and Snapshot V2. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -35,6 +35,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `hea
 - `scope.fft_status_v2` returned `FFT + CHAN1 + HANN + VRMS + 0–1 MHz` for front-panel-configured MATH1;
 - `scope.acquisition_status_v2` returned `NORM + 500 kSa/s + 10 kpts`, with average not applicable;
 - `scope.digital_status_v2` returned display, label, POD range and `1.4 V` threshold, plus shared `0 s` timing calibration and `MEDIUM` size for D0 and D8;
+- `scope.snapshot_v2` read identity and 13 licensed-option states in one call, with the other 55 fields explicitly unavailable;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
 - core preflight confirmed the safety limit, High-Z display load, and no active cross-channel relation before enable.
 
@@ -77,6 +78,10 @@ This evidence covers only static NORM acquisition status for the recorded condit
 `scope.digital_status_v2` first confirmed both source outputs OFF, `consistent`, and `healthy`, and both CH1/CH2 as `dc + high_z + 1 MΩ`. Each D0 and D8 call first queried the LA module bit. With the module present, it read only per-channel display, label, the threshold of the owning POD, global timing calibration, and display size: six text queries total. D0 returned displayed, label `D0`, POD1 (D0-D7), `1.4 V`, `0 s`, and `MEDIUM`; D8 returned displayed, label `D8`, POD2 (D8-D15), and the same shared values. `position_div`, `label_enabled`, activity, technology, and hysteresis were all unavailable by contract. No `:LA:*` setter, waveform/binary read, acquisition/trigger, OPC, status-register, or error-queue query was sent, and no source or scope write occurred. A separate Source V2 snapshot afterwards again confirmed CH1 and CH2 OFF, `consistent`, and `healthy`.
 
 This evidence covers only the recorded model, firmware, transport, and D0/D8 static-status responses. It does not prove logic-probe attachment, electrical threshold accuracy, logic activity, position semantics, label-display enable, or digital-waveform encoding.
+
+`scope.snapshot_v2` first confirmed both source outputs OFF, `consistent`, and `healthy`, and both CH1/CH2 as `dc + high_z + 1 MΩ`. The public core `ScopeService.snapshot_v2()` call used a pure-read profile of one `*IDN?` plus the 13 manual-defined `:SYSTem:OPTion:STATus? <type>` queries, for 14 text queries total. Identity and options both originated in that call; the 13 responses explicitly established the current installed set, so an empty options tuple would never come from a default or cache. The 55 health, channel, timebase, probe, waveform, and trigger fields were unavailable in stable order. No `*STB?`, `*ESR?`, error-queue, trigger, waveform, or binary read was sent, and no source or scope write occurred. A separate Source V2 snapshot afterwards again confirmed CH1 and CH2 OFF, `consistent`, and `healthy`.
+
+This evidence covers only identity and licensed-option status for the recorded model, firmware, and transport. It does not prove the unread health, channel, timebase, probe, waveform, or trigger partitions, or their accuracy.
 
 ## Acceptance boundary and next conditions
 

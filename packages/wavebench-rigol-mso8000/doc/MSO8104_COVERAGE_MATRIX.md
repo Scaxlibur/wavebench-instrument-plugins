@@ -26,6 +26,7 @@
 | 输入安全 | `:CHANnel<n>:COUPling?`、`:CHANnel<n>:IMPedance?` | `scope.channel_coupling`、`scope.channel_input_state_v2` | 实机通过 | legacy 接口继续返回 core 高阻安全 token；V2 分别返回 coupling、termination 与阻抗。CH1/CH2 的 V2 结果均为 `dc + high_z + 1 MΩ`；核心默认拒绝 50 Ω、GND 与未知组合 |
 | 自动设置 | `:SYSTem:AUToscale?`、`:AUToscale` | `scope.autoscale` | 离线通过 | 预检系统使能；明确改变垂直、时基和触发；写入或 OPC 不确定时锁存，效果未实机验证 |
 | 完整状态快照 | channel/timebase/probe/waveform/trigger 与部分 health | `scope.snapshot` | RFC 后跳过 | 公共快照强制要求设备无法查询的字段；`*STB?` 还会清零；见 RFC-0005 |
+| 状态快照 V2 | `*IDN?`、13 种 `:SYSTem:OPTion:STATus? <type>` | `scope.snapshot_v2` | 实机通过（受限 identity/选件） | 固定 14 条纯文本 query；同次读取 identity 与手册列出的全部授权选件状态，空 options 仅在全部 13 项明确未安装时成立。health、channel、timebase、probe、waveform、trigger 的 55 个字段按稳定顺序 unavailable；不读状态寄存器、错误队列、trigger、波形或二进制 |
 | acquisition 基础配置 | type、averages、memory depth、sample rate、run/stop/single | fetch/capture 的既有状态 | M4 离线通过 | capture 沿用既有配置；深度最高 500 Mpts；设置深度会改变采样率 |
 | 采集状态（legacy） | averages 与 trigger status | `scope.acquisition_status` | RFC 后跳过 | legacy 模型要求 average-complete 与 segmented 状态，设备没有对应查询；trigger STOP 不替代平均完成；见 RFC-0006 |
 | 采集状态 V2 | `:ACQuire:TYPE?`、`:ACQuire:SRATe?`、`:ACQuire:MDEPth?`，AVER 时 `:ACQuire:AVERages?` | `scope.acquisition_status_v2` | 实机通过（受限 NORM） | 固定 3 条纯读取 query；AVER 时第 4 条读取配置次数。当前回包为 `NORM + 500 kSa/s + 10 kpts`；average 在 NORM 下为 not applicable，run state 与 segmented 为 unavailable。不查询 trigger、OPC 或状态寄存器，不从 STOP 推导完成；AVER 语义和平均完成未验证 |
@@ -77,4 +78,5 @@ payload 必须与点数精确一致；所有轴参数与换算结果必须为有
 - screenshot framing；
 - RAW chunk 上限、吞吐和 timeout；
 - WORD 字节序与有效位宽；
+- 快照 V2 中 identity/选件以外的 health、channel、timebase、probe、waveform 与 trigger 字段；
 - 数字探头、电气阈值、逻辑活动、数字 waveform 编码和任何测量准确度。
