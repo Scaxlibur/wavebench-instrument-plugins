@@ -96,8 +96,8 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert screenshot_variant.request.color_mode == "device"
     assert screenshot_variant.media_type == "image/png"
     assert screenshot_variant.framing is BinaryResponseFraming.DEFINITE_BLOCK
-    assert screenshot_variant.response_max_bytes == 524_288
-    assert screenshot_variant.operation_max_bytes == 524_288
+    assert screenshot_variant.response_max_bytes == 8_388_608
+    assert screenshot_variant.operation_max_bytes == 8_388_608
     assert screenshot_variant.resynchronization_max_bytes == 0
     assert screenshot_variant.query_max_count == 1
     assert screenshot_variant.changed_fields == ()

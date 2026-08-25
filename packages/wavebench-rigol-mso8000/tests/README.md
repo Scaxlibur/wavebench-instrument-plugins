@@ -14,7 +14,7 @@ M4 采集测试使用触发状态序列和小型分块 payload，覆盖一次 SI
 
 M7 autoscale 测试覆盖系统使能预检、一次写入、`wait_opc=true` 时固定 `3 s` settle、settle 异常锁存和显式跳过等待；不会产生真实波形，也不证明自动设置效果。
 
-M5 截图测试覆盖 `PNG` 类型预检、单次 `:SAVE:IMAGe:DATA?` definite-block 读取、`524,288`-byte 预算、精确 `LF` trailing、PNG 结构校验、坏类型／坏 PNG 的停止读取，以及零 screenshot setter／零设备文件写入；不替代实际 payload、尾随字节、PNG、session health 或错误队列的实机证据。
+M5 截图测试覆盖 `PNG` 类型预检、单次 `:SAVE:IMAGe:DATA?` definite-block 读取、`8,388,608`-byte 预算、精确 `LF` trailing、原生 PNG 校验、严格无压缩 BMP24 到 PNG 的像素顺序转换、坏类型／坏 PNG／坏 BMP 的停止读取，以及零 screenshot setter／零设备文件写入；不替代截图视觉准确度、其他屏幕状态或最大 payload 的实机证据。
 
 M7 数学元数据测试通过 MATH 显示预检和状态化 FakeTransport 验证完整 transfer 事务、NORM/BYTE preamble、六字段传输状态恢复、错误锁存与零数据读取；不证明数学运算结果或 FFT 精度。
 

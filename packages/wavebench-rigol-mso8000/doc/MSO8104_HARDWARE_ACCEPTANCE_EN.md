@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-26
 
 ## Scope
 
-This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, math-waveform metadata, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, error-drain V1, and fixed-settle autoscale acceptance. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, math-waveform metadata, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, error-drain V1, fixed-settle autoscale, and Screenshot V2 acceptance. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -24,7 +24,7 @@ SDG CH1 was connected to MSO CH1 and SDG CH2 to MSO CH2. Earlier `DEF` fetch use
 3. Source V2 OFF was requested separately for CH1 and CH2. A fresh read-only snapshot independently confirmed both OFF, `consistent`, and `healthy`.
 4. After every controlled waveform transaction, outer cleanup separately requested CH1 and CH2 OFF and used a fresh read-only snapshot to confirm both were OFF.
 
-Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy`, scope STOP, and CH1/CH2 high-impedance inputs. This work did not write scope input impedance; controlled fixed-settle autoscale acceptance is recorded below.
+Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy`, scope STOP, and CH1/CH2 high-impedance inputs. This work did not write scope input impedance; controlled fixed-settle autoscale and Screenshot V2 acceptance are recorded below.
 
 ## Hardware evidence obtained
 
@@ -41,6 +41,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy
 - `scope.math_metadata` returned `1,000` points, finite axes, and eight-bit BYTE metadata for displayed MATH1 in MAIN mode, with final six-field waveform-transfer restoration verification;
 - `scope.error_drain_v1` completed one empty-queue drain before and after public capture with `scope.check_errors=true`; capture returned `1,000` samples with its existing 13-field recovery/fresh verification;
 - `scope.autoscale` returned after a fixed `3 s` settle in the controlled CH1 `1 kHz / 1 Vpp` procedure, followed by public bounded fetch returning `1,000` samples with amplitude evidence;
+- `scope.screenshot_v2` returned a `1024 × 600`, `47,584`-byte PNG for the restricted `png/device/device` procedure, with empty error drains before/after and a healthy session;
 - `scope.digital_status_v2` returned display, label, POD range and `1.4 V` threshold, plus shared `0 s` timing calibration and `MEDIUM` size for D0 and D8;
 - `scope.snapshot_v2` read identity and 13 licensed-option states in one call, with the other 55 fields explicitly unavailable;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
@@ -55,6 +56,14 @@ The procedure began with scope STOP, high-impedance CH1/CH2, and both source out
 The earlier `*OPC?` diagnostic did not obtain `1` within `15 s`, so it is no longer the completion mechanism for this command. After the fixed `3 s`, the final controlled procedure used public bounded fetch on CH1 and returned `1,000` samples with amplitude evidence. Independent cleanup then verified both source outputs OFF, scope STOP, and high-impedance CH1/CH2.
 
 This accepts the fixed `3 s` as the plugin's operational-completion criterion; it does not prove the instrument's internal autoscale algorithm, visible effect, or setting restoration. Autoscale may change vertical, timebase, and trigger settings under the Core contract. `wait_opc=false` explicitly skips the wait and has no hardware-completion acceptance.
+
+## Restricted Screenshot V2 acceptance
+
+The procedure began with both source outputs OFF, scope STOP, and high-impedance CH1/CH2. Public `ScopeService.screenshot_profile()` performed identity preflight and `:SAVE:IMAGe:TYPE?`, then confirmed the one `png/device/device` profile: one `:SAVE:IMAGe:DATA?` definite block, an `8,388,608`-byte limit, exact `LF` trailing, zero resynchronization, and no changed/restored state.
+
+Public `ScopeService.screenshot_v2()` then made one screenshot read with required before/after error checks. The recorded firmware returned `PNG` from TYPE but an uncompressed BMP24 DATA payload. The driver accepts only a fixed 40-byte DIB, 24-bit, uncompressed, complete-pixel BMP and converts it in memory to PNG; it neither saves raw data nor creates instrument files or writes TYPE, INVert, COLor, or menu state. The public result was `image/png`, `1024 × 600`, `47,584` bytes, and definite-block framing. Core PNG validation passed, both error drains were empty, and the operation session was healthy.
+
+Final cleanup again confirmed both source outputs OFF, scope STOP, and high-impedance CH1/CH2. This establishes only the recorded model, firmware, LAN/PyVISA transport, and current-screen procedure. It is not visual/pixel accuracy, color/menu semantics, other screen states, maximum payload, or non-BMP24 response evidence.
 
 ## Restricted math-waveform metadata acceptance
 
@@ -137,6 +146,6 @@ This evidence covers only identity and licensed-option status for the recorded m
 
 ## Acceptance boundary and unverified items
 
-This record covers the current-screen `DEF + LF` 1000-point path, the recorded stopped-state `MAX/DMAX + LF` 10000-point path, and stopped-MAIN `DEF + BYTE` single/multi-channel capture at 1000 samples per channel. Every result is limited to the recorded model, firmware, transport, memory depth, and procedure. It is not general X/Y-conversion or measurement-accuracy evidence across ranges, timebases, or probe conditions.
+This record covers the current-screen `DEF + LF` 1000-point path, the recorded stopped-state `MAX/DMAX + LF` 10000-point path, stopped-MAIN `DEF + BYTE` single/multi-channel capture at 1000 samples per channel, and restricted BMP24-to-PNG Screenshot V2. Every result is limited to the recorded model, firmware, transport, memory depth, and procedure. It is not general X/Y conversion, screenshot visual, or measurement-accuracy evidence across ranges, timebases, or probe conditions.
 
-Running-state MAX, other memory depths, capture lengths, timebases, channel sets, transports, throughput, timeout, and general waveform accuracy remain outside this evidence. Average capture, record/replay, screenshot, digital waveform, and every other undeclared capability remain unchanged.
+Running-state MAX, other memory depths, capture lengths, timebases, channel sets, transports, throughput, timeout, general waveform accuracy, and screenshot behavior for other screen states, maximum payloads, or non-BMP24 responses remain outside this evidence. Average capture, record/replay, digital waveform, and every other undeclared capability remain unchanged.

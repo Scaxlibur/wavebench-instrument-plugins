@@ -39,7 +39,7 @@
 | 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform`、`scope.capture_waveforms` | 实机通过（受限 bounded `DEF + BYTE`） | 仅接受已停止、MAIN 时基的 `DEF + BYTE` 基线；capture 必须观察 `WAIT/TD → STOP`，不接受首条 STOP。单通道和双通道各验证每通道 `1,000` 样本；双通道只发送一次 SINGLE、读取两次二进制数据。Core 恢复并新鲜验证 acquisition、trigger、MAIN 时基、四路 display/vertical 与 transfer 共 13 个字段；其他点数、时基、通道组合和 transport 未验证 |
 | 数学波形元数据 | `:MATH<n>:DISPlay?`、waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | 实机通过（受限 MATH1） | 已显示 MATH1、MAIN、source 双路 OFF、scope STOP／高阻下，公开调用返回 1000 点、有限轴、8 位 BYTE 元数据，并完成六项 transfer 状态恢复／最终复核；不读取 data、不证明数学内容、其他 operator／槽位轴语义或 FFT 精度 |
 | 手动光标读数 | cursor mode/type/source/unit/value/delta queries | `scope.cursor_readout`、`scope.cursor_readout_v2` | 受限离线通过 | V2 使用全局寻址，读取手动 TIME/AMPL 的独立 A/B source、单位与 A/B/差值；不移动光标。当前实机为 VBA，调用在读取数值前拒绝；准确度未实机验证 |
-| 截图 | `:SAVE:IMAGe:TYPE?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot_profile`、`scope.screenshot_v2` | 离线通过，待实机验收 | 仅 `png/device/device`；先只读确认 PNG，再以一次 `DEFINITE_BLOCK` 读取。profile 限制单响应／单操作 `524,288` bytes、精确 `LF` trailing、零 resynchronization、零状态变更与恢复；不使用 `:DISPlay:DATA?`，不写 TYPE／INVert／COLor／菜单，不创建设备文件。Core 当前 8 MiB 上限覆盖手册 `387,356`-byte 示例；实际 payload、尾随字节、PNG、session health 和空错误队列待验收；见 RFC-0003 |
+| 截图 | `:SAVE:IMAGe:TYPE?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot_profile`、`scope.screenshot_v2` | 实机通过（受限 BMP24→PNG） | 仅 `png/device/device`；先只读确认 PNG，再以一次 `DEFINITE_BLOCK` 读取。profile 采用单响应／单操作 `8,388,608` bytes、精确 `LF` trailing、零 resynchronization、零状态变更与恢复；不使用 `:DISPlay:DATA?`，不写 TYPE／INVert／COLor／菜单，不创建设备文件。记录固件实际回传无压缩 BMP24，driver 严格验证后在内存中转换为 PNG。公开调用返回 `1024 × 600`、`47,584` bytes 的 PNG，前后错误队列为空且 session healthy；视觉／像素准确度、其他屏幕状态和最大 payload 未验证；见 RFC-0003 |
 | 数字通道状态（legacy） | `:SYSTem:MODules?`、`:LA:*?` | `scope.digital_status` | RFC 后跳过 | legacy 模型必填 activity、technology、hysteresis 等设备无法查询的字段；见 RFC-0004 |
 | 数字通道状态 V2 | `:SYSTem:MODules?`、`:LA:DIGital:DISPlay?`、`:LA:DIGital:LABel?`、`:LA:POD<n>:THReshold?`、`:LA:TCALibrate?`、`:LA:SIZE?` | `scope.digital_status_v2` | 实机通过（受限 D0/D8 静态状态） | 每次先读 LA 模块；模块缺席时只返回 `shared.module_present=false`，不发 `:LA:*?`。模块存在时固定 6 条文本 query；D0/D8 均返回 displayed、label、对应 POD 范围与 `1.4 V` 阈值、`0 s` timing calibration、`MEDIUM` size。position、label-enabled、activity、technology、hysteresis 均为 unavailable；不读取波形、不推断逻辑活动或数字编码 |
 | 数字波形 | D0～D15 waveform source/data | `scope.digital_waveform` | 手册证据不足后跳过 | 公共 bitset 模型可用，但手册未定义 BYTE/WORD 的 LOW/HIGH code，WORD 字节序也不明确 |
@@ -78,7 +78,7 @@ payload 必须与点数精确一致；所有轴参数与换算结果必须为有
 - 运行态 MAX、其他 memory depth/点数下的 MAX/DMAX 吞吐、分块和 timeout；
 - 除记录的 `DEF + LF`、`1 kHz / 1 Vpp / 0 V` 条件外的 X/Y 换算与测量准确度；
 - 除受控 `DEF + BYTE` 条件外的 capture 点数、时基、通道组合、transport 和波形准确度；
-- screenshot 的实际 payload、精确 trailing、PNG、session health 和错误队列；
+- 截图视觉／像素准确度、其他屏幕状态、最大 payload，以及 BMP24 以外的设备返回格式；
 - RAW chunk 上限、吞吐和 timeout；
 - WORD 字节序与有效位宽；
 - 快照 V2 中 identity/选件以外的 health、channel、timebase、probe、waveform 与 trigger 字段；

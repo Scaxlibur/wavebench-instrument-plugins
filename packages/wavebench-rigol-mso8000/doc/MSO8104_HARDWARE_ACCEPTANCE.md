@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、数学波形元数据、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2、错误队列 drain V1，以及 autoscale 固定 settle 验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、数学波形元数据、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2、错误队列 drain V1、autoscale 固定 settle 与 screenshot V2 验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -24,7 +24,7 @@
 3. 对 CH1、CH2 分别请求 `source.output_v2 OFF`，随后以新的只读 Source V2 snapshot 独立确认两路 OFF、snapshot `consistent`、session `healthy`。
 4. 每次受控波形事务结束后，外层清理都会分别请求 CH1、CH2 OFF，再以新的只读 snapshot 确认两路均为 OFF。
 
-最终复核为 CH1 OFF、CH2 OFF、snapshot `consistent`、session `healthy`，scope 为 STOP，CH1/CH2 均为 high_z。本轮没有写入示波器输入阻抗；autoscale 固定 settle 的受控验收见下文。
+最终复核为 CH1 OFF、CH2 OFF、snapshot `consistent`、session `healthy`，scope 为 STOP，CH1/CH2 均为 high_z。本轮没有写入示波器输入阻抗；autoscale 固定 settle 与 screenshot V2 的受控验收见下文。
 
 ## 已通过的实机证据
 
@@ -41,6 +41,7 @@
 - `scope.math_metadata`：已显示 MATH1、MAIN 时基下返回 `1,000` 点、有限轴与 8 位 BYTE 元数据，并完成六项 waveform transfer 状态恢复／最终复核；
 - `scope.error_drain_v1`：公开 capture 在 `scope.check_errors=true` 下于主操作前后各完成一次空队列 drain，返回 `1,000` 样本并完成原 capture 的 13 字段恢复与新鲜验证；
 - `scope.autoscale`：CH1 `1 kHz / 1 Vpp` 受控步骤按固定 `3 s` settle 返回，随后的公开 bounded fetch 返回 `1,000` 样本并具备幅度证据；
+- `scope.screenshot_v2`：受限 `png/device/device` 调用返回 `1024 × 600`、`47,584` bytes 的 PNG；前后错误队列均为空，session healthy；
 - `scope.digital_status_v2`：D0、D8 均返回显示、标签、所属 POD 范围与 `1.4 V` 阈值，以及共享 `0 s` timing calibration 和 `MEDIUM` size；
 - `scope.snapshot_v2`：同次读取 identity 和 13 种授权选件状态；其余 55 个字段明确 unavailable；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
@@ -55,6 +56,14 @@
 此前的 `*OPC?` 诊断在 `15 s` 内未取得 `1`，因此不再作为本命令的完成机制。最终受控步骤在固定 `3 s` 后通过公开 bounded fetch 读取 CH1，返回 `1,000` 样本且幅度有效；随后独立清理确认 source 双路 OFF、scope STOP、CH1/CH2 high_z。
 
 这将固定 `3 s` 视为本插件的运行完成准则，不证明设备内部自动设置算法、可见效果或设置恢复；autoscale 按 Core 合同可改变垂直、时基和触发。`wait_opc=false` 明确跳过等待，尚无实机完成验收。
+
+## screenshot V2 受限验收
+
+该步骤以 source 双路 OFF、scope STOP、CH1/CH2 high_z 为基线。公开 `ScopeService.screenshot_profile()` 先通过身份预检和 `:SAVE:IMAGe:TYPE?` 确认唯一 `png/device/device` profile；profile 固定单次 `:SAVE:IMAGe:DATA?` definite block、`8,388,608`-byte 上限、精确 `LF` trailing、零 resynchronization，以及零状态变更／恢复字段。
+
+随后公开 `ScopeService.screenshot_v2()` 以 required before/after error check 读取一次截图。记录固件的 TYPE 回读为 `PNG`，但 DATA payload 实际为无压缩 BMP24。driver 仅接受固定 40-byte DIB、24 位、无压缩、完整像素数据的 BMP，并在内存中转换为 PNG；不会保存原始数据、创建仪器文件，或写入 TYPE、INVert、COLor、菜单。公开结果为 `image/png`、`1024 × 600`、`47,584` bytes 和 definite-block framing；Core 的 PNG 验证通过，前后 error drain 均为空，操作 session 为 healthy。
+
+退出清理再次确认 source 双路 OFF、scope STOP、CH1/CH2 high_z。本结论只覆盖记录型号、固件、LAN/PyVISA 和当前屏幕；不证明截图的视觉／像素准确度、颜色／菜单语义、其他屏幕状态、最大 payload，或 BMP24 以外的设备返回格式。
 
 ## math waveform metadata 受限验收
 
@@ -137,6 +146,6 @@ Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_con
 
 ## 验收范围与未覆盖项
 
-本记录证明当前屏幕 `DEF + LF` 1000 点、记录的停止态 `MAX/DMAX + LF` 10000 点，以及已停止 MAIN `DEF + BYTE` 的单／双通道 capture 每通道 1000 点。所有结论均限于记录的型号、固件、transport、memory depth 与步骤，不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算或测量准确度证明。
+本记录证明当前屏幕 `DEF + LF` 1000 点、记录的停止态 `MAX/DMAX + LF` 10000 点、已停止 MAIN `DEF + BYTE` 的单／双通道 capture 每通道 1000 点，以及受限 BMP24→PNG screenshot V2。所有结论均限于记录的型号、固件、transport、memory depth 与步骤，不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算、截图视觉或测量准确度证明。
 
-运行态 MAX、其他 memory depth、capture 点数、时基、通道组合、transport、吞吐、timeout 和一般波形准确度仍无实机结论。平均采集、record/replay、screenshot、数字 waveform 及其他未声明 capability 的边界不因本次验收改变。
+运行态 MAX、其他 memory depth、capture 点数、时基、通道组合、transport、吞吐、timeout、一般波形准确度，以及 screenshot 的其他屏幕状态／最大 payload／非 BMP24 返回格式仍无实机结论。平均采集、record/replay、数字 waveform 及其他未声明 capability 的边界不因本次验收改变。

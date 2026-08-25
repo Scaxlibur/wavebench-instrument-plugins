@@ -48,7 +48,7 @@
 | M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
 | M3 | 实机通过（受限 `DEF` 已知信号） | 当前屏幕 `NORMal + BYTE` 的 `DEF` 波形；使用 RFC-0008 的 bounded binary 合同 |
 | M4 | 实机通过（受限 control/capture） | `scope.acquisition_control`、停止态 bounded MAX/DMAX fetch 与已停止、MAIN 时基的 `DEF + BYTE` 单／多通道 capture 已验证。SINGLE 模式读回、`WAIT/TD → STOP`、每通道 1000 样本、恢复 `*OPC? 0 → 1` 与 13 字段 fresh verification 均有受控实机证据；运行态 MAX 与其他组合仍缺证据 |
-| M5 | 离线完成，待实机验收 | 通过 `SAVE:IMAGe:DATA?` 实现受限 `png/device/device` 的 `scope.screenshot_v2` |
+| M5 | 实机通过（受限 BMP24→PNG） | `scope.screenshot_v2` 读取 `SAVE:IMAGe:DATA?`，严格 BMP24 转 PNG |
 | M6 | 受控开发（数字状态 V2） | legacy 数字状态与数字 waveform 继续跳过；V2 只读静态状态有核心模型与实机证据 |
 | M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态、数字状态、快照只读子集；其余能力按 RFC/证据缺口跳过 |
 | M8 | 离线完成 | 覆盖文档、全量离线验证和发行包审计 |
@@ -125,11 +125,11 @@ M7 开发补充：core 当前开发分支还提供 `scope.snapshot_v2`。插件�
 
 ## M5：截图
 
-M5 已完成离线实现，等待独立实机验收。
+M5 已完成受控实机验收。
 
-Core 当前分支已把截图 response／operation 上限提高到 `8,388,608` bytes，覆盖手册的 `387,356`-byte 示例。插件仅声明 `scope.screenshot_profile` 与 `scope.screenshot_v2` 的 `png/device/device` variant：先查询 `:SAVE:IMAGe:TYPE?` 并严格要求 `PNG`，再以单次 `:SAVE:IMAGe:DATA?` definite block 读取截图。插件 profile 进一步收紧为 `524,288` bytes、精确 `LF` trailing、零 resynchronization、无状态写入和无恢复字段；不使用 `:DISPlay:DATA?`，不写 TYPE、INVert、COLor 或菜单，也不创建仪器文件。
+Core 当前分支已把截图 response／operation 上限提高到 `8,388,608` bytes，覆盖手册的 `387,356`-byte 示例。插件仅声明 `scope.screenshot_profile` 与 `scope.screenshot_v2` 的 `png/device/device` variant：先查询 `:SAVE:IMAGe:TYPE?` 并严格要求 `PNG`，再以单次 `:SAVE:IMAGe:DATA?` definite block 读取截图。profile 采用该上限、精确 `LF` trailing、零 resynchronization、无状态写入和无恢复字段；不使用 `:DISPlay:DATA?`，不写 TYPE、INVert、COLor 或菜单，也不创建仪器文件。
 
-退出证据：370 项包测试和 Ruff 通过。仍需在记录型号、固件和 LAN/PyVISA 条件下验收实际 payload、精确 trailing、PNG 完整性、session health 与空错误队列；任何超过插件预算或结构不完整的响应都 fail closed。见 [RFC-0003](rfcs/0003-scope-screenshot-framing-and-menu-contract.md)。
+记录固件的 TYPE 回读为 `PNG`，但 DATA payload 为无压缩 BMP24。driver 只接受固定 40-byte DIB、24 位、无压缩、完整像素数据的 BMP，并在内存中转换为 PNG；其他 BMP、JPEG、TIFF 或未知响应均 fail closed。公开调用返回 `1024 × 600`、`47,584` bytes 的 PNG，Core 验证 PNG，前后错误队列均为空，session healthy；最终 source 双路 OFF、scope STOP、CH1/CH2 high_z。373 项包测试、Ruff 和 Core 截图／二进制合同 46 项测试通过。视觉／像素准确度、其他屏幕状态、最大 payload 和 BMP24 以外的设备响应未验证。见 [RFC-0003](rfcs/0003-scope-screenshot-framing-and-menu-contract.md)。
 
 ## M6：数字通道
 
@@ -192,4 +192,4 @@ M7 退出证据：当前 Core 开发分支的受控 descriptor 声明 bounded fe
 
 离线证据：`0.7.0` 的 168 项包测试与 Ruff 通过；在 WaveBench core 位于同级目录的一次性仓库布局中，根测试为 715 项通过、2 项因缺少 SP3000A 私有实机证据而按预期跳过。WaveBench `0.8.22` 的源码目录与真实 wheel package check 均通过。wheel 仅包含一个 `wavebench.instruments` entry point、一个有效 WaveBench runtime dependency、MIT 许可证和插件代码；sdist 包含公开 README、矩阵、里程碑、RFC、测试与许可证。两种制品均不包含 vendor-local。一次性虚拟环境中的 wheel 安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过；61 个受跟踪 Markdown 文件的本地链接有效。全程未连接真实仪器。
 
-`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、control/capture、screenshot、math metadata、error drain、input、cursor、measurement-statistics、FFT status、acquisition status/run-state、digital status 和 snapshot V2 集成测试，合计 370 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 Core API 尚未单独发布，该结果不构成公开 wheel 发布。
+`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、control/capture、screenshot、math metadata、error drain、input、cursor、measurement-statistics、FFT status、acquisition status/run-state、digital status 和 snapshot V2 集成测试，合计 373 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 Core API 尚未单独发布，该结果不构成公开 wheel 发布。

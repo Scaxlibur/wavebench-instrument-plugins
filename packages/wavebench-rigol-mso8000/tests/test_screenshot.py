@@ -33,6 +33,48 @@ def _png(width: int = 2, height: int = 3) -> bytes:
     )
 
 
+def _bmp24(width: int = 2, height: int = 3) -> bytes:
+    row_bytes = width * 3
+    row_stride = (row_bytes + 3) & ~3
+    rows = bytearray()
+    for row in range(height):
+        pixels = bytearray()
+        for column in range(width):
+            pixels.extend((row + 1, column + 2, row + column + 3))
+        rows.extend(pixels)
+        rows.extend(b"\x00" * (row_stride - row_bytes))
+    file_size = 54 + len(rows)
+    return (
+        b"BM"
+        + file_size.to_bytes(4, "little")
+        + b"\x00\x00\x00\x00"
+        + (54).to_bytes(4, "little")
+        + (40).to_bytes(4, "little")
+        + width.to_bytes(4, "little", signed=True)
+        + height.to_bytes(4, "little", signed=True)
+        + (1).to_bytes(2, "little")
+        + (24).to_bytes(2, "little")
+        + (0).to_bytes(4, "little")
+        + len(rows).to_bytes(4, "little")
+        + b"\x00" * 16
+        + rows
+    )
+
+
+def _png_idat_payload(data: bytes) -> bytes:
+    offset = 8
+    idat = bytearray()
+    while offset < len(data):
+        length = int.from_bytes(data[offset : offset + 4], "big")
+        kind = data[offset + 4 : offset + 8]
+        payload_start = offset + 8
+        payload_end = payload_start + length
+        if kind == b"IDAT":
+            idat.extend(data[payload_start:payload_end])
+        offset = payload_end + 4
+    return bytes(idat)
+
+
 class ScreenshotBackend:
     resource = "TCPIP::192.0.2.10::INSTR"
     _wavebench_binary_budget_parameters = True
@@ -179,7 +221,7 @@ def test_screenshot_v2_uses_one_bounded_definite_block_without_writes() -> None:
         (
             ":SAVE:IMAGe:DATA?",
             BinaryResponseFraming.DEFINITE_BLOCK,
-            524_288,
+            8_388_608,
             ReplayPolicy.NO_REPLAY,
             b"\n",
             0,
@@ -221,6 +263,67 @@ def test_screenshot_v2_rejects_invalid_png_without_replay(payload: bytes) -> Non
     assert len(backend.binary_requests) == 1
     assert backend.writes == []
     assert transport.session_state.health is SessionHealth.HEALTHY
+
+
+def test_screenshot_v2_converts_uncompressed_bmp24_to_png() -> None:
+    backend = ScreenshotBackend(payload=_bmp24())
+    service, _ = _service(backend)
+
+    screenshot = service.screenshot_v2(ScopeScreenshotRequest()).value
+
+    assert screenshot.data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert (screenshot.width_px, screenshot.height_px) == (2, 3)
+    assert zlib.decompress(_png_idat_payload(screenshot.data)) == bytes(
+        (
+            0,
+            5,
+            2,
+            3,
+            6,
+            3,
+            3,
+            0,
+            4,
+            2,
+            2,
+            5,
+            3,
+            2,
+            0,
+            3,
+            2,
+            1,
+            4,
+            3,
+            1,
+        )
+    )
+    assert len(backend.binary_requests) == 1
+    assert backend.writes == []
+
+
+def test_screenshot_v2_reports_an_unsupported_non_png_format_without_payload_data() -> None:
+    backend = ScreenshotBackend(payload=b"\xff\xd8\xff" + b"\x00" * 32)
+    service, _ = _service(backend)
+
+    with pytest.raises(DataError, match="format is JPEG, not the required PNG"):
+        service.screenshot_v2(ScopeScreenshotRequest())
+
+    assert len(backend.binary_requests) == 1
+    assert backend.writes == []
+
+
+def test_screenshot_v2_rejects_non_bmp24_payload_without_replay() -> None:
+    payload = bytearray(_bmp24())
+    payload[28:30] = (32).to_bytes(2, "little")
+    backend = ScreenshotBackend(payload=bytes(payload))
+    service, _ = _service(backend)
+
+    with pytest.raises(DataError, match="not an uncompressed BMP24"):
+        service.screenshot_v2(ScopeScreenshotRequest())
+
+    assert len(backend.binary_requests) == 1
+    assert backend.writes == []
 
 
 def test_screenshot_direct_driver_rejects_unexpected_transport_trailing() -> None:

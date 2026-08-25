@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | [RFC-0001：非重放文本查询](0001-nonreplayable-text-query.md) | core R1 已实现（未发布） | 受控声明 `scope.error_drain_v1`；legacy `scope.errors` 继续不声明 |
 | [RFC-0002：示波器通道输入状态](0002-scope-channel-input-state.md) | core R1 已实现（未发布） | 插件受控声明 `scope.channel_input_state_v2` |
-| [RFC-0003：示波器截图 framing 与菜单合同](0003-scope-screenshot-framing-and-menu-contract.md) | Core 当前分支已实现；插件实机验收待完成 | 插件已声明受限 `scope.screenshot_profile`／`scope.screenshot_v2`；仅 `png/device/device`、`SAVE:IMAGe:DATA?` definite block、`524,288`-byte 预算 |
+| [RFC-0003：示波器截图 framing 与菜单合同](0003-scope-screenshot-framing-and-menu-contract.md) | Core 当前分支已实现；插件受限实机验收完成 | 插件声明 `scope.screenshot_profile`／`scope.screenshot_v2`；仅 `png/device/device`、`SAVE:IMAGe:DATA?` definite block、BMP24→PNG、`8,388,608`-byte 预算 |
 | [RFC-0004：可移植的示波器数字通道状态模型](0004-portable-scope-digital-status.md) | core R1 已实现（未发布） | 受控声明 `scope.digital_status_v2`；D0/D8 静态状态回包已验证，digital waveform 暂不声明 |
 | [RFC-0005：可组合的示波器状态快照](0005-portable-scope-snapshot.md) | core R1 已实现（未发布） | 受控声明 `scope.snapshot_v2` 的 identity/授权选件子集；其他 55 个字段暂 unavailable |
 | [RFC-0006：可移植的示波器采集状态与平均采集合同](0006-portable-scope-acquisition-contracts.md) | core R1 已实现（未发布） | 受控声明 acquisition status V2 静态子集；平均模式远程进入前提实机失败，`scope.capture_average_v2` 暂不声明 |

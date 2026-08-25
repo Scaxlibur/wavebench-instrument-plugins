@@ -1,6 +1,6 @@
 # RFC-0003：示波器截图 framing 与菜单合同
 
-状态：Core 当前分支已实现；插件离线实现完成，待独立实机验收
+状态：Core 当前分支已实现；插件受限实机验收完成
 
 目标仓库：WaveBench core
 
@@ -22,7 +22,7 @@ color_mode = device | color | monochrome | inverted
 
 `:SAVE:IMAGe:DATA?` 明确返回 TMC definite block、屏幕图像数据和结束符。手册给出的单个示例 payload 为 `387,356` bytes。Core 当前分支已将截图 V2 response 和 operation 硬上限提高到 `8,388,608` bytes，覆盖该示例。
 
-插件不使用 Core 的最大预算，而是将自己的唯一 variant 限为 `524,288` bytes。该值覆盖已知示例，但不构成对所有屏幕、固件、颜色或菜单状态的吞吐承诺；超出此预算的响应继续 fail closed。
+插件的唯一 variant 采用 Core 的 `8,388,608`-byte 最大预算。该值不是对所有屏幕、固件、颜色或菜单状态的吞吐承诺；超出此预算的响应继续 fail closed。
 
 保留以下安全限制：
 
@@ -41,7 +41,8 @@ MSO8104 首版受控声明 V2：
 - 仅声明 `png/device/device`，不写 `TYPE`、`INVert` 或 `COLor`；
 - 先只读确认 `:SAVE:IMAGe:TYPE?` 为 `PNG`，否则在 binary query 前拒绝；
 - 不使用 `:DISPlay:DATA?`、不创建仪器文件、没有临时状态写入，故变更字段与恢复步骤均为空；
-- 离线测试已覆盖实际类型预检、预算、trailing、PNG 结构和异常停止读取；实际 payload、精确 trailing、PNG 尺寸／校验、session health 和空错误队列仍须独立实机验收。
+- 记录固件的 `TYPE?` 回读 `PNG`，但 DATA payload 为无压缩 BMP24。driver 只接受固定 40-byte DIB、24 位、无压缩、完整像素数据的 BMP，并在内存中转换为 PNG；不支持的 BMP、JPEG、TIFF 与未知数据仍拒绝。
+- 公开实机调用返回 `1024 × 600`、`47,584` bytes 的 PNG；精确 `LF` trailing、前后空错误队列与 healthy session 均已验证，最终 source 双路 OFF、scope STOP、CH1/CH2 high_z。
 
 ## 不采用的方案
 

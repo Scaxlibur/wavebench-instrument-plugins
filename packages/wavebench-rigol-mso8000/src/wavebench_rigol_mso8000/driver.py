@@ -6,6 +6,7 @@ from hashlib import sha256
 import math
 from threading import RLock
 import time
+import zlib
 
 import numpy as np
 
@@ -200,7 +201,7 @@ _MSO8104_SCREENSHOT_REQUEST = ScopeScreenshotRequest(
     menu_mode="device",
     color_mode="device",
 )
-_MSO8104_SCREENSHOT_RESPONSE_MAX_BYTES = 524_288
+_MSO8104_SCREENSHOT_RESPONSE_MAX_BYTES = 8_388_608
 _MSO8104_SCREENSHOT_TRANSPORT_TRAILING = b"\n"
 _TRIGGER_STATUS_TO_PHASE = {
     "STOP": "stopped",
@@ -208,6 +209,86 @@ _TRIGGER_STATUS_TO_PHASE = {
     "RUN": "acquiring",
     "AUTO": "acquiring",
 }
+
+
+def _classify_screenshot_payload(data: bytes) -> str:
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "PNG"
+    if data.startswith(b"BM"):
+        return "BMP"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "JPEG"
+    if data.startswith((b"II*\x00", b"MM\x00*")):
+        return "TIFF"
+    return "unknown"
+
+
+def _png_chunk(kind: bytes, payload: bytes) -> bytes:
+    checksum = zlib.crc32(kind + payload) & 0xFFFFFFFF
+    return (
+        len(payload).to_bytes(4, "big")
+        + kind
+        + payload
+        + checksum.to_bytes(4, "big")
+    )
+
+
+def _convert_bmp24_to_png(data: bytes) -> bytes:
+    if len(data) < 54 or data[:2] != b"BM":
+        raise DataError("MSO8104 screenshot BMP24 header is incomplete")
+    file_size = int.from_bytes(data[2:6], "little")
+    pixel_offset = int.from_bytes(data[10:14], "little")
+    dib_size = int.from_bytes(data[14:18], "little")
+    width = int.from_bytes(data[18:22], "little", signed=True)
+    signed_height = int.from_bytes(data[22:26], "little", signed=True)
+    planes = int.from_bytes(data[26:28], "little")
+    bits_per_pixel = int.from_bytes(data[28:30], "little")
+    compression = int.from_bytes(data[30:34], "little")
+    image_size = int.from_bytes(data[34:38], "little")
+    if (
+        file_size != len(data)
+        or pixel_offset != 54
+        or dib_size != 40
+        or width <= 0
+        or signed_height == 0
+        or planes != 1
+        or bits_per_pixel != 24
+        or compression != 0
+    ):
+        raise DataError("MSO8104 screenshot BMP is not an uncompressed BMP24 image")
+    height = abs(signed_height)
+    row_bytes = width * 3
+    row_stride = (row_bytes + 3) & ~3
+    pixel_bytes = row_stride * height
+    if (
+        image_size not in {0, pixel_bytes}
+        or pixel_offset + pixel_bytes != len(data)
+    ):
+        raise DataError("MSO8104 screenshot BMP24 pixel data is inconsistent")
+    scanlines = bytearray(height * (row_bytes + 1))
+    pixels = memoryview(data)[pixel_offset:]
+    for output_row in range(height):
+        source_row = output_row if signed_height < 0 else height - 1 - output_row
+        source_offset = source_row * row_stride
+        target_offset = output_row * (row_bytes + 1)
+        scanlines[target_offset] = 0
+        for column in range(0, row_bytes, 3):
+            blue, green, red = pixels[source_offset + column : source_offset + column + 3]
+            target = target_offset + 1 + column
+            scanlines[target : target + 3] = bytes((red, green, blue))
+    ihdr = (
+        width.to_bytes(4, "big")
+        + height.to_bytes(4, "big")
+        + b"\x08\x02\x00\x00\x00"
+    )
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(b"IHDR", ihdr)
+        + _png_chunk(b"IDAT", zlib.compress(scanlines))
+        + _png_chunk(b"IEND", b"")
+    )
+
+
 _DIGITAL_STATUS_V2_LA_UNAVAILABLE_FIELDS = (
     "position_div",
     "label_enabled",
@@ -573,12 +654,16 @@ class MSO8104Scope:
                     "MSO8104 screenshot response has unexpected transport trailing bytes"
                 )
             data = result.data
-            if (
-                len(data) < 24
-                or not data.startswith(b"\x89PNG\r\n\x1a\n")
-                or data[12:16] != b"IHDR"
-            ):
-                raise DataError("MSO8104 screenshot response is not a PNG with an IHDR")
+            payload_kind = _classify_screenshot_payload(data)
+            if payload_kind == "BMP":
+                data = _convert_bmp24_to_png(data)
+            elif payload_kind != "PNG":
+                raise DataError(
+                    "MSO8104 screenshot response format is "
+                    f"{payload_kind}, not the required PNG"
+                )
+            if len(data) < 24 or data[12:16] != b"IHDR":
+                raise DataError("MSO8104 screenshot PNG is missing the required IHDR")
             width_px = int.from_bytes(data[16:20], "big")
             height_px = int.from_bytes(data[20:24], "big")
             try:

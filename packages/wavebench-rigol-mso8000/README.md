@@ -39,7 +39,7 @@
 
 ## M8 离线发行证据
 
-- MSO8104 包测试：370 项通过；全仓 Ruff 通过。
+- MSO8104 包测试：373 项通过；全仓 Ruff 通过。
 - 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
 - 当前 WaveBench `0.8.24` 开发环境的 package check：源码目录和真实 wheel 均通过。
 - wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。
@@ -54,7 +54,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 当前 descriptor 允许 `tcpip`、`usb`、`gpib` 资源前缀，这是手册声明和离线路由合同，不是连接实机通过的证据。
 
-已受控声明 `scope.screenshot_profile` 与 `scope.screenshot_v2`。Core 当前分支的截图预算为 `8,388,608` bytes，首版插件 profile 进一步收紧为单响应／单操作 `524,288` bytes、一次 binary query、`DEFINITE_BLOCK`、精确 `LF` transport trailing 和 `png/device/device`。driver 先只读确认 `:SAVE:IMAGe:TYPE? = PNG`，再读取 `:SAVE:IMAGe:DATA?`；不写 `TYPE`、`INVert`、`COLor`、菜单或设备文件，也不使用 `:DISPlay:DATA?`。离线合同已通过，实际 payload、尾随字节、PNG、session health 和空错误队列仍待独立实机验收；详见 [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md)。
+已受控声明 `scope.screenshot_profile` 与 `scope.screenshot_v2`。profile 固定单次 binary query、`DEFINITE_BLOCK`、精确 `LF` transport trailing、`8,388,608`-byte 上限与 `png/device/device`。driver 先只读确认 `:SAVE:IMAGe:TYPE? = PNG`，再读取 `:SAVE:IMAGe:DATA?`；记录固件实际返回无压缩 BMP24，driver 仅接受该严格子集并在内存中转换为 PNG。公开实机调用返回 `1024 × 600`、`47,584` bytes 的 `image/png`，前后错误队列均为空，session healthy；最终 source 双路 OFF、scope STOP、CH1/CH2 high_z。不写 `TYPE`、`INVert`、`COLor`、菜单或设备文件，也不使用 `:DISPlay:DATA?`。该证据不外推到截图视觉／像素准确度、其他屏幕状态或最大 payload；详见 [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md)。
 
 当前不声明 legacy `scope.digital_status` 或 `scope.digital_waveform`。legacy 数字状态模型要求 MSO8000 无法查询的必填字段；数字 waveform 的厂商手册未定义 BYTE/WORD 逻辑 code，WORD 字节序也不明确。插件不以默认值或模拟量换算制造数字状态。
 
