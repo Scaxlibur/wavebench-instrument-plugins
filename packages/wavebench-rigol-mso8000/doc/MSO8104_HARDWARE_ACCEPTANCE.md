@@ -55,6 +55,17 @@
 
 每次读取后都通过 `EXIT` 清理关闭已启用的 source 通道，并以新的 Source V2 snapshot 确认 CH1、CH2 均为 OFF、`consistent`、`healthy`。
 
+## 停止态 MAX/DMAX 受限验收
+
+在独立进程中，先以只读 public API 复核 source CH1/CH2 为 OFF、`consistent`、`healthy`，scope CH1/CH2 为 `dc + high_z + 1 MΩ`，且 run-state 为 stopped。随后 scope fetch 使用 read-write 配置；source 保持输出关闭。每次 fetch 前再次请求两路 output OFF 并复核，不发送 RUN、STOP、SINGLE、autoscale、时基、垂直、触发或输入设置写入。
+
+bounded `scope.fetch_waveform` 使用 `LF` trailing、no-replay、每响应最多 `250,000` bytes、每操作最多 `4,000,000` bytes、最多 16 次 binary query。MAX/DMAX 在临时 waveform transfer setup 前都要求已观察到 STOP；driver 读取当前 memory depth，并把 `:WAVeform:POINts` 设置为 memory depth、运行时总点数和 16 倍 chunk 上限的最小值。实机当前 memory depth 为 `10,000 pts`；本轮运行时上限设为总计 `20,000 pts`、每块 `2,500 pts`。
+
+- CH1：DMAX 返回 `10,000` 样本；停止态 MAX 返回 `10,000` 样本；
+- CH2：DMAX 返回 `10,000` 样本；停止态 MAX 返回 `10,000` 样本。
+
+每次完成后，core 对 `source`、`mode`、`format`、`points`、`window` 五个 transfer 字段执行恢复与 fresh verification；新 scope 会话复核仍为 stopped，新的 Source V2 snapshot 复核 CH1/CH2 均 OFF、`consistent`、`healthy`。这只证明记录型号、固件、LAN/PyVISA、当前 `10 kpts` memory depth 和受限分块下的停止态 MAX/DMAX fetch；不证明运行态 MAX、其他 memory depth、吞吐、timeout、波形准确度或 capture 语义。
+
 ## portability V2 只读跟进
 
 在 source 两路 OFF 的只读步骤中，`scope.channel_input_state_v2` 成功读取 CH1、CH2 的独立 coupling、termination 和阻抗。该步骤未写入输入设置。
@@ -90,6 +101,6 @@ Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_con
 
 ## 验收范围与后续条件
 
-本记录证明的是当前屏幕、`DEF + LF`、1000 点、记录的型号/固件/transport 和信号源条件。它不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算或测量准确度证明。
+本记录证明的是当前屏幕 `DEF + LF` 1000 点，以及记录的停止态 `MAX/DMAX + LF` 10000 点路径；均限于记录的型号、固件、transport、memory depth 与步骤。它不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算或测量准确度证明。
 
-`scope.acquisition_control`、`MAX`、`DMAX`、`SINGLE`、`scope.capture_waveform` 和 `scope.capture_waveforms` 没有获得本轮可发布的实机验收，继续默认拒绝。后续如需推进，须先解决 SINGLE 的 LAN/VXI-11 稳定 readback 与完成/失败恢复证据，再完成相应 bounded profile、采集状态恢复和独立低电压实机步骤；每一步开始前仍须确认 source 两路 OFF。
+`scope.acquisition_control`、运行态 MAX、`SINGLE`、`scope.capture_waveform` 和 `scope.capture_waveforms` 没有获得本轮可发布的实机验收，继续默认拒绝。后续如需推进，须先解决 SINGLE 的 LAN/VXI-11 稳定 readback 与完成/失败恢复证据，再完成相应采集状态恢复和独立低电压实机步骤；每一步开始前仍须确认 source 两路 OFF。

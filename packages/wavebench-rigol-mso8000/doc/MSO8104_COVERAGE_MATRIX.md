@@ -34,8 +34,8 @@
 | 采集控制 | `:RUN`、`:STOP`、`:SINGle`、`:TRIGger:SWEep?`、`:ACQuire:TYPE?` | `scope.acquisition_control` | 默认拒绝 | Core 把 start、stop 与完成式 SINGLE 绑为同一 capability。driver 有离线恢复与状态迁移实现，但 SINGLE arm/readback 实机出现 VXI-11 EOF 和会话阻塞；未取得 SINGLE 完成及失败恢复的实机证据前不声明 |
 | 平均采集事务 | global acquisition type 与 averages | `scope.capture_average` | RFC 后跳过 | 公共配置要求 single count/逐通道 arithmetic；设备也没有平均完成位；见 RFC-0006 |
 | 时基与 edge trigger | main offset/scale、MAIN/XY/ROLL、edge settings/status | capture 前提 | 部分离线通过 | capture 只读前提并沿用配置；任意 setter 不开放，完整 snapshot 见 RFC-0005 |
-| 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | 实机通过（受限 `DEF`） | 当前 core 工作树的 bounded profile 只开放 `DEF`；`LF` trailing、`1,000` bytes 和一次 binary query 已实机通过，core 已完成恢复与新鲜验证。记录的 `1 kHz / 1 Vpp / 0 V` 信号源下，CH1 为 `1.05713 Vpp / 1000 Hz`，CH2 为 `1.0705 Vpp / 999.167 Hz` |
-| 深存储波形 | MAX/RAW、start/stop 分块 | fetch/capture | 默认拒绝 | MAX/DMAX 尚未通过有界 profile 与实机验收；每块和总点数离线边界保留 |
+| 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | 实机通过（受限 `DEF`） | `LF` trailing、`1,000` bytes 和一次 binary query 已实机通过，core 已完成恢复与新鲜验证。记录的 `1 kHz / 1 Vpp / 0 V` 信号源下，CH1 为 `1.05713 Vpp / 1000 Hz`，CH2 为 `1.0705 Vpp / 999.167 Hz` |
+| 深存储波形 | MAX/RAW、start/stop 分块 | `scope.fetch_waveform` | 实机通过（受限 stopped MAX/DMAX） | 唯一 bounded profile 限制每响应 `250,000` bytes、每操作 `4,000,000` bytes、16 次 binary query。MAX/DMAX 均须先观察到 STOP，再读取 memory depth 并把 points 收紧为 memory depth、运行时总点数和 16 倍 chunk 的最小值；不发送 RUN/STOP/SINGLE。source 双路 OFF、CH1/CH2 高阻、当前 `10 kpts` memory depth、`20 kpts / 2.5 kpts chunk` 条件下，CH1/CH2 各自的 MAX/DMAX 均返回 `10,000` 样本并完成五字段 restore/fresh verify。运行态 MAX、其他深度、吞吐、timeout 和 capture 未验证 |
 | 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | 默认拒绝 | capture 还缺 acquisition、trigger、timebase 与通道状态的完整恢复证据；不以 SINGLE 或 `*OPC?` 冒充完整验收 |
 | 数学波形元数据 | `:MATH<n>:DISPlay?`、waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | 离线通过 | 仅已显示槽位与 MAIN 时基；恢复六项传输状态，不读取 data；实机恢复仍未验证 |
 | 手动光标读数 | cursor mode/type/source/unit/value/delta queries | `scope.cursor_readout`、`scope.cursor_readout_v2` | 受限离线通过 | V2 使用全局寻址，读取手动 TIME/AMPL 的独立 A/B source、单位与 A/B/差值；不移动光标。当前实机为 VBA，调用在读取数值前拒绝；准确度未实机验证 |
@@ -77,7 +77,7 @@ payload 必须与点数精确一致；所有轴参数与换算结果必须为有
 - `*OPC?` 是否等待目标 single acquisition；
 - SINGLE arm/readback、完成状态迁移与失败恢复；
 - 除记录的 `DEF + LF`、`1 kHz / 1 Vpp / 0 V` 条件外的 X/Y 换算与测量准确度；
-- MAX/DMAX 的 binary 吞吐、分块和 timeout；
+- 运行态 MAX，以及不同 memory depth 下 MAX/DMAX 的 binary 吞吐、分块和 timeout；
 - screenshot framing；
 - RAW chunk 上限、吞吐和 timeout；
 - WORD 字节序与有效位宽；

@@ -55,6 +55,17 @@ After confirming SDG CH1 to MSO CH1 and SDG CH2 to MSO CH2, separate short sourc
 
 After each read, EXIT cleanup disabled the enabled source channel and a fresh Source V2 snapshot confirmed CH1 and CH2 OFF, `consistent`, and `healthy`.
 
+## Restricted stopped-state MAX/DMAX acceptance
+
+Separate processes first used public read-only APIs to confirm source CH1/CH2 OFF, `consistent`, and `healthy`, scope CH1/CH2 as `dc + high_z + 1 MΩ`, and stopped run-state. Scope fetch then used read-write access while the source outputs remained OFF. Every fetch again requested both outputs OFF and verified them. No RUN, STOP, SINGLE, autoscale, timebase, vertical, trigger, or input-setting write was sent.
+
+Bounded `scope.fetch_waveform` used `LF` trailing, no replay, a `250,000`-byte per-response limit, a `4,000,000`-byte operation limit, and at most 16 binary queries. MAX/DMAX both required observed STOP before temporary waveform-transfer setup; the driver read current memory depth and set `:WAVeform:POINts` to the minimum of memory depth, the runtime total-point limit, and 16 chunks. The current hardware memory depth was `10,000 pts`; this run set runtime limits to `20,000 pts` total and `2,500 pts` per chunk.
+
+- CH1: DMAX returned `10,000` samples; stopped-state MAX returned `10,000` samples.
+- CH2: DMAX returned `10,000` samples; stopped-state MAX returned `10,000` samples.
+
+After every operation, core restored and freshly verified the five transfer fields `source`, `mode`, `format`, `points`, and `window`; a new scope session verified stopped state and a fresh Source V2 snapshot verified CH1/CH2 OFF, `consistent`, and `healthy`. This establishes only stopped-state MAX/DMAX fetch for the recorded model, firmware, LAN/PyVISA, `10 kpts` memory depth, and bounded chunk procedure. It is not running-state MAX, other memory depths, throughput, timeout, waveform-accuracy, or capture-semantics evidence.
+
 ## Portability V2 read-only follow-up
 
 With both source outputs OFF, `scope.channel_input_state_v2` successfully read independent coupling, termination, and impedance for CH1 and CH2. This step did not write input settings.
@@ -90,6 +101,6 @@ This evidence covers only identity and licensed-option status for the recorded m
 
 ## Acceptance boundary and next conditions
 
-This record covers only the current-screen `DEF + LF`, 1000-point path for the stated model, firmware, transport, and source condition. It is not general X/Y-conversion or measurement-accuracy evidence across ranges, timebases, or probe conditions.
+This record covers only the current-screen `DEF + LF` 1000-point path and the recorded stopped-state `MAX/DMAX + LF` 10000-point path, each for the stated model, firmware, transport, memory depth, and procedure. It is not general X/Y-conversion or measurement-accuracy evidence across ranges, timebases, or probe conditions.
 
-`scope.acquisition_control`, `MAX`, `DMAX`, `SINGLE`, `scope.capture_waveform`, and `scope.capture_waveforms` have no releasable hardware acceptance from this work and remain default denied. Advancing them first requires stable LAN/VXI-11 SINGLE readback plus completion/failure-recovery evidence, then their own bounded profile, acquisition-state recovery, offline fault contracts, and a separate low-voltage hardware procedure; each step must still begin with both source outputs OFF.
+`scope.acquisition_control`, running-state MAX, `SINGLE`, `scope.capture_waveform`, and `scope.capture_waveforms` have no releasable hardware acceptance from this work and remain default denied. Advancing them first requires stable LAN/VXI-11 SINGLE readback plus completion/failure-recovery evidence, then acquisition-state recovery, offline fault contracts, and a separate low-voltage hardware procedure; each step must still begin with both source outputs OFF.

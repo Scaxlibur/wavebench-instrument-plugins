@@ -1,6 +1,6 @@
 # RFC-0008：有界示波器波形块的尾随字节合同
 
-状态：核心开发工作树已实现；插件实机验收待完成
+状态：核心开发工作树已实现；插件完成受限 `DEF` 与停止态 MAX/DMAX 实机验收
 
 目标仓库：WaveBench core
 
@@ -63,9 +63,7 @@ core 当前工作树已让标准 waveform Service 在 binary budget 的操作上
 
 ## capability 影响
 
-`0.9.0` 开发版本只声明 `scope.fetch_waveform` 的 `DEF` 子集：`LF` trailing、`1,000`
-bytes、一次 binary query，以及 source/mode/format/points/window 五字段恢复。该声明只用于当前
-core 工作树的离线和受控验收，不构成发布版兼容性结论。
+`0.9.0` 开发版本声明 `scope.fetch_waveform` 的受限 `DEF`、停止态 MAX 和停止态 DMAX：`LF` trailing、每响应 `250,000` bytes、每操作 `4,000,000` bytes、最多 16 次 binary query，以及 source/mode/format/points/window 五字段恢复。MAX/DMAX 在 transfer setup 前要求 STOP，读取 memory depth 后再把 points 限制为 memory depth、运行时总点数和 16 倍 chunk 的最小值。该声明只用于当前 core 工作树的离线和受控验收，不构成发布版兼容性结论。
 
 插件继续不声明：
 
@@ -79,7 +77,7 @@ driver 保留严格的 preamble、payload、恢复和锁存代码供离线回归
 2. 1000-sample payload 与五字段 transfer state 恢复已由 core fresh readback 证明；
 3. 在人工确认 acquisition、探头倍率、通道显示和接线后，完成 `1 kHz / 1 Vpp` 的 X/Y 换算和测量闭环；
 4. 每轮开始和结束都独立确认 source 两路 OFF；
-5. CH2、MAX、DMAX、双通道和 capture 作为后续独立 capability 验收，不从 CH1 `DEF` 外推。
+5. CH1/CH2 的停止态 MAX/DMAX 已在 source 双路 OFF、scope 高阻、scope stopped、当前 `10 kpts` memory depth 与 `20 kpts / 2.5 kpts chunk` 条件下各自返回 `10,000` 样本，并完成五字段 restore/fresh verify；运行态 MAX、其他 memory depth、双通道一次性 capture 和 capture 仍须独立验收，不从该结果外推。
 
 ## 不采用的方案
 
