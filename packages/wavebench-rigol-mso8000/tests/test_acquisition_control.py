@@ -9,6 +9,7 @@ from wavebench.instruments.scope_extensions import (
     ScopeAcquisitionControlProfile,
     ScopeAcquisitionControlBaseline,
     ScopeAcquisitionControlSnapshot,
+    ScopeContinuousAcquisitionRequest,
     ScopeAcquisitionRunState,
 )
 from wavebench.services.scope_extension_service import ScopeExtensionService
@@ -37,6 +38,8 @@ class AcquisitionControlTransport:
         self.queries: list[str] = []
         self.writes: list[str] = []
         self.fail_writes: set[str] = set()
+        self.fail_query_on_calls: dict[str, set[int]] = {}
+        self._query_call_counts: dict[str, int] = {}
         self.close_calls = 0
 
     def record_event(self, direction: str, text: str) -> None:
@@ -50,6 +53,10 @@ class AcquisitionControlTransport:
     ) -> str:
         del replay
         self.queries.append(command)
+        call_count = self._query_call_counts.get(command, 0) + 1
+        self._query_call_counts[command] = call_count
+        if call_count in self.fail_query_on_calls.get(command, set()):
+            raise InstrumentError(f"injected query failure: {command}")
         if command == ":TRIGger:STATus?":
             if self.statuses:
                 return self.statuses.pop(0)
@@ -244,14 +251,13 @@ def test_single_requires_post_arm_transition_before_terminal_stop() -> None:
     )
     assert transport.writes == [":SINGle"]
     assert transport.queries == [
-        ":TRIGger:SWEep?",
         ":TRIGger:STATus?",
         ":TRIGger:STATus?",
         ":TRIGger:STATus?",
     ]
 
 
-def test_single_waits_one_bounded_interval_before_sweep_readback() -> None:
+def test_single_waits_before_initial_status_and_after_nonterminal_status() -> None:
     transport = AcquisitionControlTransport(statuses=["WAIT", "STOP"])
     sleeps: list[float] = []
     scope = MSO8104Scope(
@@ -265,10 +271,10 @@ def test_single_waits_one_bounded_interval_before_sweep_readback() -> None:
 
     assert completion.state.phase == "stopped"
     assert sleeps == [0.05, 0.05]
-    assert transport.queries[:2] == [":TRIGger:SWEep?", ":TRIGger:STATus?"]
+    assert transport.queries == [":TRIGger:STATus?", ":TRIGger:STATus?"]
 
 
-def test_single_expires_before_arm_readback_without_a_query() -> None:
+def test_single_expires_before_initial_status_without_a_query() -> None:
     transport = AcquisitionControlTransport()
     clock_values = iter((0.0, 1.0))
     scope = MSO8104Scope(
@@ -276,11 +282,49 @@ def test_single_expires_before_arm_readback_without_a_query() -> None:
         _clock=lambda: next(clock_values),
     )
 
-    with pytest.raises(OperationTimeout, match="before arm readback"):
+    with pytest.raises(OperationTimeout, match="before initial status"):
         scope.acquire_single(baseline=_baseline(), deadline=0.5)
 
     assert transport.writes == [":SINGle"]
     assert transport.queries == []
+
+
+def test_single_expires_during_initial_settle_without_a_query() -> None:
+    transport = AcquisitionControlTransport()
+    clock_values = iter((0.0, 0.0, 1.0))
+    sleeps: list[float] = []
+    scope = MSO8104Scope(
+        transport=transport,
+        trigger_poll_interval_s=0.05,
+        _clock=lambda: next(clock_values),
+        _sleep=sleeps.append,
+    )
+
+    with pytest.raises(OperationTimeout, match="before initial status"):
+        scope.acquire_single(baseline=_baseline(), deadline=0.5)
+
+    assert transport.writes == [":SINGle"]
+    assert transport.queries == []
+    assert sleeps == [0.05]
+
+
+def test_single_does_not_query_after_poll_sleep_reaches_deadline() -> None:
+    transport = AcquisitionControlTransport(statuses=["WAIT"])
+    clock_values = iter((0.0, 0.0, 0.0, 0.0, 0.0, 1.0))
+    sleeps: list[float] = []
+    scope = MSO8104Scope(
+        transport=transport,
+        trigger_poll_interval_s=0.05,
+        _clock=lambda: next(clock_values),
+        _sleep=sleeps.append,
+    )
+
+    with pytest.raises(OperationTimeout, match="did not reach STOP"):
+        scope.acquire_single(baseline=_baseline(), deadline=0.5)
+
+    assert transport.writes == [":SINGle"]
+    assert transport.queries == [":TRIGger:STATus?"]
+    assert sleeps == [0.05, 0.05]
 
 
 def test_single_fails_closed_if_stop_is_the_first_observed_status() -> None:
@@ -302,6 +346,19 @@ def test_single_does_not_treat_auto_status_as_single_completion_evidence() -> No
         scope.acquire_single(baseline=_baseline(), deadline=1.0)
 
     assert transport.writes == [":SINGle"]
+    assert scope.acquisition_writes_blocked is True
+
+
+def test_single_latches_when_initial_status_transport_fails() -> None:
+    transport = AcquisitionControlTransport()
+    transport.fail_query_on_calls[":TRIGger:STATus?"] = {1}
+    scope = MSO8104Scope(transport=transport, _clock=lambda: 0.0)
+
+    with pytest.raises(InstrumentError, match="outcome is uncertain"):
+        scope.acquire_single(baseline=_baseline(), deadline=1.0)
+
+    assert transport.writes == [":SINGle"]
+    assert transport.queries == [":TRIGger:STATus?"]
     assert scope.acquisition_writes_blocked is True
 
 
@@ -337,15 +394,35 @@ def test_restore_writes_stop_then_baseline_trigger_and_acquisition_without_queri
     assert transport.queries == []
 
 
-def test_restore_returns_partial_failure_evidence_for_core_cleanup() -> None:
+@pytest.mark.parametrize(
+    ("failed_command", "attempted", "restored"),
+    [
+        (":STOP", ("scope.run_state",), ()),
+        (
+            ":TRIGger:SWEep NORMal",
+            ("scope.run_state", "scope.trigger"),
+            ("scope.run_state",),
+        ),
+        (
+            ":ACQuire:TYPE NORMal",
+            ("scope.run_state", "scope.trigger", "scope.acquisition"),
+            ("scope.run_state", "scope.trigger"),
+        ),
+    ],
+)
+def test_restore_returns_partial_failure_evidence_for_each_write_position(
+    failed_command: str,
+    attempted: tuple[str, ...],
+    restored: tuple[str, ...],
+) -> None:
     transport = AcquisitionControlTransport()
-    transport.fail_writes.add(":TRIGger:SWEep NORMal")
+    transport.fail_writes.add(failed_command)
 
     result = MSO8104Scope(transport=transport).restore_acquisition_control(_baseline())
 
     assert result.status == "failed"
-    assert result.attempted_fields == ("scope.run_state", "scope.trigger")
-    assert result.restored_fields == ("scope.run_state",)
+    assert result.attempted_fields == attempted
+    assert result.restored_fields == restored
     assert result.error_code == "restore_write_failed"
     assert transport.queries == []
 
@@ -440,8 +517,72 @@ def test_current_core_service_accepts_single_transition_proof() -> None:
     assert transport.session_state.health.value == "healthy"
 
 
+def test_current_core_service_starts_then_stops_normal_acquisition() -> None:
+    backend = AcquisitionControlTransport(statuses=["STOP", "WAIT"])
+    service, driver, transport = _extension_service(backend)
+
+    started = service.start_acquisition(
+        ScopeContinuousAcquisitionRequest(trigger_mode="normal")
+    )
+    stopped = service.stop_acquisition()
+
+    assert started.value == ScopeAcquisitionRunState("waiting", "normal", "WAIT")
+    assert stopped.value == ScopeAcquisitionRunState("stopped", "unknown", "STOP")
+    assert backend.writes == [":TRIGger:SWEep NORMal", ":RUN", ":STOP"]
+    assert driver.acquisition_writes_blocked is False
+    assert transport.session_state.health.value == "healthy"
+
+
+def test_current_core_service_restores_after_unproven_start() -> None:
+    backend = AcquisitionControlTransport(statuses=["STOP", "STOP"])
+    service, driver, transport = _extension_service(backend)
+
+    with pytest.raises(InstrumentError, match="outcome is uncertain"):
+        service.start_acquisition(ScopeContinuousAcquisitionRequest(trigger_mode="normal"))
+
+    assert backend.writes == [
+        ":TRIGger:SWEep NORMal",
+        ":RUN",
+        ":STOP",
+        ":TRIGger:SWEep NORMal",
+        ":ACQuire:TYPE NORMal",
+    ]
+    assert driver.acquisition_writes_blocked is True
+    assert transport.session_state.health.value == "healthy"
+
+
 def test_current_core_service_restores_after_unproven_single() -> None:
     backend = AcquisitionControlTransport(statuses=["STOP", "STOP"])
+    service, driver, transport = _extension_service(backend)
+
+    with pytest.raises(DataError, match="unproven"):
+        service.acquire_single()
+
+    assert backend.writes == [
+        ":SINGle",
+        ":STOP",
+        ":TRIGger:SWEep NORMal",
+        ":ACQuire:TYPE NORMal",
+    ]
+    assert driver.acquisition_writes_blocked is True
+    assert transport.session_state.health.value == "healthy"
+
+
+def test_current_core_service_does_not_restore_after_poisoned_initial_status_failure() -> None:
+    backend = AcquisitionControlTransport(statuses=["STOP"])
+    backend.fail_query_on_calls[":TRIGger:STATus?"] = {2}
+    service, driver, transport = _extension_service(backend)
+
+    with pytest.raises(InstrumentError, match="outcome is uncertain"):
+        service.acquire_single()
+
+    assert backend.writes == [":SINGle"]
+    assert driver.acquisition_writes_blocked is True
+    assert transport.session_state.health.value == "poisoned"
+
+
+def test_current_core_service_restores_after_unproven_initial_status() -> None:
+    backend = AcquisitionControlTransport(statuses=["STOP", "TD"])
     service, driver, transport = _extension_service(backend)
 
     with pytest.raises(DataError, match="unproven"):

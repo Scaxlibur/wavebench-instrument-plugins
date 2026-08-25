@@ -666,18 +666,20 @@ class MSO8104Scope:
                 remaining_s = deadline - self._clock()
                 if remaining_s <= 0:
                     raise OperationTimeout(
-                        "MSO8104 single-acquisition deadline expired before arm readback"
+                        "MSO8104 single-acquisition deadline expired before initial status"
                     )
                 self._sleep(min(self.trigger_poll_interval_s, remaining_s))
-                trigger_sweep = parse_trigger_sweep(
-                    self.transport.query(":TRIGger:SWEep?")
-                )
-                if trigger_sweep != "SING":
-                    raise DataError(
-                        "MSO8104 single acquisition trigger-sweep readback did not match"
+                if deadline <= self._clock():
+                    raise OperationTimeout(
+                        "MSO8104 single-acquisition deadline expired before initial status"
                     )
                 observed_states: list[ScopeAcquisitionRunState] = []
                 while True:
+                    if deadline <= self._clock():
+                        raise OperationTimeout(
+                            "MSO8104 single acquisition did not reach STOP before the "
+                            "operation deadline"
+                        )
                     status = parse_trigger_status(
                         self.transport.query(":TRIGger:STATus?")
                     )
