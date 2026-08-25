@@ -106,7 +106,7 @@ class ScopeAverageCaptureResultV2:
 
 ## capability 影响
 
-core 当前开发分支已实现 acquisition status V2。MSO8104 在受控开发中声明 `scope.acquisition_status_v2`：读取 type、sample rate、memory depth，并仅在 AVER 模式下读取 configured count；average complete、run state 与 segmented 分区保持 unavailable 或 not applicable。legacy `scope.acquisition_status` 与 `scope.capture_average` 仍不声明。`0.8.0` 还因 RFC-0008 暂停了 waveform/capture capability；保留的离线 capture 实现曾只读取调用前已经配置好的 acquisition type，不会设置或声称验证平均次数。
+core 当前开发分支已实现 acquisition status V2。MSO8104 在受控开发中声明 `scope.acquisition_status_v2`：读取 type、sample rate、memory depth，并仅在 AVER 模式下读取 configured count；average complete、run state 与 segmented 分区保持 unavailable 或 not applicable。legacy `scope.acquisition_status` 与 `scope.capture_average` 仍不声明。当前 `0.9.0` 开发版本已受控声明普通 waveform/capture；这不提供平均采集完成条件，也不会设置或声称验证平均次数。
 
 核心发布 V2 后，`scope.capture_average` 仍需 RIGOL 官方文档或后续获批的实机证据证明平均采集的完成条件，才能离线加实机 fixture 后启用。接口可表达不等于设备语义已经得到证明。
 

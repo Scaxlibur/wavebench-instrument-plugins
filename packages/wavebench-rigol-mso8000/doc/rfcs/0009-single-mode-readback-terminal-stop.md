@@ -1,6 +1,6 @@
 # RFC-0009：已验证 SINGLE 模式下的即时 STOP 完成合同
 
-状态：提议
+状态：Core R1 已在当前开发分支实现；MSO8104 已完成受限实机验收
 
 目标仓库：WaveBench Core
 
@@ -44,9 +44,9 @@ query-back trigger sweep == SINGLE
 
 该 proof 不是「首条状态恰好为 STOP」的泛化，也不是把 trigger-mode 字段由 driver 猜成 `single`。它要求设备模式 query-back 的显式回包，且回包必须发生在 SINGLE 写入之后、首条终态状态读取之前。
 
-若 query-back 后先得到 `WAIT`，driver 继续轮询并沿用既有 `state_transition` proof；不使用本文的新 proof。对 MSO8104，query-back 后的 `RUN`、`AUTO`、`TD`、未知 token、错误或超时均为不满足合同，必须 fail closed 并进入既有恢复路径。
+若 query-back 后先得到 `WAIT`，driver 继续轮询并沿用既有 `state_transition` proof；不使用本文的新 proof。对 MSO8104，query-back 后的 `TD` 仅在本次已确认的 SINGLE 上下文中保守表示为非终态 arming，后续必须读到 STOP；TD 本身不构成完成。`RUN`、`AUTO`、未知 token、错误或超时均不满足合同，必须 fail closed 并进入既有恢复路径。
 
-## 建议的 Core 模型变更
+## Core R1 实现模型
 
 ### Completion proof
 
@@ -69,7 +69,7 @@ ScopeCompletionProof = Literal[
 single_mode_readback_allows_terminal_stop: bool = False
 ```
 
-Core 必须验证该字段是 `bool`。默认 `False` 保持所有既有仪器和 descriptor 的行为不变。只有仪器手册明确说明 SINGLE 的 arm/停止语义、并完成本文要求的 driver trace 与实机验收后，插件才能设为 `True`。
+Core 验证该字段为 `bool`。默认 `False` 保持所有既有仪器和 descriptor 的行为不变。MSO8104 在手册语义、driver conformance 与受控实机验收完成后设为 `True`。
 
 该标志不替代 `single_arm_semantics`、计数/identity 语义或 failure restore order；它只授权一种额外的终态 proof。设备若未明确 opt-in，首条 `STOP` 仍按当前规则拒绝。
 
@@ -108,7 +108,7 @@ Core 的模型无法仅凭 dataclass 证明 transport query 顺序。因此 driv
 3. driver 查询设备的 trigger sweep，并将明确 `SING` token 映射为 `post_arm_trigger_mode="single"`；
 4. driver 查询第一条 acquisition state；
 5. 若该状态是 `STOP`，按本文的新 proof 返回 completion；
-6. 若该状态是 `WAIT`，继续在同一 deadline 内轮询，按既有 `state_transition` 返回 completion；
+6. 若该状态是 `WAIT` 或受限上下文中的 `TD`，继续在同一 deadline 内轮询，按既有 `state_transition` 返回 completion；
 7. 任一模式读回不匹配、状态 token 不适用、after-error、deadline、transport 或模型错误，都执行既有 STOP、trigger/acquisition restore 与 fresh verification。
 
 对于 MSO8104，第 3、4 步的命令序列为：
@@ -123,18 +123,11 @@ Core 的模型无法仅凭 dataclass 证明 transport query 顺序。因此 driv
 
 本文不改变完成后的设备状态：成功的 SINGLE 仍停在 SINGLE/STOP。失败恢复保持现有 failure-cleanup-only 合同。
 
-## MSO8104 适配边界
+## MSO8104 适配结果
 
-Core 接受并实现该合同后，MSO8104 插件可以把该 profile flag 设为 `True`，并在现有 `acquire_single()` 内实现上述 trace。随后才可考虑声明 `scope.acquisition_control`。
+Core 已实现该合同；MSO8104 插件已将 profile flag 设为 `True`、在 `acquire_single()` 内实现上述 trace，并声明 `scope.acquisition_control`。
 
-这一步仍不自动开放：
-
-- `scope.capture_waveform`；
-- `scope.capture_waveforms`；
-- 运行态 MAX/DMAX；
-- 平均采集或 record/replay。
-
-capture 需要独立证明波形的新鲜性、完整 capture 事务及 13 字段恢复/新鲜验证。当前 MSO8104 capture 候选仍使用「非终态到 STOP」的严格离线保护；本文只为控制操作定义一种受限 completion proof，不能直接放宽 capture。
+该 control proof 本身不自动开放 capture、运行态 MAX/DMAX、平均采集或 record/replay。capture 需要独立证明波形新鲜性、完整 capture 事务及 13 字段恢复/新鲜验证。MSO8104 已另行完成受限 `DEF + BYTE` 单／多通道 capture 验收：capture 保持「非终态到 STOP」的严格保护，不接受本文的即时 STOP proof。
 
 ## 兼容性与拒绝行为
 
@@ -144,9 +137,9 @@ capture 需要独立证明波形的新鲜性、完整 capture 事务及 13 字�
 - 缺少 profile opt-in、`post_arm_trigger_mode`、合法状态或精确单项 observed state 的任何一个条件时，Core 拒绝 completion 并启动既有恢复；
 - `*OPC?` 成功、固定延时、单独 STOP、当前 waveform、preamble count、record frame、状态寄存器读数均不能满足本 proof。
 
-## 验收要求
+## 已完成验收
 
-Core 至少应新增以下测试：
+Core R1 已覆盖以下模型与服务测试：
 
 1. opt-in profile 与精确 legal completion 通过；
 2. 默认 profile、`post_arm_trigger_mode != "single"`、终态非 STOP、state trigger mode 非 SINGLE、多个 observed state、任何 count/identity 字段非空均被拒绝；
@@ -154,13 +147,13 @@ Core 至少应新增以下测试：
 4. Service 在新 proof 合法时返回成功，在模型/after-error/transport 失败时仍执行 failure restore 和 fresh verification；
 5. capability validation、read-only access、poisoned session 与 exclusive lease 行为保持原有边界。
 
-MSO8104 插件在公开 `scope.acquisition_control` 前，必须完成低压实机验收：
+MSO8104 已完成以下低压实机验收：
 
-1. `:SINGle → :TRIGger:SWEep? = SING → :TRIGger:STATus? = STOP` 的成功路径；
-2. `WAIT → STOP` 仍走既有状态迁移路径；
-3. sweep/status 不匹配、超时和 transport 失败的恢复与 fresh verification；
-4. 每轮结束后的 source 双路 OFF、scope stopped、CH1/CH2 高阻复核；
-5. 与 capture 分开的波形新鲜性和恢复验收。
+1. `:SINGle → :TRIGger:SWEep? = SING → :TRIGger:STATus? = STOP` 的 terminal-proof 成功路径；
+2. `WAIT → STOP` 与 `TD → STOP` 的状态迁移路径；
+3. sweep/status 不匹配、超时和 transport 失败的离线恢复与 fresh verification；
+4. 每轮结束后的 source 双路 OFF、scope STOP、CH1/CH2 high_z 复核；
+5. 与 control 分开的 bounded `DEF + BYTE` 单／双通道 capture 新鲜性和 13 字段恢复验收。
 
 ## 不采用的方案
 

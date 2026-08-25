@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary 路径、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2 和快照 V2 的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2 和快照 V2 的验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -15,16 +15,16 @@
 - core：WaveBench `0.8.24`；
 - transport：LAN/PyVISA，读取重试 `0`。
 
-接线为 SDG CH1 到 MSO CH1、SDG CH2 到 MSO CH2。首轮目标 profile 为 Sine、`1 kHz`、`1 Vpp`、`0 V` offset；本地安全配置进一步限制 `max_source_vpp = 1.0` 和端口电压范围 `-0.6 V` 到 `0.6 V`。
+接线为 SDG CH1 到 MSO CH1、SDG CH2 到 MSO CH2。既有 `DEF` fetch 使用 Sine、`1 kHz`、`1 Vpp`、`0 V` offset；capture 验收使用低频方波与 `1 Vpp` 幅度，启用前读取 offset 并确认其处于本地端口安全范围。安全配置限制 `max_source_vpp = 1.0` 和端口电压范围 `-0.6 V` 到 `0.6 V`。
 
 ## 安全步骤与结果
 
 1. 先以 Source V2 只读快照读取两路状态。CH1、CH2 均为 Sine、`1 kHz`、`1 Vpp`、`0 V`、High-Z display load、harmonic OFF、output OFF。
 2. 以 scope 只读状态读取输入。CH1 返回 `DCL`，CH2 返回 `ACL`，两者均为 WaveBench 高阻安全 token。
 3. 对 CH1、CH2 分别请求 `source.output_v2 OFF`，随后以新的只读 Source V2 snapshot 独立确认两路 OFF、snapshot `consistent`、session `healthy`。
-4. 分别短时开启 CH1 和 CH2；每次波形事务结束后，外层清理都会请求对应通道 OFF，再以新的只读 snapshot 确认 CH1、CH2 均为 OFF。
+4. 每次受控波形事务结束后，外层清理都会分别请求 CH1、CH2 OFF，再以新的只读 snapshot 确认两路均为 OFF。
 
-最终复核为 CH1 OFF、CH2 OFF、snapshot `consistent`、session `healthy`。本轮没有写入示波器的输入阻抗、时基、触发或 autoscale 设置。
+最终复核为 CH1 OFF、CH2 OFF、snapshot `consistent`、session `healthy`，scope 为 STOP，CH1/CH2 均为 high_z。本轮没有写入示波器输入阻抗或 autoscale 设置。
 
 ## 已通过的实机证据
 
@@ -35,6 +35,9 @@
 - `scope.fft_status_v2`：前面板预配置 MATH1 返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`；
 - `scope.acquisition_status_v2`：当前返回 `NORM + 500 kSa/s + 10 kpts`，average 为 not applicable；
 - `scope.acquisition_run_state`：当前 AUTO 保守回报为 acquiring；source 两路 OFF、输入高阻下的 STOP→NORMAL/RUN→STOP 闭环依次确认 stopped、waiting、stopped；
+- `scope.acquisition_control`：`start(normal)`→`stop`，以及模式读回后的 SINGLE terminal-STOP 与 `WAIT/TD → STOP` 均通过受控验收；
+- `scope.capture_waveform`：受限 `DEF + BYTE` capture 返回 `1,000` 样本，完成 13 字段恢复与新鲜验证；
+- `scope.capture_waveforms`：一次 SINGLE 读取 CH1/CH2 两路，各返回 `1,000` 样本，完成相同恢复与新鲜验证；
 - `scope.digital_status_v2`：D0、D8 均返回显示、标签、所属 POD 范围与 `1.4 V` 阈值，以及共享 `0 s` timing calibration 和 `MEDIUM` size；
 - `scope.snapshot_v2`：同次读取 identity 和 13 种授权选件状态；其余 55 个字段明确 unavailable；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
@@ -66,6 +69,16 @@ bounded `scope.fetch_waveform` 使用 `LF` trailing、no-replay、每响应最�
 
 每次完成后，core 对 `source`、`mode`、`format`、`points`、`window` 五个 transfer 字段执行恢复与 fresh verification；新 scope 会话复核仍为 stopped，新的 Source V2 snapshot 复核 CH1/CH2 均 OFF、`consistent`、`healthy`。这只证明记录型号、固件、LAN/PyVISA、当前 `10 kpts` memory depth 和受限分块下的停止态 MAX/DMAX fetch；不证明运行态 MAX、其他 memory depth、吞吐、timeout、波形准确度或 capture 语义。
 
+## 受限 SINGLE 与 capture 验收
+
+每次试验开始前，以 public API 确认 source 两路 OFF、snapshot `consistent`、scope STOP 和 CH1/CH2 high_z。信号源在输出关闭时配置为低频方波、`1 Vpp`；offset 仅经 Source V2 读回确认处于端口安全范围，不绕过驱动直接写入。输出稳定后，ScopeService 执行 SINGLE 或 capture。
+
+`scope.acquisition_control` 的受控 trace 在 `:SINGle` 后先读回 `:TRIGger:SWEep? = SING`。首条 status 为 `STOP` 时返回受限终态 completion proof；另有试验观察到 `WAIT → STOP` 与 `TD → STOP`，均返回 state-transition proof。`RUN`、`AUTO`、未知状态、模式不匹配、超时和 transport 异常仍按 fail-closed 处理。
+
+`scope.capture_waveform` 与 `scope.capture_waveforms` 只接受已停止、MAIN 时基的 `DEF + BYTE` baseline，并拒绝首条 STOP 作为波形新鲜性证据。单通道 capture 返回 `1,000` 样本；双通道 capture 仅发送一次 SINGLE、读取两段二进制数据，CH1/CH2 各返回 `1,000` 样本。两种调用均观察到 `WAIT → STOP`，并由 Core 恢复 acquisition、trigger、MAIN 时基、四路 display/vertical、waveform source/mode/format/points/window、query-response-header 和 byte-order 共 13 个字段。`TD → STOP` 的实机观察来自单独的采集控制验收。
+
+该固件在恢复写批次后会先返回 `*OPC? = 0`；插件最多轮询 8 次，只有读到 `1` 后才发起上述 13 字段 fresh verification。`*OPC?` 在这里仅同步恢复写批次，不作为 SINGLE completion 或波形新鲜性证据。每轮结束后均以新会话确认 source 两路 OFF、scope STOP、CH1/CH2 high_z。
+
 ## portability V2 只读跟进
 
 在 source 两路 OFF 的只读步骤中，`scope.channel_input_state_v2` 成功读取 CH1、CH2 的独立 coupling、termination 和阻抗。该步骤未写入输入设置。
@@ -85,13 +98,11 @@ bounded `scope.fetch_waveform` 使用 `LF` trailing、no-replay、每响应最�
 
 `scope.acquisition_status_v2` 只读取 `:ACQuire:TYPE?`、`:ACQuire:SRATe?` 和 `:ACQuire:MDEPth?`；当前 type 为 NORM，因此不读取 `:ACQuire:AVERages?`。回包为 acquisition type `NORM`、sample rate `500000 Sa/s`、memory depth `10000 pts`；average 分区为 not applicable，run state 和 segmented 分区为 unavailable。该步骤未发送 SINGLE、RUN、STOP、任何 acquisition setter、trigger status、OPC、状态寄存器或错误队列查询，因而没有改变采集或触发状态。验证前后 source 两路均 OFF、`consistent`、`healthy`，CH1 为 `dc + high_z + 1 MΩ`。
 
-该证据只覆盖记录条件下的静态 NORM 采集状态。AVER 配置次数、average completion、run state、segmented 状态和任何 capture 完成条件均未实机验证；尤其不能由 trigger STOP 推导 average complete。
+该证据只覆盖记录条件下的静态 NORM 采集状态。AVER 配置次数、average completion、segmented 状态以及此只读 profile 本身的 capture completion 语义均未验证；尤其不能由 trigger STOP 推导 average complete。
 
 `scope.acquisition_run_state` 单次只读取 `:TRIGger:STATus?`。记录条件下，初始 AUTO 被保守映射为 acquiring；随后在 source 两路 OFF、CH1/CH2 均为 `dc + high_z + 1 MΩ` 的条件下，受管 STOP 返回 stopped，NORMAL/RUN 返回 waiting，最终 STOP 再次返回 stopped。没有读取波形、OPC、状态寄存器或错误队列，也没有改动时基、垂直或采样类型。
 
-Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_control` capability。使用 public API 的 `start(normal)` 后 `stop` 已在 source 双路 OFF、输入高阻条件下实机返回 active/stopped 的可观察闭环。无信号 SINGLE 试验按预期 fail closed，Core cleanup 与 fresh verification 已实机确认恢复；这只证明失败恢复，不证明采集完成。带 CH1 受限信号的 SINGLE 试验也未形成成功证据：实时安全预检确认正弦、固定频率、High-Z display load、幅度不超过 `1 Vpp` 且端口包络在 `±0.6 V` 内，但首次可观察状态仍为 STOP，未出现既有 Core 所要求的非终态到 STOP 状态迁移。历史 arm/readback 的 VXI-11 EOF 与会话阻塞同样不构成完成证据。两次 source 双路 OFF 的 SINGLE 探测中，`*OPC?` 返回成功后独立 run-state 仍为 waiting，因此它只表示命令处理完成，不能替代触发/完成证据。
-
-[RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md) 现提议一个更窄的、profile-gated 的 completion proof：`SINGLE` 写入后必须读回 `SING`，随后第一条 trigger-status 才是 `STOP`。本轮没有形成该完整受控 trace；RFC 也尚未由 Core 实现。因此 descriptor 继续不声明 `scope.acquisition_control`，并且该提议不放行 capture。每次 SINGLE 尝试后均以独立新会话确认 source CH1/CH2 OFF、`consistent`、`healthy`，scope stopped 且 CH1/CH2 高阻。
+Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_control` capability。Core 当前开发分支已实现 [RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md) 的受限 terminal-STOP proof，MSO8104 descriptor 已显式 opt in。它不放宽 capture：capture 仍只接受非终态到 STOP 的新鲜性证据，并要求独立的 13 字段恢复和 fresh verification。
 
 `scope.digital_status_v2` 先只读确认 source 两路 OFF、`consistent`、`healthy`，并确认 CH1/CH2 均为 `dc + high_z + 1 MΩ`。D0 与 D8 的每次调用先查询 LA 模块位；模块存在后，仅查询逐通道 display、label、所属 POD threshold、全局 timing calibration 和 display size，共 6 条文本 query。D0 回包为显示、label `D0`、POD1（D0～D7）、`1.4 V`、`0 s`、`MEDIUM`；D8 对应为显示、label `D8`、POD2（D8～D15）以及相同的共享字段。`position_div`、`label_enabled`、activity、technology 和 hysteresis 均按合同标为 unavailable。该步骤没有发送任何 `:LA:*` setter、波形/二进制、采集/触发、OPC、状态寄存器或错误队列查询，也没有 source 或 scope 写入；结束后的独立 Source V2 snapshot 再次确认 CH1/CH2 均 OFF、`consistent`、`healthy`。
 
@@ -101,8 +112,8 @@ Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_con
 
 该证据只覆盖记录型号、固件、transport 下的 identity 和授权选件状态。它不证明未读取的健康、通道、时基、探头、波形或触发分区，也不构成这些字段的准确度结论。
 
-## 验收范围与后续条件
+## 验收范围与未覆盖项
 
-本记录证明的是当前屏幕 `DEF + LF` 1000 点，以及记录的停止态 `MAX/DMAX + LF` 10000 点路径；均限于记录的型号、固件、transport、memory depth 与步骤。它不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算或测量准确度证明。
+本记录证明当前屏幕 `DEF + LF` 1000 点、记录的停止态 `MAX/DMAX + LF` 10000 点，以及已停止 MAIN `DEF + BYTE` 的单／双通道 capture 每通道 1000 点。所有结论均限于记录的型号、固件、transport、memory depth 与步骤，不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算或测量准确度证明。
 
-`scope.acquisition_control`、运行态 MAX、`SINGLE`、`scope.capture_waveform` 和 `scope.capture_waveforms` 没有获得本轮可发布的实机验收，继续默认拒绝。推进 control 前须先由 Core 接受并实现 [RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md)，再以低压实机完成 `:SINGle → :TRIGger:SWEep? = SING → :TRIGger:STATus? = STOP`、`WAIT → STOP`、失败恢复与 fresh verification 的独立验收；每一步开始前仍须确认 source 两路 OFF。capture 还需要独立的新鲜性与 13 字段恢复验收。
+运行态 MAX、其他 memory depth、capture 点数、时基、通道组合、transport、吞吐、timeout 和一般波形准确度仍无实机结论。平均采集、record/replay、screenshot、数字 waveform 及其他未声明 capability 的边界不因本次验收改变。

@@ -1,13 +1,13 @@
 # RFC-0008：有界示波器波形块的尾随字节合同
 
-状态：核心开发工作树已实现；插件完成受限 `DEF` 与停止态 MAX/DMAX 实机验收
+状态：核心开发工作树已实现；插件完成受限 `DEF`、停止态 MAX/DMAX 与 bounded `DEF + BYTE` capture 实机验收
 
 目标仓库：WaveBench core
 
 2026-08-24 更新：core 当前工作树已实现标准 waveform 的
 `ScopeWaveformBinaryProfile`、bounded driver Protocol、factory barrier 和 core-owned
 restore/verify。实现使用 `query_binary()` 与 descriptor-owned profile，不采用本文早期的
-`query_bin_block()` 新关键字草案。core 尚未形成独立发布版本；MSO8104 仍须重新完成受控实机验收。
+`query_bin_block()` 新关键字草案。core 尚未形成独立发布版本；MSO8104 的受控 waveform/capture 验收已完成。
 
 ## 问题
 
@@ -65,19 +65,16 @@ core 当前工作树已让标准 waveform Service 在 binary budget 的操作上
 
 `0.9.0` 开发版本声明 `scope.fetch_waveform` 的受限 `DEF`、停止态 MAX 和停止态 DMAX：`LF` trailing、每响应 `250,000` bytes、每操作 `4,000,000` bytes、最多 16 次 binary query，以及 source/mode/format/points/window 五字段恢复。MAX/DMAX 在 transfer setup 前要求 STOP，读取 memory depth 后再把 points 限制为 memory depth、运行时总点数和 16 倍 chunk 的最小值。该声明只用于当前 core 工作树的离线和受控验收，不构成发布版兼容性结论。
 
-插件继续不声明：
+插件同时声明 `scope.capture_waveform` 与 `scope.capture_waveforms`。capture 仅接受已停止、MAIN 时基的 `DEF + BYTE` baseline：单通道最多一次、双通道最多四次 binary query，并由 Core 恢复和新鲜验证 acquisition、trigger、时基、四路 display/vertical 与 transfer 的 13 个字段。首条 STOP 不构成 capture 新鲜性证据。
 
-- `scope.capture_waveform`；
-- `scope.capture_waveforms`。
-
-driver 保留严格的 preamble、payload、恢复和锁存代码供离线回归。完成 `scope.fetch_waveform`
-的发布前至少需验证：
+已完成的受控验证：
 
 1. `DEF` + `LF` trailing block 成功读取，session 保持 healthy；
 2. 1000-sample payload 与五字段 transfer state 恢复已由 core fresh readback 证明；
 3. 在人工确认 acquisition、探头倍率、通道显示和接线后，完成 `1 kHz / 1 Vpp` 的 X/Y 换算和测量闭环；
 4. 每轮开始和结束都独立确认 source 两路 OFF；
-5. CH1/CH2 的停止态 MAX/DMAX 已在 source 双路 OFF、scope 高阻、scope stopped、当前 `10 kpts` memory depth 与 `20 kpts / 2.5 kpts chunk` 条件下各自返回 `10,000` 样本，并完成五字段 restore/fresh verify；运行态 MAX、其他 memory depth、双通道一次性 capture 和 capture 仍须独立验收，不从该结果外推。
+5. CH1/CH2 的停止态 MAX/DMAX 已在 source 双路 OFF、scope 高阻、scope stopped、当前 `10 kpts` memory depth 与 `20 kpts / 2.5 kpts chunk` 条件下各自返回 `10,000` 样本，并完成五字段 restore/fresh verify；
+6. bounded 单通道与双通道 `DEF + BYTE` capture 已在低压步骤下返回每通道 `1,000` 样本，并完成 `WAIT → STOP`、恢复 `*OPC? 0 → 1` 与 13 字段 fresh verification；`TD → STOP` 已由独立 SINGLE control 验收确认。最终 source 两路 OFF、scope STOP、CH1/CH2 high_z。
 
 ## 不采用的方案
 

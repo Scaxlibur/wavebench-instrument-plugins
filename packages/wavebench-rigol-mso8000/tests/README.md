@@ -2,13 +2,13 @@
 
 本目录只使用 FakeTransport、故障注入、构建产物和一次性虚拟环境，不扫描端口或连接真实仪器。
 
-实机相关行为只能标记为「未验证」。测试中的身份、资源、序列号、波形和截图均为虚构数据。
+本目录中的测试不构成实机证据。测试中的身份、资源、序列号、波形和截图均为虚构数据；受控实机结论记录在 `doc/`。
 
 M3 波形测试只向状态化 FakeTransport 发送命令，并覆盖传输状态恢复、二进制故障不重放、恢复失败锁存和并发串行化。
 
-M4 采集测试使用触发状态序列和小型分块 payload，覆盖一次 SINGLE、STOP 轮询、MAX/DMAX、总点数预算与部分结果；测试点数不是实机吞吐证据。
+M4 采集测试使用触发状态序列和小型分块 payload，覆盖一次 SINGLE、模式读回、终态／状态迁移 proof、MAX/DMAX、总点数预算与部分结果；测试点数不是实机吞吐证据。
 
-采集控制测试覆盖 `scope.acquisition_run_state` 的单条 trigger-status 映射、STOP→NORMAL/RUN→STOP 的 readback、SINGLE 需要 post-arm 状态迁移才可返回成功、arm 后的有界 settle、Core failure cleanup 与 fresh verification。Core control profile 仅在测试 descriptor 中启用；正式 descriptor 不声明 `scope.acquisition_control`，直至 SINGLE 的实机 completion/恢复证据完整。
+采集控制与 bounded capture 测试覆盖 `scope.acquisition_run_state` 的单条 trigger-status 映射、SINGLE 后的 `SING` 模式读回、terminal STOP、`WAIT/TD → STOP`、失败 cleanup、恢复 `*OPC?` 轮询，以及 13 字段 fresh verification。正式 descriptor 已声明 `scope.acquisition_control`、`scope.capture_waveform` 和 `scope.capture_waveforms`；离线测试不替代受控实机验收。
 
 M7 autoscale 测试只验证系统使能预检、一次写入、可选 OPC 等待和歧义锁存；不会产生真实波形，也不证明自动设置效果。
 

@@ -4,11 +4,11 @@
 
 ## 当前状态
 
-`0.9.0` 开发版本保留 MSO8104 身份与 CH1/CH2 高阻输入的受控实机证据，并在当前 WaveBench core 开发分支的有界二进制与 portability V2 合同下声明 `scope.fetch_waveform`、`scope.channel_input_state_v2`、`scope.measurement_statistics_v2`、`scope.fft_status_v2`、`scope.acquisition_status_v2`、`scope.acquisition_run_state`、`scope.digital_status_v2`、`scope.snapshot_v2` 和 `scope.cursor_readout_v2`。waveform 入口接受 `DEF`、停止态 `MAX` 与停止态 `DMAX`：精确声明 `LF` trailing、单响应最多 `250,000` bytes、单操作最多 `4,000,000` bytes、最多 16 次 binary query，并由 core 负责五字段恢复和新鲜验证。MAX/DMAX 先要求已停止，再读取当前 memory depth，并把读取点数收紧为 memory depth、运行时总点数与 16 倍 chunk 上限的最小值；不发送 RUN、STOP 或 SINGLE。input state V2 保留原始 coupling、termination 与阻抗；statistics V2 只接受显式 `item + sources`，以 6 条纯读取查询返回完整统计结果且拒绝 `include_buffer=True`；FFT V2 先确认 math slot 为 `FFT`，再读取 source、window、vertical unit 与起止频率；acquisition status V2 读取采集类型、采样率、存储深度，并仅在 AVER 模式下读取平均配置次数；acquisition run-state 只读取当前 trigger status；digital status V2 先确认 LA 模块，再读取逐通道显示、标签、POD 阈值和共享显示状态；snapshot V2 在同一次调用中读取 identity 与手册列出的全部授权选件状态；cursor V2 只读取预配置的全局手动 `TIME/AMPL` 光标。`scope.acquisition_control`、`scope.capture_waveform` 与 `scope.capture_waveforms` 继续不声明；见 [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md)。离线采集候选只接受已停止、MAIN 时基下的 `DEF` 与 `BYTE` 基线，要求一次 SINGLE 的非终态→STOP 证明，再由 core 恢复并新鲜验证 13 个字段；尚无实机成功完成证据。
+`0.9.0` 开发版本在当前 WaveBench Core 开发分支的有界二进制与 portability V2 合同下声明 `scope.fetch_waveform`、`scope.capture_waveform`、`scope.capture_waveforms`、`scope.acquisition_control`、`scope.channel_input_state_v2`、`scope.measurement_statistics_v2`、`scope.fft_status_v2`、`scope.acquisition_status_v2`、`scope.acquisition_run_state`、`scope.digital_status_v2`、`scope.snapshot_v2` 和 `scope.cursor_readout_v2`。waveform 入口支持 `DEF`、停止态 `MAX` 与停止态 `DMAX`；descriptor 精确声明 `LF` trailing、单响应最多 `250,000` bytes、单操作最多 `4,000,000` bytes 与最多 16 次 binary query。`scope.capture_waveform` 和 `scope.capture_waveforms` 仅接受已停止、MAIN 时基下的 `DEF + BYTE` 基线；单通道最多 1 次、双通道最多 4 次 binary query，均由 Core 恢复并新鲜验证 acquisition、trigger、时基、四路 display/vertical 与 transfer 的 13 个字段。SINGLE 写入后必须读回 `SING`：首条 `STOP` 使用受限 completion proof，`WAIT` 或 `TD` 到 `STOP` 使用状态迁移 proof；capture 仅接受后者作为波形新鲜性证据。
 
-实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。在 `DEF + LF` profile 下，CH1 返回 `1.05713 Vpp / 1000 Hz`，CH2 返回 `1.0705 Vpp / 999.167 Hz`；在 source CH1/CH2 均 OFF、两输入为 `1 MΩ` 高阻、scope 已停止、当前 memory depth 为 `10 kpts`、运行时上限为 `20 kpts / 2.5 kpts chunk` 的条件下，CH1/CH2 的停止态 `MAX` 与 `DMAX` 均返回 `10,000` 样本并完成五字段恢复和新鲜验证；`scope.measurement_statistics_v2` 对 `VPP,CHAN1` 和 `VPP,CHAN2` 均成功读取 6 个聚合字段，`CNT` 均为 `1000`；前面板预配置的 MATH1 FFT 返回 CH1、HANN、VRMS 与 `0–1 MHz`；当前采集状态返回 NORM、`500 kSa/s` 和 `10 kpts`；run-state 的当前 `AUTO` 状态被保守报告为运行中，受控 STOP→NORMAL/RUN→STOP 闭环返回 STOP、WAIT、STOP；D0/D8 数字状态确认对应 POD、`1.4 V` 阈值、`0 s` timing calibration 与 `MEDIUM` size；snapshot V2 完成 identity 和 13 种授权选件状态的 14 条只读查询。两路均使用 `1 kHz / 1 Vpp / 0 V` 信号源，并在每次读取后独立确认两路输出关闭。该结果只证明记录条件下的数据换算、摘要、停止态 MAX/DMAX fetch、统计回包、FFT 状态回包、静态采集/数字状态/run-state 回包、identity/选件状态回包与五字段恢复，不构成通用测量准确度、统计窗口语义、FFT 精度、平均完成、数字探头/逻辑活动、探头校准、SINGLE 完成、运行态 MAX 或 capture 的证据。
+实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。单通道和双通道 bounded `DEF + BYTE` capture 都在 1 Vpp 安全限制内返回每通道 `1,000` 样本并具备有效幅度；两者均观察到 `WAIT → STOP`，恢复后 `*OPC?` 由 `0` 轮询至 `1`，随后完成 Core 的 13 字段新鲜验证。`TD → STOP` 已在独立的 SINGLE control 验收中观察到。每轮结束均以新会话确认 source CH1/CH2 OFF、scope STOP、CH1/CH2 为 high_z。此前 `DEF + LF` fetch、停止态 MAX/DMAX、统计、FFT、静态 acquisition/digital 状态与 snapshot 的受限实机证据保持有效。该结果不外推到运行态 MAX、其他点数、时基、通道组合、transport 或一般测量准确度。
 
-采集控制的实机边界更窄：`start(normal)`→`stop` 已形成 active/stopped 闭环；source 双路 OFF 时，SINGLE 的 fail-closed 路径已完成 Core cleanup/fresh verification。带 CH1 受限信号的 SINGLE 仍首个观察到 STOP，未形成非终态→STOP 完成迁移，因此 `scope.acquisition_control` 和 capture 继续默认拒绝。每次探测后均以新会话确认 source 双路 OFF、scope stopped 和 CH1/CH2 高阻。
+采集控制的实机边界仍受限：`start(normal)`→`stop` 已形成 active/stopped 过程；SINGLE 在模式读回为 `SING` 后，首条 `STOP` 和 `WAIT/TD → STOP` 都已完成受控验证。`*OPC?` 只用于 capture 恢复写批次的通信同步，不能替代 SINGLE completion 或波形新鲜性证明。
 
 当前身份信息：
 
@@ -37,7 +37,7 @@
 
 ## M8 离线发行证据
 
-- MSO8104 包测试：327 项通过；全仓 Ruff 通过。
+- MSO8104 包测试：337 项通过；全仓 Ruff 通过。
 - 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
 - 当前 WaveBench `0.8.24` 开发环境的 package check：源码目录和真实 wheel 均通过。
 - wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。
@@ -68,7 +68,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `scope.acquisition_status_v2` 固定读取 `:ACQuire:TYPE?`、`:ACQuire:SRATe?` 和 `:ACQuire:MDEPth?`；仅当 type 为 `AVER` 时才读取 `:ACQuire:AVERages?`。average 分区在非 AVER 模式下明确为 not applicable；AVER 模式下只报告配置次数，`average.complete` 仍为 unavailable。run state 和 segmented 分区没有进入 profile，不发送 `:TRIGger:STATus?`、`*OPC?`、`*STB?` 或 `*ESR?`，也不从 STOP 推导完成状态。受控实机当前返回 `NORM + 500 kSa/s + 10 kpts`；前后 source 两路均 OFF、`consistent`、`healthy`。legacy `scope.acquisition_status` 与平均采集仍不声明。
 
-`scope.acquisition_run_state` 只读取 `:TRIGger:STATus?`：`STOP` 映射为 stopped，`WAIT` 映射为 waiting，`RUN` 和记录条件下经 STOP 验证的 `AUTO` 映射为 acquiring；`TD` 保持 unknown。受控闭环在 source 两路 OFF、CH1/CH2 高阻下完成 AUTO→STOP→NORMAL/RUN→WAIT→STOP。Core 把 start、stop 和 SINGLE 绑定在同一 `scope.acquisition_control` capability；`start(normal)`→`stop` 与无信号 SINGLE 的 fail-closed cleanup/fresh verification 已有实机证据，但受限 CH1 信号的 SINGLE 没有给出非终态→STOP 完成迁移。历史 VXI-11 EOF/会话阻塞也不构成完成证据，因此 driver 虽保留受 deadline 限制的实现与离线 Core 编排测试，descriptor 暂不声明该 capability。离线采集候选使用同一严格状态迁移，并让 core 恢复 acquisition、trigger、MAIN 时基、四路 display/vertical 与 waveform transfer 共 13 个字段；它只接受已停止、MAIN 时基下的 `DEF` 与 `BYTE` 基线，不能视为公开能力或实机采集结论。运行态 MAX、SINGLE 与单次/多通道 capture 继续不可用。
+`scope.acquisition_run_state` 只读取 `:TRIGger:STATus?`：`STOP` 映射为 stopped，`WAIT` 映射为 waiting，`RUN` 和记录条件下经 STOP 验证的 `AUTO` 映射为 acquiring；通常 `TD` 保持 unknown。仅在刚完成 `SING` 模式读回的 SINGLE 事务中，`TD` 被保守表示为非终态 arming，并且必须后续读到 `STOP` 才能构成 state-transition proof。`scope.acquisition_control` 已声明；它支持 `start(normal)`、`stop` 与受限 SINGLE completion。bounded capture 与 control proof 相互独立：capture 不接受首条 STOP，仍要求 `WAIT/TD → STOP`，并恢复和新鲜验证 13 个字段。运行态 MAX、其他 capture 点数/时基/通道组合仍未验收。
 
 `scope.digital_status_v2` 只接受 D0～D15。每次先查询 LA 模块位；LA 缺席时只返回 `shared.module_present=false`，不会发送任何 `:LA:*?` 查询。LA 存在时，driver 以 6 条文本 query 读取逐通道显示和标签、所属 POD 的共享阈值、全局 timing calibration 与显示大小。`position_div` 因手册查询格式自相矛盾而保持 unavailable；`label_enabled`、activity、technology 和 hysteresis 也没有可证明查询，绝不以默认值或 UI 活动选择替代。受控实机的 D0、D8 都已确认显示、标签、各自 POD 边界与 `1.4 V` 阈值，以及 `0 s` timing calibration 和 `MEDIUM` size；前后 source 两路均 OFF、`consistent`、`healthy`。该结果不构成数字探头、电气阈值、逻辑活动或数字 waveform 编码的准确度证据。
 
@@ -76,9 +76,9 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。新增 `scope.channel_input_state_v2` 不使用上述兼容 token，而是分别返回 `ac/dc/gnd`、`high_z/50_ohm` 和可证明阻抗。实机 CH1/CH2 均读为 `dc + high_z + 1 MΩ`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 
-`scope.fetch_waveform` 的有界路径支持 `DEF`、停止态 `MAX` 与停止态 `DMAX`。它使用 core 的 `query_binary()`，不再调用 legacy `query_bin_block()`；`LF` trailing、`250,000`-byte 单响应上限、`4,000,000`-byte 单操作上限、最多 16 次 binary query 与 no-replay 均由 descriptor profile 约束。MAX/DMAX 在任何 transfer setup 前都要求 scope 已停止；driver 读取 `:ACQuire:MDEPth?`，再将 `:WAVeform:POINts` 设置为 memory depth、运行时总点数和 16 倍 chunk 上限的最小值。记录的 `1 kHz / 1 Vpp / 0 V` source 条件下，DEF 的 CH1 读取 `1.05713 Vpp / 1000 Hz`，CH2 读取 `1.0705 Vpp / 999.167 Hz`；在 source 双路 OFF、scope stopped、`10 kpts` memory depth 和 `20 kpts / 2.5 kpts chunk` 的受限条件下，CH1/CH2 的 MAX 与 DMAX 均返回 10,000 样本。每次均完成五字段 transfer-state restore 与新鲜验证。该证据不外推到运行态 MAX、单次/多通道 capture 或其他量程、时基、深度和探头条件。
+`scope.fetch_waveform` 的有界路径支持 `DEF`、停止态 `MAX` 与停止态 `DMAX`。它使用 Core 的 `query_binary()`，不再调用 legacy `query_bin_block()`；`LF` trailing、`250,000`-byte 单响应上限、`4,000,000`-byte 单操作上限、最多 16 次 binary query 与 no-replay 均由 descriptor profile 约束。MAX/DMAX 在任何 transfer setup 前都要求 scope 已停止。该 fetch 证据不外推到运行态 MAX、其他量程、时基、深度和探头条件；受限 capture 的独立验收见上文。
 
-离线设计仍保留每块 `250,000` 点、每次调用总计 `4,000,000` 点、最多 16 块的长记录边界。MAX/DMAX 的停止态 fetch 已获受限实机证据；运行态 MAX、单次和多通道 capture 仍需要各自的 acquisition 恢复证据，当前不构成公开能力或实机采集结论。
+离线设计仍保留每块 `250,000` 点、每次调用总计 `4,000,000` 点、最多 16 块的长记录边界。停止态 MAX/DMAX fetch 与 bounded 单／多通道 capture 已有各自受限实机证据；运行态 MAX、其他 capture 点数、时基、通道组合和 transport 仍需要独立验收。
 
 ```toml
 [connection]

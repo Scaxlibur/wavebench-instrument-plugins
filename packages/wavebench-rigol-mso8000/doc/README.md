@@ -10,4 +10,4 @@
 - [MSO8104 编程手册功能覆盖矩阵](MSO8104_COVERAGE_MATRIX.md)
 - [MSO8104 受控实机验收记录](MSO8104_HARDWARE_ACCEPTANCE.md)
 
-实机结论仅适用于记录中的型号、固件、transport 和受控步骤。当前 waveform binary 读取受 [RFC-0008](rfcs/0008-bounded-waveform-block-trailing-contract.md) 阻断，不把身份或输入安全验证扩展为波形采集成功。
+实机结论仅适用于记录中的型号、固件、transport 和受控步骤。当前受控 profile 已通过 [RFC-0008](rfcs/0008-bounded-waveform-block-trailing-contract.md) 的 bounded binary 合同完成 `DEF`、停止态 MAX/DMAX 与 `DEF + BYTE` capture 验收；不将这些结论外推到未记录的点数、时基、transport 或测量准确度。

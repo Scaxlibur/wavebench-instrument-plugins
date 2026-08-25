@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-25
 
 ## Scope
 
-This record covers the first controlled check of RIGOL MSO8104 identity, input safety, the waveform-binary path, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, and Snapshot V2. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, and Snapshot V2 acceptance. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -15,16 +15,16 @@ Devices and runtime:
 - core: WaveBench `0.8.24`;
 - transport: LAN/PyVISA with zero read retries.
 
-SDG CH1 was connected to MSO CH1 and SDG CH2 to MSO CH2. The reviewed source profile was Sine, `1 kHz`, `1 Vpp`, and `0 V` offset. Local safety configuration further constrained `max_source_vpp = 1.0` and port voltage to `-0.6 V` through `0.6 V`.
+SDG CH1 was connected to MSO CH1 and SDG CH2 to MSO CH2. Earlier `DEF` fetch used Sine at `1 kHz`, `1 Vpp`, and `0 V` offset. Capture acceptance used a low-frequency square wave at `1 Vpp`; output offset was read back within the configured port-safety range before enable. Local safety configuration constrained `max_source_vpp = 1.0` and port voltage to `-0.6 V` through `0.6 V`.
 
 ## Safety sequence and result
 
 1. A read-only Source V2 snapshot found both channels at Sine, `1 kHz`, `1 Vpp`, `0 V`, High-Z display load, harmonic OFF, and output OFF.
 2. Read-only scope status returned CH1=`DCL` and CH2=`ACL`; both are WaveBench high-impedance safety tokens.
 3. Source V2 OFF was requested separately for CH1 and CH2. A fresh read-only snapshot independently confirmed both OFF, `consistent`, and `healthy`.
-4. CH1 and CH2 were each enabled only briefly in separate runs. After every waveform transaction, the outer cleanup requested the enabled channel OFF and used a fresh read-only snapshot to confirm CH1 and CH2 were both OFF.
+4. After every controlled waveform transaction, outer cleanup separately requested CH1 and CH2 OFF and used a fresh read-only snapshot to confirm both were OFF.
 
-Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `healthy`. This run did not write scope input impedance, timebase, trigger, or autoscale settings.
+Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy`, scope STOP, and CH1/CH2 high-impedance inputs. This work did not write scope input impedance or autoscale settings.
 
 ## Hardware evidence obtained
 
@@ -35,6 +35,9 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `hea
 - `scope.fft_status_v2` returned `FFT + CHAN1 + HANN + VRMS + 0–1 MHz` for front-panel-configured MATH1;
 - `scope.acquisition_status_v2` returned `NORM + 500 kSa/s + 10 kpts`, with average not applicable;
 - `scope.acquisition_run_state` conservatively reported current AUTO as acquiring; with both sources OFF and high-impedance inputs, STOP→NORMAL/RUN→STOP confirmed stopped, waiting, stopped;
+- `scope.acquisition_control` verified `start(normal)`→`stop`, plus post-readback SINGLE terminal STOP and `WAIT`/`TD → STOP`;
+- `scope.capture_waveform` verified bounded `DEF + BYTE` capture at `1,000` samples with 13-field recovery/fresh verification;
+- `scope.capture_waveforms` verified one SINGLE and two binary reads for CH1/CH2, at `1,000` samples per channel with the same recovery/fresh verification;
 - `scope.digital_status_v2` returned display, label, POD range and `1.4 V` threshold, plus shared `0 s` timing calibration and `MEDIUM` size for D0 and D8;
 - `scope.snapshot_v2` read identity and 13 licensed-option states in one call, with the other 55 fields explicitly unavailable;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
@@ -66,6 +69,16 @@ Bounded `scope.fetch_waveform` used `LF` trailing, no replay, a `250,000`-byte p
 
 After every operation, core restored and freshly verified the five transfer fields `source`, `mode`, `format`, `points`, and `window`; a new scope session verified stopped state and a fresh Source V2 snapshot verified CH1/CH2 OFF, `consistent`, and `healthy`. This establishes only stopped-state MAX/DMAX fetch for the recorded model, firmware, LAN/PyVISA, `10 kpts` memory depth, and bounded chunk procedure. It is not running-state MAX, other memory depths, throughput, timeout, waveform-accuracy, or capture-semantics evidence.
 
+## Restricted SINGLE and capture acceptance
+
+Before every trial, public APIs confirmed both source outputs OFF, a `consistent` snapshot, scope STOP, and high-impedance CH1/CH2 inputs. While output was OFF, Source V2 configured a low-frequency square wave at `1 Vpp`; offset was read back within the configured port envelope and was never written through a raw bypass. Outputs were stable before ScopeService invoked SINGLE or capture.
+
+For `scope.acquisition_control`, the controlled trace read back `:TRIGger:SWEep? = SING` after `:SINGle`. Terminal first `STOP` returned the restricted terminal completion proof. Separate runs observed `WAIT → STOP` and `TD → STOP`, both returning the state-transition proof. `RUN`, `AUTO`, unknown state, mode mismatch, timeout, and transport failure remain fail-closed.
+
+`scope.capture_waveform` and `scope.capture_waveforms` accept only an already-stopped MAIN-timebase `DEF + BYTE` baseline and reject first STOP as waveform-freshness evidence. Single-channel capture returned `1,000` samples. Multi-channel capture sent one SINGLE, read two binary payloads, and returned `1,000` samples for each of CH1 and CH2. Both observed `WAIT → STOP`, then Core restored acquisition, trigger, MAIN timebase, four-channel display/vertical state, waveform source/mode/format/points/window, query-response header, and byte-order boundaries across 13 fields. `TD → STOP` was observed in the separate acquisition-control acceptance.
+
+This firmware initially returned `*OPC? = 0` after the recovery-write batch. The plugin polls at most eight times and performs 13-field fresh verification only after `1`. This `*OPC?` use synchronizes recovery writes only; it is neither SINGLE-completion nor waveform-freshness evidence. Every run then used a new session to verify both source outputs OFF, scope STOP, and high-impedance CH1/CH2 inputs.
+
 ## Portability V2 read-only follow-up
 
 With both source outputs OFF, `scope.channel_input_state_v2` successfully read independent coupling, termination, and impedance for CH1 and CH2. This step did not write input settings.
@@ -85,13 +98,11 @@ This proves FFT-status response and the V2 unavailable-field boundary only for t
 
 `scope.acquisition_status_v2` read only `:ACQuire:TYPE?`, `:ACQuire:SRATe?`, and `:ACQuire:MDEPth?`. The current type was NORM, so it did not read `:ACQuire:AVERages?`. The response was acquisition type `NORM`, sample rate `500000 Sa/s`, and memory depth `10000 pts`; the average partition was not applicable, while run state and segmented status were unavailable. This step sent no SINGLE, RUN, STOP, acquisition setter, trigger-status, OPC, status-register, or error-queue query, so it did not change acquisition or trigger state. Both source outputs were OFF, `consistent`, and `healthy` before and after, and CH1 was `dc + high_z + 1 MΩ`.
 
-This evidence covers only static NORM acquisition status for the recorded condition. AVER configured count, average completion, run state, segmented status, and every capture-completion condition remain hardware-unverified; trigger STOP must not imply average complete.
+This evidence covers only static NORM acquisition status for the recorded condition. AVER configured count, average completion, segmented status, and capture-completion semantics of this read-only profile remain hardware-unverified; trigger STOP must not imply average complete.
 
 `scope.acquisition_run_state` issued only `:TRIGger:STATus?`. The initial AUTO state was conservatively mapped to acquiring; with both source outputs OFF and CH1/CH2 at `dc + high_z + 1 MΩ`, managed STOP returned stopped, NORMAL/RUN returned waiting, and final STOP returned stopped. No waveform, OPC, status-register, or error-queue read occurred, and no timebase, vertical, or acquisition-type setting changed.
 
-Core binds start, stop, and completion-style SINGLE into the one `scope.acquisition_control` capability. A public-API `start(normal)` then `stop` returned an observable active/stopped loop with both sources OFF and high-impedance inputs. A no-signal SINGLE probe failed closed as intended, and Core cleanup plus fresh verification were hardware-confirmed; that proves failure recovery only, not acquisition completion. A limited-signal CH1 SINGLE probe also produced no success evidence: a live safety preflight confirmed sine, fixed frequency, High-Z display load, amplitude no greater than `1 Vpp`, and a `±0.6 V` port envelope, but the first observable state was still STOP, without the nonterminal-to-STOP transition required by the existing Core model. The historical VXI-11 EOF and blocked-session arm/readback outcomes likewise are not completion evidence. In two source-OFF SINGLE probes, `*OPC?` succeeded while an independent run-state read was still waiting, so it proves command handling only and cannot replace trigger/completion evidence.
-
-[RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md) now proposes a narrower, profile-gated completion proof: after writing SINGLE, the driver must read back `SING`, then the first trigger-status response must be `STOP`. This work did not record that complete controlled trace, and Core has not implemented the RFC. The descriptor therefore continues not to declare `scope.acquisition_control`; the proposal does not enable capture. Every SINGLE attempt was followed by an independent new-session confirmation of source CH1/CH2 OFF, `consistent`, `healthy`, stopped scope, and high-impedance CH1/CH2 inputs.
+Core binds start, stop, and completion-style SINGLE into the one `scope.acquisition_control` capability. The current Core development branch implements the restricted terminal-STOP proof from [RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md), and the MSO8104 descriptor explicitly opts in. It does not relax capture: capture still requires independent nonterminal-to-STOP freshness evidence and 13-field recovery/fresh verification.
 
 `scope.digital_status_v2` first confirmed both source outputs OFF, `consistent`, and `healthy`, and both CH1/CH2 as `dc + high_z + 1 MΩ`. Each D0 and D8 call first queried the LA module bit. With the module present, it read only per-channel display, label, the threshold of the owning POD, global timing calibration, and display size: six text queries total. D0 returned displayed, label `D0`, POD1 (D0-D7), `1.4 V`, `0 s`, and `MEDIUM`; D8 returned displayed, label `D8`, POD2 (D8-D15), and the same shared values. `position_div`, `label_enabled`, activity, technology, and hysteresis were all unavailable by contract. No `:LA:*` setter, waveform/binary read, acquisition/trigger, OPC, status-register, or error-queue query was sent, and no source or scope write occurred. A separate Source V2 snapshot afterwards again confirmed CH1 and CH2 OFF, `consistent`, and `healthy`.
 
@@ -101,8 +112,8 @@ This evidence covers only the recorded model, firmware, transport, and D0/D8 sta
 
 This evidence covers only identity and licensed-option status for the recorded model, firmware, and transport. It does not prove the unread health, channel, timebase, probe, waveform, or trigger partitions, or their accuracy.
 
-## Acceptance boundary and next conditions
+## Acceptance boundary and unverified items
 
-This record covers only the current-screen `DEF + LF` 1000-point path and the recorded stopped-state `MAX/DMAX + LF` 10000-point path, each for the stated model, firmware, transport, memory depth, and procedure. It is not general X/Y-conversion or measurement-accuracy evidence across ranges, timebases, or probe conditions.
+This record covers the current-screen `DEF + LF` 1000-point path, the recorded stopped-state `MAX/DMAX + LF` 10000-point path, and stopped-MAIN `DEF + BYTE` single/multi-channel capture at 1000 samples per channel. Every result is limited to the recorded model, firmware, transport, memory depth, and procedure. It is not general X/Y-conversion or measurement-accuracy evidence across ranges, timebases, or probe conditions.
 
-`scope.acquisition_control`, running-state MAX, `SINGLE`, `scope.capture_waveform`, and `scope.capture_waveforms` have no releasable hardware acceptance from this work and remain default denied. Advancing control first requires Core to accept and implement [RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md), followed by separate low-voltage acceptance of `:SINGle → :TRIGger:SWEep? = SING → :TRIGger:STATus? = STOP`, `WAIT → STOP`, failure recovery, and fresh verification; every step must still begin with both source outputs OFF. Capture additionally requires independent freshness and 13-field recovery acceptance.
+Running-state MAX, other memory depths, capture lengths, timebases, channel sets, transports, throughput, timeout, and general waveform accuracy remain outside this evidence. Average capture, record/replay, screenshot, digital waveform, and every other undeclared capability remain unchanged.
