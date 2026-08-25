@@ -85,7 +85,7 @@ legacy `scope.errors` 不公开。当前 Core 通过 `query(..., replay=ReplayPo
 
 开发补充：core 当前开发分支已提供 `scope.channel_input_state_v2`。插件新增无损 V2 映射，保留 AC/DC/GND、high_z/50_ohm 与 `1_000_000/50` Ω，不从 legacy token 反推。199 项包测试、Ruff 与 package check 通过；只读实机查询确认 CH1/CH2 都是 `dc + high_z + 1 MΩ`，查询前后 source 两路均 OFF、`consistent`、`healthy`。
 
-错误队列开发补充：Core 当前开发分支通过 `query(..., replay=ReplayPolicy.NO_REPLAY)` 提供单发文本读取与 `scope.error_drain_v1` 合同。插件严格解析手册格式 `<integer>,"<message>"`，只接受实机观察到的 `0,"No error"` 终止；达到 `max_records` 后再读取一条 overflow 记录。357 项包测试、Ruff 和构建检查通过。公开 `1 Vpp / 0.25 Hz` SINGLE capture 在 `scope.check_errors=true` 下前后 drain 空队列、返回 1000 样本并恢复 13 个字段；非零记录、FIFO 顺序和 overflow 仍只有离线证据。
+错误队列开发补充：Core 当前开发分支通过 `query(..., replay=ReplayPolicy.NO_REPLAY)` 提供单发文本读取与 `scope.error_drain_v1` 合同。插件严格解析手册格式 `<integer>,"<message>"`，只接受实机观察到的 `0,"No error"` 终止；达到 `max_records` 后再读取一条 overflow 记录。366 项包测试、Ruff 和构建检查通过。公开 `1 Vpp / 0.25 Hz` SINGLE capture 在 `scope.check_errors=true` 下前后 drain 空队列、返回 1000 样本并恢复 13 个字段；非零记录、FIFO 顺序和 overflow 仍只有离线证据。
 
 ## M3：当前屏幕波形
 
@@ -192,4 +192,4 @@ M7 退出证据：当前 Core 开发分支的受控 descriptor 声明 bounded fe
 
 离线证据：`0.7.0` 的 168 项包测试与 Ruff 通过；在 WaveBench core 位于同级目录的一次性仓库布局中，根测试为 715 项通过、2 项因缺少 SP3000A 私有实机证据而按预期跳过。WaveBench `0.8.22` 的源码目录与真实 wheel package check 均通过。wheel 仅包含一个 `wavebench.instruments` entry point、一个有效 WaveBench runtime dependency、MIT 许可证和插件代码；sdist 包含公开 README、矩阵、里程碑、RFC、测试与许可证。两种制品均不包含 vendor-local。一次性虚拟环境中的 wheel 安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过；61 个受跟踪 Markdown 文件的本地链接有效。全程未连接真实仪器。
 
-`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、control/capture、math metadata、error drain、input、cursor、measurement-statistics、FFT status、acquisition status/run-state、digital status 和 snapshot V2 集成测试，合计 357 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 Core API 尚未单独发布，该结果不构成公开 wheel 发布。
+`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、control/capture、math metadata、error drain、input、cursor、measurement-statistics、FFT status、acquisition status/run-state、digital status 和 snapshot V2 集成测试，合计 366 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 Core API 尚未单独发布，该结果不构成公开 wheel 发布。

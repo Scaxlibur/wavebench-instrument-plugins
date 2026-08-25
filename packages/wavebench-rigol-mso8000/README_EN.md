@@ -25,7 +25,7 @@ The required standard-waveform bounded API and portability V2 APIs are committed
 
 ## M8 offline release evidence
 
-- All 357 MSO8104 package tests and repository-wide Ruff checks pass.
+- All 366 MSO8104 package tests and repository-wide Ruff checks pass.
 - In a disposable sibling WaveBench-core layout, 715 root tests pass and two SP3000A private-hardware-evidence tests skip as expected.
 - Package checks pass for both the source directory and the real wheel in the current WaveBench `0.8.24` development environment.
 - The wheel/sdist contracts cover the single instrument entry point, WaveBench runtime dependency, MIT license, and public content; vendor-local material is absent.

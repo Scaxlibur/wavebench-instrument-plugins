@@ -39,7 +39,7 @@
 
 ## M8 离线发行证据
 
-- MSO8104 包测试：357 项通过；全仓 Ruff 通过。
+- MSO8104 包测试：366 项通过；全仓 Ruff 通过。
 - 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
 - 当前 WaveBench `0.8.24` 开发环境的 package check：源码目录和真实 wheel 均通过。
 - wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。

@@ -247,6 +247,7 @@ def test_cursor_readout_v2_rejects_invalid_preconditions_without_io(
     ("cursor_type", "source_a", "source_b", "query"),
     [
         ("HBA", "CHAN1", "CHAN1", ":CURSor:MANual:SOURce1?"),
+        ("VBA", "CHAN1", "CHAN1", ":CURSor:MANual:SOURce1?"),
         ("TIME", "NONE", "CHAN1", ":CURSor:MANual:TUNit?"),
         ("AMPL", "LA", "CHAN1", ":CURSor:MANual:VUNit?"),
     ],
@@ -273,6 +274,43 @@ def test_cursor_readout_v2_rejects_unsupported_manual_states_before_values(
 
     assert query not in transport.queries
     assert not any("Value?" in command or "DELta?" in command for command in transport.queries)
+
+
+@pytest.mark.parametrize("mode", ["TRAC", "XY", "MEAS", "BROKEN"])
+def test_cursor_readout_v2_rejects_unsupported_or_invalid_mode_before_manual_queries(
+    mode: str,
+) -> None:
+    transport = CursorTransport({":CURSor:MODE?": mode})
+
+    with pytest.raises((ConfigError, DataError)):
+        MSO8104Scope(transport=transport).get_cursor_readout_v2(
+            None,
+            configured_cursor=True,
+        )
+
+    assert transport.queries == [":CURSor:MODE?"]
+
+
+@pytest.mark.parametrize("invalid_value", ["nan", "inf", "-inf", ""])
+def test_cursor_readout_v2_rejects_nonfinite_or_empty_values_without_continuing(
+    invalid_value: str,
+) -> None:
+    transport = CursorTransport({":CURSor:MANual:AXValue?": invalid_value})
+
+    with pytest.raises(DataError, match="manual cursor A X value"):
+        MSO8104Scope(transport=transport).get_cursor_readout_v2(
+            None,
+            configured_cursor=True,
+        )
+
+    assert transport.queries == [
+        ":CURSor:MODE?",
+        ":CURSor:MANual:TYPE?",
+        ":CURSor:MANual:SOURce1?",
+        ":CURSor:MANual:SOURce2?",
+        ":CURSor:MANual:TUNit?",
+        ":CURSor:MANual:AXValue?",
+    ]
 
 
 @pytest.mark.parametrize(
