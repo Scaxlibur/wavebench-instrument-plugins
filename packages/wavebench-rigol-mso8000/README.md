@@ -6,7 +6,7 @@
 
 `0.9.0` 开发版本保留 MSO8104 身份与 CH1/CH2 高阻输入的受控实机证据，并在当前 WaveBench core 开发分支的有界二进制与 portability V2 合同下声明 `scope.fetch_waveform`、`scope.channel_input_state_v2`、`scope.measurement_statistics_v2`、`scope.fft_status_v2` 和 `scope.cursor_readout_v2`。waveform 入口当前只接受 `DEF`：精确声明 `LF` trailing、单响应和单操作均最多 `1,000` bytes、最多一次 binary query，并由 core 负责恢复和新鲜验证。input state V2 保留原始 coupling、termination 与阻抗；statistics V2 只接受显式 `item + sources`，以 6 条纯读取查询返回完整统计结果且拒绝 `include_buffer=True`；FFT V2 先确认 math slot 为 `FFT`，再读取 source、window、vertical unit 与起止频率；cursor V2 只读取预配置的全局手动 `TIME/AMPL` 光标。`scope.capture_waveform` 与 `scope.capture_waveforms` 继续暂停；见 [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md)。
 
-实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。在 `DEF + LF` profile 下，CH1 返回 `1.05713 Vpp / 1000 Hz`，CH2 返回 `1.0705 Vpp / 999.167 Hz`；`scope.measurement_statistics_v2` 对 `VPP,CHAN1` 和 `VPP,CHAN2` 均成功读取 6 个聚合字段，`CNT` 均为 `1000`。两路均使用 `1 kHz / 1 Vpp / 0 V` 信号源，并在每次读取后独立确认两路输出关闭。该结果只证明记录条件下的数据换算、摘要、统计回包与五字段恢复，不构成通用测量准确度、统计窗口语义、探头校准、MAX/DMAX 或 capture 的证据。
+实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。在 `DEF + LF` profile 下，CH1 返回 `1.05713 Vpp / 1000 Hz`，CH2 返回 `1.0705 Vpp / 999.167 Hz`；`scope.measurement_statistics_v2` 对 `VPP,CHAN1` 和 `VPP,CHAN2` 均成功读取 6 个聚合字段，`CNT` 均为 `1000`；前面板预配置的 MATH1 FFT 返回 CH1、HANN、VRMS 与 `0–1 MHz`。两路均使用 `1 kHz / 1 Vpp / 0 V` 信号源，并在每次读取后独立确认两路输出关闭。该结果只证明记录条件下的数据换算、摘要、统计回包、FFT 状态回包与五字段恢复，不构成通用测量准确度、统计窗口语义、FFT 精度、探头校准、MAX/DMAX 或 capture 的证据。
 
 当前身份信息：
 
@@ -62,7 +62,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `scope.measurement_statistics_v2` 覆盖手册列出的统计 item，使用规范化的大写 item token 和显式 `CHAN1`～`CHAN4`、`MATH1`～`MATH4` source；`D0`～`D15` 仅接受手册明确允许的周期、频率、宽度、占空比、延时和相位项。延时与相位项必须给出两个 source，其他 item 必须给出一个 source。driver 只查询 CURRENT、AVERages、DEViation、MINimum、MAXimum 与 CNT，不发送统计配置、清零或显示写入。受控实机已确认 `VPP,CHAN1` 与 `VPP,CHAN2` 的 6 个数值字段和 `CNT=1000` 可读取；设备既有统计历史未被修改，因此平均、标准差、最小值和最大值不作为信号准确度或统计窗口语义的证据。legacy `scope.measurement_statistics` 继续不声明。
 
-`scope.fft_status_v2` 只接受调用方已在前面板配置的 MATH1～MATH4 FFT。driver 先查询 `OPERator?` 并要求回包为 `FFT`，再读取 FFT source、window、vertical unit、起始频率和终止频率；所有步骤均为文本 query。`average_complete`、RBW 和 FFT sample rate 没有手册可证明的 query，因此固定列入 `unavailable_fields`，不会从全局 acquisition sample rate、频率范围或波形点数推导。离线契约已覆盖；当前尚无前面板 FFT 配置下的实机证据。
+`scope.fft_status_v2` 只接受调用方已在前面板配置的 MATH1～MATH4 FFT。driver 先查询 `OPERator?` 并要求回包为 `FFT`，再读取 FFT source、window、vertical unit、起始频率和终止频率；所有步骤均为文本 query。`average_complete`、RBW 和 FFT sample rate 没有手册可证明的 query，因此固定列入 `unavailable_fields`，不会从全局 acquisition sample rate、频率范围或波形点数推导。受控实机 MATH1 已确认 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`，前后 source 两路均 OFF、`consistent`、`healthy`；该结果不构成 FFT 振幅、频率或频率轴准确度证据。
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。新增 `scope.channel_input_state_v2` 不使用上述兼容 token，而是分别返回 `ac/dc/gnd`、`high_z/50_ohm` 和可证明阻抗。实机 CH1/CH2 均读为 `dc + high_z + 1 MΩ`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 

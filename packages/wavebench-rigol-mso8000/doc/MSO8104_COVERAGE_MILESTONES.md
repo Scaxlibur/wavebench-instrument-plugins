@@ -99,7 +99,7 @@ M7 开发补充：core 当前开发分支另提供 `scope.cursor_readout_v2`。�
 
 M7 开发补充：core 当前开发分支还提供 `scope.measurement_statistics_v2`。插件声明只读 `item_sources` profile，覆盖手册列出的统计 item；每次调用固定读取 CURRENT、AVERages、DEViation、MINimum、MAXimum 与 CNT，拒绝统计 buffer 和不符合 item/source 约束的请求。受控实机以 `VPP,CHAN1` 和 `VPP,CHAN2` 验证 6 个有限返回字段与 `CNT=1000`；不发送统计配置、清零或显示写入。其余 item/source、双 source/数字 source 语义和统计准确度仍未验证。221 项包测试、Ruff 和 wheel 生命周期测试通过。
 
-M7 开发补充：core 当前开发分支还提供 `scope.fft_status_v2`。插件先以 `OPERator? == FFT` 证明目标 math slot 当前为 FFT，再读取 source、window、vertical unit、起始频率与终止频率；6 条 text query 以外不执行 I/O。average-complete、RBW 与 FFT sample rate 固定 unavailable，不由全局 acquisition 值推导。238 项包测试、Ruff 和 wheel 生命周期测试通过；尚未在前面板已配置 FFT 的设备上进行实机读取。
+M7 开发补充：core 当前开发分支还提供 `scope.fft_status_v2`。插件先以 `OPERator? == FFT` 证明目标 math slot 当前为 FFT，再读取 source、window、vertical unit、起始频率与终止频率；6 条 text query 以外不执行 I/O。average-complete、RBW 与 FFT sample rate 固定 unavailable，不由全局 acquisition 值推导。238 项包测试、Ruff 和 wheel 生命周期测试通过；前面板预配置的 MATH1 受控实机返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`，前后 source 两路 OFF、`consistent`、`healthy`。该结果不构成 FFT 精度证据。
 
 ## M4：单次、多通道与有界长记录
 
@@ -151,7 +151,7 @@ M6 评审结果为两项 capability 均跳过。
 | `scope.measurement_statistics` | RFC 后跳过 | legacy 核心按 slot 寻址，设备按 item/source 查询且不能反查界面 slot；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |
 | `scope.measurement_statistics_v2` | 受控开发 | 显式 item/source、6 条纯读取查询、无统计 buffer。`VPP,CHAN1/CHAN2` 已完成受控实机回包验证；其他 item/source 和统计准确度未验证 |
 | `scope.fft_status` | RFC 后跳过 | legacy 模型强制要求 average-complete、RBW 与 FFT sample rate，设备没有这些 query；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |
-| `scope.fft_status_v2` | 离线通过 | 先确认 `FFT` operator，再读取 source/window/unit/起止频率；三项无合同字段精确 unavailable，实机待验 |
+| `scope.fft_status_v2` | 实机通过（受限 MATH1） | 先确认 `FFT` operator，再读取 source/window/unit/起止频率；MATH1 已验证 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`，三项无合同字段精确 unavailable，不构成 FFT 精度证据 |
 | `scope.reference_metadata` | 厂商证据缺口后跳过 | Reference 命令只有 source、垂直显示和标签；waveform source 不接受 REF，无法得到轴、点数和分辨率 |
 | `scope.history_timestamps` | 厂商证据缺口后跳过 | Record 命令只有 enable/start/play/current/frame count，没有逐帧相对或日历时间戳 |
 

@@ -120,7 +120,7 @@ class ScopeCursorReadoutV2:
 
 ## capability 影响
 
-core 当前开发分支已实现 selector、statistics、FFT 与 cursor 的 V2 合同。MSO8104 在受控开发中声明 `scope.measurement_statistics_v2`：只接受 `item_sources`、不支持统计 buffer，并以 6 条纯读取查询返回完整聚合值；legacy `scope.measurement_statistics` 仍不声明。`scope.fft_status_v2` 先确认 math operator 为 `FFT`，再读取 source、window、vertical unit 与起止频率；average-complete、RBW 和 FFT sample rate 保持 unavailable。FFT 的实机回包和前面板状态仍待单独验证。
+core 当前开发分支已实现 selector、statistics、FFT 与 cursor 的 V2 合同。MSO8104 在受控开发中声明 `scope.measurement_statistics_v2`：只接受 `item_sources`、不支持统计 buffer，并以 6 条纯读取查询返回完整聚合值；legacy `scope.measurement_statistics` 仍不声明。`scope.fft_status_v2` 先确认 math operator 为 `FFT`，再读取 source、window、vertical unit 与起止频率；average-complete、RBW 和 FFT sample rate 保持 unavailable。受控实机的前面板 MATH1 返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`；FFT 准确度仍待单独验证。
 
 当前 `scope.cursor_readout` 只声明上述无损子集。V2 发布后可以扩展到双源、追踪与多单位模式；XY 和 measurement cursor 仍须逐项取得返回语义证据后再开放。
 
