@@ -50,7 +50,7 @@
 | M4 | 默认拒绝 | 单次、多通道与有界 MAX/DMAX；仍缺 acquisition 恢复和实机证据 |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | RFC/证据缺口后跳过 | 数字状态模型不完整；数字 payload 编码未定义 |
-| M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT 只读子集；其余能力按 RFC/证据缺口跳过 |
+| M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态只读子集；其余能力按 RFC/证据缺口跳过 |
 | M8 | 离线完成 | 覆盖文档、全量离线验证和发行包审计 |
 
 ## M0：合同与发行边界
@@ -101,6 +101,8 @@ M7 开发补充：core 当前开发分支还提供 `scope.measurement_statistics
 
 M7 开发补充：core 当前开发分支还提供 `scope.fft_status_v2`。插件先以 `OPERator? == FFT` 证明目标 math slot 当前为 FFT，再读取 source、window、vertical unit、起始频率与终止频率；6 条 text query 以外不执行 I/O。average-complete、RBW 与 FFT sample rate 固定 unavailable，不由全局 acquisition 值推导。238 项包测试、Ruff 和 wheel 生命周期测试通过；前面板预配置的 MATH1 受控实机返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`，前后 source 两路 OFF、`consistent`、`healthy`。该结果不构成 FFT 精度证据。
 
+M7 开发补充：core 当前开发分支还提供 `scope.acquisition_status_v2`。插件固定读取 acquisition type、sample rate 与 memory depth；仅在 `AVER` 模式下读取 configured average count。average 在非 AVER 模式为 not applicable；`average.complete`、run state 与 segmented 分区不报告，不能由 trigger STOP、OPC 或已配置次数推导。253 项包测试、Ruff 和 wheel 生命周期测试通过；受控实机当前返回 `NORM + 500 kSa/s + 10 kpts`，前后 source 两路 OFF、`consistent`、`healthy`。AVER 语义和所有完成状态仍未验证。
+
 ## M4：单次、多通道与有界长记录
 
 离线实现过 `scope.capture_waveform` 与 `scope.capture_waveforms`。多通道必须先配置全部通道，只执行一次 `:SINGle` 与一次完成等待，再逐通道读取并校验 X 轴一致。
@@ -146,7 +148,8 @@ M6 评审结果为两项 capability 均跳过。
 | capability | 结论 | 原因 |
 | --- | --- | --- |
 | `scope.snapshot` | RFC 后跳过 | 完整模型强制要求 MSO8000 无法查询的 health、probe 与 channel 字段；见 [RFC-0005](rfcs/0005-portable-scope-snapshot.md) |
-| `scope.acquisition_status` | RFC 后跳过 | 模型把平均完成与 segmented 状态绑定，设备没有对应查询；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
+| `scope.acquisition_status` | RFC 后跳过 | legacy 模型把平均完成与 segmented 状态绑定，设备没有对应查询；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
+| `scope.acquisition_status_v2` | 实机通过（受限 NORM） | type/sample rate/memory depth 纯读取；AVER 时才读取配置次数。当前验证 `NORM + 500 kSa/s + 10 kpts`；不报告 run state、segmented 或 average complete |
 | `scope.capture_average` | RFC 后跳过 | 配置模型要求设备不存在的 single count 与逐通道 arithmetic，也没有平均完成位；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
 | `scope.measurement_statistics` | RFC 后跳过 | legacy 核心按 slot 寻址，设备按 item/source 查询且不能反查界面 slot；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |
 | `scope.measurement_statistics_v2` | 受控开发 | 显式 item/source、6 条纯读取查询、无统计 buffer。`VPP,CHAN1/CHAN2` 已完成受控实机回包验证；其他 item/source 和统计准确度未验证 |
@@ -155,7 +158,7 @@ M6 评审结果为两项 capability 均跳过。
 | `scope.reference_metadata` | 厂商证据缺口后跳过 | Reference 命令只有 source、垂直显示和标签；waveform source 不接受 REF，无法得到轴、点数和分辨率 |
 | `scope.history_timestamps` | 厂商证据缺口后跳过 | Record 命令只有 enable/start/play/current/frame count，没有逐帧相对或日历时间戳 |
 
-M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 core 开发分支的受控 descriptor 额外声明 input、cursor 和 measurement-statistics V2 子集。覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
+M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 core 开发分支的受控 descriptor 额外声明 input、cursor、measurement-statistics、FFT 和 acquisition-status V2 子集。覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
 
 ## M8：离线发行审计
 
@@ -170,4 +173,4 @@ M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 c
 
 离线证据：`0.7.0` 的 168 项包测试与 Ruff 通过；在 WaveBench core 位于同级目录的一次性仓库布局中，根测试为 715 项通过、2 项因缺少 SP3000A 私有实机证据而按预期跳过。WaveBench `0.8.22` 的源码目录与真实 wheel package check 均通过。wheel 仅包含一个 `wavebench.instruments` entry point、一个有效 WaveBench runtime dependency、MIT 许可证和插件代码；sdist 包含公开 README、矩阵、里程碑、RFC、测试与许可证。两种制品均不包含 vendor-local。一次性虚拟环境中的 wheel 安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过；61 个受跟踪 Markdown 文件的本地链接有效。全程未连接真实仪器。
 
-`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、input、cursor、measurement-statistics 和 FFT status V2 集成测试，合计 238 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。
+`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、input、cursor、measurement-statistics、FFT status 和 acquisition status V2 集成测试，合计 253 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。

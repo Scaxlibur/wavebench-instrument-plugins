@@ -27,7 +27,8 @@
 | 自动设置 | `:SYSTem:AUToscale?`、`:AUToscale` | `scope.autoscale` | 离线通过 | 预检系统使能；明确改变垂直、时基和触发；写入或 OPC 不确定时锁存，效果未实机验证 |
 | 完整状态快照 | channel/timebase/probe/waveform/trigger 与部分 health | `scope.snapshot` | RFC 后跳过 | 公共快照强制要求设备无法查询的字段；`*STB?` 还会清零；见 RFC-0005 |
 | acquisition 基础配置 | type、averages、memory depth、sample rate、run/stop/single | fetch/capture 的既有状态 | M4 离线通过 | capture 沿用既有配置；深度最高 500 Mpts；设置深度会改变采样率 |
-| acquisition 状态 | averages 与 trigger status | `scope.acquisition_status` | RFC 后跳过 | 没有 average-complete 或 segmented 状态；trigger STOP 不替代平均完成；见 RFC-0006 |
+| 采集状态（legacy） | averages 与 trigger status | `scope.acquisition_status` | RFC 后跳过 | legacy 模型要求 average-complete 与 segmented 状态，设备没有对应查询；trigger STOP 不替代平均完成；见 RFC-0006 |
+| 采集状态 V2 | `:ACQuire:TYPE?`、`:ACQuire:SRATe?`、`:ACQuire:MDEPth?`，AVER 时 `:ACQuire:AVERages?` | `scope.acquisition_status_v2` | 实机通过（受限 NORM） | 固定 3 条纯读取 query；AVER 时第 4 条读取配置次数。当前回包为 `NORM + 500 kSa/s + 10 kpts`；average 在 NORM 下为 not applicable，run state 与 segmented 为 unavailable。不查询 trigger、OPC 或状态寄存器，不从 STOP 推导完成；AVER 语义和平均完成未验证 |
 | 平均采集事务 | global acquisition type 与 averages | `scope.capture_average` | RFC 后跳过 | 公共配置要求 single count/逐通道 arithmetic；设备也没有平均完成位；见 RFC-0006 |
 | 时基与 edge trigger | main offset/scale、MAIN/XY/ROLL、edge settings/status | capture 前提 | 部分离线通过 | capture 只读前提并沿用配置；任意 setter 不开放，完整 snapshot 见 RFC-0005 |
 | 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | 实机通过（受限 `DEF`） | 当前 core 工作树的 bounded profile 只开放 `DEF`；`LF` trailing、`1,000` bytes 和一次 binary query 已实机通过，core 已完成恢复与新鲜验证。记录的 `1 kHz / 1 Vpp / 0 V` 信号源下，CH1 为 `1.05713 Vpp / 1000 Hz`，CH2 为 `1.0705 Vpp / 999.167 Hz` |

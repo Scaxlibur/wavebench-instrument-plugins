@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-25
 
 ## Scope
 
-This record covers the first controlled check of RIGOL MSO8104 identity, input safety, the waveform-binary path, measurement-statistics V2, and FFT-status V2. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers the first controlled check of RIGOL MSO8104 identity, input safety, the waveform-binary path, measurement-statistics V2, FFT-status V2, and acquisition-status V2. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -33,6 +33,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `hea
 - `scope.channel_input_state_v2` returned `dc + high_z + 1 MΩ` for both CH1 and CH2;
 - `scope.measurement_statistics_v2` returned six finite aggregate values with `CNT=1000` for both `VPP,CHAN1` and `VPP,CHAN2`;
 - `scope.fft_status_v2` returned `FFT + CHAN1 + HANN + VRMS + 0–1 MHz` for front-panel-configured MATH1;
+- `scope.acquisition_status_v2` returned `NORM + 500 kSa/s + 10 kpts`, with average not applicable;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
 - core preflight confirmed the safety limit, High-Z display load, and no active cross-channel relation before enable.
 
@@ -67,6 +68,10 @@ This proves the six response fields and numeric/integer count parsing for the re
 `scope.fft_status_v2` used MATH1 already configured at the front panel and did not create, modify, or restore FFT through SCPI. It first confirmed both source outputs OFF, `consistent`, and `healthy`, and CH1 as `dc + high_z + 1 MΩ`; it then read only operator, source, window, vertical unit, start frequency, and stop frequency. The response was MATH1 operator `FFT`, source `CHAN1`, window `HANN`, vertical unit `VRMS`, and a `0 Hz` to `1 MHz` frequency range. This run performed no source or scope write, waveform transfer, binary read, error-queue read, or FFT-state restoration. A separate Source V2 snapshot afterwards again confirmed both CH1 and CH2 OFF, `consistent`, and `healthy`.
 
 This proves FFT-status response and the V2 unavailable-field boundary only for the recorded model, firmware, transport, and front-panel configuration. `average_complete`, RBW, and FFT sample rate remain unavailable; this is not FFT amplitude, frequency, frequency-axis, or window-effect accuracy evidence.
+
+`scope.acquisition_status_v2` read only `:ACQuire:TYPE?`, `:ACQuire:SRATe?`, and `:ACQuire:MDEPth?`. The current type was NORM, so it did not read `:ACQuire:AVERages?`. The response was acquisition type `NORM`, sample rate `500000 Sa/s`, and memory depth `10000 pts`; the average partition was not applicable, while run state and segmented status were unavailable. This step sent no SINGLE, RUN, STOP, acquisition setter, trigger-status, OPC, status-register, or error-queue query, so it did not change acquisition or trigger state. Both source outputs were OFF, `consistent`, and `healthy` before and after, and CH1 was `dc + high_z + 1 MΩ`.
+
+This evidence covers only static NORM acquisition status for the recorded condition. AVER configured count, average completion, run state, segmented status, and every capture-completion condition remain hardware-unverified; trigger STOP must not imply average complete.
 
 ## Acceptance boundary and next conditions
 

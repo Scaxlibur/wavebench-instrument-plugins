@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary 路径、统计测量 V2 和 FFT 状态 V2 的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary 路径、统计测量 V2、FFT 状态 V2 和采集状态 V2 的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -33,6 +33,7 @@
 - `scope.channel_input_state_v2`：CH1/CH2 均返回 `dc + high_z + 1 MΩ`；
 - `scope.measurement_statistics_v2`：`VPP,CHAN1` 与 `VPP,CHAN2` 均返回 6 个有限聚合值，`CNT=1000`；
 - `scope.fft_status_v2`：前面板预配置 MATH1 返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`；
+- `scope.acquisition_status_v2`：当前返回 `NORM + 500 kSa/s + 10 kpts`，average 为 not applicable；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
 - 启用前 safety limit、High-Z display load 和无 active cross-channel relation 的 core preflight。
 
@@ -67,6 +68,10 @@
 `scope.fft_status_v2` 使用前面板已配置的 MATH1，不通过 SCPI 创建、修改或恢复 FFT。先确认 source 两路 OFF、`consistent`、`healthy`，并确认 CH1 为 `dc + high_z + 1 MΩ`；随后只读取 operator、source、window、vertical unit、起始频率和终止频率 6 项。回包为 MATH1 operator `FFT`、source `CHAN1`、window `HANN`、vertical unit `VRMS`、频率范围 `0 Hz` 至 `1 MHz`。本次没有 source 或示波器写入、波形传输、二进制读取、错误队列读取或 FFT 状态恢复动作；结束后的独立 Source V2 snapshot 再次确认 CH1、CH2 均 OFF、`consistent`、`healthy`。
 
 该步骤只证明记录型号、固件、transport 与前面板配置下的 FFT 状态回包和 V2 unavailable 字段边界。`average_complete`、RBW 和 FFT sample rate 仍为 unavailable；不构成 FFT 振幅、频率、频率轴或窗函数效果的准确度结论。
+
+`scope.acquisition_status_v2` 只读取 `:ACQuire:TYPE?`、`:ACQuire:SRATe?` 和 `:ACQuire:MDEPth?`；当前 type 为 NORM，因此不读取 `:ACQuire:AVERages?`。回包为 acquisition type `NORM`、sample rate `500000 Sa/s`、memory depth `10000 pts`；average 分区为 not applicable，run state 和 segmented 分区为 unavailable。该步骤未发送 SINGLE、RUN、STOP、任何 acquisition setter、trigger status、OPC、状态寄存器或错误队列查询，因而没有改变采集或触发状态。验证前后 source 两路均 OFF、`consistent`、`healthy`，CH1 为 `dc + high_z + 1 MΩ`。
+
+该证据只覆盖记录条件下的静态 NORM 采集状态。AVER 配置次数、average completion、run state、segmented 状态和任何 capture 完成条件均未实机验证；尤其不能由 trigger STOP 推导 average complete。
 
 ## 验收范围与后续条件
 
