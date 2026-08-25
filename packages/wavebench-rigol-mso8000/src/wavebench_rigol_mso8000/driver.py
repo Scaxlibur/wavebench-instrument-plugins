@@ -697,14 +697,17 @@ class MSO8104Scope:
             if deadline <= self._clock():
                 raise OperationTimeout("MSO8104 single-acquisition deadline expired before arming")
             try:
-                observed_states = self._arm_single_and_wait_for_transition(deadline)
+                proof, observed_states, post_arm_trigger_mode = (
+                    self._arm_single_and_wait_for_completion(deadline)
+                )
                 return ScopeAcquisitionCompletion(
                     state=observed_states[-1],
                     original_state=baseline.snapshot.run_state,
                     proof_baseline_state=baseline.snapshot.run_state,
                     proof_baseline_stage="original_atomic_arm",
-                    proof="state_transition",
+                    proof=proof,
                     observed_states=observed_states,
+                    post_arm_trigger_mode=post_arm_trigger_mode,
                 )
             except (DataError, OperationTimeout):
                 self._acquisition_writes_blocked = True
@@ -715,6 +718,63 @@ class MSO8104Scope:
                     "MSO8104 single-acquisition outcome is uncertain; acquisition writes are "
                     "blocked"
                 ) from exc
+
+    def _arm_single_and_wait_for_completion(
+        self,
+        deadline: float,
+    ) -> tuple[str, tuple[ScopeAcquisitionRunState, ...], str | None]:
+        self.transport.write(":SINGle")
+        if deadline <= self._clock():
+            raise OperationTimeout(
+                "MSO8104 single-acquisition deadline expired before mode readback"
+            )
+        trigger_sweep = parse_trigger_sweep(self.transport.query(":TRIGger:SWEep?"))
+        if trigger_sweep != "SING":
+            raise DataError(
+                "MSO8104 single-acquisition mode readback did not confirm SINGLE"
+            )
+        if deadline <= self._clock():
+            raise OperationTimeout(
+                "MSO8104 single-acquisition deadline expired before initial status"
+            )
+        initial_status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+        initial_state = self._run_state_from_trigger_status(
+            initial_status,
+            trigger_mode="single",
+        )
+        if initial_state.phase == "stopped":
+            return (
+                "single_mode_readback_then_stopped",
+                (initial_state,),
+                "single",
+            )
+        if initial_status != "WAIT":
+            raise DataError(
+                "MSO8104 single acquisition completion is unproven for unexpected trigger "
+                f"status {initial_status!r} after SINGLE mode readback"
+            )
+        observed_states = [initial_state]
+        while True:
+            remaining_s = deadline - self._clock()
+            if remaining_s <= 0:
+                raise OperationTimeout(
+                    "MSO8104 single acquisition did not reach STOP before the operation deadline"
+                )
+            self._sleep(min(self.trigger_poll_interval_s, remaining_s))
+            if deadline <= self._clock():
+                raise OperationTimeout(
+                    "MSO8104 single acquisition did not reach STOP before the operation deadline"
+                )
+            status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+            state = self._run_state_from_trigger_status(status, trigger_mode="single")
+            if status not in {"WAIT", "STOP"}:
+                raise DataError(
+                    "MSO8104 single acquisition completion is unproven for unexpected trigger "
+                    f"status {status!r} after SINGLE mode readback"
+                )
+            observed_states.append(state)
+            if state.phase == "stopped":
+                return "state_transition", tuple(observed_states), None
 
     def _arm_single_and_wait_for_transition(
         self,

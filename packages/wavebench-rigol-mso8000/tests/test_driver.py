@@ -7,6 +7,7 @@ from wavebench.instruments import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import ScopeChannelInputStateV2
 from wavebench.instruments.scope_extensions import (
+    ScopeAcquisitionControlProfile,
     ScopeAcquisitionStatusProfileV2,
     ScopeCursorReadoutProfileV2,
     ScopeFftStatusProfileV2,
@@ -53,6 +54,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.fft_status_v2",
         "scope.acquisition_status_v2",
         "scope.acquisition_run_state",
+        "scope.acquisition_control",
         "scope.digital_status_v2",
         "scope.snapshot_v2",
         "scope.cursor_readout",
@@ -140,6 +142,13 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert acquisition_profile.conditionally_applicable_fields == ("average",)
     assert acquisition_profile.max_queries == 4
     assert acquisition_profile.allowed_effect == "pure_read"
+    control_profile = descriptor.scope_extensions.acquisition_control_profile
+    assert isinstance(control_profile, ScopeAcquisitionControlProfile)
+    assert control_profile.supported_continuous_modes == ("normal",)
+    assert control_profile.single_arm_semantics == "atomic_configure_and_arm"
+    assert control_profile.arm_resets_acquisition_count is True
+    assert control_profile.failure_restore_order == ("scope.trigger", "scope.acquisition")
+    assert control_profile.single_mode_readback_allows_terminal_stop is True
     snapshot_profile = descriptor.scope_extensions.snapshot_profile_v2
     assert isinstance(snapshot_profile, ScopeSnapshotProfileV2)
     assert snapshot_profile.readable_fields == (
