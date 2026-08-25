@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-25
 
 ## Scope
 
-This record covers the first controlled check of RIGOL MSO8104 identity, input safety, the waveform-binary path, measurement-statistics V2, FFT-status V2, and acquisition-status V2. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers the first controlled check of RIGOL MSO8104 identity, input safety, the waveform-binary path, measurement-statistics V2, FFT-status V2, acquisition-status V2, and digital-status V2. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -34,6 +34,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `hea
 - `scope.measurement_statistics_v2` returned six finite aggregate values with `CNT=1000` for both `VPP,CHAN1` and `VPP,CHAN2`;
 - `scope.fft_status_v2` returned `FFT + CHAN1 + HANN + VRMS + 0–1 MHz` for front-panel-configured MATH1;
 - `scope.acquisition_status_v2` returned `NORM + 500 kSa/s + 10 kpts`, with average not applicable;
+- `scope.digital_status_v2` returned display, label, POD range and `1.4 V` threshold, plus shared `0 s` timing calibration and `MEDIUM` size for D0 and D8;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
 - core preflight confirmed the safety limit, High-Z display load, and no active cross-channel relation before enable.
 
@@ -72,6 +73,10 @@ This proves FFT-status response and the V2 unavailable-field boundary only for t
 `scope.acquisition_status_v2` read only `:ACQuire:TYPE?`, `:ACQuire:SRATe?`, and `:ACQuire:MDEPth?`. The current type was NORM, so it did not read `:ACQuire:AVERages?`. The response was acquisition type `NORM`, sample rate `500000 Sa/s`, and memory depth `10000 pts`; the average partition was not applicable, while run state and segmented status were unavailable. This step sent no SINGLE, RUN, STOP, acquisition setter, trigger-status, OPC, status-register, or error-queue query, so it did not change acquisition or trigger state. Both source outputs were OFF, `consistent`, and `healthy` before and after, and CH1 was `dc + high_z + 1 MΩ`.
 
 This evidence covers only static NORM acquisition status for the recorded condition. AVER configured count, average completion, run state, segmented status, and every capture-completion condition remain hardware-unverified; trigger STOP must not imply average complete.
+
+`scope.digital_status_v2` first confirmed both source outputs OFF, `consistent`, and `healthy`, and both CH1/CH2 as `dc + high_z + 1 MΩ`. Each D0 and D8 call first queried the LA module bit. With the module present, it read only per-channel display, label, the threshold of the owning POD, global timing calibration, and display size: six text queries total. D0 returned displayed, label `D0`, POD1 (D0-D7), `1.4 V`, `0 s`, and `MEDIUM`; D8 returned displayed, label `D8`, POD2 (D8-D15), and the same shared values. `position_div`, `label_enabled`, activity, technology, and hysteresis were all unavailable by contract. No `:LA:*` setter, waveform/binary read, acquisition/trigger, OPC, status-register, or error-queue query was sent, and no source or scope write occurred. A separate Source V2 snapshot afterwards again confirmed CH1 and CH2 OFF, `consistent`, and `healthy`.
+
+This evidence covers only the recorded model, firmware, transport, and D0/D8 static-status responses. It does not prove logic-probe attachment, electrical threshold accuracy, logic activity, position semantics, label-display enable, or digital-waveform encoding.
 
 ## Acceptance boundary and next conditions
 

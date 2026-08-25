@@ -19,3 +19,5 @@ M7 cursor 测试只覆盖预先配置的手动同源 `TIME + SEC` 与 `AMPL + SO
 FFT 状态 V2 测试覆盖目标 math slot 的 `FFT` operator 前置、6 条固定纯读取 query、source/window/unit/频率范围解析、无合同字段的精确 unavailable、非 FFT 或非法回包的停止查询行为，以及零写入；不配置或移动 FFT、Math、波形传输状态，也不证明 FFT 测量准确度。
 
 采集状态 V2 测试覆盖固定 type/sample rate/memory depth query、AVER 模式的条件平均次数 query、父级 average 分区的 not applicable 语义、无合同字段的 unavailable、严格数值范围与幂次平均次数解析、失败后的停止查询和零写入；不读取 trigger、OPC、状态寄存器或错误队列，也不证明平均完成或采集完成。
+
+数字状态 V2 测试覆盖 D0～D15 的零 I/O 参数门、LA 模块缺席时不发送 `:LA:*?`、D0/D7/D8/D15 的 POD 映射、显示/标签/POD 阈值/timing calibration/size 的严格解析、固定查询顺序、无合同字段的精确 unavailable、非法回包后的停止查询和零写入；不读取数字 waveform，也不推断逻辑活动、电气阈值或编码。

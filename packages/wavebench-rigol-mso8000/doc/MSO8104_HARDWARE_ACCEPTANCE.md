@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary 路径、统计测量 V2、FFT 状态 V2 和采集状态 V2 的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary 路径、统计测量 V2、FFT 状态 V2、采集状态 V2 和数字状态 V2 的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -34,6 +34,7 @@
 - `scope.measurement_statistics_v2`：`VPP,CHAN1` 与 `VPP,CHAN2` 均返回 6 个有限聚合值，`CNT=1000`；
 - `scope.fft_status_v2`：前面板预配置 MATH1 返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`；
 - `scope.acquisition_status_v2`：当前返回 `NORM + 500 kSa/s + 10 kpts`，average 为 not applicable；
+- `scope.digital_status_v2`：D0、D8 均返回显示、标签、所属 POD 范围与 `1.4 V` 阈值，以及共享 `0 s` timing calibration 和 `MEDIUM` size；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
 - 启用前 safety limit、High-Z display load 和无 active cross-channel relation 的 core preflight。
 
@@ -72,6 +73,10 @@
 `scope.acquisition_status_v2` 只读取 `:ACQuire:TYPE?`、`:ACQuire:SRATe?` 和 `:ACQuire:MDEPth?`；当前 type 为 NORM，因此不读取 `:ACQuire:AVERages?`。回包为 acquisition type `NORM`、sample rate `500000 Sa/s`、memory depth `10000 pts`；average 分区为 not applicable，run state 和 segmented 分区为 unavailable。该步骤未发送 SINGLE、RUN、STOP、任何 acquisition setter、trigger status、OPC、状态寄存器或错误队列查询，因而没有改变采集或触发状态。验证前后 source 两路均 OFF、`consistent`、`healthy`，CH1 为 `dc + high_z + 1 MΩ`。
 
 该证据只覆盖记录条件下的静态 NORM 采集状态。AVER 配置次数、average completion、run state、segmented 状态和任何 capture 完成条件均未实机验证；尤其不能由 trigger STOP 推导 average complete。
+
+`scope.digital_status_v2` 先只读确认 source 两路 OFF、`consistent`、`healthy`，并确认 CH1/CH2 均为 `dc + high_z + 1 MΩ`。D0 与 D8 的每次调用先查询 LA 模块位；模块存在后，仅查询逐通道 display、label、所属 POD threshold、全局 timing calibration 和 display size，共 6 条文本 query。D0 回包为显示、label `D0`、POD1（D0～D7）、`1.4 V`、`0 s`、`MEDIUM`；D8 对应为显示、label `D8`、POD2（D8～D15）以及相同的共享字段。`position_div`、`label_enabled`、activity、technology 和 hysteresis 均按合同标为 unavailable。该步骤没有发送任何 `:LA:*` setter、波形/二进制、采集/触发、OPC、状态寄存器或错误队列查询，也没有 source 或 scope 写入；结束后的独立 Source V2 snapshot 再次确认 CH1/CH2 均 OFF、`consistent`、`healthy`。
+
+该证据只覆盖记录型号、固件、transport 与 D0/D8 静态状态回包。它不证明数字探头连接、电气阈值准确度、逻辑活动、position 语义、标签显示使能或 digital waveform 编码。
 
 ## 验收范围与后续条件
 

@@ -37,7 +37,8 @@
 | 数学波形元数据 | `:MATH<n>:DISPlay?`、waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | 离线通过 | 仅已显示槽位与 MAIN 时基；恢复六项传输状态，不读取 data；实机恢复仍未验证 |
 | 手动光标读数 | cursor mode/type/source/unit/value/delta queries | `scope.cursor_readout`、`scope.cursor_readout_v2` | 受限离线通过 | V2 使用全局寻址，读取手动 TIME/AMPL 的独立 A/B source、单位与 A/B/差值；不移动光标。当前实机为 VBA，调用在读取数值前拒绝；准确度未实机验证 |
 | 截图 | `:DISPlay:DATA?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot` | RFC 后跳过 | DISPLAY 路径未声明 block framing；SAVE DATA 路径不能证明 `include_menu=False`；见 RFC-0003 |
-| 数字通道状态 | `:SYSTem:MODules?`、`:LA:*?` | `scope.digital_status` | RFC 后跳过 | 核心模型必填 activity、technology、hysteresis 等设备无法查询的字段；见 RFC-0004 |
+| 数字通道状态（legacy） | `:SYSTem:MODules?`、`:LA:*?` | `scope.digital_status` | RFC 后跳过 | legacy 模型必填 activity、technology、hysteresis 等设备无法查询的字段；见 RFC-0004 |
+| 数字通道状态 V2 | `:SYSTem:MODules?`、`:LA:DIGital:DISPlay?`、`:LA:DIGital:LABel?`、`:LA:POD<n>:THReshold?`、`:LA:TCALibrate?`、`:LA:SIZE?` | `scope.digital_status_v2` | 实机通过（受限 D0/D8 静态状态） | 每次先读 LA 模块；模块缺席时只返回 `shared.module_present=false`，不发 `:LA:*?`。模块存在时固定 6 条文本 query；D0/D8 均返回 displayed、label、对应 POD 范围与 `1.4 V` 阈值、`0 s` timing calibration、`MEDIUM` size。position、label-enabled、activity、technology、hysteresis 均为 unavailable；不读取波形、不推断逻辑活动或数字编码 |
 | 数字波形 | D0～D15 waveform source/data | `scope.digital_waveform` | 手册证据不足后跳过 | 公共 bitset 模型可用，但手册未定义 BYTE/WORD 的 LOW/HIGH code，WORD 字节序也不明确 |
 | 自动测量与统计 | `:MEASure:STATistic:ITEM? <type>,<item>,<source...>` | `scope.measurement_statistics_v2` | 实机通过（受限 `VPP,CHAN1/CHAN2`） | 只接受显式 item/source；6 条纯读取查询返回 CURRENT、AVERages、DEViation、MINimum、MAXimum 与 CNT，`include_buffer=True` 拒绝。受控实机的 `VPP,CHAN1/CHAN2` 均返回完整数值并有 `CNT=1000`；不写入统计配置、清零或显示。legacy slot 接口继续不声明；其他 item/source、双源/数字源语义和统计准确度未验证 |
 | FFT 状态 | `:MATH<n>:OPERator?` 与 `:MATH<n>:FFT:*?` | `scope.fft_status_v2` | 实机通过（受限 MATH1） | 先确认 operator 为 `FFT`，再读取 source、window、vertical unit、起始/终止频率，合计 6 条纯读取 query。前面板 MATH1 实测回包为 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`；前后 source 两路 OFF、`consistent`、`healthy`。average-complete、RBW 与 FFT sample rate 固定 unavailable，不从全局采样率、频率范围或点数推导；不构成 FFT 精度证据，legacy 接口继续不声明 |
@@ -76,4 +77,4 @@ payload 必须与点数精确一致；所有轴参数与换算结果必须为有
 - screenshot framing；
 - RAW chunk 上限、吞吐和 timeout；
 - WORD 字节序与有效位宽；
-- LA 模块、数字探头、选件和任何测量准确度。
+- 数字探头、电气阈值、逻辑活动、数字 waveform 编码和任何测量准确度。

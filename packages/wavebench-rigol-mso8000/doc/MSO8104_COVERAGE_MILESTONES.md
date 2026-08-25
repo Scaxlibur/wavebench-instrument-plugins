@@ -49,8 +49,8 @@
 | M3 | 实机通过（受限 `DEF` 已知信号） | 当前屏幕 `NORMal + BYTE` 的 `DEF` 波形；使用 RFC-0008 的 bounded binary 合同 |
 | M4 | 默认拒绝 | 单次、多通道与有界 MAX/DMAX；仍缺 acquisition 恢复和实机证据 |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
-| M6 | RFC/证据缺口后跳过 | 数字状态模型不完整；数字 payload 编码未定义 |
-| M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态只读子集；其余能力按 RFC/证据缺口跳过 |
+| M6 | 受控开发（数字状态 V2） | legacy 数字状态与数字 waveform 继续跳过；V2 只读静态状态有核心模型与实机证据 |
+| M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态、数字状态只读子集；其余能力按 RFC/证据缺口跳过 |
 | M8 | 离线完成 | 覆盖文档、全量离线验证和发行包审计 |
 
 ## M0：合同与发行边界
@@ -103,6 +103,8 @@ M7 开发补充：core 当前开发分支还提供 `scope.fft_status_v2`。插�
 
 M7 开发补充：core 当前开发分支还提供 `scope.acquisition_status_v2`。插件固定读取 acquisition type、sample rate 与 memory depth；仅在 `AVER` 模式下读取 configured average count。average 在非 AVER 模式为 not applicable；`average.complete`、run state 与 segmented 分区不报告，不能由 trigger STOP、OPC 或已配置次数推导。253 项包测试、Ruff 和 wheel 生命周期测试通过；受控实机当前返回 `NORM + 500 kSa/s + 10 kpts`，前后 source 两路 OFF、`consistent`、`healthy`。AVER 语义和所有完成状态仍未验证。
 
+M7 开发补充：core 当前开发分支还提供 `scope.digital_status_v2`。插件先读取 LA 模块位；LA 缺席时只报告 `shared.module_present=false`，不读取任何 `:LA:*?`。LA 存在时，D0～D15 以固定 POD1（D0～D7）或 POD2（D8～D15）范围读取 display、label、POD 阈值、全局 timing calibration 和 size，共 6 条文本 query。position、label-enabled、activity、technology 与 hysteresis 维持 unavailable，不读取 digital waveform。268 项包测试、Ruff 和 wheel 生命周期测试通过；受控实机 D0/D8 均返回 displayed、对应 label/POD、`1.4 V`、`0 s` 和 `MEDIUM`，前后 source 两路 OFF、`consistent`、`healthy`。数字探头、电气阈值、逻辑活动与编码语义仍未验证。
+
 ## M4：单次、多通道与有界长记录
 
 离线实现过 `scope.capture_waveform` 与 `scope.capture_waveforms`。多通道必须先配置全部通道，只执行一次 `:SINGle` 与一次完成等待，再逐通道读取并校验 X 轴一致。
@@ -123,13 +125,15 @@ M5 评审结果为「RFC 后跳过」，descriptor 不声明 `scope.screenshot`�
 
 ## M6：数字通道
 
-M6 评审结果为两项 capability 均跳过。
+初始评审中，两项 legacy capability 均跳过。core R1 随后实现 [RFC-0004](rfcs/0004-portable-scope-digital-status.md) 的可移植 V2 模型，允许按逐通道、POD 与共享状态分别报告可证明字段。
 
-`scope.digital_status` 的公共模型要求 activity、technology、threshold coupling、hysteresis 与 label enable 等非空字段。MSO8000 只提供模块、显示、POD 共用阈值、全局 size/deskew、位置和标签查询，不能用默认值补齐其余字段。[RFC-0004](rfcs/0004-portable-scope-digital-status.md) 提议可移植的可选状态模型。
+legacy `scope.digital_status` 继续跳过：其公共模型要求 activity、technology、threshold coupling、hysteresis 与 label enable 等非空字段。MSO8000 只能证明模块、显示、POD 共用阈值、全局 size/timing calibration 和标签；`position` 查询格式又有歧义，不能用默认值补齐其余字段。
 
-`scope.digital_waveform` 已有合适的 `uint16` bitset 模型，也要求调用方明确确认 acquisition 已停止；缺口在厂商合同。手册允许 D0～D15 作为 waveform source，却没有定义 BYTE/WORD payload 到 LOW/HIGH 的确切 code，WORD 字节序也不明确。插件不把模拟波形换算公式套到数字数据，也不让 FakeTransport fixture 反向充当设备协议证据。
+`scope.digital_status_v2` 受控声明：只接受 D0～D15，每次先查询 LA 模块位；模块缺席时只报告 `shared.module_present=false`，不发送 `:LA:*?`。模块存在时固定读取显示、标签、所属 POD 阈值、全局 timing calibration 与 size，并将 position、label-enabled、activity、technology 与 hysteresis 标为 unavailable。D0 与 D8 的受控只读实机查询已验证两组 POD 边界和静态回包；不构成逻辑活动、电气阈值或数字探头准确度结论。
 
-退出证据：descriptor 保持不声明 `scope.digital_status` 与 `scope.digital_waveform`。数字状态等待核心模型，数字波形等待 RIGOL 官方编码证据或后续获批的最小实机原始帧验收；本轮不连接实机。
+`scope.digital_waveform` 已有合适的 `uint16` bitset 模型，也要求调用方明确确认 acquisition 已停止；缺口仍在厂商合同。手册允许 D0～D15 作为 waveform source，却没有定义 BYTE/WORD payload 到 LOW/HIGH 的确切 code，WORD 字节序也不明确。插件不把模拟波形换算公式套到数字数据，也不让 FakeTransport fixture 反向充当设备协议证据。
+
+退出证据：descriptor 受控声明 `scope.digital_status_v2`，但继续不声明 legacy `scope.digital_status` 与 `scope.digital_waveform`。数字 waveform 等待 RIGOL 官方编码证据或后续获批的最小实机原始帧验收。
 
 ## M7：受控写与高级能力
 
@@ -147,6 +151,7 @@ M6 评审结果为两项 capability 均跳过。
 
 | capability | 结论 | 原因 |
 | --- | --- | --- |
+| `scope.digital_status_v2` | 实机通过（受限 D0/D8 静态状态） | LA 模块预检后，固定 6 条纯读取 query 返回 display、label、POD 阈值和共享 timing calibration/size；position、label-enabled、activity、technology、hysteresis 精确 unavailable，不读取数字 waveform |
 | `scope.snapshot` | RFC 后跳过 | 完整模型强制要求 MSO8000 无法查询的 health、probe 与 channel 字段；见 [RFC-0005](rfcs/0005-portable-scope-snapshot.md) |
 | `scope.acquisition_status` | RFC 后跳过 | legacy 模型把平均完成与 segmented 状态绑定，设备没有对应查询；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
 | `scope.acquisition_status_v2` | 实机通过（受限 NORM） | type/sample rate/memory depth 纯读取；AVER 时才读取配置次数。当前验证 `NORM + 500 kSa/s + 10 kpts`；不报告 run state、segmented 或 average complete |
@@ -158,7 +163,7 @@ M6 评审结果为两项 capability 均跳过。
 | `scope.reference_metadata` | 厂商证据缺口后跳过 | Reference 命令只有 source、垂直显示和标签；waveform source 不接受 REF，无法得到轴、点数和分辨率 |
 | `scope.history_timestamps` | 厂商证据缺口后跳过 | Record 命令只有 enable/start/play/current/frame count，没有逐帧相对或日历时间戳 |
 
-M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 core 开发分支的受控 descriptor 额外声明 input、cursor、measurement-statistics、FFT 和 acquisition-status V2 子集。覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
+M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 core 开发分支的受控 descriptor 额外声明 input、cursor、measurement-statistics、FFT、acquisition-status 和 digital-status V2 子集。覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
 
 ## M8：离线发行审计
 
@@ -173,4 +178,4 @@ M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 c
 
 离线证据：`0.7.0` 的 168 项包测试与 Ruff 通过；在 WaveBench core 位于同级目录的一次性仓库布局中，根测试为 715 项通过、2 项因缺少 SP3000A 私有实机证据而按预期跳过。WaveBench `0.8.22` 的源码目录与真实 wheel package check 均通过。wheel 仅包含一个 `wavebench.instruments` entry point、一个有效 WaveBench runtime dependency、MIT 许可证和插件代码；sdist 包含公开 README、矩阵、里程碑、RFC、测试与许可证。两种制品均不包含 vendor-local。一次性虚拟环境中的 wheel 安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过；61 个受跟踪 Markdown 文件的本地链接有效。全程未连接真实仪器。
 
-`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、input、cursor、measurement-statistics、FFT status 和 acquisition status V2 集成测试，合计 253 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。
+`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、input、cursor、measurement-statistics、FFT status、acquisition status 和 digital status V2 集成测试，合计 268 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。
