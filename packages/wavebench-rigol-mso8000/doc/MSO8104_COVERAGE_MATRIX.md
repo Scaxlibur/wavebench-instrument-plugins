@@ -31,12 +31,12 @@
 | 采集状态（legacy） | averages 与 trigger status | `scope.acquisition_status` | RFC 后跳过 | legacy 模型要求 average-complete 与 segmented 状态，设备没有对应查询；trigger STOP 不替代平均完成；见 RFC-0006 |
 | 采集状态 V2 | `:ACQuire:TYPE?`、`:ACQuire:SRATe?`、`:ACQuire:MDEPth?`，AVER 时 `:ACQuire:AVERages?` | `scope.acquisition_status_v2` | 实机通过（受限 NORM） | 固定 3 条纯读取 query；AVER 时第 4 条读取配置次数。当前回包为 `NORM + 500 kSa/s + 10 kpts`；average 在 NORM 下为 not applicable，run state 与 segmented 为 unavailable。不查询 trigger、OPC 或状态寄存器，不从 STOP 推导完成；AVER 语义和平均完成未验证 |
 | 采集运行状态 | `:TRIGger:STATus?` | `scope.acquisition_run_state` | 实机通过（受限观察） | 单条文本 query；STOP→stopped、WAIT→waiting、RUN/AUTO→acquiring，TD→unknown。实机从 AUTO 经 STOP 进入 stopped，再经 NORMAL/RUN 观察到 WAIT，最终 STOP；不以状态查询证明 SINGLE 完成 |
-| 采集控制 | `:RUN`、`:STOP`、`:SINGle`、`:TRIGger:SWEep?`、`:ACQuire:TYPE?` | `scope.acquisition_control` | 默认拒绝 | Core 把 start、stop 与完成式 SINGLE 绑为同一 capability。`start(normal)`→`stop` 已实机返回 active/stopped；无信号 SINGLE 的 Core cleanup/fresh verification 已实机通过。受限 CH1 信号 SINGLE 的首次状态仍为 STOP，未观察到非终态→STOP 完成迁移；历史 EOF/会话阻塞也不构成完成证据，因此不声明 |
+| 采集控制 | `:RUN`、`:STOP`、`:SINGle`、`:TRIGger:SWEep?`、`:ACQuire:TYPE?` | `scope.acquisition_control` | 默认拒绝 | Core 把 start、stop 与完成式 SINGLE 绑为同一 capability。`start(normal)`→`stop` 已实机返回 active/stopped；无信号 SINGLE 的 Core cleanup/fresh verification 已实机通过。受限 CH1 信号的首条状态为 STOP，未满足现有非终态→STOP proof；`*OPC?` 成功后仍可读到 WAIT，不能作为完成证据。见 [RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md)：仅建议对明确 opt-in 设备采用 `SING` 模式读回后的首条 STOP；Core 未实现、未实机闭环前继续不声明 |
 | 平均采集事务 | global acquisition type 与 averages | `scope.capture_average` | RFC 后跳过 | 公共配置要求 single count/逐通道 arithmetic；设备也没有平均完成位；见 RFC-0006 |
 | 时基与 edge trigger | main offset/scale、MAIN/XY/ROLL、edge settings/status | capture 前提 | 部分离线通过 | capture 只读前提并沿用配置；任意 setter 不开放，完整 snapshot 见 RFC-0005 |
 | 当前屏幕波形 | `WAVeform` NORM/BYTE/preamble/data | `scope.fetch_waveform` | 实机通过（受限 `DEF`） | `LF` trailing、`1,000` bytes 和一次 binary query 已实机通过，core 已完成恢复与新鲜验证。记录的 `1 kHz / 1 Vpp / 0 V` 信号源下，CH1 为 `1.05713 Vpp / 1000 Hz`，CH2 为 `1.0705 Vpp / 999.167 Hz` |
 | 深存储波形 | MAX/RAW、start/stop 分块 | `scope.fetch_waveform` | 实机通过（受限 stopped MAX/DMAX） | 唯一 bounded profile 限制每响应 `250,000` bytes、每操作 `4,000,000` bytes、16 次 binary query。MAX/DMAX 均须先观察到 STOP，再读取 memory depth 并把 points 收紧为 memory depth、运行时总点数和 16 倍 chunk 的最小值；不发送 RUN/STOP/SINGLE。source 双路 OFF、CH1/CH2 高阻、当前 `10 kpts` memory depth、`20 kpts / 2.5 kpts chunk` 条件下，CH1/CH2 各自的 MAX/DMAX 均返回 `10,000` 样本并完成五字段 restore/fresh verify。运行态 MAX、其他深度、吞吐、timeout 和 capture 未验证 |
-| 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | 默认拒绝 | 离线候选只接受已停止、MAIN 时基下的 `DEF` 与 `BYTE` transfer 基线；一次 SINGLE 后必须观察非终态→STOP，再由 core 恢复并新鲜验证 acquisition、trigger、MAIN 时基、四路 display/vertical 和 transfer 共 13 个字段；首个 STOP、`MAX/DMAX`、非 BYTE 基线、实机成功完成与 capture capability 均继续拒绝 |
+| 单次与多通道 | `:SINGle`、trigger status、逐源 waveform | `scope.capture_waveform(s)` | 默认拒绝 | 离线候选只接受已停止、MAIN 时基下的 `DEF` 与 `BYTE` transfer 基线；当前仍要求一次 SINGLE 后观察非终态→STOP，再由 core 恢复并新鲜验证 acquisition、trigger、MAIN 时基、四路 display/vertical 和 transfer 共 13 个字段；首个 STOP、`MAX/DMAX`、非 BYTE 基线、实机成功完成与 capture capability 均继续拒绝。RFC-0009 的 control proof 不放宽该 capture 条件 |
 | 数学波形元数据 | `:MATH<n>:DISPlay?`、waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | 离线通过 | 仅已显示槽位与 MAIN 时基；恢复六项传输状态，不读取 data；实机恢复仍未验证 |
 | 手动光标读数 | cursor mode/type/source/unit/value/delta queries | `scope.cursor_readout`、`scope.cursor_readout_v2` | 受限离线通过 | V2 使用全局寻址，读取手动 TIME/AMPL 的独立 A/B source、单位与 A/B/差值；不移动光标。当前实机为 VBA，调用在读取数值前拒绝；准确度未实机验证 |
 | 截图 | `:DISPlay:DATA?`、`:SAVE:IMAGe:DATA?` | `scope.screenshot` | RFC 后跳过 | DISPLAY 路径未声明 block framing；SAVE DATA 路径不能证明 `include_menu=False`；见 RFC-0003 |
@@ -74,8 +74,8 @@ payload 必须与点数精确一致；所有轴参数与换算结果必须为有
 
 - USB 和 GPIB 资源的连接与终止符；
 - 错误队列无错误哨兵；
-- `*OPC?` 是否等待目标 single acquisition；
-- SINGLE 的非终态→STOP 完成状态迁移；失败恢复已在无信号条件下验证，但不构成成功采集证据；
+- `*OPC?` 在两次 source 双路 OFF 的 SINGLE 探测中返回成功后仍可读到 WAIT；它不能作为目标采集完成证据；
+- [RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md) 的 Core 实现，以及 `SING` 模式读回后首条 STOP、`WAIT → STOP`、失败恢复与 fresh verification 的低压实机闭环；失败恢复已在无信号条件下验证，但不构成成功采集证据；
 - 除记录的 `DEF + LF`、`1 kHz / 1 Vpp / 0 V` 条件外的 X/Y 换算与测量准确度；
 - 运行态 MAX，以及不同 memory depth 下 MAX/DMAX 的 binary 吞吐、分块和 timeout；
 - screenshot framing；

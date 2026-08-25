@@ -47,7 +47,7 @@
 | M1 | 离线完成 | 最小身份插件与安装生命周期 |
 | M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
 | M3 | 实机通过（受限 `DEF` 已知信号） | 当前屏幕 `NORMal + BYTE` 的 `DEF` 波形；使用 RFC-0008 的 bounded binary 合同 |
-| M4 | 部分实机通过 / capture 默认拒绝 | `scope.acquisition_run_state`、`start(normal)`→`stop`、无信号 SINGLE 失败恢复，以及停止态 bounded MAX/DMAX fetch 已验证；已停止、MAIN 时基下的 `DEF + BYTE` capture 候选已完成 13 字段离线恢复覆盖，运行态 MAX、SINGLE 成功完成与实机 capture 仍缺证据 |
+| M4 | 部分实机通过 / capture 默认拒绝 | `scope.acquisition_run_state`、`start(normal)`→`stop`、无信号 SINGLE 失败恢复，以及停止态 bounded MAX/DMAX fetch 已验证；已停止、MAIN 时基下的 `DEF + BYTE` capture 候选已完成 13 字段离线恢复覆盖。运行态 MAX、RFC-0009 的 SINGLE completion 实机闭环与实机 capture 仍缺证据 |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | 受控开发（数字状态 V2） | legacy 数字状态与数字 waveform 继续跳过；V2 只读静态状态有核心模型与实机证据 |
 | M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态、数字状态、快照只读子集；其余能力按 RFC/证据缺口跳过 |
@@ -115,11 +115,11 @@ M7 开发补充：core 当前开发分支还提供 `scope.snapshot_v2`。插件�
 
 离线证据：`0.4.0` 在 `0.3.1` 的单次采集合同上补齐 MAX/DMAX。BYTE block 最大 250,000 点，每次调用全部通道总计最大 4,000,000 点；超限在 binary query 和数组分配前拒绝。106 项包测试覆盖长记录状态恢复、block 长度、失败不重放、总预算部分结果、MAX 状态相关语义、DMAX STOP 前提与严格整数 option。
 
-开发补充：core 当前开发分支提供 `scope.acquisition_run_state` 与 `scope.acquisition_control` 合同。插件公开前者，单条 `:TRIGger:STATus?` 将 STOP、WAIT、RUN/AUTO 分别映射为 stopped、waiting、acquiring，TD 保持 unknown。受控实机已完成 `start(normal)`→`stop` 的 active/stopped 闭环；无信号 SINGLE 按 fail-closed 路径结束，Core cleanup 与 fresh verification 均实机通过。Core 把 start、stop 和完成式 SINGLE 绑定为同一 control capability；带受限 CH1 信号的 SINGLE 仍以首个 STOP 结束，未观察到非终态→STOP 完成迁移，历史 VXI-11 EOF/会话阻塞同样不构成 completion evidence。因此 descriptor 暂不声明 `scope.acquisition_control`。
+开发补充：core 当前开发分支提供 `scope.acquisition_run_state` 与 `scope.acquisition_control` 合同。插件公开前者，单条 `:TRIGger:STATus?` 将 STOP、WAIT、RUN/AUTO 分别映射为 stopped、waiting、acquiring，TD 保持 unknown。受控实机已完成 `start(normal)`→`stop` 的 active/stopped 闭环；无信号 SINGLE 按 fail-closed 路径结束，Core cleanup 与 fresh verification 均实机通过。Core 把 start、stop 和完成式 SINGLE 绑定为同一 control capability；带受限 CH1 信号的 SINGLE 首条状态为 STOP，未满足既有非终态→STOP proof，历史 VXI-11 EOF/会话阻塞同样不构成 completion evidence。`*OPC?` 成功后仍可读到 WAIT，不能作为完成证据。[RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md) 改为提议经过 `SING` 模式读回约束的首条 STOP proof；Core 尚未实现，插件也尚未形成该完整实机 trace。因此 descriptor 暂不声明 `scope.acquisition_control`。
 
 开发补充：唯一 bounded fetch profile 现在允许每响应 `250,000` bytes、每操作 `4,000,000` bytes、最多 16 次 binary query。MAX/DMAX 都先要求 stopped，再读取 current memory depth，并把 points 限制为 memory depth、运行时总点数与 16 倍 chunk 的最小值。source 双路 OFF、CH1/CH2 高阻、scope stopped、当前 `10 kpts` memory depth、运行时 `20 kpts / 2.5 kpts chunk` 的独立实机步骤中，CH1/CH2 的 MAX 与 DMAX 均返回 `10,000` 样本，且 core 完成五字段 restore/fresh verify。该证据不包含运行态 MAX、其他 memory depth、吞吐或 timeout。
 
-开发补充：capture 候选使用 core 的 bounded executor，不公开 capability。仅接受已停止、MAIN 时基下的 `DEF` 和已确认的 `BYTE` baseline；一次 SINGLE 后必须有非终态→STOP 迁移，再使用一个 binary ledger 逐通道读取。core 统一恢复并新鲜验证 acquisition、trigger、MAIN 时基、四路 display/vertical、waveform source/mode/format/points/window，以及 query-response-header/byte-order 边界，共 13 个字段。首个 STOP、`MAX/DMAX`、非 BYTE baseline、任一恢复写失败和 callback/binary 错误均 fail closed。当前没有对应实机成功完成或恢复证据，不能把 SINGLE 触发或 trigger STOP 当成完整的波形采集证据。
+开发补充：capture 候选使用 core 的 bounded executor，不公开 capability。仅接受已停止、MAIN 时基下的 `DEF` 和已确认的 `BYTE` baseline；一次 SINGLE 后必须有非终态→STOP 迁移，再使用一个 binary ledger 逐通道读取。core 统一恢复并新鲜验证 acquisition、trigger、MAIN 时基、四路 display/vertical、waveform source/mode/format/points/window，以及 query-response-header/byte-order 边界，共 13 个字段。首个 STOP、`MAX/DMAX`、非 BYTE baseline、任一恢复写失败和 callback/binary 错误均 fail closed。[RFC-0009](rfcs/0009-single-mode-readback-terminal-stop.md) 仅提议 control completion proof，不放宽此处 capture 条件。当前没有对应实机成功完成或恢复证据，不能把 SINGLE 触发或 trigger STOP 当成完整的波形采集证据。
 
 ## M5：截图
 
@@ -163,7 +163,7 @@ legacy `scope.digital_status` 继续跳过：其公共模型要求 activity、te
 | `scope.acquisition_status` | RFC 后跳过 | legacy 模型把平均完成与 segmented 状态绑定，设备没有对应查询；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
 | `scope.acquisition_status_v2` | 实机通过（受限 NORM） | type/sample rate/memory depth 纯读取；AVER 时才读取配置次数。当前验证 `NORM + 500 kSa/s + 10 kpts`；不报告 run state、segmented 或 average complete |
 | `scope.acquisition_run_state` | 实机通过（受限观察） | 单条 trigger-status query；AUTO→acquiring、STOP→stopped、NORMAL/RUN→WAIT 已验证。SINGLE completion 不由该观察推导 |
-| `scope.acquisition_control` | 默认拒绝 | Core 绑定 start/stop/SINGLE；start/stop 与无信号失败恢复已有实机证据，但 SINGLE 成功仍缺非终态→STOP 完成迁移 |
+| `scope.acquisition_control` | 默认拒绝 | Core 绑定 start/stop/SINGLE；start/stop 与无信号失败恢复已有实机证据。RFC-0009 提议以 `SING` 模式读回后的首条 STOP 作为 opt-in completion proof；Core 实现与对应实机 trace 前继续拒绝 |
 | `scope.capture_average` | RFC 后跳过 | 配置模型要求设备不存在的 single count 与逐通道 arithmetic，也没有平均完成位；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
 | `scope.measurement_statistics` | RFC 后跳过 | legacy 核心按 slot 寻址，设备按 item/source 查询且不能反查界面 slot；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |
 | `scope.measurement_statistics_v2` | 受控开发 | 显式 item/source、6 条纯读取查询、无统计 buffer。`VPP,CHAN1/CHAN2` 已完成受控实机回包验证；其他 item/source 和统计准确度未验证 |
