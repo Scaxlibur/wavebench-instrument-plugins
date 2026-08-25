@@ -4,9 +4,9 @@
 
 ## 当前状态
 
-`0.9.0` 开发版本保留 MSO8104 身份与 CH1/CH2 高阻输入的受控实机证据，并在当前 WaveBench core 开发分支的有界二进制与 portability V2 合同下声明 `scope.fetch_waveform`、`scope.channel_input_state_v2` 和 `scope.cursor_readout_v2`。waveform 入口当前只接受 `DEF`：精确声明 `LF` trailing、单响应和单操作均最多 `1,000` bytes、最多一次 binary query，并由 core 负责恢复和新鲜验证。input state V2 保留原始 coupling、termination 与阻抗；cursor V2 只读取预配置的全局手动 `TIME/AMPL` 光标。 `scope.capture_waveform` 与 `scope.capture_waveforms` 继续暂停；见 [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md)。
+`0.9.0` 开发版本保留 MSO8104 身份与 CH1/CH2 高阻输入的受控实机证据，并在当前 WaveBench core 开发分支的有界二进制与 portability V2 合同下声明 `scope.fetch_waveform`、`scope.channel_input_state_v2`、`scope.measurement_statistics_v2` 和 `scope.cursor_readout_v2`。waveform 入口当前只接受 `DEF`：精确声明 `LF` trailing、单响应和单操作均最多 `1,000` bytes、最多一次 binary query，并由 core 负责恢复和新鲜验证。input state V2 保留原始 coupling、termination 与阻抗；statistics V2 只接受显式 `item + sources`，以 6 条纯读取查询返回完整统计结果且拒绝 `include_buffer=True`；cursor V2 只读取预配置的全局手动 `TIME/AMPL` 光标。`scope.capture_waveform` 与 `scope.capture_waveforms` 继续暂停；见 [RFC-0008](doc/rfcs/0008-bounded-waveform-block-trailing-contract.md)。
 
-实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。在 `DEF + LF` profile 下，CH1 返回 `1.05713 Vpp / 1000 Hz`，CH2 返回 `1.0705 Vpp / 999.167 Hz`；两路均使用 `1 kHz / 1 Vpp / 0 V` 信号源，并在每次读取后独立确认两路输出关闭。该结果只证明记录条件下的数据换算、摘要与五字段恢复，不构成通用测量准确度、探头校准、MAX/DMAX 或 capture 的证据。
+实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。在 `DEF + LF` profile 下，CH1 返回 `1.05713 Vpp / 1000 Hz`，CH2 返回 `1.0705 Vpp / 999.167 Hz`；`scope.measurement_statistics_v2` 对 `VPP,CHAN1` 和 `VPP,CHAN2` 均成功读取 6 个聚合字段，`CNT` 均为 `1000`。两路均使用 `1 kHz / 1 Vpp / 0 V` 信号源，并在每次读取后独立确认两路输出关闭。该结果只证明记录条件下的数据换算、摘要、统计回包与五字段恢复，不构成通用测量准确度、统计窗口语义、探头校准、MAX/DMAX 或 capture 的证据。
 
 当前身份信息：
 
@@ -35,7 +35,7 @@
 
 ## M8 离线发行证据
 
-- MSO8104 包测试：171 项通过；全仓 Ruff 通过。
+- MSO8104 包测试：221 项通过；全仓 Ruff 通过。
 - 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
 - 当前 WaveBench `0.8.24` 开发环境的 package check：源码目录和真实 wheel 均通过。
 - wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。
@@ -59,6 +59,8 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 `scope.math_metadata` 只接受已显示的 MATH1～MATH4 和 MAIN 时基。driver 保存六项 waveform 传输状态，按手册要求先切换到 NORM，再选择 MATH 源与 BYTE 格式，只查询 preamble 后恢复原状态；不读取波形数据。返回的 `values_per_sample` 为未知，Y 分辨率来自 BYTE 格式的 8 位合同。数学运算内容、FFT 精度和设备恢复均未实机验证。
 
 `scope.cursor_readout` 保留兼容接口，只读取调用方确认已配置的全局手动光标，公共 `cursor_index` 固定为 `1`。新增的 `scope.cursor_readout_v2` 使用全局寻址，要求 `cursor_index=None`，可读取手动 `TIME/AMPL` 的独立 A/B source、秒/赫兹/角度/百分比或 source/百分比单位，以及 A、B、差值读数；driver 不移动或重配光标。追踪、XY、测量模式、NONE 和 LA 幅度仍默认拒绝。当前实机光标为 `VBA`，V2 在读取数值前拒绝；光标读数准确度仍未实机验证。
+
+`scope.measurement_statistics_v2` 覆盖手册列出的统计 item，使用规范化的大写 item token 和显式 `CHAN1`～`CHAN4`、`MATH1`～`MATH4` source；`D0`～`D15` 仅接受手册明确允许的周期、频率、宽度、占空比、延时和相位项。延时与相位项必须给出两个 source，其他 item 必须给出一个 source。driver 只查询 CURRENT、AVERages、DEViation、MINimum、MAXimum 与 CNT，不发送统计配置、清零或显示写入。受控实机已确认 `VPP,CHAN1` 与 `VPP,CHAN2` 的 6 个数值字段和 `CNT=1000` 可读取；设备既有统计历史未被修改，因此平均、标准差、最小值和最大值不作为信号准确度或统计窗口语义的证据。legacy `scope.measurement_statistics` 继续不声明。
 
 `channel_coupling()` 联合查询通道耦合与输入阻抗，并把 `AC/DC + OMEG` 映射为核心高阻 token `ACL/DCL`，把 `AC/DC + FIFT` 映射为低阻 token `AC/DC`。新增 `scope.channel_input_state_v2` 不使用上述兼容 token，而是分别返回 `ac/dc/gnd`、`high_z/50_ohm` 和可证明阻抗。实机 CH1/CH2 均读为 `dc + high_z + 1 MΩ`。核心默认拒绝 50 Ω、`GND` 和未知状态。由于 `:SYSTem:ERRor?` 会消费队首且核心普通文本查询可能重放，当前不声明 `scope.errors`；调用后续波形 Service 时必须显式配置 `scope.check_errors=false`，直到 [RFC-0001](doc/rfcs/0001-nonreplayable-text-query.md) 落地。
 

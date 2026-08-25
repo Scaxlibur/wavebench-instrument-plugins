@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录只覆盖 RIGOL MSO8104 基础身份、输入安全和受控 waveform binary 路径的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary 路径，以及统计测量 V2 的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -31,6 +31,7 @@
 - `scope.idn`：严格识别 RIGOL MSO8104；
 - `scope.channel_coupling`：CH1=`DCL`、CH2=`ACL`；
 - `scope.channel_input_state_v2`：CH1/CH2 均返回 `dc + high_z + 1 MΩ`；
+- `scope.measurement_statistics_v2`：`VPP,CHAN1` 与 `VPP,CHAN2` 均返回 6 个有限聚合值，`CNT=1000`；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
 - 启用前 safety limit、High-Z display load 和无 active cross-channel relation 的 core preflight。
 
@@ -54,6 +55,13 @@
 在 source 两路 OFF 的只读步骤中，`scope.channel_input_state_v2` 成功读取 CH1、CH2 的独立 coupling、termination 和阻抗。该步骤未写入输入设置。
 
 `scope.cursor_readout_v2` 只接受预配置的全局手动 `TIME/AMPL` 光标，且不移动或重配光标。本次设备返回 `VBA`，driver 在读取任意数值前按预期拒绝；该结果不构成光标读数验收。步骤结束后再次确认 source 两路 OFF、`consistent`、`healthy`。
+
+`scope.measurement_statistics_v2` 使用 `item + sources` selector，不访问旧 slot 接口。分别短时开启 CH1 与 CH2 后，对 `VPP,CHAN1` 和 `VPP,CHAN2` 各发送 CURRENT、AVERages、DEViation、MINimum、MAXimum 与 CNT 6 条只读查询；未发送统计配置、清零、显示或任何示波器写入。
+
+- `VPP,CHAN1`：actual `1.0787 V`、average `0.099304 V`、standard deviation `0.088314 V`、minimum `0.064723 V`、maximum `1.1003 V`、count `1000`；
+- `VPP,CHAN2`：actual `1.0705 V`、average `0.095994 V`、standard deviation `0.083057 V`、minimum `0.06554 V`、maximum `1.1142 V`、count `1000`。
+
+该步骤证明 6 个响应字段与数值/整数 count 解析可在记录条件下工作。统计历史由设备既有状态维护，driver 不会重置或重新配置它；因此 average、standard deviation、minimum 和 maximum 不作为统计窗口、信号准确度或跨条件测量结论。每次退出清理均关闭已启用的 source 通道，最终快照确认 CH1、CH2 均 OFF、`consistent`、`healthy`。
 
 ## 验收范围与后续条件
 

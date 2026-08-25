@@ -1,6 +1,6 @@
 # RFC-0007：可移植的示波器统计、FFT 与光标读取合同
 
-状态：提议
+状态：core R1 已实现（未发布）；MSO8104 受控开发采用 statistics/cursor V2 子集
 
 目标仓库：WaveBench core
 
@@ -120,7 +120,7 @@ class ScopeCursorReadoutV2:
 
 ## capability 影响
 
-核心发布 selector 或可选 FFT 模型前，MSO8104 descriptor 不声明 `scope.measurement_statistics` 或 `scope.fft_status`。
+core 当前开发分支已实现 selector、statistics、FFT 与 cursor 的 V2 合同。MSO8104 在受控开发中声明 `scope.measurement_statistics_v2`：只接受 `item_sources`、不支持统计 buffer，并以 6 条纯读取查询返回完整聚合值；legacy `scope.measurement_statistics` 仍不声明。FFT 的具体查询和返回语义尚未形成设备证据，`scope.fft_status_v2` 仍不声明。
 
 当前 `scope.cursor_readout` 只声明上述无损子集。V2 发布后可以扩展到双源、追踪与多单位模式；XY 和 measurement cursor 仍须逐项取得返回语义证据后再开放。
 

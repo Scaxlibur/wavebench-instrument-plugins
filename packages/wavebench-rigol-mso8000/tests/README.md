@@ -13,3 +13,5 @@ M7 autoscale 测试只验证系统使能预检、一次写入、可选 OPC 等�
 M7 数学元数据测试通过 MATH 显示预检和状态化 FakeTransport 验证 NORM/BYTE preamble、六字段传输状态恢复、错误锁存与零数据读取；不证明数学运算结果或 FFT 精度。
 
 M7 cursor 测试只覆盖预先配置的手动同源 `TIME + SEC` 与 `AMPL + SOUR` 读取，以及其余模式和单位的默认拒绝；不移动光标，也不证明读数准确度。
+
+统计测量 V2 测试覆盖显式 `item + sources` selector、6 条固定纯读取查询、双 source 延时/相位项、允许的数字周期 source、无 buffer 预检、有限数和整数 count 解析，以及失败后的停止查询行为；不配置统计项、不清零设备历史，也不证明统计准确度。

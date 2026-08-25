@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-25
 
 ## Scope
 
-This record covers the first controlled check of RIGOL MSO8104 identity, input safety, and the waveform-binary path. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers the first controlled check of RIGOL MSO8104 identity, input safety, the waveform-binary path, and measurement-statistics V2. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -31,6 +31,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, and session `hea
 - `scope.idn` strictly identified RIGOL MSO8104;
 - `scope.channel_coupling` returned CH1=`DCL` and CH2=`ACL`;
 - `scope.channel_input_state_v2` returned `dc + high_z + 1 MΩ` for both CH1 and CH2;
+- `scope.measurement_statistics_v2` returned six finite aggregate values with `CNT=1000` for both `VPP,CHAN1` and `VPP,CHAN2`;
 - Source V2 dual-channel snapshot, OFF requests, and independent OFF readback completed;
 - core preflight confirmed the safety limit, High-Z display load, and no active cross-channel relation before enable.
 
@@ -54,6 +55,13 @@ After each read, EXIT cleanup disabled the enabled source channel and a fresh So
 With both source outputs OFF, `scope.channel_input_state_v2` successfully read independent coupling, termination, and impedance for CH1 and CH2. This step did not write input settings.
 
 `scope.cursor_readout_v2` accepts only a preconfigured global manual `TIME/AMPL` cursor and never moves or reconfigures it. The device returned `VBA`; the driver correctly rejected before any value query, so this is not cursor-readout acceptance. The final source snapshot again confirmed both outputs OFF, `consistent`, and `healthy`.
+
+`scope.measurement_statistics_v2` uses an `item + sources` selector and does not access the legacy slot route. After separately enabling CH1 and CH2 for brief runs, it issued only CURRENT, AVERages, DEViation, MINimum, MAXimum, and CNT queries for `VPP,CHAN1` and `VPP,CHAN2`. It sent no statistics configuration, reset, display, or scope write.
+
+- `VPP,CHAN1`: actual `1.0787 V`, average `0.099304 V`, standard deviation `0.088314 V`, minimum `0.064723 V`, maximum `1.1003 V`, and count `1000`;
+- `VPP,CHAN2`: actual `1.0705 V`, average `0.095994 V`, standard deviation `0.083057 V`, minimum `0.06554 V`, maximum `1.1142 V`, and count `1000`.
+
+This proves the six response fields and numeric/integer count parsing for the recorded condition. Statistics history is device-owned and was neither reset nor configured by the driver; average, standard deviation, minimum, and maximum are therefore not evidence of statistics-window semantics, signal accuracy, or cross-condition measurement behavior. EXIT cleanup disabled the enabled source channel after each run, and the final snapshot confirmed both CH1 and CH2 OFF, `consistent`, and `healthy`.
 
 ## Acceptance boundary and next conditions
 
