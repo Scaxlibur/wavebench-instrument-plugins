@@ -1210,6 +1210,11 @@ def test_bounded_capture_candidate_uses_strict_single_and_restores_full_baseline
     assert _capture_state(transport) == previous
     assert transport.trigger_statuses == ["STOP"]
     assert transport.events.count(("write", ":SINGle")) == 1
+    single_index = transport.events.index(("write", ":SINGle"))
+    assert transport.events[single_index + 1 : single_index + 3] == [
+        ("query", ":TRIGger:SWEep?"),
+        ("query", ":TRIGger:STATus?"),
+    ]
     assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 1
     assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
     assert scope.waveform_writes_blocked is False
@@ -1217,13 +1222,13 @@ def test_bounded_capture_candidate_uses_strict_single_and_restores_full_baseline
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_capture_candidate_rejects_first_stop_and_core_restores() -> None:
+def test_bounded_capture_candidate_rejects_terminal_stop_after_mode_readback() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     transport.trigger_statuses = ["STOP", "STOP"]
     previous = _capture_state(transport)
     executor, scope, session_state = _capture_bounded_executor(transport)
 
-    with pytest.raises(DataError, match="completion is unproven"):
+    with pytest.raises(DataError, match="capture freshness is unproven"):
         executor.capture_single(
             channel=1,
             points="DEF",
@@ -1234,7 +1239,36 @@ def test_bounded_capture_candidate_rejects_first_stop_and_core_restores() -> Non
 
     assert _capture_state(transport) == previous
     assert transport.binary_calls == 0
+    single_index = transport.events.index(("write", ":SINGle"))
+    assert transport.events[single_index + 1 : single_index + 3] == [
+        ("query", ":TRIGger:SWEep?"),
+        ("query", ":TRIGger:STATus?"),
+    ]
     assert scope.acquisition_writes_blocked is True
+    assert session_state.health is SessionHealth.HEALTHY
+
+
+def test_bounded_capture_candidate_accepts_td_to_stop_after_single_readback() -> None:
+    transport = WaveformTransport(state=_capture_initial_state())
+    transport.trigger_statuses = ["STOP", "TD", "STOP"]
+    previous = _capture_state(transport)
+    executor, scope, session_state = _capture_bounded_executor(transport)
+
+    result = executor.capture_single(
+        channel=1,
+        points="DEF",
+        time_range_s=None,
+        vertical_scale_v_per_div=None,
+        check_errors=False,
+    )
+
+    assert result.value.channel == 1
+    assert _capture_state(transport) == previous
+    assert transport.trigger_statuses == ["STOP"]
+    assert transport.events.count(("write", ":SINGle")) == 1
+    assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 1
+    assert scope.waveform_writes_blocked is False
+    assert scope.acquisition_writes_blocked is False
     assert session_state.health is SessionHealth.HEALTHY
 
 

@@ -2292,7 +2292,12 @@ class MSO8104Scope:
     def _capture_single_and_wait_for_transition(self) -> None:
         deadline = self._clock() + self.acquisition_timeout_s
         try:
-            self._arm_single_and_wait_for_transition(deadline)
+            proof, _, _ = self._arm_single_and_wait_for_completion(deadline)
+            if proof != "state_transition":
+                raise DataError(
+                    "MSO8104 bounded capture freshness is unproven: terminal STOP "
+                    "after SINGLE mode readback does not prove a post-arm waveform"
+                )
         except (DataError, OperationTimeout):
             self._acquisition_writes_blocked = True
             raise
