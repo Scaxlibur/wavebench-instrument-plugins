@@ -8,6 +8,7 @@ from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import ScopeChannelInputStateV2
 from wavebench.instruments.scope_extensions import (
     ScopeCursorReadoutProfileV2,
+    ScopeMeasurementStatisticsProfileV2,
     ScopeWaveformBinaryProfile,
 )
 from wavebench.logging import CommandLogger
@@ -45,6 +46,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.channel_input_state_v2",
         "scope.autoscale",
         "scope.math_metadata",
+        "scope.measurement_statistics_v2",
         "scope.cursor_readout",
         "scope.cursor_readout_v2",
     )
@@ -99,6 +101,14 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "y_b",
         "y_delta",
     )
+    statistics_profile = descriptor.scope_extensions.measurement_statistics_profile_v2
+    assert isinstance(statistics_profile, ScopeMeasurementStatisticsProfileV2)
+    assert statistics_profile.selector_modes == ("item_sources",)
+    assert statistics_profile.max_queries == 6
+    assert statistics_profile.supports_buffer is False
+    assert statistics_profile.item_source_count_range == (1, 2)
+    assert statistics_profile.supported_items[0:3] == ("VMAX", "VMIN", "VPP")
+    assert statistics_profile.supported_items[-2:] == ("FRPHASE", "FFPHASE")
 
 
 def test_factory_opens_exactly_one_core_transport_without_instrument_io() -> None:

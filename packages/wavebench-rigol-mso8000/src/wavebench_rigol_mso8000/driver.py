@@ -15,6 +15,8 @@ from wavebench.instruments.models import (
     ScopeCursorReadoutV2,
     ScopeCursorQuantity,
     ScopeDerivedWaveformMetadata,
+    ScopeMeasurementStatisticsRequestV2,
+    ScopeMeasurementStatisticsV2,
     WaveformData,
     WaveformHeader,
 )
@@ -28,6 +30,11 @@ from wavebench.transport.base import InstrumentTransport
 from wavebench.transport.contracts import BinaryResponseFraming, ReplayPolicy
 
 from .parsers import (
+    MSO8104_MEASUREMENT_STATISTICS_ANALOG_MATH_SOURCES,
+    MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCE_ITEMS,
+    MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCES,
+    MSO8104_MEASUREMENT_STATISTICS_ITEMS,
+    MSO8104_MEASUREMENT_STATISTICS_TWO_SOURCE_ITEMS,
     parse_channel_input_state_v2,
     normalize_channel_input,
     parse_boolean_state,
@@ -39,6 +46,7 @@ from .parsers import (
     parse_finite_float,
     parse_manual_cursor_type,
     parse_mso8104_identity,
+    parse_nonnegative_statistic_count,
     parse_positive_integer,
     parse_rigol_waveform_preamble,
     parse_timebase_mode,
@@ -1058,6 +1066,105 @@ class MSO8104Scope:
                     "x_delta",
                     "inverse_x_delta",
                 ),
+            )
+
+    @staticmethod
+    def _validate_measurement_statistics_request(
+        request: ScopeMeasurementStatisticsRequestV2,
+    ) -> tuple[str, tuple[str, ...]]:
+        if not isinstance(request, ScopeMeasurementStatisticsRequestV2):
+            raise DataError("MSO8104 measurement statistics V2 request has an invalid type")
+        if request.selector.mode != "item_sources":
+            raise ConfigError(
+                "MSO8104 measurement statistics V2 supports only explicit item_sources "
+                "selectors"
+            )
+        if request.include_buffer:
+            raise ConfigError(
+                "MSO8104 measurement statistics V2 does not support statistics buffers"
+            )
+
+        item = request.selector.item
+        sources = request.selector.sources
+        if item not in MSO8104_MEASUREMENT_STATISTICS_ITEMS:
+            raise ConfigError(
+                f"MSO8104 measurement statistics V2 does not support item {item!r}"
+            )
+        expected_source_count = (
+            2 if item in MSO8104_MEASUREMENT_STATISTICS_TWO_SOURCE_ITEMS else 1
+        )
+        if len(sources) != expected_source_count:
+            raise ConfigError(
+                f"MSO8104 measurement statistics V2 item {item} requires exactly "
+                f"{expected_source_count} source(s)"
+            )
+        for source in sources:
+            if source in MSO8104_MEASUREMENT_STATISTICS_ANALOG_MATH_SOURCES:
+                continue
+            if (
+                source in MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCES
+                and item in MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCE_ITEMS
+            ):
+                continue
+            raise ConfigError(
+                f"MSO8104 measurement statistics V2 item {item} does not support "
+                f"source {source!r}"
+            )
+        return item, sources
+
+    def get_measurement_statistics_v2(
+        self,
+        request: ScopeMeasurementStatisticsRequestV2,
+    ) -> ScopeMeasurementStatisticsV2:
+        item, sources = self._validate_measurement_statistics_request(request)
+        selector_args = f"{item},{','.join(sources)}"
+        with self._io_lock:
+            self._require_open()
+            actual = parse_finite_float(
+                self.transport.query(
+                    f":MEASure:STATistic:ITEM? CURRENT,{selector_args}"
+                ),
+                field="measurement statistics current",
+            )
+            average = parse_finite_float(
+                self.transport.query(
+                    f":MEASure:STATistic:ITEM? AVERages,{selector_args}"
+                ),
+                field="measurement statistics average",
+            )
+            standard_deviation = parse_finite_float(
+                self.transport.query(
+                    f":MEASure:STATistic:ITEM? DEViation,{selector_args}"
+                ),
+                field="measurement statistics deviation",
+            )
+            minimum = parse_finite_float(
+                self.transport.query(
+                    f":MEASure:STATistic:ITEM? MINimum,{selector_args}"
+                ),
+                field="measurement statistics minimum",
+            )
+            maximum = parse_finite_float(
+                self.transport.query(
+                    f":MEASure:STATistic:ITEM? MAXimum,{selector_args}"
+                ),
+                field="measurement statistics maximum",
+            )
+            waveform_count = parse_nonnegative_statistic_count(
+                self.transport.query(
+                    f":MEASure:STATistic:ITEM? CNT,{selector_args}"
+                ),
+                field="measurement statistics count",
+            )
+            return ScopeMeasurementStatisticsV2(
+                selector=request.selector,
+                category=item,
+                actual=actual,
+                average=average,
+                standard_deviation=standard_deviation,
+                minimum=minimum,
+                maximum=maximum,
+                waveform_count=waveform_count,
             )
 
     @staticmethod

@@ -5,9 +5,12 @@ from wavebench.instruments import InstrumentDescriptor, OptionSpec
 from wavebench.instruments.scope_extensions import (
     ScopeCursorReadoutProfileV2,
     ScopeDescriptorExtensions,
+    ScopeMeasurementStatisticsProfileV2,
     ScopeWaveformBinaryOperationProfile,
     ScopeWaveformBinaryProfile,
 )
+
+from .parsers import MSO8104_MEASUREMENT_STATISTICS_ITEMS
 
 
 _WAVEFORM_FETCH_RESTORE_ORDER = (
@@ -56,6 +59,13 @@ _CURSOR_READOUT_PROFILE_V2 = ScopeCursorReadoutProfileV2(
     ),
     addressing="global",
     max_queries=9,
+)
+_MEASUREMENT_STATISTICS_PROFILE_V2 = ScopeMeasurementStatisticsProfileV2(
+    selector_modes=("item_sources",),
+    max_queries=6,
+    supports_buffer=False,
+    supported_items=MSO8104_MEASUREMENT_STATISTICS_ITEMS,
+    item_source_count_range=(1, 2),
 )
 
 
@@ -110,6 +120,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.channel_input_state_v2",
             "scope.autoscale",
             "scope.math_metadata",
+            "scope.measurement_statistics_v2",
             "scope.cursor_readout",
             "scope.cursor_readout_v2",
         ),
@@ -151,6 +162,7 @@ def descriptor() -> InstrumentDescriptor:
         ),
         scope_extensions=ScopeDescriptorExtensions(
             waveform_binary_profile=_WAVEFORM_BINARY_PROFILE,
+            measurement_statistics_profile_v2=_MEASUREMENT_STATISTICS_PROFILE_V2,
             cursor_readout_profile_v2=_CURSOR_READOUT_PROFILE_V2,
         ),
     )

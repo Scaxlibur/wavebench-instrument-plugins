@@ -38,6 +38,81 @@ _WAVEFORM_SOURCES = frozenset(
         *(f"MATH{index}" for index in range(1, 5)),
     )
 )
+MSO8104_MEASUREMENT_STATISTICS_ITEMS = (
+    "VMAX",
+    "VMIN",
+    "VPP",
+    "VTOP",
+    "VBASV",
+    "VAMP",
+    "VAVG",
+    "VRMS",
+    "OVERSHOOT",
+    "PRESHOOT",
+    "MAREA",
+    "MPAREA",
+    "PERIOD",
+    "FREQUENCY",
+    "RTIME",
+    "FTIME",
+    "PWIDTH",
+    "NWIDTH",
+    "PDUTY",
+    "NDUTY",
+    "TVMAX",
+    "TVMIN",
+    "PSLEWRATE",
+    "NSLEWRATE",
+    "VUPPER",
+    "VMID",
+    "VLOWER",
+    "VARIANCE",
+    "PVRMS",
+    "PPULSES",
+    "NPULSES",
+    "PEDGES",
+    "NEDGES",
+    "RRDELAY",
+    "RFDELAY",
+    "FRDELAY",
+    "FFDELAY",
+    "RRPHASE",
+    "RFPHASE",
+    "FRPHASE",
+    "FFPHASE",
+)
+MSO8104_MEASUREMENT_STATISTICS_TWO_SOURCE_ITEMS = frozenset(
+    {
+        "RRDELAY",
+        "RFDELAY",
+        "FRDELAY",
+        "FFDELAY",
+        "RRPHASE",
+        "RFPHASE",
+        "FRPHASE",
+        "FFPHASE",
+    }
+)
+MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCE_ITEMS = frozenset(
+    {
+        "PERIOD",
+        "FREQUENCY",
+        "PWIDTH",
+        "NWIDTH",
+        "PDUTY",
+        "NDUTY",
+        *MSO8104_MEASUREMENT_STATISTICS_TWO_SOURCE_ITEMS,
+    }
+)
+MSO8104_MEASUREMENT_STATISTICS_ANALOG_MATH_SOURCES = frozenset(
+    {
+        *(f"CHAN{index}" for index in range(1, 5)),
+        *(f"MATH{index}" for index in range(1, 5)),
+    }
+)
+MSO8104_MEASUREMENT_STATISTICS_DIGITAL_SOURCES = frozenset(
+    f"D{index}" for index in range(16)
+)
 
 
 def parse_mso8104_identity(response: str) -> RigolIdentity:
@@ -169,6 +244,15 @@ def parse_finite_float(response: str, *, field: str) -> float:
     if not math.isfinite(value):
         raise DataError(f"non-finite MSO8104 {field} response: {response!r}")
     return value
+
+
+def parse_nonnegative_statistic_count(response: str, *, field: str) -> int:
+    value = parse_finite_float(response, field=field)
+    if value < 0 or not value.is_integer():
+        raise DataError(
+            f"MSO8104 {field} must be a non-negative integer, got {response!r}"
+        )
+    return int(value)
 
 
 def _parse_bounded_integer(

@@ -168,6 +168,7 @@ assert descriptor.capabilities == (
     "scope.channel_input_state_v2",
     "scope.autoscale",
     "scope.math_metadata",
+    "scope.measurement_statistics_v2",
     "scope.cursor_readout",
     "scope.cursor_readout_v2",
 )
