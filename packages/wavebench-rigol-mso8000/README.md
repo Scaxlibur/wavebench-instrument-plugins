@@ -8,7 +8,7 @@
 
 实机结论只适用于记录的 MSO8104 固件 `00.02.02`、LAN/PyVISA 和受控步骤。在 `DEF + LF` profile 下，CH1 返回 `1.05713 Vpp / 1000 Hz`，CH2 返回 `1.0705 Vpp / 999.167 Hz`；在 source CH1/CH2 均 OFF、两输入为 `1 MΩ` 高阻、scope 已停止、当前 memory depth 为 `10 kpts`、运行时上限为 `20 kpts / 2.5 kpts chunk` 的条件下，CH1/CH2 的停止态 `MAX` 与 `DMAX` 均返回 `10,000` 样本并完成五字段恢复和新鲜验证；`scope.measurement_statistics_v2` 对 `VPP,CHAN1` 和 `VPP,CHAN2` 均成功读取 6 个聚合字段，`CNT` 均为 `1000`；前面板预配置的 MATH1 FFT 返回 CH1、HANN、VRMS 与 `0–1 MHz`；当前采集状态返回 NORM、`500 kSa/s` 和 `10 kpts`；run-state 的当前 `AUTO` 状态被保守报告为运行中，受控 STOP→NORMAL/RUN→STOP 闭环返回 STOP、WAIT、STOP；D0/D8 数字状态确认对应 POD、`1.4 V` 阈值、`0 s` timing calibration 与 `MEDIUM` size；snapshot V2 完成 identity 和 13 种授权选件状态的 14 条只读查询。两路均使用 `1 kHz / 1 Vpp / 0 V` 信号源，并在每次读取后独立确认两路输出关闭。该结果只证明记录条件下的数据换算、摘要、停止态 MAX/DMAX fetch、统计回包、FFT 状态回包、静态采集/数字状态/run-state 回包、identity/选件状态回包与五字段恢复，不构成通用测量准确度、统计窗口语义、FFT 精度、平均完成、数字探头/逻辑活动、探头校准、SINGLE 完成、运行态 MAX 或 capture 的证据。
 
-采集控制的实机边界更窄：`start(normal)`→`stop` 已形成 active/stopped 闭环；source 双路 OFF 时，SINGLE 的 fail-closed 路径已完成 Core cleanup/fresh verification。带 CH1 受限信号的 SINGLE 仍首个观察到 STOP，未形成非终态→STOP 完成迁移，因此 `scope.acquisition_control` 和 capture 继续默认拒绝。每次探测后均以新会话确认 source 双路 OFF、scope stopped 和 CH1/CH2 高阻。
+采集控制的实机边界更窄：`start(normal)`→`stop` 已形成 active/stopped 闭环；source 双路 OFF 时，SINGLE 的 fail-closed 路径已完成 Core cleanup/fresh verification。带 CH1 受限信号的 SINGLE 仍首个观察到 STOP，未形成非终态→STOP 完成迁移。两次 source 双路 OFF 的 `*OPC?` 探测均返回 `1`，但随后 run-state 仍为 waiting，因而只能证明命令处理，不能证明触发、完成或新波形。`scope.acquisition_control` 和 capture 继续默认拒绝；[RFC-0009](doc/rfcs/0009-scope-single-arm.md) 提议一个不声明完成的独立 SINGLE arm capability。每次探测后均以新会话确认 source 双路 OFF、scope stopped 和 CH1/CH2 高阻。
 
 当前身份信息：
 
