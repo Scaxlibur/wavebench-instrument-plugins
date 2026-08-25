@@ -738,17 +738,14 @@ class MSO8104Scope:
                 "MSO8104 single-acquisition deadline expired before initial status"
             )
         initial_status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
-        initial_state = self._run_state_from_trigger_status(
-            initial_status,
-            trigger_mode="single",
-        )
+        initial_state = self._single_completion_state(initial_status)
         if initial_state.phase == "stopped":
             return (
                 "single_mode_readback_then_stopped",
                 (initial_state,),
                 "single",
             )
-        if initial_status != "WAIT":
+        if initial_status not in {"TD", "WAIT"}:
             raise DataError(
                 "MSO8104 single acquisition completion is unproven for unexpected trigger "
                 f"status {initial_status!r} after SINGLE mode readback"
@@ -766,8 +763,8 @@ class MSO8104Scope:
                     "MSO8104 single acquisition did not reach STOP before the operation deadline"
                 )
             status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
-            state = self._run_state_from_trigger_status(status, trigger_mode="single")
-            if status not in {"WAIT", "STOP"}:
+            state = self._single_completion_state(status)
+            if status not in {"TD", "WAIT", "STOP"}:
                 raise DataError(
                     "MSO8104 single acquisition completion is unproven for unexpected trigger "
                     f"status {status!r} after SINGLE mode readback"
@@ -775,6 +772,15 @@ class MSO8104Scope:
             observed_states.append(state)
             if state.phase == "stopped":
                 return "state_transition", tuple(observed_states), None
+
+    @staticmethod
+    def _single_completion_state(status: str) -> ScopeAcquisitionRunState:
+        if status == "TD":
+            # The manual lists TD but does not define its subphase.  Only under a
+            # just-read-back SINGLE mode may it serve as a raw, nonterminal
+            # transition observation; it never proves completion by itself.
+            return ScopeAcquisitionRunState("arming", "single", status)
+        return MSO8104Scope._run_state_from_trigger_status(status, trigger_mode="single")
 
     def _arm_single_and_wait_for_transition(
         self,

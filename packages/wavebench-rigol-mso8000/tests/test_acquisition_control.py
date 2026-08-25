@@ -259,6 +259,30 @@ def test_single_uses_state_transition_after_verified_single_mode_wait() -> None:
     ]
 
 
+def test_single_uses_state_transition_after_verified_single_mode_td() -> None:
+    transport = AcquisitionControlTransport(statuses=["TD", "STOP"])
+    scope = MSO8104Scope(
+        transport=transport,
+        trigger_poll_interval_s=0.0,
+        _clock=lambda: 0.0,
+        _sleep=lambda _: None,
+    )
+
+    completion = scope.acquire_single(baseline=_baseline(), deadline=1.0)
+
+    assert completion.proof == "state_transition"
+    assert completion.observed_states == (
+        ScopeAcquisitionRunState("arming", "single", "TD"),
+        ScopeAcquisitionRunState("stopped", "single", "STOP"),
+    )
+    assert transport.events == [
+        ("write", ":SINGle"),
+        ("query", ":TRIGger:SWEep?"),
+        ("query", ":TRIGger:STATus?"),
+        ("query", ":TRIGger:STATus?"),
+    ]
+
+
 def test_single_queries_initial_status_before_waiting_to_poll() -> None:
     transport = AcquisitionControlTransport(statuses=["WAIT", "STOP"])
     sleeps: list[float] = []
@@ -349,7 +373,7 @@ def test_single_accepts_terminal_stop_after_verified_single_mode_readback() -> N
     assert scope.acquisition_writes_blocked is False
 
 
-@pytest.mark.parametrize("status", ["AUTO", "RUN", "TD"])
+@pytest.mark.parametrize("status", ["AUTO", "RUN"])
 def test_single_rejects_unexpected_status_after_single_mode_readback(status: str) -> None:
     transport = AcquisitionControlTransport(statuses=[status])
     scope = MSO8104Scope(transport=transport, _clock=lambda: 0.0)
@@ -620,8 +644,24 @@ def test_current_core_service_does_not_restore_after_poisoned_initial_status_fai
     assert transport.session_state.health.value == "poisoned"
 
 
+def test_current_core_service_accepts_td_state_transition() -> None:
+    backend = AcquisitionControlTransport(statuses=["STOP", "TD", "STOP"])
+    service, driver, transport = _extension_service(backend)
+
+    result = service.acquire_single()
+
+    assert result.value.proof == "state_transition"
+    assert result.value.observed_states == (
+        ScopeAcquisitionRunState("arming", "single", "TD"),
+        ScopeAcquisitionRunState("stopped", "single", "STOP"),
+    )
+    assert backend.writes == [":SINGle"]
+    assert driver.acquisition_writes_blocked is False
+    assert transport.session_state.health.value == "healthy"
+
+
 def test_current_core_service_restores_after_unproven_initial_status() -> None:
-    backend = AcquisitionControlTransport(statuses=["STOP", "TD"])
+    backend = AcquisitionControlTransport(statuses=["STOP", "RUN"])
     service, driver, transport = _extension_service(backend)
 
     with pytest.raises(DataError, match="unexpected trigger status"):
