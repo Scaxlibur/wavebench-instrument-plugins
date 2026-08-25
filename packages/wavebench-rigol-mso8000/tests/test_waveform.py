@@ -64,6 +64,7 @@ class WaveformTransport:
         self.displayed = {channel: True for channel in range(1, 5)}
         self.math_display_responses = {index: "1" for index in range(1, 5)}
         self.timebase_mode = "MAIN"
+        self.memory_depth = 10_000
         self.trigger_statuses = ["STOP"]
         self.events: list[tuple[str, str]] = []
         self.fail_writes: set[str] = set()
@@ -107,6 +108,8 @@ class WaveformTransport:
             return str(self.state[queries[command]])
         if command == ":TIMebase:MODE?":
             return self.timebase_mode
+        if command == ":ACQuire:MDEPth?":
+            return str(self.memory_depth)
         if command == ":TRIGger:STATus?":
             if len(self.trigger_statuses) > 1:
                 return self.trigger_statuses.pop(0)
@@ -810,6 +813,7 @@ def test_dmax_fetch_requires_stop_and_reads_bounded_chunks() -> None:
         preamble=_long_preamble(type_code=2, points=5),
         payload=bytes([128, 129, 130, 131, 132]),
     )
+    transport.memory_depth = 5
     transport.trigger_statuses = ["STOP"]
     scope = MSO8104Scope(
         transport=transport,
@@ -1041,6 +1045,7 @@ def test_bounded_dmax_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
         preamble=_long_preamble(type_code=2, points=5),
         payload=bytes([128, 129, 130, 131, 132]),
     )
+    transport.memory_depth = 5
     transport.trigger_statuses = ["STOP"]
     executor, scope, session_state = _bounded_executor(
         transport,
@@ -1052,6 +1057,8 @@ def test_bounded_dmax_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
 
     assert result.value.sample_count == 5
     assert transport.events.count(("query", ":TRIGger:STATus?")) == 1
+    assert transport.events.count(("query", ":ACQuire:MDEPth?")) == 1
+    assert ("write", ":WAVeform:POINts 5") in transport.events
     assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 3
     assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
     assert [request[2] for request in transport.binary_requests] == [2, 2, 1]
@@ -1061,14 +1068,15 @@ def test_bounded_dmax_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
     assert result.diagnostics["scope_operation"]["binary_budget"]["remaining_query_count"] == 13
 
 
-def test_bounded_max_fetch_uses_chunks_without_acquisition_control() -> None:
+def test_bounded_max_fetch_uses_memory_depth_in_stopped_state() -> None:
     previous = _initial_state()
     transport = WaveformTransport(
         state=previous,
         preamble=_long_preamble(type_code=1, points=5),
         payload=bytes([128, 129, 130, 131, 132]),
     )
-    transport.trigger_statuses = ["RUN"]
+    transport.memory_depth = 5
+    transport.trigger_statuses = ["STOP"]
     executor, scope, session_state = _bounded_executor(
         transport,
         max_total_waveform_points=10,
@@ -1078,7 +1086,9 @@ def test_bounded_max_fetch_uses_chunks_without_acquisition_control() -> None:
     result = executor.fetch(channel=2, points="MAX", check_errors=False)
 
     assert result.value.sample_count == 5
-    assert ("query", ":TRIGger:STATus?") not in transport.events
+    assert transport.events.count(("query", ":TRIGger:STATus?")) == 1
+    assert transport.events.count(("query", ":ACQuire:MDEPth?")) == 1
+    assert ("write", ":WAVeform:POINts 5") in transport.events
     assert ("write", ":STOP") not in transport.events
     assert transport.events.count(("query_binary", ":WAVeform:DATA?")) == 3
     assert transport.events.count(("query_bin_block", ":WAVeform:DATA?")) == 0
@@ -1088,7 +1098,14 @@ def test_bounded_max_fetch_uses_chunks_without_acquisition_control() -> None:
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_dmax_refuses_non_stopped_acquisition_before_raw_setup() -> None:
+@pytest.mark.parametrize(
+    ("points", "mode"),
+    (("MAX", "MAX"), ("DMAX", "RAW")),
+)
+def test_bounded_long_fetch_refuses_non_stopped_acquisition_before_setup(
+    points: str,
+    mode: str,
+) -> None:
     previous = WaveformTransferState(
         source="CHAN3",
         mode="NORM",
@@ -1099,16 +1116,16 @@ def test_bounded_dmax_refuses_non_stopped_acquisition_before_raw_setup() -> None
     )
     transport = WaveformTransport(
         state=previous,
-        preamble=_long_preamble(type_code=2, points=5),
+        preamble=_long_preamble(type_code=1 if points == "MAX" else 2, points=5),
         payload=bytes(range(5)),
     )
     transport.trigger_statuses = ["RUN"]
     executor, _, session_state = _bounded_executor(transport)
 
     with pytest.raises(ConfigError, match="already stopped"):
-        executor.fetch(channel=1, points="DMAX", check_errors=False)
+        executor.fetch(channel=1, points=points, check_errors=False)
 
-    assert ("write", ":WAVeform:MODE RAW") not in transport.events
+    assert ("write", f":WAVeform:MODE {mode}") not in transport.events
     assert transport.binary_calls == 0
     assert transport.state == asdict(previous)
     assert session_state.health is SessionHealth.HEALTHY

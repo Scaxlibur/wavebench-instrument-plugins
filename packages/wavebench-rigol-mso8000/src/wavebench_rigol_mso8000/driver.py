@@ -1225,18 +1225,48 @@ class MSO8104Scope:
         self._apply_waveform_prefix(channel=channel, mode=mode)
 
     def _bounded_long_waveform_point_budget(self) -> int:
+        memory_depth = parse_positive_scientific_integer(
+            self.transport.query(":ACQuire:MDEPth?"),
+            field="acquisition memory depth",
+        )
+        if memory_depth > _MAX_WAVEFORM_STATE_POINTS:
+            raise DataError(
+                "MSO8104 acquisition memory depth exceeds the documented 500000000 "
+                f"points: {memory_depth}"
+            )
         return min(
+            memory_depth,
             self.max_total_waveform_points,
             _BOUNDED_FETCH_MAX_BINARY_QUERIES * self.max_byte_points_per_read,
         )
 
-    def _require_dmax_stopped(self) -> None:
+    def _require_long_fetch_stopped(self, point_mode: str) -> None:
         status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
         if status != "STOP":
             raise ConfigError(
-                "MSO8104 DMAX fetch requires an already stopped acquisition; "
+                f"MSO8104 {point_mode} fetch requires an already stopped acquisition; "
                 f"current trigger status is {status}"
             )
+
+    def _configure_bounded_long_waveform_transfer(
+        self,
+        *,
+        channel: int,
+        point_mode: str,
+        point_budget: int,
+    ) -> None:
+        self._configure_waveform_transfer(channel=channel, point_mode=point_mode)
+        self._write_and_verify(
+            command=f":WAVeform:POINts {point_budget}",
+            query=":WAVeform:POINts?",
+            expected=point_budget,
+            parser=lambda value: parse_positive_integer(
+                value,
+                field="waveform points",
+                maximum=_MAX_WAVEFORM_STATE_POINTS,
+            ),
+            phase="setup",
+        )
 
     def fetch_waveform_bounded(
         self,
@@ -1253,17 +1283,21 @@ class MSO8104Scope:
             self._require_waveform_writes_allowed()
             self._require_displayed_channels([channel])
             self._require_main_timebase()
-            if point_mode == "DMAX":
-                self._require_dmax_stopped()
-            self._configure_waveform_transfer(channel=channel, point_mode=point_mode)
+            if point_mode == "DEF":
+                self._configure_waveform_transfer(channel=channel, point_mode=point_mode)
+                point_budget = self.max_total_waveform_points
+            else:
+                self._require_long_fetch_stopped(point_mode)
+                point_budget = self._bounded_long_waveform_point_budget()
+                self._configure_bounded_long_waveform_transfer(
+                    channel=channel,
+                    point_mode=point_mode,
+                    point_budget=point_budget,
+                )
             return self._read_byte_waveform(
                 channel,
                 point_mode=point_mode,
-                remaining_points=(
-                    self.max_total_waveform_points
-                    if point_mode == "DEF"
-                    else self._bounded_long_waveform_point_budget()
-                ),
+                remaining_points=point_budget,
                 bounded=True,
             )
 
@@ -1878,7 +1912,7 @@ class MSO8104Scope:
             self._require_displayed_channels([channel])
             self._require_main_timebase()
             if point_mode == "DMAX":
-                self._require_dmax_stopped()
+                self._require_long_fetch_stopped(point_mode)
             return self._read_waveform_transaction(
                 channel,
                 point_mode=point_mode,
