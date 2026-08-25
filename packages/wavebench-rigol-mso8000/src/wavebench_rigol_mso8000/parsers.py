@@ -67,6 +67,7 @@ _MATH_OPERATORS = frozenset(
 _FFT_SOURCES = frozenset(f"CHAN{index}" for index in range(1, 5))
 _FFT_WINDOWS = frozenset({"RECT", "BLAC", "HANN", "HAMM", "FLAT", "TRI"})
 _FFT_VERTICAL_UNITS = frozenset({"VRMS", "DB"})
+_SCREENSHOT_IMAGE_TYPES = frozenset({"BMP24", "JPEG", "PNG", "TIFF"})
 _ACQUISITION_TYPES = frozenset({"NORM", "PEAK", "AVER", "HRES"})
 _TRIGGER_SWEEP_MODES = frozenset({"AUTO", "NORM", "SING"})
 _DIGITAL_DISPLAY_SIZES = {
@@ -226,6 +227,14 @@ def parse_fft_window(response: str) -> str:
 
 def parse_fft_vertical_unit(response: str) -> str:
     return _parse_enum(response, field="FFT vertical unit", allowed=_FFT_VERTICAL_UNITS)
+
+
+def parse_screenshot_image_type(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="screenshot image type",
+        allowed=_SCREENSHOT_IMAGE_TYPES,
+    )
 
 
 def parse_acquisition_type(response: str) -> str:

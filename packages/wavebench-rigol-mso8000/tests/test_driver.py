@@ -14,12 +14,13 @@ from wavebench.instruments.scope_extensions import (
     ScopeCursorReadoutProfileV2,
     ScopeFftStatusProfileV2,
     ScopeMeasurementStatisticsProfileV2,
+    ScopeScreenshotProfile,
     ScopeSnapshotProfileV2,
     ScopeWaveformBinaryProfile,
 )
 from wavebench.logging import CommandLogger
 from wavebench.services.scope_service import assert_scope_high_impedance
-from wavebench.transport.contracts import ReplayPolicy
+from wavebench.transport.contracts import BinaryResponseFraming, ReplayPolicy
 from wavebench_rigol_mso8000 import descriptor as plugin_descriptor
 from wavebench_rigol_mso8000.driver import MSO8104Scope
 from wavebench_rigol_mso8000.parsers import (
@@ -65,6 +66,8 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
         "scope.channel_coupling",
         "scope.channel_input_state_v2",
         "scope.autoscale",
+        "scope.screenshot_profile",
+        "scope.screenshot_v2",
         "scope.math_metadata",
         "scope.measurement_statistics_v2",
         "scope.fft_status_v2",
@@ -83,6 +86,26 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.wavebench_max_version == "0.9.0"
     assert descriptor.version == "0.9.0"
     assert descriptor.scope_extensions is not None
+    screenshot_profile = descriptor.scope_extensions.screenshot_profile
+    assert isinstance(screenshot_profile, ScopeScreenshotProfile)
+    screenshot_variant = screenshot_profile.select(
+        screenshot_profile.variants[0].request
+    )
+    assert screenshot_variant.request.format == "png"
+    assert screenshot_variant.request.menu_mode == "device"
+    assert screenshot_variant.request.color_mode == "device"
+    assert screenshot_variant.media_type == "image/png"
+    assert screenshot_variant.framing is BinaryResponseFraming.DEFINITE_BLOCK
+    assert screenshot_variant.response_max_bytes == 524_288
+    assert screenshot_variant.operation_max_bytes == 524_288
+    assert screenshot_variant.resynchronization_max_bytes == 0
+    assert screenshot_variant.query_max_count == 1
+    assert screenshot_variant.changed_fields == ()
+    assert screenshot_variant.restore_order == ()
+    assert screenshot_variant.snapshot_max_steps == 0
+    assert screenshot_variant.restore_max_steps == 0
+    assert screenshot_variant.verify_max_steps == 0
+    assert screenshot_variant.transport_trailing_hex == "0a"
     profile = descriptor.scope_extensions.waveform_binary_profile
     assert isinstance(profile, ScopeWaveformBinaryProfile)
     assert profile.transport_trailing == b"\n"

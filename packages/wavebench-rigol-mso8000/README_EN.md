@@ -25,7 +25,7 @@ The required standard-waveform bounded API and portability V2 APIs are committed
 
 ## M8 offline release evidence
 
-- All 362 MSO8104 package tests and repository-wide Ruff checks pass.
+- All 370 MSO8104 package tests and repository-wide Ruff checks pass.
 - In a disposable sibling WaveBench-core layout, 715 root tests pass and two SP3000A private-hardware-evidence tests skip as expected.
 - Package checks pass for both the source directory and the real wheel in the current WaveBench `0.8.24` development environment.
 - The wheel/sdist contracts cover the single instrument entry point, WaveBench runtime dependency, MIT license, and public content; vendor-local material is absent.
@@ -54,7 +54,7 @@ Descriptor import must not open a transport, scan ports, send SCPI, or create fi
 
 The descriptor accepts `tcpip`, `usb`, and `gpib` resource prefixes as a manual-backed, offline routing contract. This is not hardware connection evidence.
 
-The descriptor does not declare a screenshot capability. Core R1.3 `scope.screenshot_v2` can express definite-block framing and `menu_mode="device"`, but its `262,144`-byte hard ceiling is below the MSO8000 manual's `387,356`-byte `:SAVE:IMAGe:DATA?` example. `:DISPlay:DATA?` still lacks provable framing. [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md) records the budget request. The plugin does not guess framing, create instrument files, or represent device menu behavior as `exclude`.
+The descriptor declares `scope.screenshot_profile` and `scope.screenshot_v2` under a constrained contract. The current Core branch permits `8,388,608` bytes; the initial plugin profile narrows this to one `524,288`-byte response/operation, one binary query, `DEFINITE_BLOCK`, exact `LF` transport trailing, and `png/device/device`. The driver first reads `:SAVE:IMAGe:TYPE?` and requires `PNG`, then reads `:SAVE:IMAGe:DATA?`. It does not write TYPE, INVert, COLor, menu, or instrument files, and does not use `:DISPlay:DATA?`. The offline contract passes; actual payload, trailing bytes, PNG, session health, and empty error queue still require independent hardware acceptance. See [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md).
 
 The descriptor still omits legacy `scope.digital_status` and `scope.digital_waveform`. The legacy status model requires fields that MSO8000 cannot query. The vendor manual does not define BYTE/WORD logic codes for D0-D15 waveform sources and leaves WORD byte order unclear. The plugin does not invent digital state from defaults or analog conversion.
 

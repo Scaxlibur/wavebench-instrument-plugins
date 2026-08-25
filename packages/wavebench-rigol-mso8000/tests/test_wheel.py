@@ -170,6 +170,8 @@ assert descriptor.capabilities == (
     "scope.channel_coupling",
     "scope.channel_input_state_v2",
     "scope.autoscale",
+    "scope.screenshot_profile",
+    "scope.screenshot_v2",
     "scope.math_metadata",
     "scope.measurement_statistics_v2",
     "scope.fft_status_v2",

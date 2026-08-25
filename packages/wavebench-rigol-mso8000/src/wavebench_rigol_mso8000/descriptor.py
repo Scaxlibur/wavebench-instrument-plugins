@@ -9,10 +9,14 @@ from wavebench.instruments.scope_extensions import (
     ScopeDescriptorExtensions,
     ScopeFftStatusProfileV2,
     ScopeMeasurementStatisticsProfileV2,
+    ScopeScreenshotProfile,
+    ScopeScreenshotRequest,
+    ScopeScreenshotVariant,
     ScopeSnapshotProfileV2,
     ScopeWaveformBinaryOperationProfile,
     ScopeWaveformBinaryProfile,
 )
+from wavebench.transport.contracts import BinaryResponseFraming
 
 from .parsers import (
     MSO8104_ACQUISITION_STATUS_V2_CONDITIONALLY_APPLICABLE_FIELDS,
@@ -147,6 +151,29 @@ _SNAPSHOT_PROFILE_V2 = ScopeSnapshotProfileV2(
     readable_fields=MSO8104_SNAPSHOT_V2_READABLE_FIELDS,
     max_queries=1 + len(MSO8104_SYSTEM_OPTION_TYPES),
 )
+_MSO8104_SCREENSHOT_REQUEST = ScopeScreenshotRequest(
+    format="png",
+    menu_mode="device",
+    color_mode="device",
+)
+_MSO8104_SCREENSHOT_PROFILE = ScopeScreenshotProfile(
+    variants=(
+        ScopeScreenshotVariant(
+            request=_MSO8104_SCREENSHOT_REQUEST,
+            media_type="image/png",
+            framing=BinaryResponseFraming.DEFINITE_BLOCK,
+            response_max_bytes=524_288,
+            operation_max_bytes=524_288,
+            resynchronization_max_bytes=0,
+            changed_fields=(),
+            restore_order=(),
+            snapshot_max_steps=0,
+            restore_max_steps=0,
+            verify_max_steps=0,
+            transport_trailing_hex="0a",
+        ),
+    ),
+)
 
 
 def _strict_bounded_option(
@@ -202,6 +229,8 @@ def descriptor() -> InstrumentDescriptor:
             "scope.channel_coupling",
             "scope.channel_input_state_v2",
             "scope.autoscale",
+            "scope.screenshot_profile",
+            "scope.screenshot_v2",
             "scope.math_metadata",
             "scope.measurement_statistics_v2",
             "scope.fft_status_v2",
@@ -236,8 +265,8 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "Hardware-identified RIGOL MSO8104 identity, safety, bounded waveform "
-            "fetch/capture with non-replayed error drain, autoscale, math, acquisition "
-            "control, digital state, snapshot, and cursor driver."
+            "fetch/capture with non-replayed error drain, autoscale, constrained PNG "
+            "screenshots, math, acquisition control, digital state, snapshot, and cursor driver."
         ),
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",
@@ -251,6 +280,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.driver",
         ),
         scope_extensions=ScopeDescriptorExtensions(
+            screenshot_profile=_MSO8104_SCREENSHOT_PROFILE,
             waveform_binary_profile=_WAVEFORM_BINARY_PROFILE,
             measurement_statistics_profile_v2=_MEASUREMENT_STATISTICS_PROFILE_V2,
             fft_status_profile_v2=_FFT_STATUS_PROFILE_V2,

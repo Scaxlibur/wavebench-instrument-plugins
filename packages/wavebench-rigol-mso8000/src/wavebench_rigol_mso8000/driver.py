@@ -40,6 +40,13 @@ from wavebench.instruments.scope_extensions import (
     ScopeBaselineRestoreResult,
     DriverErrorRecord,
     ErrorDrainResult,
+    ScopeScreenshot,
+    ScopeScreenshotBaseline,
+    ScopeScreenshotProfile,
+    ScopeScreenshotRequest,
+    ScopeScreenshotRestoreResult,
+    ScopeScreenshotStateField,
+    ScopeScreenshotStateSnapshot,
     ScopeWaveformTransferBaseline,
     ScopeWaveformTransferField,
     ScopeWaveformTransferRestoreResult,
@@ -84,6 +91,7 @@ from .parsers import (
     parse_positive_integer,
     parse_positive_scientific_integer,
     parse_rigol_waveform_preamble,
+    parse_screenshot_image_type,
     parse_timebase_mode,
     parse_trigger_sweep,
     parse_trigger_status,
@@ -187,6 +195,13 @@ _ACQUISITION_TYPE_TO_COMMAND = {
 _ERROR_QUEUE_COMMAND = ":SYSTem:ERRor?"
 _ERROR_QUEUE_TERMINATOR = (0, "No error")
 _AUTOSCALE_SETTLE_S = 3.0
+_MSO8104_SCREENSHOT_REQUEST = ScopeScreenshotRequest(
+    format="png",
+    menu_mode="device",
+    color_mode="device",
+)
+_MSO8104_SCREENSHOT_RESPONSE_MAX_BYTES = 524_288
+_MSO8104_SCREENSHOT_TRANSPORT_TRAILING = b"\n"
 _TRIGGER_STATUS_TO_PHASE = {
     "STOP": "stopped",
     "WAIT": "waiting",
@@ -498,6 +513,115 @@ class MSO8104Scope:
                 raise InstrumentError(
                     "MSO8104 autoscale settle wait failed; autoscale writes are blocked"
                 ) from exc
+
+    def get_screenshot_profile(self) -> ScopeScreenshotProfile:
+        with self._io_lock:
+            self._require_open()
+            image_type = parse_screenshot_image_type(
+                self.transport.query(":SAVE:IMAGe:TYPE?")
+            )
+            if image_type != "PNG":
+                raise ConfigError(
+                    "MSO8104 screenshot V2 requires the preconfigured PNG image type, "
+                    f"got {image_type}"
+                )
+            from .descriptor import _MSO8104_SCREENSHOT_PROFILE
+
+            return ScopeScreenshotProfile(
+                variants=_MSO8104_SCREENSHOT_PROFILE.variants,
+                source="combined",
+            )
+
+    def snapshot_screenshot_state(
+        self,
+        fields: tuple[ScopeScreenshotStateField, ...],
+    ) -> ScopeScreenshotStateSnapshot:
+        if fields:
+            raise DataError(
+                "MSO8104 screenshot V2 has no mutable screenshot state fields"
+            )
+        with self._io_lock:
+            self._require_open()
+            return ScopeScreenshotStateSnapshot(captured_fields=())
+
+    def capture_screenshot(
+        self,
+        request: ScopeScreenshotRequest,
+        *,
+        baseline: ScopeScreenshotBaseline | None,
+    ) -> ScopeScreenshot:
+        if not isinstance(request, ScopeScreenshotRequest):
+            raise DataError("MSO8104 screenshot V2 request has an invalid type")
+        if request != _MSO8104_SCREENSHOT_REQUEST:
+            raise ConfigError(
+                "MSO8104 screenshot V2 supports only png/device/device requests"
+            )
+        if baseline is not None:
+            raise DataError("MSO8104 screenshot V2 must not receive a state baseline")
+        with self._io_lock:
+            self._require_open()
+            result = self.transport.query_binary(
+                ":SAVE:IMAGe:DATA?",
+                framing=BinaryResponseFraming.DEFINITE_BLOCK,
+                max_bytes=_MSO8104_SCREENSHOT_RESPONSE_MAX_BYTES,
+                replay=ReplayPolicy.NO_REPLAY,
+            )
+            if result.framing is not BinaryResponseFraming.DEFINITE_BLOCK:
+                raise DataError("MSO8104 screenshot response did not use a definite block")
+            if result.transport_trailing_bytes != _MSO8104_SCREENSHOT_TRANSPORT_TRAILING:
+                raise DataError(
+                    "MSO8104 screenshot response has unexpected transport trailing bytes"
+                )
+            data = result.data
+            if (
+                len(data) < 24
+                or not data.startswith(b"\x89PNG\r\n\x1a\n")
+                or data[12:16] != b"IHDR"
+            ):
+                raise DataError("MSO8104 screenshot response is not a PNG with an IHDR")
+            width_px = int.from_bytes(data[16:20], "big")
+            height_px = int.from_bytes(data[20:24], "big")
+            try:
+                return ScopeScreenshot(
+                    data=data,
+                    media_type="image/png",
+                    width_px=width_px,
+                    height_px=height_px,
+                    requested=request,
+                    effective=request,
+                    framing=result.framing,
+                )
+            except (TypeError, ValueError) as exc:
+                raise DataError("MSO8104 screenshot response is not a valid PNG") from exc
+
+    def restore_screenshot_state(
+        self,
+        baseline: ScopeScreenshotBaseline,
+    ) -> ScopeScreenshotRestoreResult:
+        if baseline.restore_order or baseline.snapshot.captured_fields:
+            raise DataError(
+                "MSO8104 screenshot V2 cannot restore unexpected screenshot state fields"
+            )
+        with self._io_lock:
+            self._require_open()
+            return ScopeScreenshotRestoreResult(
+                status="completed",
+                attempted_fields=(),
+                restored_fields=(),
+            )
+
+    def verify_screenshot_state_restored(
+        self,
+        fields: tuple[ScopeScreenshotStateField, ...],
+        baseline: ScopeScreenshotBaseline,
+    ) -> ScopeScreenshotStateSnapshot:
+        if fields or baseline.restore_order or baseline.snapshot.captured_fields:
+            raise DataError(
+                "MSO8104 screenshot V2 cannot verify unexpected screenshot state fields"
+            )
+        with self._io_lock:
+            self._require_open()
+            return ScopeScreenshotStateSnapshot(captured_fields=())
 
     @property
     def waveform_writes_blocked(self) -> bool:
