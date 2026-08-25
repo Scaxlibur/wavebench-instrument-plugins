@@ -46,6 +46,8 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     assert descriptor.capabilities == (
         "scope.idn",
         "scope.fetch_waveform",
+        "scope.capture_waveform",
+        "scope.capture_waveforms",
         "scope.channel_coupling",
         "scope.channel_input_state_v2",
         "scope.autoscale",
@@ -70,19 +72,46 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     profile = descriptor.scope_extensions.waveform_binary_profile
     assert isinstance(profile, ScopeWaveformBinaryProfile)
     assert profile.transport_trailing == b"\n"
-    assert len(profile.operations) == 1
-    assert profile.operations[0].operation_kind == "fetch"
-    assert profile.operations[0].response_max_bytes == 250_000
-    assert profile.operations[0].operation_max_bytes == 4_000_000
-    assert profile.operations[0].query_max_count == 16
-    assert profile.operations[0].resynchronization_max_bytes == 65_536
-    assert profile.operations[0].restore_order == (
+    fetch, capture_single, capture_multiple = profile.operations
+    assert fetch.operation_kind == "fetch"
+    assert fetch.response_max_bytes == 250_000
+    assert fetch.operation_max_bytes == 4_000_000
+    assert fetch.query_max_count == 16
+    assert fetch.resynchronization_max_bytes == 65_536
+    assert fetch.restore_order == (
         "scope.waveform_source",
         "scope.waveform_mode",
         "scope.waveform_format",
         "scope.waveform_points",
         "scope.waveform_transfer_window",
     )
+    for operation, expected_kind, expected_operation_bytes, expected_query_count in (
+        (capture_single, "capture_single", 1_000, 1),
+        (capture_multiple, "capture_multiple", 4_000, 4),
+    ):
+        assert operation.operation_kind == expected_kind
+        assert operation.response_max_bytes == 1_000
+        assert operation.operation_max_bytes == expected_operation_bytes
+        assert operation.query_max_count == expected_query_count
+        assert operation.resynchronization_max_bytes == 65_536
+        assert operation.restore_order == (
+            "scope.acquisition",
+            "scope.trigger",
+            "scope.timebase",
+            "scope.channel_display",
+            "scope.channel_vertical",
+            "scope.waveform_source",
+            "scope.waveform_mode",
+            "scope.query_response_header",
+            "scope.waveform_format",
+            "scope.waveform_byte_order",
+            "scope.waveform_points",
+            "scope.waveform_transfer_window",
+            "scope.run_state",
+        )
+        assert operation.snapshot_max_steps == 32
+        assert operation.restore_max_steps == 32
+        assert operation.verify_max_steps == 32
     assert descriptor.validate_options({}) == {
         "max_total_points": 4_000_000,
         "max_chunk_points": 250_000,

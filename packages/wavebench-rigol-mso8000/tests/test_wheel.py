@@ -164,6 +164,8 @@ assert descriptor.distribution == "wavebench-rigol-mso8000"
 assert descriptor.capabilities == (
     "scope.idn",
     "scope.fetch_waveform",
+    "scope.capture_waveform",
+    "scope.capture_waveforms",
     "scope.channel_coupling",
     "scope.channel_input_state_v2",
     "scope.autoscale",

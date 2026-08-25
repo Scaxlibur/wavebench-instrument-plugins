@@ -33,6 +33,21 @@ _WAVEFORM_FETCH_RESTORE_ORDER = (
 _WAVEFORM_FETCH_RESPONSE_MAX_BYTES = 250_000
 _WAVEFORM_FETCH_OPERATION_MAX_BYTES = 4_000_000
 _WAVEFORM_FETCH_QUERY_MAX_COUNT = 16
+_WAVEFORM_CAPTURE_RESTORE_ORDER = (
+    "scope.acquisition",
+    "scope.trigger",
+    "scope.timebase",
+    "scope.channel_display",
+    "scope.channel_vertical",
+    "scope.waveform_source",
+    "scope.waveform_mode",
+    "scope.query_response_header",
+    "scope.waveform_format",
+    "scope.waveform_byte_order",
+    "scope.waveform_points",
+    "scope.waveform_transfer_window",
+    "scope.run_state",
+)
 _WAVEFORM_BINARY_PROFILE = ScopeWaveformBinaryProfile(
     operations=(
         ScopeWaveformBinaryOperationProfile(
@@ -45,6 +60,28 @@ _WAVEFORM_BINARY_PROFILE = ScopeWaveformBinaryProfile(
             snapshot_max_steps=6,
             restore_max_steps=6,
             verify_max_steps=6,
+        ),
+        ScopeWaveformBinaryOperationProfile(
+            operation_kind="capture_single",
+            response_max_bytes=1_000,
+            operation_max_bytes=1_000,
+            query_max_count=1,
+            resynchronization_max_bytes=65_536,
+            restore_order=_WAVEFORM_CAPTURE_RESTORE_ORDER,
+            snapshot_max_steps=32,
+            restore_max_steps=32,
+            verify_max_steps=32,
+        ),
+        ScopeWaveformBinaryOperationProfile(
+            operation_kind="capture_multiple",
+            response_max_bytes=1_000,
+            operation_max_bytes=4_000,
+            query_max_count=4,
+            resynchronization_max_bytes=65_536,
+            restore_order=_WAVEFORM_CAPTURE_RESTORE_ORDER,
+            snapshot_max_steps=32,
+            restore_max_steps=32,
+            verify_max_steps=32,
         ),
     ),
     transport_trailing_hex="0a",
@@ -159,6 +196,8 @@ def descriptor() -> InstrumentDescriptor:
         capabilities=(
             "scope.idn",
             "scope.fetch_waveform",
+            "scope.capture_waveform",
+            "scope.capture_waveforms",
             "scope.channel_coupling",
             "scope.channel_input_state_v2",
             "scope.autoscale",
@@ -195,8 +234,9 @@ def descriptor() -> InstrumentDescriptor:
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary=(
-            "Hardware-identified RIGOL MSO8104 identity, safety, bounded DEF waveform fetch, "
-            "autoscale, math, acquisition control, digital state, snapshot, and cursor driver."
+            "Hardware-identified RIGOL MSO8104 identity, safety, bounded DEF waveform "
+            "fetch/capture, autoscale, math, acquisition control, digital state, snapshot, "
+            "and cursor driver."
         ),
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",

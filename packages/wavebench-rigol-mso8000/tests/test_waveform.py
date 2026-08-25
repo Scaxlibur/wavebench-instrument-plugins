@@ -9,10 +9,6 @@ import pytest
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.models import ScopeDerivedWaveformMetadata
-from wavebench.instruments.scope_extensions import (
-    ScopeWaveformBinaryOperationProfile,
-    ScopeWaveformBinaryProfile,
-)
 from wavebench.services.scope_waveform_executor import BoundedWaveformExecutor
 from wavebench.transport.contracts import (
     BinaryQueryResult,
@@ -1066,69 +1062,6 @@ def _bounded_executor(
     )
 
 
-_CAPTURE_RECOVERY_FIELDS = (
-    "scope.acquisition",
-    "scope.trigger",
-    "scope.timebase",
-    "scope.channel_display",
-    "scope.channel_vertical",
-    "scope.waveform_source",
-    "scope.waveform_mode",
-    "scope.query_response_header",
-    "scope.waveform_format",
-    "scope.waveform_byte_order",
-    "scope.waveform_points",
-    "scope.waveform_transfer_window",
-    "scope.run_state",
-)
-
-
-def _capture_candidate_descriptor():
-    descriptor = plugin_descriptor()
-    assert descriptor.scope_extensions is not None
-    fetch_profile = descriptor.scope_extensions.waveform_binary_profile
-    assert fetch_profile is not None
-    return replace(
-        descriptor,
-        capabilities=(
-            *descriptor.capabilities,
-            "scope.capture_waveform",
-            "scope.capture_waveforms",
-        ),
-        scope_extensions=replace(
-            descriptor.scope_extensions,
-            waveform_binary_profile=ScopeWaveformBinaryProfile(
-                operations=(
-                    *fetch_profile.operations,
-                    ScopeWaveformBinaryOperationProfile(
-                        operation_kind="capture_single",
-                        response_max_bytes=1_000,
-                        operation_max_bytes=1_000,
-                        query_max_count=1,
-                        resynchronization_max_bytes=65_536,
-                        restore_order=_CAPTURE_RECOVERY_FIELDS,
-                        snapshot_max_steps=32,
-                        restore_max_steps=32,
-                        verify_max_steps=32,
-                    ),
-                    ScopeWaveformBinaryOperationProfile(
-                        operation_kind="capture_multiple",
-                        response_max_bytes=1_000,
-                        operation_max_bytes=4_000,
-                        query_max_count=4,
-                        resynchronization_max_bytes=65_536,
-                        restore_order=_CAPTURE_RECOVERY_FIELDS,
-                        snapshot_max_steps=32,
-                        restore_max_steps=32,
-                        verify_max_steps=32,
-                    ),
-                ),
-                transport_trailing_hex=fetch_profile.transport_trailing_hex,
-            ),
-        ),
-    )
-
-
 def _capture_bounded_executor(
     transport: WaveformTransport,
 ) -> tuple[BoundedWaveformExecutor, MSO8104Scope, InstrumentSessionState]:
@@ -1142,7 +1075,7 @@ def _capture_bounded_executor(
     return (
         BoundedWaveformExecutor(
             driver=scope,
-            descriptor=_capture_candidate_descriptor(),
+            descriptor=plugin_descriptor(),
             session_state=session_state,
             connection_timeout_ms=5_000,
             transport=guarded,
@@ -1192,7 +1125,7 @@ def test_bounded_fetch_uses_core_ledger_and_core_owned_recovery() -> None:
     assert result.diagnostics["scope_operation"]["binary_budget"]["remaining_query_count"] == 15
 
 
-def test_bounded_capture_candidate_uses_strict_single_and_restores_full_baseline() -> None:
+def test_bounded_capture_uses_strict_single_and_restores_full_baseline() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
     previous = _capture_state(transport)
@@ -1222,7 +1155,7 @@ def test_bounded_capture_candidate_uses_strict_single_and_restores_full_baseline
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_capture_candidate_rejects_terminal_stop_after_mode_readback() -> None:
+def test_bounded_capture_rejects_terminal_stop_after_mode_readback() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     transport.trigger_statuses = ["STOP", "STOP"]
     previous = _capture_state(transport)
@@ -1248,7 +1181,7 @@ def test_bounded_capture_candidate_rejects_terminal_stop_after_mode_readback() -
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_capture_candidate_accepts_td_to_stop_after_single_readback() -> None:
+def test_bounded_capture_accepts_td_to_stop_after_single_readback() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     transport.trigger_statuses = ["STOP", "TD", "STOP"]
     previous = _capture_state(transport)
@@ -1272,7 +1205,7 @@ def test_bounded_capture_candidate_accepts_td_to_stop_after_single_readback() ->
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_capture_candidate_rejects_non_stopped_baseline_before_single() -> None:
+def test_bounded_capture_rejects_non_stopped_baseline_before_single() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     transport.trigger_statuses = ["WAIT"]
     executor, _, session_state = _capture_bounded_executor(transport)
@@ -1290,7 +1223,7 @@ def test_bounded_capture_candidate_rejects_non_stopped_baseline_before_single() 
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_multi_capture_candidate_uses_one_single_and_one_baseline() -> None:
+def test_bounded_multi_capture_uses_one_single_and_one_baseline() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
     previous = _capture_state(transport)
@@ -1321,7 +1254,7 @@ def test_bounded_multi_capture_candidate_uses_one_single_and_one_baseline() -> N
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_capture_candidate_rejects_non_byte_transfer_baseline_before_single() -> None:
+def test_bounded_capture_rejects_non_byte_transfer_baseline_before_single() -> None:
     transport = WaveformTransport(state=_initial_state())
     executor, _, session_state = _capture_bounded_executor(transport)
 
@@ -1338,7 +1271,7 @@ def test_bounded_capture_candidate_rejects_non_byte_transfer_baseline_before_sin
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_capture_candidate_rejects_long_point_modes_before_single() -> None:
+def test_bounded_capture_rejects_long_point_modes_before_single() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     executor, _, session_state = _capture_bounded_executor(transport)
 
@@ -1355,7 +1288,7 @@ def test_bounded_capture_candidate_rejects_long_point_modes_before_single() -> N
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_capture_candidate_binary_failure_restores_full_baseline() -> None:
+def test_bounded_capture_binary_failure_restores_full_baseline() -> None:
     transport = WaveformTransport(state=_capture_initial_state(), payload=b"short")
     transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
     previous = _capture_state(transport)
@@ -1377,7 +1310,7 @@ def test_bounded_capture_candidate_binary_failure_restores_full_baseline() -> No
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_multi_capture_candidate_callback_failure_restores_full_baseline() -> None:
+def test_bounded_multi_capture_callback_failure_restores_full_baseline() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
     previous = _capture_state(transport)
@@ -1405,7 +1338,7 @@ def test_bounded_multi_capture_candidate_callback_failure_restores_full_baseline
     assert session_state.health is SessionHealth.HEALTHY
 
 
-def test_bounded_capture_candidate_restore_failure_rejects_success_value() -> None:
+def test_bounded_capture_restore_failure_rejects_success_value() -> None:
     transport = WaveformTransport(state=_capture_initial_state())
     transport.trigger_statuses = ["STOP", "WAIT", "STOP"]
     transport.fail_writes.add(":ACQuire:TYPE NORMal")
