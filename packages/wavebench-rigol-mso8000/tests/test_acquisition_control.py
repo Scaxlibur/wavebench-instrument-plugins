@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.scope_extensions import (
+    ScopeAcquisitionControlProfile,
     ScopeAcquisitionControlBaseline,
     ScopeAcquisitionControlSnapshot,
     ScopeAcquisitionRunState,
@@ -125,7 +128,7 @@ def _baseline(
         ("STOP", "stopped"),
         ("WAIT", "waiting"),
         ("RUN", "acquiring"),
-        ("TD", "acquiring"),
+        ("TD", "unknown"),
         ("AUTO", "acquiring"),
     ],
 )
@@ -392,12 +395,35 @@ def _extension_service(
     return (
         ScopeExtensionService(
             driver=driver,
-            descriptor=plugin_descriptor(),
+            descriptor=_control_descriptor_for_core_test(),
             session_state=transport.session_state,
             connection_timeout_ms=1_000,
         ),
         driver,
         transport,
+    )
+
+
+def _control_descriptor_for_core_test():
+    descriptor = plugin_descriptor()
+    assert descriptor.scope_extensions is not None
+    profile = ScopeAcquisitionControlProfile(
+        supported_continuous_modes=("normal",),
+        single_arm_semantics="atomic_configure_and_arm",
+        arm_resets_acquisition_count=True,
+        failure_restore_order=("scope.trigger", "scope.acquisition"),
+        snapshot_max_steps=3,
+        restore_max_steps=3,
+        verify_max_steps=3,
+        identity_semantics="unknown",
+    )
+    return replace(
+        descriptor,
+        capabilities=(*descriptor.capabilities, "scope.acquisition_control"),
+        scope_extensions=replace(
+            descriptor.scope_extensions,
+            acquisition_control_profile=profile,
+        ),
     )
 
 

@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary 路径、统计测量 V2、FFT 状态 V2、采集状态 V2、数字状态 V2 和快照 V2 的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary 路径、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2 和快照 V2 的首轮验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -34,6 +34,7 @@
 - `scope.measurement_statistics_v2`：`VPP,CHAN1` 与 `VPP,CHAN2` 均返回 6 个有限聚合值，`CNT=1000`；
 - `scope.fft_status_v2`：前面板预配置 MATH1 返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`；
 - `scope.acquisition_status_v2`：当前返回 `NORM + 500 kSa/s + 10 kpts`，average 为 not applicable；
+- `scope.acquisition_run_state`：当前 AUTO 保守回报为 acquiring；source 两路 OFF、输入高阻下的 STOP→NORMAL/RUN→STOP 闭环依次确认 stopped、waiting、stopped；
 - `scope.digital_status_v2`：D0、D8 均返回显示、标签、所属 POD 范围与 `1.4 V` 阈值，以及共享 `0 s` timing calibration 和 `MEDIUM` size；
 - `scope.snapshot_v2`：同次读取 identity 和 13 种授权选件状态；其余 55 个字段明确 unavailable；
 - Source V2 双通道读取、OFF 请求和独立 OFF 回读；
@@ -75,6 +76,10 @@
 
 该证据只覆盖记录条件下的静态 NORM 采集状态。AVER 配置次数、average completion、run state、segmented 状态和任何 capture 完成条件均未实机验证；尤其不能由 trigger STOP 推导 average complete。
 
+`scope.acquisition_run_state` 单次只读取 `:TRIGger:STATus?`。记录条件下，初始 AUTO 被保守映射为 acquiring；随后在 source 两路 OFF、CH1/CH2 均为 `dc + high_z + 1 MΩ` 的条件下，受管 STOP 返回 stopped，NORMAL/RUN 返回 waiting，最终 STOP 再次返回 stopped。没有读取波形、OPC、状态寄存器或错误队列，也没有改动时基、垂直或采样类型。
+
+Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_control` capability。driver 的离线测试覆盖 baseline、失败 cleanup、fresh verification 与状态迁移；但两次低压 SINGLE 探测未形成成功证据：一次 arm 后 sweep readback 出现 VXI-11 EOF，另一次底层会话阻塞并被终止以释放资源租约。两次之后均独立确认 source CH1/CH2 OFF、`consistent`、`healthy`；最终以新的只读 scope 会话确认 stopped、NORM 和高阻输入。由于 SINGLE completion 与失败恢复尚未实机证明，descriptor 不声明 `scope.acquisition_control`，也不据此放行 capture。
+
 `scope.digital_status_v2` 先只读确认 source 两路 OFF、`consistent`、`healthy`，并确认 CH1/CH2 均为 `dc + high_z + 1 MΩ`。D0 与 D8 的每次调用先查询 LA 模块位；模块存在后，仅查询逐通道 display、label、所属 POD threshold、全局 timing calibration 和 display size，共 6 条文本 query。D0 回包为显示、label `D0`、POD1（D0～D7）、`1.4 V`、`0 s`、`MEDIUM`；D8 对应为显示、label `D8`、POD2（D8～D15）以及相同的共享字段。`position_div`、`label_enabled`、activity、technology 和 hysteresis 均按合同标为 unavailable。该步骤没有发送任何 `:LA:*` setter、波形/二进制、采集/触发、OPC、状态寄存器或错误队列查询，也没有 source 或 scope 写入；结束后的独立 Source V2 snapshot 再次确认 CH1/CH2 均 OFF、`consistent`、`healthy`。
 
 该证据只覆盖记录型号、固件、transport 与 D0/D8 静态状态回包。它不证明数字探头连接、电气阈值准确度、逻辑活动、position 语义、标签显示使能或 digital waveform 编码。
@@ -87,4 +92,4 @@
 
 本记录证明的是当前屏幕、`DEF + LF`、1000 点、记录的型号/固件/transport 和信号源条件。它不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算或测量准确度证明。
 
-`MAX`、`DMAX`、`SINGLE`、`scope.capture_waveform` 和 `scope.capture_waveforms` 没有获得本轮实机验收，继续默认拒绝。后续如需推进，须先完成相应 bounded profile、采集状态恢复和离线故障合同，再拟定独立的低电压实机步骤；每一步开始前仍须确认 source 两路 OFF。
+`scope.acquisition_control`、`MAX`、`DMAX`、`SINGLE`、`scope.capture_waveform` 和 `scope.capture_waveforms` 没有获得本轮可发布的实机验收，继续默认拒绝。后续如需推进，须先解决 SINGLE 的 LAN/VXI-11 稳定 readback 与完成/失败恢复证据，再完成相应 bounded profile、采集状态恢复和独立低电压实机步骤；每一步开始前仍须确认 source 两路 OFF。

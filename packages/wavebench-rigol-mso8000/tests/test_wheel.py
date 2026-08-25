@@ -172,7 +172,6 @@ assert descriptor.capabilities == (
     "scope.fft_status_v2",
     "scope.acquisition_status_v2",
     "scope.acquisition_run_state",
-    "scope.acquisition_control",
     "scope.digital_status_v2",
     "scope.snapshot_v2",
     "scope.cursor_readout",

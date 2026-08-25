@@ -8,6 +8,8 @@ M3 波形测试只向状态化 FakeTransport 发送命令，并覆盖传输状�
 
 M4 采集测试使用触发状态序列和小型分块 payload，覆盖一次 SINGLE、STOP 轮询、MAX/DMAX、总点数预算与部分结果；测试点数不是实机吞吐证据。
 
+采集控制测试覆盖 `scope.acquisition_run_state` 的单条 trigger-status 映射、STOP→NORMAL/RUN→STOP 的 readback、SINGLE 需要 post-arm 状态迁移才可返回成功、arm 后的有界 settle、Core failure cleanup 与 fresh verification。Core control profile 仅在测试 descriptor 中启用；正式 descriptor 不声明 `scope.acquisition_control`，直至 SINGLE 的实机 completion/恢复证据完整。
+
 M7 autoscale 测试只验证系统使能预检、一次写入、可选 OPC 等待和歧义锁存；不会产生真实波形，也不证明自动设置效果。
 
 M7 数学元数据测试通过 MATH 显示预检和状态化 FakeTransport 验证 NORM/BYTE preamble、六字段传输状态恢复、错误锁存与零数据读取；不证明数学运算结果或 FFT 精度。

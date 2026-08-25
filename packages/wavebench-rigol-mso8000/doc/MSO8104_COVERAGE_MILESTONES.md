@@ -47,7 +47,7 @@
 | M1 | 离线完成 | 最小身份插件与安装生命周期 |
 | M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
 | M3 | 实机通过（受限 `DEF` 已知信号） | 当前屏幕 `NORMal + BYTE` 的 `DEF` 波形；使用 RFC-0008 的 bounded binary 合同 |
-| M4 | 默认拒绝 | 单次、多通道与有界 MAX/DMAX；仍缺 acquisition 恢复和实机证据 |
+| M4 | 部分实机通过 / capture 默认拒绝 | `scope.acquisition_run_state` 与 STOP→NORMAL/RUN→STOP 已验证；SINGLE、单次/多通道 capture 与有界 MAX/DMAX 仍缺稳定完成和恢复证据 |
 | M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
 | M6 | 受控开发（数字状态 V2） | legacy 数字状态与数字 waveform 继续跳过；V2 只读静态状态有核心模型与实机证据 |
 | M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态、数字状态、快照只读子集；其余能力按 RFC/证据缺口跳过 |
@@ -115,6 +115,8 @@ M7 开发补充：core 当前开发分支还提供 `scope.snapshot_v2`。插件�
 
 离线证据：`0.4.0` 在 `0.3.1` 的单次采集合同上补齐 MAX/DMAX。BYTE block 最大 250,000 点，每次调用全部通道总计最大 4,000,000 点；超限在 binary query 和数组分配前拒绝。106 项包测试覆盖长记录状态恢复、block 长度、失败不重放、总预算部分结果、MAX 状态相关语义、DMAX STOP 前提与严格整数 option。
 
+开发补充：core 当前开发分支提供 `scope.acquisition_run_state` 与 `scope.acquisition_control` 合同。插件公开前者，单条 `:TRIGger:STATus?` 将 STOP、WAIT、RUN/AUTO 分别映射为 stopped、waiting、acquiring，TD 保持 unknown。受控实机先将初始 AUTO 停止，再以 NORMAL/RUN 观察 WAIT，最后停止；整个步骤中 source 两路 OFF、CH1/CH2 高阻。Core 把 start、stop 和完成式 SINGLE 绑定为同一 control capability；虽然 driver 具备离线 baseline、状态迁移与失败 cleanup 实现，SINGLE 实机 arm/readback 仍出现 VXI-11 EOF 和一次底层会话阻塞，未形成 completion evidence。因此 descriptor 暂不声明 `scope.acquisition_control`。
+
 实机状态：有界 binary 合同已不再是唯一阻断项，但 `scope.capture_waveform` 与 `scope.capture_waveforms` 仍暂停。capture profile 必须完整恢复 run state、acquisition、trigger、timebase、channel display 和 channel vertical；当前 MSO8104 没有相应的实机证据。不能把 SINGLE 触发或 trigger STOP 当成完整的波形采集证据。
 
 ## M5：截图
@@ -158,6 +160,8 @@ legacy `scope.digital_status` 继续跳过：其公共模型要求 activity、te
 | `scope.snapshot` | RFC 后跳过 | 完整模型强制要求 MSO8000 无法查询的 health、probe 与 channel 字段；见 [RFC-0005](rfcs/0005-portable-scope-snapshot.md) |
 | `scope.acquisition_status` | RFC 后跳过 | legacy 模型把平均完成与 segmented 状态绑定，设备没有对应查询；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
 | `scope.acquisition_status_v2` | 实机通过（受限 NORM） | type/sample rate/memory depth 纯读取；AVER 时才读取配置次数。当前验证 `NORM + 500 kSa/s + 10 kpts`；不报告 run state、segmented 或 average complete |
+| `scope.acquisition_run_state` | 实机通过（受限观察） | 单条 trigger-status query；AUTO→acquiring、STOP→stopped、NORMAL/RUN→WAIT 已验证。SINGLE completion 不由该观察推导 |
+| `scope.acquisition_control` | 默认拒绝 | Core 绑定 start/stop/SINGLE；driver 的离线 Core 编排通过，但 SINGLE 实机 EOF/会话阻塞尚未完成安全验收 |
 | `scope.capture_average` | RFC 后跳过 | 配置模型要求设备不存在的 single count 与逐通道 arithmetic，也没有平均完成位；见 [RFC-0006](rfcs/0006-portable-scope-acquisition-contracts.md) |
 | `scope.measurement_statistics` | RFC 后跳过 | legacy 核心按 slot 寻址，设备按 item/source 查询且不能反查界面 slot；见 [RFC-0007](rfcs/0007-portable-scope-analysis-reads.md) |
 | `scope.measurement_statistics_v2` | 受控开发 | 显式 item/source、6 条纯读取查询、无统计 buffer。`VPP,CHAN1/CHAN2` 已完成受控实机回包验证；其他 item/source 和统计准确度未验证 |
@@ -166,7 +170,7 @@ legacy `scope.digital_status` 继续跳过：其公共模型要求 activity、te
 | `scope.reference_metadata` | 厂商证据缺口后跳过 | Reference 命令只有 source、垂直显示和标签；waveform source 不接受 REF，无法得到轴、点数和分辨率 |
 | `scope.history_timestamps` | 厂商证据缺口后跳过 | Record 命令只有 enable/start/play/current/frame count，没有逐帧相对或日历时间戳 |
 
-M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 core 开发分支的受控 descriptor 额外声明 input、cursor、measurement-statistics、FFT、acquisition-status、digital-status 和 snapshot V2 子集。覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
+M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 core 开发分支的受控 descriptor 额外声明 input、cursor、measurement-statistics、FFT、acquisition-status、acquisition-run-state、digital-status 和 snapshot V2 子集。覆盖矩阵记录其余结论；不使用默认值、私有 API、设备文件或实机 I/O 补齐缺口。
 
 ## M8：离线发行审计
 
@@ -181,4 +185,4 @@ M7 退出证据：历史版本仅公开已形成离线证据的能力；当前 c
 
 离线证据：`0.7.0` 的 168 项包测试与 Ruff 通过；在 WaveBench core 位于同级目录的一次性仓库布局中，根测试为 715 项通过、2 项因缺少 SP3000A 私有实机证据而按预期跳过。WaveBench `0.8.22` 的源码目录与真实 wheel package check 均通过。wheel 仅包含一个 `wavebench.instruments` entry point、一个有效 WaveBench runtime dependency、MIT 许可证和插件代码；sdist 包含公开 README、矩阵、里程碑、RFC、测试与许可证。两种制品均不包含 vendor-local。一次性虚拟环境中的 wheel 安装、零 I/O descriptor 发现、卸载和 canonical ID fallback 通过；61 个受跟踪 Markdown 文件的本地链接有效。全程未连接真实仪器。
 
-`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、input、cursor、measurement-statistics、FFT status、acquisition status、digital status 和 snapshot V2 集成测试，合计 282 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。
+`0.9.0` 开发回归在当前 WaveBench `0.8.24` 工作树中包含有界 waveform、input、cursor、measurement-statistics、FFT status、acquisition status/run-state、digital status 和 snapshot V2 集成测试，合计 305 项包测试与 Ruff 通过；源码目录和真实 wheel 的生命周期测试也通过。由于所需 core API 尚未单独发布，该结果不构成公开 wheel 发布。

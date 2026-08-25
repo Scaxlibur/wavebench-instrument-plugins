@@ -165,7 +165,6 @@ _TRIGGER_STATUS_TO_PHASE = {
     "STOP": "stopped",
     "WAIT": "waiting",
     "RUN": "acquiring",
-    "TD": "acquiring",
     "AUTO": "acquiring",
 }
 _DIGITAL_STATUS_V2_LA_UNAVAILABLE_FIELDS = (

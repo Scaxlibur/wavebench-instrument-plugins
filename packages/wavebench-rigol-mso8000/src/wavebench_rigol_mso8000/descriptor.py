@@ -3,7 +3,6 @@ from __future__ import annotations
 from wavebench.errors import DataError
 from wavebench.instruments import InstrumentDescriptor, OptionSpec
 from wavebench.instruments.scope_extensions import (
-    ScopeAcquisitionControlProfile,
     ScopeAcquisitionStatusProfileV2,
     ScopeCursorReadoutProfileV2,
     ScopeDescriptorExtensions,
@@ -92,16 +91,6 @@ _ACQUISITION_STATUS_PROFILE_V2 = ScopeAcquisitionStatusProfileV2(
     max_queries=4,
     conditionally_applicable_fields=MSO8104_ACQUISITION_STATUS_V2_CONDITIONALLY_APPLICABLE_FIELDS,
 )
-_ACQUISITION_CONTROL_PROFILE = ScopeAcquisitionControlProfile(
-    supported_continuous_modes=("normal",),
-    single_arm_semantics="atomic_configure_and_arm",
-    arm_resets_acquisition_count=True,
-    failure_restore_order=("scope.trigger", "scope.acquisition"),
-    snapshot_max_steps=3,
-    restore_max_steps=3,
-    verify_max_steps=3,
-    identity_semantics="unknown",
-)
 _SNAPSHOT_PROFILE_V2 = ScopeSnapshotProfileV2(
     readable_fields=MSO8104_SNAPSHOT_V2_READABLE_FIELDS,
     max_queries=1 + len(MSO8104_SYSTEM_OPTION_TYPES),
@@ -163,7 +152,6 @@ def descriptor() -> InstrumentDescriptor:
             "scope.fft_status_v2",
             "scope.acquisition_status_v2",
             "scope.acquisition_run_state",
-            "scope.acquisition_control",
             "scope.digital_status_v2",
             "scope.snapshot_v2",
             "scope.cursor_readout",
@@ -210,7 +198,6 @@ def descriptor() -> InstrumentDescriptor:
             measurement_statistics_profile_v2=_MEASUREMENT_STATISTICS_PROFILE_V2,
             fft_status_profile_v2=_FFT_STATUS_PROFILE_V2,
             acquisition_status_profile_v2=_ACQUISITION_STATUS_PROFILE_V2,
-            acquisition_control_profile=_ACQUISITION_CONTROL_PROFILE,
             snapshot_profile_v2=_SNAPSHOT_PROFILE_V2,
             cursor_readout_profile_v2=_CURSOR_READOUT_PROFILE_V2,
         ),
