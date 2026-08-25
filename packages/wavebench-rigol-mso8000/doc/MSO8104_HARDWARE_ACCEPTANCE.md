@@ -89,7 +89,7 @@ bounded `scope.fetch_waveform` 使用 `LF` trailing、no-replay、每响应最�
 
 `scope.acquisition_run_state` 单次只读取 `:TRIGger:STATus?`。记录条件下，初始 AUTO 被保守映射为 acquiring；随后在 source 两路 OFF、CH1/CH2 均为 `dc + high_z + 1 MΩ` 的条件下，受管 STOP 返回 stopped，NORMAL/RUN 返回 waiting，最终 STOP 再次返回 stopped。没有读取波形、OPC、状态寄存器或错误队列，也没有改动时基、垂直或采样类型。
 
-Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_control` capability。driver 的离线测试覆盖 baseline、失败 cleanup、fresh verification 与状态迁移；但两次低压 SINGLE 探测未形成成功证据：一次 arm 后 sweep readback 出现 VXI-11 EOF，另一次底层会话阻塞并被终止以释放资源租约。两次之后均独立确认 source CH1/CH2 OFF、`consistent`、`healthy`；最终以新的只读 scope 会话确认 stopped、NORM 和高阻输入。由于 SINGLE completion 与失败恢复尚未实机证明，descriptor 不声明 `scope.acquisition_control`，也不据此放行 capture。
+Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_control` capability。使用 public API 的 `start(normal)` 后 `stop` 已在 source 双路 OFF、输入高阻条件下实机返回 active/stopped 的可观察闭环。无信号 SINGLE 试验按预期 fail closed，Core cleanup 与 fresh verification 已实机确认恢复；这只证明失败恢复，不证明采集完成。带 CH1 受限信号的 SINGLE 试验也未形成成功证据：实时安全预检确认正弦、固定频率、High-Z display load、幅度不超过 `1 Vpp` 且端口包络在 `±0.6 V` 内，但首次可观察状态仍为 STOP，未出现非终态到 STOP 的状态迁移。历史 arm/readback 的 VXI-11 EOF 与会话阻塞同样不构成完成证据。每次之后均以独立新会话确认 source CH1/CH2 OFF、`consistent`、`healthy`，scope stopped 且 CH1/CH2 高阻。由于 SINGLE completion 仍未实机证明，descriptor 不声明 `scope.acquisition_control`，也不据此放行 capture。
 
 `scope.digital_status_v2` 先只读确认 source 两路 OFF、`consistent`、`healthy`，并确认 CH1/CH2 均为 `dc + high_z + 1 MΩ`。D0 与 D8 的每次调用先查询 LA 模块位；模块存在后，仅查询逐通道 display、label、所属 POD threshold、全局 timing calibration 和 display size，共 6 条文本 query。D0 回包为显示、label `D0`、POD1（D0～D7）、`1.4 V`、`0 s`、`MEDIUM`；D8 对应为显示、label `D8`、POD2（D8～D15）以及相同的共享字段。`position_div`、`label_enabled`、activity、technology 和 hysteresis 均按合同标为 unavailable。该步骤没有发送任何 `:LA:*` setter、波形/二进制、采集/触发、OPC、状态寄存器或错误队列查询，也没有 source 或 scope 写入；结束后的独立 Source V2 snapshot 再次确认 CH1/CH2 均 OFF、`consistent`、`healthy`。
 
@@ -103,4 +103,4 @@ Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_con
 
 本记录证明的是当前屏幕 `DEF + LF` 1000 点，以及记录的停止态 `MAX/DMAX + LF` 10000 点路径；均限于记录的型号、固件、transport、memory depth 与步骤。它不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算或测量准确度证明。
 
-`scope.acquisition_control`、运行态 MAX、`SINGLE`、`scope.capture_waveform` 和 `scope.capture_waveforms` 没有获得本轮可发布的实机验收，继续默认拒绝。后续如需推进，须先解决 SINGLE 的 LAN/VXI-11 稳定 readback 与完成/失败恢复证据，再完成相应采集状态恢复和独立低电压实机步骤；每一步开始前仍须确认 source 两路 OFF。
+`scope.acquisition_control`、运行态 MAX、`SINGLE`、`scope.capture_waveform` 和 `scope.capture_waveforms` 没有获得本轮可发布的实机验收，继续默认拒绝。后续如需推进，须取得 SINGLE 的非终态到 STOP 完成证据，并补齐相应采集状态恢复与独立低电压实机步骤；每一步开始前仍须确认 source 两路 OFF。
