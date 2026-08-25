@@ -39,7 +39,7 @@
 | 数字通道状态 | `:SYSTem:MODules?`、`:LA:*?` | `scope.digital_status` | RFC 后跳过 | 核心模型必填 activity、technology、hysteresis 等设备无法查询的字段；见 RFC-0004 |
 | 数字波形 | D0～D15 waveform source/data | `scope.digital_waveform` | 手册证据不足后跳过 | 公共 bitset 模型可用，但手册未定义 BYTE/WORD 的 LOW/HIGH code，WORD 字节序也不明确 |
 | 自动测量与统计 | `:MEASure:STATistic:ITEM? <type>,<item>,<source...>` | `scope.measurement_statistics_v2` | 实机通过（受限 `VPP,CHAN1/CHAN2`） | 只接受显式 item/source；6 条纯读取查询返回 CURRENT、AVERages、DEViation、MINimum、MAXimum 与 CNT，`include_buffer=True` 拒绝。受控实机的 `VPP,CHAN1/CHAN2` 均返回完整数值并有 `CNT=1000`；不写入统计配置、清零或显示。legacy slot 接口继续不声明；其他 item/source、双源/数字源语义和统计准确度未验证 |
-| FFT 状态 | FFT source/window/unit/frequency settings | `scope.fft_status` | RFC 后跳过 | 设备没有公共模型必填的 average-complete、RBW 与 FFT sample rate；见 RFC-0007 |
+| FFT 状态 | `:MATH<n>:OPERator?` 与 `:MATH<n>:FFT:*?` | `scope.fft_status_v2` | 离线通过，实机待验 | 先确认 operator 为 `FFT`，再读取 source、window、vertical unit、起始/终止频率，合计 6 条纯读取 query。average-complete、RBW 与 FFT sample rate 固定 unavailable，不从全局采样率、频率范围或点数推导。前面板 FFT 状态和回包语义尚无实机证据；legacy 接口继续不声明 |
 | Reference 元数据 | source、vertical scale/offset、label | `scope.reference_metadata` | 手册证据不足后跳过 | waveform source 不接受 REF，无法查询轴、点数与 Y 分辨率 |
 | History 时间戳 | record enable/start/play/current/frames | `scope.history_timestamps` | 手册证据不足后跳过 | 没有逐帧 relative/calendar timestamp；帧号不冒充时间戳 |
 | DVM/counter | DVM 与 counter 命令族 | 当前无合适 scope capability | RFC 后跳过 | 需要新的类型化公共模型与 Service |

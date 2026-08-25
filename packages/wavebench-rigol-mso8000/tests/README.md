@@ -15,3 +15,5 @@ M7 数学元数据测试通过 MATH 显示预检和状态化 FakeTransport 验�
 M7 cursor 测试只覆盖预先配置的手动同源 `TIME + SEC` 与 `AMPL + SOUR` 读取，以及其余模式和单位的默认拒绝；不移动光标，也不证明读数准确度。
 
 统计测量 V2 测试覆盖显式 `item + sources` selector、6 条固定纯读取查询、双 source 延时/相位项、允许的数字周期 source、无 buffer 预检、有限数和整数 count 解析，以及失败后的停止查询行为；不配置统计项、不清零设备历史，也不证明统计准确度。
+
+FFT 状态 V2 测试覆盖目标 math slot 的 `FFT` operator 前置、6 条固定纯读取 query、source/window/unit/频率范围解析、无合同字段的精确 unavailable、非 FFT 或非法回包的停止查询行为，以及零写入；不配置或移动 FFT、Math、波形传输状态，也不证明 FFT 测量准确度。
