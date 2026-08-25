@@ -67,6 +67,7 @@ _FFT_SOURCES = frozenset(f"CHAN{index}" for index in range(1, 5))
 _FFT_WINDOWS = frozenset({"RECT", "BLAC", "HANN", "HAMM", "FLAT", "TRI"})
 _FFT_VERTICAL_UNITS = frozenset({"VRMS", "DB"})
 _ACQUISITION_TYPES = frozenset({"NORM", "PEAK", "AVER", "HRES"})
+_TRIGGER_SWEEP_MODES = frozenset({"AUTO", "NORM", "SING"})
 _DIGITAL_DISPLAY_SIZES = {
     "SMAL": "SMALL",
     "MED": "MEDIUM",
@@ -228,6 +229,14 @@ def parse_fft_vertical_unit(response: str) -> str:
 
 def parse_acquisition_type(response: str) -> str:
     return _parse_enum(response, field="acquisition type", allowed=_ACQUISITION_TYPES)
+
+
+def parse_trigger_sweep(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="trigger sweep",
+        allowed=_TRIGGER_SWEEP_MODES,
+    )
 
 
 def parse_logic_analyzer_module_present(response: str) -> bool:

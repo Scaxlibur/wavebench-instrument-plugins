@@ -29,9 +29,14 @@ from wavebench.instruments.models import (
     WaveformHeader,
 )
 from wavebench.instruments.scope_extensions import (
+    ScopeAcquisitionCompletion,
+    ScopeAcquisitionControlBaseline,
+    ScopeAcquisitionControlSnapshot,
+    ScopeAcquisitionRunState,
     ScopeAcquisitionStatusFieldV2,
     ScopeAcquisitionStatusV2,
     ScopeAverageStatusV2,
+    ScopeBaselineRestoreResult,
     ScopeWaveformTransferBaseline,
     ScopeWaveformTransferField,
     ScopeWaveformTransferRestoreResult,
@@ -76,6 +81,7 @@ from .parsers import (
     parse_positive_scientific_integer,
     parse_rigol_waveform_preamble,
     parse_timebase_mode,
+    parse_trigger_sweep,
     parse_trigger_status,
     parse_waveform_format,
     parse_waveform_mode,
@@ -130,6 +136,38 @@ _ACQUISITION_STATUS_V2_STATIC_UNAVAILABLE_FIELDS: tuple[
 _ACQUISITION_STATUS_V2_AVERAGE_UNAVAILABLE_FIELDS: tuple[
     ScopeAcquisitionStatusFieldV2, ...
 ] = ("run_state", "average.complete", "segmented")
+_ACQUISITION_CONTROL_RESTORE_ORDER = (
+    "scope.run_state",
+    "scope.trigger",
+    "scope.acquisition",
+)
+_ACQUISITION_CONTROL_FAILURE_RESTORE_ORDER = (
+    "scope.trigger",
+    "scope.acquisition",
+)
+_TRIGGER_SWEEP_TO_CORE_MODE = {
+    "AUTO": "auto",
+    "NORM": "normal",
+    "SING": "single",
+}
+_TRIGGER_SWEEP_TO_COMMAND = {
+    "AUTO": ":TRIGger:SWEep AUTO",
+    "NORM": ":TRIGger:SWEep NORMal",
+    "SING": ":TRIGger:SWEep SINGle",
+}
+_ACQUISITION_TYPE_TO_COMMAND = {
+    "NORM": ":ACQuire:TYPE NORMal",
+    "PEAK": ":ACQuire:TYPE PEAK",
+    "AVER": ":ACQuire:TYPE AVERages",
+    "HRES": ":ACQuire:TYPE HRESolution",
+}
+_TRIGGER_STATUS_TO_PHASE = {
+    "STOP": "stopped",
+    "WAIT": "waiting",
+    "RUN": "acquiring",
+    "TD": "acquiring",
+    "AUTO": "acquiring",
+}
 _DIGITAL_STATUS_V2_LA_UNAVAILABLE_FIELDS = (
     "position_div",
     "label_enabled",
@@ -405,7 +443,8 @@ class MSO8104Scope:
     def _require_acquisition_writes_allowed(self) -> None:
         if self._acquisition_writes_blocked:
             raise InstrumentError(
-                "MSO8104 acquisition writes are blocked after an uncertain single acquisition; "
+                "MSO8104 acquisition writes are blocked after an uncertain acquisition "
+                "transaction; "
                 "close and reopen the instrument session before retrying"
             )
 
@@ -415,6 +454,270 @@ class MSO8104Scope:
                 "MSO8104 autoscale writes are blocked after an ambiguous operation; "
                 "close and reopen the instrument session before retrying"
             )
+
+    @staticmethod
+    def _run_state_from_trigger_status(
+        status: str,
+        *,
+        trigger_mode: str,
+    ) -> ScopeAcquisitionRunState:
+        phase = _TRIGGER_STATUS_TO_PHASE.get(status, "unknown")
+        if status == "AUTO" and trigger_mode == "single":
+            phase = "unknown"
+        return ScopeAcquisitionRunState(
+            phase=phase,
+            trigger_mode=trigger_mode,
+            raw_state=status,
+        )
+
+    @staticmethod
+    def _trigger_sweep_command(token: str) -> str:
+        try:
+            return _TRIGGER_SWEEP_TO_COMMAND[token]
+        except KeyError as exc:
+            raise DataError(
+                "MSO8104 acquisition baseline has an unsupported trigger sweep token"
+            ) from exc
+
+    @staticmethod
+    def _acquisition_type_command(token: str) -> str:
+        try:
+            return _ACQUISITION_TYPE_TO_COMMAND[token]
+        except KeyError as exc:
+            raise DataError(
+                "MSO8104 acquisition baseline has an unsupported acquisition type token"
+            ) from exc
+
+    @staticmethod
+    def _validate_acquisition_control_baseline(
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> None:
+        if not isinstance(baseline, ScopeAcquisitionControlBaseline):
+            raise DataError("MSO8104 acquisition control baseline has an invalid type")
+        if baseline.restore_order != _ACQUISITION_CONTROL_RESTORE_ORDER:
+            raise DataError(
+                "MSO8104 acquisition control baseline does not match the descriptor profile"
+            )
+        MSO8104Scope._trigger_sweep_command(baseline.snapshot.trigger_state_token)
+        MSO8104Scope._acquisition_type_command(baseline.snapshot.acquisition_state_token)
+
+    def _snapshot_acquisition_control_state(self) -> ScopeAcquisitionControlSnapshot:
+        status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+        trigger_sweep = parse_trigger_sweep(self.transport.query(":TRIGger:SWEep?"))
+        acquisition_type = parse_acquisition_type(self.transport.query(":ACQuire:TYPE?"))
+        return ScopeAcquisitionControlSnapshot(
+            run_state=self._run_state_from_trigger_status(
+                status,
+                trigger_mode=_TRIGGER_SWEEP_TO_CORE_MODE[trigger_sweep],
+            ),
+            trigger_state_token=trigger_sweep,
+            acquisition_state_token=acquisition_type,
+        )
+
+    def get_acquisition_run_state(self) -> ScopeAcquisitionRunState:
+        with self._io_lock:
+            self._require_open()
+            status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+            return self._run_state_from_trigger_status(status, trigger_mode="unknown")
+
+    def snapshot_acquisition_control(self) -> ScopeAcquisitionControlSnapshot:
+        with self._io_lock:
+            self._require_open()
+            return self._snapshot_acquisition_control_state()
+
+    def restore_acquisition_control(
+        self,
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> ScopeBaselineRestoreResult:
+        self._validate_acquisition_control_baseline(baseline)
+        commands = (
+            ("scope.run_state", ":STOP"),
+            (
+                "scope.trigger",
+                self._trigger_sweep_command(baseline.snapshot.trigger_state_token),
+            ),
+            (
+                "scope.acquisition",
+                self._acquisition_type_command(baseline.snapshot.acquisition_state_token),
+            ),
+        )
+        with self._io_lock:
+            self._require_open()
+            attempted: list[str] = []
+            restored: list[str] = []
+            for field_name, command in commands:
+                attempted.append(field_name)
+                try:
+                    self.transport.write(command)
+                except Exception:
+                    self._acquisition_writes_blocked = True
+                    return ScopeBaselineRestoreResult(
+                        status="failed",
+                        attempted_fields=tuple(attempted),
+                        restored_fields=tuple(restored),
+                        error_code="restore_write_failed",
+                    )
+                restored.append(field_name)
+            return ScopeBaselineRestoreResult(
+                status="completed",
+                attempted_fields=tuple(attempted),
+                restored_fields=tuple(restored),
+            )
+
+    def verify_acquisition_control_restored(
+        self,
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> ScopeAcquisitionControlSnapshot:
+        self._validate_acquisition_control_baseline(baseline)
+        with self._io_lock:
+            self._require_open()
+            return self._snapshot_acquisition_control_state()
+
+    def start_continuous(
+        self,
+        *,
+        trigger_mode: str,
+        baseline: ScopeAcquisitionControlBaseline,
+    ) -> ScopeAcquisitionRunState:
+        if trigger_mode != "normal":
+            raise ConfigError("MSO8104 acquisition control supports only normal trigger mode")
+        self._validate_acquisition_control_baseline(baseline)
+        with self._io_lock:
+            self._require_open()
+            self._require_acquisition_writes_allowed()
+            try:
+                self.transport.write(_TRIGGER_SWEEP_TO_COMMAND["NORM"])
+                actual_sweep = parse_trigger_sweep(
+                    self.transport.query(":TRIGger:SWEep?")
+                )
+                if actual_sweep != "NORM":
+                    raise DataError(
+                        "MSO8104 normal acquisition trigger sweep readback did not match"
+                    )
+                self.transport.write(":RUN")
+                status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+                state = self._run_state_from_trigger_status(
+                    status,
+                    trigger_mode="normal",
+                )
+                if state.phase not in {"ready", "arming", "waiting", "acquiring"}:
+                    raise DataError(
+                        "MSO8104 normal acquisition postcondition is not proven by trigger "
+                        f"status {status!r}"
+                    )
+                return state
+            except Exception as exc:
+                self._acquisition_writes_blocked = True
+                raise InstrumentError(
+                    "MSO8104 normal acquisition outcome is uncertain; acquisition writes are "
+                    "blocked"
+                ) from exc
+
+    def stop_acquisition(self) -> ScopeAcquisitionRunState:
+        with self._io_lock:
+            self._require_open()
+            status = parse_trigger_status(self.transport.query(":TRIGger:STATus?"))
+            state = self._run_state_from_trigger_status(status, trigger_mode="unknown")
+            if state.phase == "stopped":
+                return state
+            if state.phase == "unknown":
+                raise ConfigError(
+                    "MSO8104 acquisition stop requires a directly mappable trigger status, "
+                    f"got {status!r}"
+                )
+            try:
+                self.transport.write(":STOP")
+                stopped_status = parse_trigger_status(
+                    self.transport.query(":TRIGger:STATus?")
+                )
+                stopped = self._run_state_from_trigger_status(
+                    stopped_status,
+                    trigger_mode="unknown",
+                )
+                if stopped.phase != "stopped":
+                    raise DataError(
+                        "MSO8104 acquisition stop postcondition is not proven by trigger "
+                        f"status {stopped_status!r}"
+                    )
+                return stopped
+            except Exception as exc:
+                self._acquisition_writes_blocked = True
+                raise InstrumentError(
+                    "MSO8104 acquisition stop outcome is uncertain; acquisition writes are "
+                    "blocked"
+                ) from exc
+
+    def acquire_single(
+        self,
+        *,
+        baseline: ScopeAcquisitionControlBaseline,
+        deadline: float,
+    ) -> ScopeAcquisitionCompletion:
+        self._validate_acquisition_control_baseline(baseline)
+        if not isinstance(deadline, (int, float)) or not math.isfinite(deadline):
+            raise DataError("MSO8104 single-acquisition deadline must be finite")
+        with self._io_lock:
+            self._require_open()
+            self._require_acquisition_writes_allowed()
+            if deadline <= self._clock():
+                raise OperationTimeout("MSO8104 single-acquisition deadline expired before arming")
+            try:
+                self.transport.write(":SINGle")
+                trigger_sweep = parse_trigger_sweep(
+                    self.transport.query(":TRIGger:SWEep?")
+                )
+                if trigger_sweep != "SING":
+                    raise DataError(
+                        "MSO8104 single acquisition trigger-sweep readback did not match"
+                    )
+                observed_states: list[ScopeAcquisitionRunState] = []
+                while True:
+                    status = parse_trigger_status(
+                        self.transport.query(":TRIGger:STATus?")
+                    )
+                    state = self._run_state_from_trigger_status(
+                        status,
+                        trigger_mode="single",
+                    )
+                    observed_states.append(state)
+                    if state.phase == "stopped":
+                        if not any(
+                            item.phase in {"arming", "waiting", "acquiring"}
+                            for item in observed_states[:-1]
+                        ):
+                            raise DataError(
+                                "MSO8104 single acquisition completion is unproven: no "
+                                "post-arm transition was observed before STOP"
+                            )
+                        return ScopeAcquisitionCompletion(
+                            state=state,
+                            original_state=baseline.snapshot.run_state,
+                            proof_baseline_state=baseline.snapshot.run_state,
+                            proof_baseline_stage="original_atomic_arm",
+                            proof="state_transition",
+                            observed_states=tuple(observed_states),
+                        )
+                    if state.phase == "unknown":
+                        raise DataError(
+                            "MSO8104 single acquisition completion is unproven for trigger "
+                            f"status {status!r}"
+                        )
+                    remaining_s = deadline - self._clock()
+                    if remaining_s <= 0:
+                        raise OperationTimeout(
+                            "MSO8104 single acquisition did not reach STOP before the "
+                            "operation deadline"
+                        )
+                    self._sleep(min(self.trigger_poll_interval_s, remaining_s))
+            except (DataError, OperationTimeout):
+                self._acquisition_writes_blocked = True
+                raise
+            except Exception as exc:
+                self._acquisition_writes_blocked = True
+                raise InstrumentError(
+                    "MSO8104 single-acquisition outcome is uncertain; acquisition writes are "
+                    "blocked"
+                ) from exc
 
     def _require_main_timebase(self) -> None:
         mode = parse_timebase_mode(self.transport.query(":TIMebase:MODE?"))
