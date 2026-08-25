@@ -48,7 +48,7 @@
 | M2 | 离线完成 | 输入阻抗安全适配；消费型错误查询 RFC |
 | M3 | 实机通过（受限 `DEF` 已知信号） | 当前屏幕 `NORMal + BYTE` 的 `DEF` 波形；使用 RFC-0008 的 bounded binary 合同 |
 | M4 | 实机通过（受限 control/capture） | `scope.acquisition_control`、停止态 bounded MAX/DMAX fetch 与已停止、MAIN 时基的 `DEF + BYTE` 单／多通道 capture 已验证。SINGLE 模式读回、`WAIT/TD → STOP`、每通道 1000 样本、恢复 `*OPC? 0 → 1` 与 13 字段 fresh verification 均有受控实机证据；运行态 MAX 与其他组合仍缺证据 |
-| M5 | RFC 后跳过 | PNG framing 与菜单可见性缺少可证明的核心合同 |
+| M5 | Core 预算待扩展 | R1.3 已提供 V2 framing／菜单合同；`SAVE:IMAGe:DATA?` 的手册示例超过 Core 截图预算 |
 | M6 | 受控开发（数字状态 V2） | legacy 数字状态与数字 waveform 继续跳过；V2 只读静态状态有核心模型与实机证据 |
 | M7 | 受控开发 | autoscale、Math metadata、受限 cursor，以及 portability V2 的输入、统计、FFT、采集状态、数字状态、快照只读子集；其余能力按 RFC/证据缺口跳过 |
 | M8 | 离线完成 | 覆盖文档、全量离线验证和发行包审计 |
@@ -125,11 +125,11 @@ M7 开发补充：core 当前开发分支还提供 `scope.snapshot_v2`。插件�
 
 ## M5：截图
 
-M5 评审结果为「RFC 后跳过」，descriptor 不声明 `scope.screenshot`。
+M5 当前为「Core 预算待扩展」，descriptor 继续不声明截图 capability。
 
-手册称 `:DISPlay:DATA?` 返回 PNG 二进制数据，却没有声明 IEEE/TMC block framing，不能交给核心现有的 `query_bin_block()`。`:SAVE:IMAGe:DATA?` 虽明确返回 TMC block，但依赖 TYPE、INVERT 与 COLOR 状态，且手册没有菜单 inclusion 控制；插件无法诚实满足核心 `include_menu=False` 合同。仪器文件保存路径仍在永久默认拒绝区。
+Core R1.3 已以 `query_binary()`、`scope.screenshot_v2` 与 `menu_mode=device` 解决 definite-block framing 和菜单不可控的合同。`:DISPlay:DATA?` 仍没有 IEEE/TMC block 或可证明 message framing；`:SAVE:IMAGe:DATA?` 虽明确返回 TMC block，但手册示例 payload 为 `387,356` bytes，超过 Core 当前 `262,144`-byte 截图上限。仪器文件保存路径仍在永久默认拒绝区。
 
-退出证据：[RFC-0003](rfcs/0003-scope-screenshot-framing-and-menu-contract.md) 记录原始二进制单次查询与菜单可见性模型缺口。核心补齐合同前，不猜测 framing、不忽略参数，也不创建仪器文件。没有读取真实截图。
+退出证据：[RFC-0003](rfcs/0003-scope-screenshot-framing-and-menu-contract.md) 记录预算扩展请求。Core 调整前不猜测 DISPLAY framing、不创建仪器文件，也不以低于已知示例的 profile 预算伪称支持截图。没有读取真实截图。
 
 ## M6：数字通道
 

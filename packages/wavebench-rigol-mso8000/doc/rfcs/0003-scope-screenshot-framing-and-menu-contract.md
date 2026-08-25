@@ -1,69 +1,56 @@
 # RFC-0003：示波器截图 framing 与菜单合同
 
-状态：提议
+状态：Core R1.3 已实现（未发布）；截图预算待扩展
 
 目标仓库：WaveBench core
 
-## 问题
+## Core 已解决的合同
 
-MSO8000 编程手册提供两条截图路径，但当前 WaveBench 公开接口无法同时安全表达响应 framing 与菜单可见性。
+Core R1.3 已采用 `query_binary()`、`ScopeScreenshotProfile` 与 `scope.screenshot_v2`，因此本 RFC 的原始 `query_raw_bytes_once()` 建议不再适用。截图请求现在使用精确 tuple：
 
-`:DISPlay:DATA?` 返回当前屏幕的 PNG 二进制数据。手册没有说明该响应带 IEEE/TMC definite-length block 头，因此插件不能把它交给只接受 block framing 的 `InstrumentTransport.query_bin_block()`；普通文本 `query()` 也不能无损读取任意二进制响应。猜测 framing 会把超时、截断或 PNG 首字节误判成有效响应。
-
-`:SAVE:IMAGe:DATA?` 明确返回 TMC block，但内容受 `:SAVE:IMAGe:TYPE`、`:SAVE:IMAGe:INVert` 与 `:SAVE:IMAGe:COLor` 状态影响。这三项可以设计为快照、逐项回读与恢复的事务，手册却没有提供菜单 inclusion 的查询或设置。WaveBench 的 `ScopeScreenshotProtocol.screenshot_png()` 要求调用方传入 `include_menu`，Service 当前明确请求 `include_menu=False`。插件无法证明设备响应满足该合同，也不能静默忽略参数。
-
-`:SAVE:IMAGe <path>` 会在仪器或外部存储中创建或覆盖文件，不属于可接受的截图替代路径。
-
-## 建议接口
-
-先为无 framing 声明的二进制查询增加单次读取接口，例如：
-
-```python
-class InstrumentTransport(Protocol):
-    def query_raw_bytes_once(self, command: str) -> bytes: ...
+```text
+format = png
+menu_mode = device | include | exclude
+color_mode = device | color | monochrome | inverted
 ```
 
-要求：
+这足以安全表达 MSO8000 的两条路径之间的 framing 差异与菜单不可控制的情形：插件可只声明 `menu_mode="device"`，不把未知菜单状态伪装为 `exclude`。Core 同时负责有界二进制 I/O、PNG 完整性、状态恢复和新鲜验证。
 
-- 命令和响应只发送、读取一次，失败后不重放；
-- 返回未经文本解码或 block 解包的完整响应；
-- 保留核心的 lease、access guard、审计与大小上限；
-- 读取失败或截断时明确报告响应状态不确定；
-- 各 transport backend 对终止符和读取完成条件具有一致、可测试的定义。
+`:DISPlay:DATA?` 仍不适用：手册只称其返回 PNG 数据流，没有定义 IEEE/TMC block 或可证明的 message boundary。`:SAVE:IMAGe <path>` 会在仪器或外部存储中创建或覆盖文件，仍不属于可接受的替代路径。
 
-截图合同还需要表达设备不能控制或不能证明菜单可见性的情况。可将请求与结果分离，并允许结果报告未知状态，例如：
+## 剩余问题：截图预算
 
-```python
-@dataclass(frozen=True)
-class ScopeScreenshotRequest:
-    format: Literal["png"]
-    color_scheme: Literal["color", "gray"]
-    include_menu: bool | None = None
+`:SAVE:IMAGe:DATA?` 明确返回 TMC definite block、屏幕图像数据和结束符。手册给出的单个示例 payload 为 `387,356` bytes。Core 当前 `scope.screenshot_v2` 的 response 和 operation 硬上限均为 `262,144` bytes，低于这条已文档化的设备响应。
 
+因此，插件不能诚实声明用 `:SAVE:IMAGe:DATA?` 的 V2 variant：即使实现的 framing、菜单语义和 PNG 校验正确，profile 也会在 Core 验证前拒绝覆盖手册示例所需的预算。
 
-@dataclass(frozen=True)
-class ScopeScreenshotResult:
-    data: bytes
-    color_scheme: Literal["color", "gray"]
-    include_menu: bool | None
-```
+## 建议 Core 跟进
 
-具体模型名和 capability 迁移方式由 core 决定；关键要求是调用方不能把「未知」误当成 `False`。
+将截图 V2 的 response 与 operation 最大字节数同时提高到至少 `524,288` bytes；保留以下既有安全限制：
 
-## capability 影响
+- 一次 operation 仅允许一次 binary query；
+- transport resynchronization 预算仍为 `0`；
+- profile 不得声明超过 Core 全局上限；
+- `DEFINITE_BLOCK`、精确 trailing 和 PNG 校验要求不变；
+- 超出上限的响应继续 fail closed。
 
-核心合同补齐前：
+`524,288` bytes 是覆盖已文档化 `387,356`-byte 示例的最小保守档位，不构成对所有屏幕、固件、颜色或菜单状态的吞吐承诺。插件仍须以实机响应确定自身更小的 variant budget，或在设备超过该预算时拒绝返回成功。
 
-- descriptor 不声明 `scope.screenshot`；
-- driver 不调用 `:DISPlay:DATA?`，也不猜测其 framing；
-- driver 不通过 `:SAVE:IMAGe:DATA?` 假装满足 `include_menu=False`；
-- driver 不创建仪器文件，也不使用远程文件传输绕过截图协议。
+## 插件采用条件
 
-核心提供原始二进制单次查询后，插件仍需验证 PNG 签名、响应大小、颜色设置回读与恢复，并为菜单可见性保留明确的未知或不支持结果。以上结论仍需实机验证。
+Core 预算调整后，MSO8104 首版仍只可受控声明 V2：
 
-## 替代方案
+- capability 为 `scope.screenshot_profile` 与 `scope.screenshot_v2`，不恢复 legacy `scope.screenshot`；
+- 仅使用 `:SAVE:IMAGe:DATA?` 和 `DEFINITE_BLOCK`；
+- 仅声明 `png/device/device`，不写 `TYPE`、`INVert` 或 `COLor`；
+- 先只读确认 `:SAVE:IMAGe:TYPE?` 为 `PNG`，否则在 binary query 前拒绝；
+- 不使用 `:DISPlay:DATA?`、不创建仪器文件、没有临时状态写入，故变更字段与恢复步骤均为空；
+- 对实际 payload、精确 trailing、PNG 尺寸／校验、session health 和空错误队列完成独立实机验收。
 
-- 对 `:DISPlay:DATA?` 调用 `query_bin_block()`：手册没有 TMC block 证据。
-- 对二进制响应调用文本 `query()`：存在解码、终止符、截断和重放风险。
-- 仅支持默认 `include_menu=False` 并忽略参数：无法证明返回图片不含菜单。
-- 使用 `:SAVE:IMAGe <path>` 后再读取文件：引入路径、覆盖、清理和权限副作用，违反基础插件的默认拒绝边界。
+## 不采用的方案
+
+- 对 `:DISPlay:DATA?` 猜测 `DEFINITE_BLOCK` 或 `MESSAGE` framing；
+- 对二进制响应调用文本 `query()`；
+- 为绕过预算将图片拆分、截断或使用文件路径；
+- 将 `menu_mode="device"` 伪装为 `exclude`；
+- 调低插件 profile budget 后声称支持手册中已知更大的截图。

@@ -54,7 +54,7 @@ Descriptor import must not open a transport, scan ports, send SCPI, or create fi
 
 The descriptor accepts `tcpip`, `usb`, and `gpib` resource prefixes as a manual-backed, offline routing contract. This is not hardware connection evidence.
 
-The descriptor does not declare `scope.screenshot`. The manual does not specify TMC block framing for `:DISPlay:DATA?`, while `:SAVE:IMAGe:DATA?` cannot prove the core's `include_menu=False` contract. [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md) records both gaps. The plugin does not guess framing, ignore request parameters, or create instrument files.
+The descriptor does not declare a screenshot capability. Core R1.3 `scope.screenshot_v2` can express definite-block framing and `menu_mode="device"`, but its `262,144`-byte hard ceiling is below the MSO8000 manual's `387,356`-byte `:SAVE:IMAGe:DATA?` example. `:DISPlay:DATA?` still lacks provable framing. [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md) records the budget request. The plugin does not guess framing, create instrument files, or represent device menu behavior as `exclude`.
 
 The descriptor still omits legacy `scope.digital_status` and `scope.digital_waveform`. The legacy status model requires fields that MSO8000 cannot query. The vendor manual does not define BYTE/WORD logic codes for D0-D15 waveform sources and leaves WORD byte order unclear. The plugin does not invent digital state from defaults or analog conversion.
 

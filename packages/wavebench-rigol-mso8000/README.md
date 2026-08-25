@@ -54,7 +54,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 当前 descriptor 允许 `tcpip`、`usb`、`gpib` 资源前缀，这是手册声明和离线路由合同，不是连接实机通过的证据。
 
-当前不声明 `scope.screenshot`。`:DISPlay:DATA?` 的手册段落没有声明 TMC block framing，`:SAVE:IMAGe:DATA?` 虽为 TMC block，却不能证明返回图片满足核心 `include_menu=False` 合同。具体缺口见 [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md)；插件不猜测 framing、不忽略参数，也不创建仪器文件。
+当前不声明截图 capability。Core R1.3 的 `scope.screenshot_v2` 已能表达 definite-block framing 与 `menu_mode="device"`，但其 `262,144`-byte 硬上限低于 MSO8000 手册 `:SAVE:IMAGe:DATA?` 的 `387,356`-byte 示例。`:DISPlay:DATA?` 仍没有可证明 framing。具体预算请求见 [RFC-0003](doc/rfcs/0003-scope-screenshot-framing-and-menu-contract.md)；插件不猜测 framing、不创建仪器文件，也不把 `device` 菜单语义伪装为 `exclude`。
 
 当前不声明 legacy `scope.digital_status` 或 `scope.digital_waveform`。legacy 数字状态模型要求 MSO8000 无法查询的必填字段；数字 waveform 的厂商手册未定义 BYTE/WORD 逻辑 code，WORD 字节序也不明确。插件不以默认值或模拟量换算制造数字状态。
 
