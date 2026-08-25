@@ -127,6 +127,7 @@ _WAVEFORM_BINARY_CAPTURE_RESTORE_ORDER: tuple[ScopeWaveformTransferField, ...] =
 )
 _WAVEFORM_CAPTURE_RESPONSE_HEADER_TOKEN = "definite-block-lf"
 _WAVEFORM_CAPTURE_BYTE_ORDER_TOKEN = "not-applicable-byte"
+_CAPTURE_RECOVERY_OPC_MAX_QUERIES = 8
 _CURSOR_TIME_UNITS = {
     "SEC": ("s", "Hz"),
     "HZ": ("Hz", "s"),
@@ -1317,10 +1318,20 @@ class MSO8104Scope:
                 # recovery writes before issuing it.  This is transport recovery
                 # only; it is not an acquisition-completion proof.
                 self._sleep(self.capture_recovery_settle_s)
-                recovery_opc = self.transport.query("*OPC?").strip()
-                if recovery_opc != "1":
+                for attempt in range(_CAPTURE_RECOVERY_OPC_MAX_QUERIES):
+                    recovery_opc = self.transport.query("*OPC?").strip()
+                    if recovery_opc == "1":
+                        break
+                    if recovery_opc != "0":
+                        raise DataError(
+                            "MSO8104 capture recovery synchronization returned an invalid "
+                            f"OPC response {recovery_opc!r}"
+                        )
+                    if attempt + 1 != _CAPTURE_RECOVERY_OPC_MAX_QUERIES:
+                        self._sleep(self.capture_recovery_settle_s)
+                else:
                     raise DataError(
-                        "MSO8104 capture recovery synchronization did not return OPC=1"
+                        "MSO8104 capture recovery synchronization did not reach OPC=1"
                     )
                 return self._capture_recovery_snapshot(
                     self._snapshot_capture_recovery_state()
