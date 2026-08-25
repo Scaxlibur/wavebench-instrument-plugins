@@ -371,6 +371,61 @@ def test_math_metadata_uses_normal_byte_preamble_and_restores_state() -> None:
     ]
 
 
+def test_math_metadata_has_exact_transfer_transaction_without_data_or_acquisition_io() -> None:
+    previous = _initial_state()
+    transport = WaveformTransport(state=previous)
+    transport.preambles["MATH1"] = _normal_preamble()
+
+    MSO8104Scope(transport=transport).get_math_waveform_metadata(1)
+
+    snapshot_queries = [
+        ("query", ":WAVeform:SOURce?"),
+        ("query", ":WAVeform:MODE?"),
+        ("query", ":WAVeform:FORMat?"),
+        ("query", ":WAVeform:POINts?"),
+        ("query", ":WAVeform:STARt?"),
+        ("query", ":WAVeform:STOP?"),
+    ]
+    assert transport.events == [
+        ("query", ":MATH1:DISPlay?"),
+        ("query", ":TIMebase:MODE?"),
+        *snapshot_queries,
+        ("write", ":WAVeform:MODE NORM"),
+        ("query", ":WAVeform:MODE?"),
+        ("write", ":WAVeform:SOURce MATH1"),
+        ("query", ":WAVeform:SOURce?"),
+        ("write", ":WAVeform:FORMat BYTE"),
+        ("query", ":WAVeform:FORMat?"),
+        ("write", ":WAVeform:POINts 1000"),
+        ("query", ":WAVeform:POINts?"),
+        ("write", ":WAVeform:STARt 1"),
+        ("query", ":WAVeform:STARt?"),
+        ("write", ":WAVeform:STOP 1000"),
+        ("query", ":WAVeform:STOP?"),
+        *snapshot_queries,
+        ("query", ":WAVeform:PREamble?"),
+        ("write", f":WAVeform:SOURce {previous.source}"),
+        ("query", ":WAVeform:SOURce?"),
+        ("write", f":WAVeform:MODE {previous.mode}"),
+        ("query", ":WAVeform:MODE?"),
+        ("write", f":WAVeform:FORMat {previous.data_format}"),
+        ("query", ":WAVeform:FORMat?"),
+        ("write", f":WAVeform:POINts {previous.points}"),
+        ("query", ":WAVeform:POINts?"),
+        ("write", f":WAVeform:STOP {previous.stop}"),
+        ("query", ":WAVeform:STOP?"),
+        ("write", f":WAVeform:STARt {previous.start}"),
+        ("query", ":WAVeform:STARt?"),
+        *snapshot_queries,
+    ]
+    assert transport.binary_calls == 0
+    assert all(
+        command not in {":RUN", ":STOP", ":SINGle", ":AUToscale"}
+        for direction, command in transport.events
+        if direction == "write"
+    )
+
+
 @pytest.mark.parametrize("math_index", [0, 5, True, 1.0, "1"])
 def test_math_metadata_rejects_invalid_index_without_io(math_index: object) -> None:
     transport = WaveformTransport()

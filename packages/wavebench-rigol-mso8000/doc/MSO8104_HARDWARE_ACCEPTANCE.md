@@ -6,7 +6,7 @@
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2、错误队列 drain V1，以及 autoscale 完成探测。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、数学波形元数据、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2、错误队列 drain V1，以及 autoscale 完成探测。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -38,6 +38,7 @@
 - `scope.acquisition_control`：`start(normal)`→`stop`，以及模式读回后的 SINGLE terminal-STOP 与 `WAIT/TD → STOP` 均通过受控验收；
 - `scope.capture_waveform`：受限 `DEF + BYTE` capture 返回 `1,000` 样本，完成 13 字段恢复与新鲜验证；
 - `scope.capture_waveforms`：一次 SINGLE 读取 CH1/CH2 两路，各返回 `1,000` 样本，完成相同恢复与新鲜验证；
+- `scope.math_metadata`：已显示 MATH1、MAIN 时基下返回 `1,000` 点、有限轴与 8 位 BYTE 元数据，并完成六项 waveform transfer 状态恢复／最终复核；
 - `scope.error_drain_v1`：公开 capture 在 `scope.check_errors=true` 下于主操作前后各完成一次空队列 drain，返回 `1,000` 样本并完成原 capture 的 13 字段恢复与新鲜验证；
 - `scope.digital_status_v2`：D0、D8 均返回显示、标签、所属 POD 范围与 `1.4 V` 阈值，以及共享 `0 s` timing calibration 和 `MEDIUM` size；
 - `scope.snapshot_v2`：同次读取 identity 和 13 种授权选件状态；其余 55 个字段明确 unavailable；
@@ -53,6 +54,12 @@
 `*OPC?` 的有界完成路径在 `15 s` 内未取得 `1`，因此 driver 按设计锁存 autoscale 写域并 fail closed；没有在未确认完成时发送波形读取、状态恢复或第二次 autoscale。随后独立清理确认 source 双路 OFF、scope STOP、CH1/CH2 high_z。另一次尝试先经公开 API 启动 NORMAL，也在 autoscale 前以采集写结果不确定而失败，不能为 autoscale 补充完成证据。
 
 这不证明设备没有接受或执行 `:AUToscale`，但没有可证明的完成、实际显示效果或恢复证据。`wait_opc=false` 没有作为绕过方案执行或验收。故 `scope.autoscale` 继续只有离线合同和 fail-closed 实机边界，不标为实机通过。
+
+## math waveform metadata 受限验收
+
+该步骤在 source 双路 OFF、scope STOP、CH1/CH2 high_z 下进行。公开 `ScopeService.math_waveform_metadata(1)` 先确认 MATH1 已显示且时基为 MAIN，随后快照 waveform source、mode、format、points、start 与 stop 六项状态；临时切换为 `MATH1 + NORM + BYTE + 1000 + 1:1000`，只读取 `:WAVeform:PREamble?`，并逐项恢复、回读和最终比较六项基线。没有发送 `:WAVeform:DATA?`、RUN、STOP、SINGLE、autoscale、MATH setter 或 source 写入。
+
+公开调用返回 `source_kind=math`、index `1`、`1,000` 点、有限 X/Y 轴、`values_per_sample=None` 和 `y_resolution_bits=8`。最后独立确认 source 双路 OFF、scope STOP、CH1/CH2 high_z。这证明记录条件下的 MATH1 preamble 路径与六字段恢复，不证明数学运算内容、MATH2～MATH4、其他 operator 的轴语义、MATH 数值精度或 FFT 精度。
 
 ## waveform 受限验收
 

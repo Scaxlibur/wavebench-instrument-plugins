@@ -25,7 +25,7 @@ The required standard-waveform bounded API and portability V2 APIs are committed
 
 ## M8 offline release evidence
 
-- All 356 MSO8104 package tests and repository-wide Ruff checks pass.
+- All 357 MSO8104 package tests and repository-wide Ruff checks pass.
 - In a disposable sibling WaveBench-core layout, 715 root tests pass and two SP3000A private-hardware-evidence tests skip as expected.
 - Package checks pass for both the source directory and the real wheel in the current WaveBench `0.8.24` development environment.
 - The wheel/sdist contracts cover the single instrument entry point, WaveBench runtime dependency, MIT license, and public content; vendor-local material is absent.
@@ -60,7 +60,7 @@ The descriptor still omits legacy `scope.digital_status` and `scope.digital_wave
 
 `scope.autoscale` intentionally changes vertical, timebase, and trigger settings under the core operation contract. The driver first queries `:SYSTem:AUToscale?` and requires `check_errors=false`. With `wait_opc=true`, it treats `*OPC? = 0` as nonterminal and polls within a bound; only `1` succeeds. A write failure, malformed response, or timeout latches only the autoscale write domain until the session is reopened. On the recorded firmware, a controlled CH1 `1 Vpp / 1 kHz` probe did not provide a completion state within `15 s`; no subsequent waveform read was issued. That write, and the unverified `wait_opc=false` route, are not hardware-completion or effect evidence.
 
-`scope.math_metadata` accepts only displayed MATH1-MATH4 slots in MAIN timebase mode. The driver saves all six waveform-transfer fields, switches to NORM before selecting the MATH source and BYTE format, reads only the preamble, and restores the previous state. It does not read waveform data. `values_per_sample` remains unknown and Y resolution is the documented eight-bit BYTE transfer width. Math content, FFT accuracy, and device restoration remain hardware-unverified.
+`scope.math_metadata` accepts only displayed MATH1-MATH4 slots in MAIN timebase mode. The driver saves all six waveform-transfer fields, switches to NORM before selecting the MATH source and BYTE format, reads only the preamble, and restores the previous state. It does not read waveform data. The recorded MATH1 call returned 1,000 points, finite axes, and eight-bit BYTE metadata with final six-field restoration verification. `values_per_sample` remains unknown; math content, axis semantics for other slots/operators, and FFT accuracy are not inferred.
 
 `scope.cursor_readout` remains the compatibility route for an explicitly preconfigured global manual cursor at public cursor index `1`. The new `scope.cursor_readout_v2` uses global addressing with `cursor_index=None`, and reads manual `TIME/AMPL` A/B sources, seconds/hertz/degrees/percent or source/percent units, and A/B/delta values without moving or reconfiguring cursors. Tracking, XY, measurement mode, NONE, and LA amplitude remain fail closed. The current hardware cursor is `VBA`, so V2 correctly rejects before value queries; accuracy remains hardware-unverified.
 

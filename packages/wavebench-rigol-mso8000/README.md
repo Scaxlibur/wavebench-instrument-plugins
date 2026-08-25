@@ -39,7 +39,7 @@
 
 ## M8 离线发行证据
 
-- MSO8104 包测试：356 项通过；全仓 Ruff 通过。
+- MSO8104 包测试：357 项通过；全仓 Ruff 通过。
 - 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
 - 当前 WaveBench `0.8.24` 开发环境的 package check：源码目录和真实 wheel 均通过。
 - wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。
@@ -60,7 +60,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `scope.autoscale` 会按核心操作合同改变垂直、时基和触发设置。driver 先查询 `:SYSTem:AUToscale?`，禁用时不发送写命令；调用必须设置 `check_errors=false`。`wait_opc=true` 会把 `*OPC? = 0` 视为未完成并有界轮询，只有 `1` 才返回成功；写入、回包异常或超时都会锁存 autoscale 写域，关闭并重新打开会话前不再重试。记录的固件在 CH1 `1 Vpp / 1 kHz` 受控 probe 中未能于 `15 s` 内提供完成态，因此没有执行后续波形读取，也不把该写入或 `wait_opc=false` 路径表述为实机完成或效果证据。
 
-`scope.math_metadata` 只接受已显示的 MATH1～MATH4 和 MAIN 时基。driver 保存六项 waveform 传输状态，按手册要求先切换到 NORM，再选择 MATH 源与 BYTE 格式，只查询 preamble 后恢复原状态；不读取波形数据。返回的 `values_per_sample` 为未知，Y 分辨率来自 BYTE 格式的 8 位合同。数学运算内容、FFT 精度和设备恢复均未实机验证。
+`scope.math_metadata` 只接受已显示的 MATH1～MATH4 和 MAIN 时基。driver 保存六项 waveform 传输状态，按手册要求先切换到 NORM，再选择 MATH 源与 BYTE 格式，只查询 preamble 后恢复原状态；不读取波形数据。记录的 MATH1 调用已返回 1000 点、有限轴和 8 位 BYTE 元数据，并完成六字段最终恢复复核。返回的 `values_per_sample` 仍为未知；数学运算内容、其他槽位／operator 的轴语义和 FFT 精度不由该能力推断。
 
 `scope.cursor_readout` 保留兼容接口，只读取调用方确认已配置的全局手动光标，公共 `cursor_index` 固定为 `1`。新增的 `scope.cursor_readout_v2` 使用全局寻址，要求 `cursor_index=None`，可读取手动 `TIME/AMPL` 的独立 A/B source、秒/赫兹/角度/百分比或 source/百分比单位，以及 A、B、差值读数；driver 不移动或重配光标。追踪、XY、测量模式、NONE 和 LA 幅度仍默认拒绝。当前实机光标为 `VBA`，V2 在读取数值前拒绝；光标读数准确度仍未实机验证。
 

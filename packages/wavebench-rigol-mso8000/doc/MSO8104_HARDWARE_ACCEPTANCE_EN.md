@@ -6,7 +6,7 @@ Acceptance dates: 2026-08-24 through 2026-08-26
 
 ## Scope
 
-This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, error-drain V1, and an autoscale completion probe. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, math-waveform metadata, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, error-drain V1, and an autoscale completion probe. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -38,6 +38,7 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy
 - `scope.acquisition_control` verified `start(normal)`→`stop`, plus post-readback SINGLE terminal STOP and `WAIT`/`TD → STOP`;
 - `scope.capture_waveform` verified bounded `DEF + BYTE` capture at `1,000` samples with 13-field recovery/fresh verification;
 - `scope.capture_waveforms` verified one SINGLE and two binary reads for CH1/CH2, at `1,000` samples per channel with the same recovery/fresh verification;
+- `scope.math_metadata` returned `1,000` points, finite axes, and eight-bit BYTE metadata for displayed MATH1 in MAIN mode, with final six-field waveform-transfer restoration verification;
 - `scope.error_drain_v1` completed one empty-queue drain before and after public capture with `scope.check_errors=true`; capture returned `1,000` samples with its existing 13-field recovery/fresh verification;
 - `scope.digital_status_v2` returned display, label, POD range and `1.4 V` threshold, plus shared `0 s` timing calibration and `MEDIUM` size for D0 and D8;
 - `scope.snapshot_v2` read identity and 13 licensed-option states in one call, with the other 55 fields explicitly unavailable;
@@ -53,6 +54,12 @@ The probe began with scope STOP, high-impedance CH1/CH2, and both source outputs
 The bounded `*OPC?` completion route did not obtain `1` within `15 s`, so the driver latched the autoscale write domain and failed closed. It sent no waveform read, restoration, or second autoscale while completion was unproven. Independent cleanup then verified both source outputs OFF, scope STOP, and high-impedance CH1/CH2. A separate attempt to enter NORMAL through the public API failed with an uncertain acquisition-write result before autoscale, so it adds no autoscale completion evidence.
 
 This does not prove that the instrument did not accept or execute `:AUToscale`, but it does not establish completion, visible effect, or restoration. `wait_opc=false` was not run or accepted as a workaround. `scope.autoscale` therefore remains an offline contract with a fail-closed hardware boundary, not hardware complete.
+
+## Restricted math-waveform metadata acceptance
+
+This step kept both sources OFF, scope STOP, and CH1/CH2 high impedance. Public `ScopeService.math_waveform_metadata(1)` first confirmed displayed MATH1 and MAIN timebase, then snapshotted waveform source, mode, format, points, start, and stop. It temporarily selected `MATH1 + NORM + BYTE + 1000 + 1:1000`, queried only `:WAVeform:PREamble?`, and restored, read back, and finally compared all six baseline fields. It sent no `:WAVeform:DATA?`, RUN, STOP, SINGLE, autoscale, MATH setter, or source write.
+
+The public result was `source_kind=math`, index `1`, `1,000` points, finite X/Y axes, `values_per_sample=None`, and `y_resolution_bits=8`. Independent final checks again found both sources OFF, scope STOP, and high-impedance CH1/CH2. This establishes the recorded MATH1 preamble path and six-field restoration only; it does not establish math content, MATH2-MATH4, axis semantics for other operators, math numeric accuracy, or FFT accuracy.
 
 ## Limited waveform acceptance
 
