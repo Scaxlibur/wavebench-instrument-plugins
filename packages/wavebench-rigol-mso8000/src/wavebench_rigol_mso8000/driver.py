@@ -488,16 +488,27 @@ class MSO8104Scope:
             if not wait_opc:
                 return
             try:
-                response = self.transport.query_opc().strip()
-                if response != "1":
-                    raise DataError(
-                        f"invalid MSO8104 *OPC? response after autoscale: {response!r}"
-                    )
+                self._wait_for_autoscale_opc()
             except Exception as exc:
                 self._autoscale_writes_blocked = True
                 raise InstrumentError(
                     "MSO8104 autoscale completion is uncertain; autoscale writes are blocked"
                 ) from exc
+
+    def _wait_for_autoscale_opc(self) -> None:
+        deadline = self._clock() + self.acquisition_timeout_s
+        while True:
+            response = self.transport.query_opc().strip()
+            if response == "1":
+                return
+            if response != "0":
+                raise DataError(f"invalid MSO8104 *OPC? response after autoscale: {response!r}")
+            remaining_s = deadline - self._clock()
+            if remaining_s <= 0:
+                raise OperationTimeout(
+                    "MSO8104 autoscale did not reach OPC=1 before the configured timeout"
+                )
+            self._sleep(min(self.trigger_poll_interval_s, remaining_s))
 
     @property
     def waveform_writes_blocked(self) -> bool:

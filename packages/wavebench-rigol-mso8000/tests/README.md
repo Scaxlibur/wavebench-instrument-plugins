@@ -12,7 +12,7 @@ M4 采集测试使用触发状态序列和小型分块 payload，覆盖一次 SI
 
 错误队列 drain 测试覆盖有符号状态码、含逗号 message、精确 `0,"No error"` 终止、每条消费型 query 的 `ReplayPolicy.NO_REPLAY`、格式异常、通信失败、最大记录数和 overflow。公开有界 fetch/capture 的 `scope.check_errors=true` 路径还验证 Core 在主操作前后执行 drain；离线测试不替代非零记录与 overflow 的实机证据。
 
-M7 autoscale 测试只验证系统使能预检、一次写入、可选 OPC 等待和歧义锁存；不会产生真实波形，也不证明自动设置效果。
+M7 autoscale 测试覆盖系统使能预检、一次写入、`OPC=0 → 1` 的有界轮询、超时／异常回包锁存和可选跳过等待；不会产生真实波形，也不证明自动设置效果。
 
 M7 数学元数据测试通过 MATH 显示预检和状态化 FakeTransport 验证 NORM/BYTE preamble、六字段传输状态恢复、错误锁存与零数据读取；不证明数学运算结果或 FFT 精度。
 

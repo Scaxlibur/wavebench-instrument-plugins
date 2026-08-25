@@ -2,11 +2,11 @@
 
 [中文](MSO8104_HARDWARE_ACCEPTANCE.md)
 
-Acceptance dates: 2026-08-24 through 2026-08-25
+Acceptance dates: 2026-08-24 through 2026-08-26
 
 ## Scope
 
-This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, and error-drain V1 acceptance. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
+This record covers controlled RIGOL MSO8104 identity, input safety, waveform binary, acquisition control, single/multi-channel capture, measurement-statistics V2, FFT-status V2, acquisition-status V2, acquisition run-state, digital-status V2, Snapshot V2, error-drain V1, and an autoscale completion probe. It does not record real resource addresses, serial numbers, raw waveforms, screenshots, or complete command logs.
 
 Devices and runtime:
 
@@ -24,7 +24,7 @@ SDG CH1 was connected to MSO CH1 and SDG CH2 to MSO CH2. Earlier `DEF` fetch use
 3. Source V2 OFF was requested separately for CH1 and CH2. A fresh read-only snapshot independently confirmed both OFF, `consistent`, and `healthy`.
 4. After every controlled waveform transaction, outer cleanup separately requested CH1 and CH2 OFF and used a fresh read-only snapshot to confirm both were OFF.
 
-Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy`, scope STOP, and CH1/CH2 high-impedance inputs. This work did not write scope input impedance or autoscale settings.
+Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy`, scope STOP, and CH1/CH2 high-impedance inputs. This work did not write scope input impedance; one fail-closed autoscale completion probe is recorded below.
 
 ## Hardware evidence obtained
 
@@ -45,6 +45,14 @@ Final verification was CH1 OFF, CH2 OFF, snapshot `consistent`, session `healthy
 - core preflight confirmed the safety limit, High-Z display load, and no active cross-channel relation before enable.
 
 These results apply only to the stated model, firmware, LAN/PyVISA transport, and controlled procedure.
+
+## Autoscale completion probe
+
+The probe began with scope STOP, high-impedance CH1/CH2, and both source outputs OFF, then enabled only CH1 Sine at `1 kHz / 1 Vpp`. Public `ScopeService.autoscale()` used `wait_opc=true` and `check_errors=false`: the latter is required because the current Core legacy autoscale route still demands undeclared `scope.errors` rather than `scope.error_drain_v1`. The driver read the system AUTO enable state first and sent only one `:AUToscale` write.
+
+The bounded `*OPC?` completion route did not obtain `1` within `15 s`, so the driver latched the autoscale write domain and failed closed. It sent no waveform read, restoration, or second autoscale while completion was unproven. Independent cleanup then verified both source outputs OFF, scope STOP, and high-impedance CH1/CH2. A separate attempt to enter NORMAL through the public API failed with an uncertain acquisition-write result before autoscale, so it adds no autoscale completion evidence.
+
+This does not prove that the instrument did not accept or execute `:AUToscale`, but it does not establish completion, visible effect, or restoration. `wait_opc=false` was not run or accepted as a workaround. `scope.autoscale` therefore remains an offline contract with a fail-closed hardware boundary, not hardware complete.
 
 ## Limited waveform acceptance
 

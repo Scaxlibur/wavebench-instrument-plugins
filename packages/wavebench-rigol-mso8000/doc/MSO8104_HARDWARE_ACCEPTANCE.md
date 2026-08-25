@@ -2,11 +2,11 @@
 
 [English](MSO8104_HARDWARE_ACCEPTANCE_EN.md)
 
-验收日期：2026-08-24 至 2026-08-25
+验收日期：2026-08-24 至 2026-08-26
 
 ## 范围
 
-本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2 和错误队列 drain V1 的验收。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
+本记录覆盖 RIGOL MSO8104 基础身份、输入安全、受控 waveform binary、采集控制、单／多通道 capture、统计测量 V2、FFT 状态 V2、采集状态 V2、采集运行状态、数字状态 V2、快照 V2、错误队列 drain V1，以及 autoscale 完成探测。不会记录真实资源地址、序列号、原始波形、截图或完整命令日志。
 
 参与设备：
 
@@ -24,7 +24,7 @@
 3. 对 CH1、CH2 分别请求 `source.output_v2 OFF`，随后以新的只读 Source V2 snapshot 独立确认两路 OFF、snapshot `consistent`、session `healthy`。
 4. 每次受控波形事务结束后，外层清理都会分别请求 CH1、CH2 OFF，再以新的只读 snapshot 确认两路均为 OFF。
 
-最终复核为 CH1 OFF、CH2 OFF、snapshot `consistent`、session `healthy`，scope 为 STOP，CH1/CH2 均为 high_z。本轮没有写入示波器输入阻抗或 autoscale 设置。
+最终复核为 CH1 OFF、CH2 OFF、snapshot `consistent`、session `healthy`，scope 为 STOP，CH1/CH2 均为 high_z。本轮没有写入示波器输入阻抗；另有一次 fail-closed autoscale completion probe，结果见下文。
 
 ## 已通过的实机证据
 
@@ -45,6 +45,14 @@
 - 启用前 safety limit、High-Z display load 和无 active cross-channel relation 的 core preflight。
 
 上述结论只覆盖本记录中的型号、固件、LAN/PyVISA 和受控步骤。
+
+## autoscale 完成探测
+
+该步骤以 scope STOP、CH1/CH2 high_z、source 双路 OFF 为基线；随后只开启 CH1 的 `1 kHz / 1 Vpp` 正弦输出。公开 `ScopeService.autoscale()` 使用 `wait_opc=true` 与 `check_errors=false`：后者是因为当前 Core 的 legacy autoscale 路径仍要求未声明的 `scope.errors`，不能改用 `scope.error_drain_v1`。driver 已先读取系统 AUTO 使能，并仅发送一次 `:AUToscale`。
+
+`*OPC?` 的有界完成路径在 `15 s` 内未取得 `1`，因此 driver 按设计锁存 autoscale 写域并 fail closed；没有在未确认完成时发送波形读取、状态恢复或第二次 autoscale。随后独立清理确认 source 双路 OFF、scope STOP、CH1/CH2 high_z。另一次尝试先经公开 API 启动 NORMAL，也在 autoscale 前以采集写结果不确定而失败，不能为 autoscale 补充完成证据。
+
+这不证明设备没有接受或执行 `:AUToscale`，但没有可证明的完成、实际显示效果或恢复证据。`wait_opc=false` 没有作为绕过方案执行或验收。故 `scope.autoscale` 继续只有离线合同和 fail-closed 实机边界，不标为实机通过。
 
 ## waveform 受限验收
 
