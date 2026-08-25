@@ -243,7 +243,7 @@ class CaptureRecoveryState:
 class MSO8104Scope:
     transport: InstrumentTransport
     acquisition_timeout_s: float = 30.0
-    trigger_poll_interval_s: float = 0.05
+    trigger_poll_interval_s: float = 0.25
     max_total_waveform_points: int = _HARD_MAX_TOTAL_WAVEFORM_POINTS
     max_byte_points_per_read: int = _HARD_MAX_BYTE_POINTS_PER_READ
     _clock: Callable[[], float] = field(default=time.monotonic, repr=False)
