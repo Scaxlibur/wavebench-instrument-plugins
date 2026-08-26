@@ -19,7 +19,7 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | Seed | Offline complete | `*IDN?`, zero-I/O descriptor, packaging tests, one entry point, and vendor-local exclusion. |
 | M0 | Offline complete; A1 complete | `rf_source`, `rf_out` topology, a strict snapshot parser, and production read-only status. |
 | M1 | Offline complete | OFF-only CW frequency/dBm configuration with independent readback; the production capability remains closed. |
-| M2 | Offline in progress | One-write RF ON/OFF mapping, Core safety preflight, independent readback, and one-shot OFF recovery; the production capability remains closed. |
+| M2 | Offline complete | One-write RF ON/OFF mapping, Core safety preflight, independent readback, and one-shot OFF recovery; the production capability remains closed. |
 | M3 | Not started | Declared internal-sine AM/FM/PM subset. |
 | M4 | Not started | Declared Pulse and frequency-only Step Sweep subset. |
 | A1–A5 | A1 complete; A2–A5 not started | A1 is read-only snapshot evidence; the remaining items need separately authorized controlled hardware evidence. |
@@ -41,7 +41,7 @@ A1 has completed and been reviewed, so the production descriptor now declares `r
 ## M1–M4 and A1–A5
 
 - M1 has an offline one-write `:FREQ`/`:LEV` mapping, independent readback contract, Core CLI, run step, and redacted artifact while RF is OFF. The production descriptor still lacks `rf_source.cw_configure`, so the CLI and run step cannot operate a live DSG830. Fake/guarded-transport acceptance does not promote a production capability; A3 is still required before `rf_source.cw_configure` is production-declared.
-- M2 is now adding `:OUTP ON|OFF`, independent readback, per-port preflight, and at most one guarded same-port OFF recovery when session health permits. The driver sends exactly one output write and leaves preflight, readback, and recovery to Core. A2 is required before `rf_source.output` is production-declared.
+- M2 has an offline `:OUTP ON|OFF` mapping, independent readback, per-port preflight, and at most one guarded same-port OFF recovery when session health permits. The driver sends exactly one output write and leaves preflight, readback, and recovery to Core. A2 is required before `rf_source.output` is production-declared.
 - M3 is limited to a bounded internal-sine AM/FM/PM subset. A4 is required before production modulation capability.
 - M4 is limited to declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.
 

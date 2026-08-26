@@ -19,7 +19,7 @@
 | Seed | 离线完成 | `*IDN?`、无 I/O descriptor、包装测试、唯一 entry point 和 vendor-local 排除。 |
 | M0 | 离线完成；A1 已完成 | `rf_source`、`rf_out` topology、严格 snapshot parser 与生产只读状态查询。 |
 | M1 | 离线完成 | OFF-only CW 频率／dBm 功率配置与独立 readback；production capability 仍关闭。 |
-| M2 | 离线进行中 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production capability 仍关闭。 |
+| M2 | 离线完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production capability 仍关闭。 |
 | M3 | 未开始 | 已声明的内部 Sine AM／FM／PM 子集。 |
 | M4 | 未开始 | 已声明的 Pulse 与 frequency-only Step Sweep 子集。 |
 | A1–A5 | A1 已完成；A2–A5 未开始 | A1 为只读快照证据；其余为独立授权的受控实机证据。 |
@@ -57,7 +57,7 @@ M1 不开放 production CW capability。A3 的频率与 dBm 功率环回证据�
 
 ## M2：RF 输出
 
-已开始实现已冻结的 `:OUTP ON|OFF` 映射、独立 readback 和端口级安全预检。DSG830 driver 的 `set_rf_output()` 每次只发送 `:OUTP ON` 或 `:OUTP OFF`，不查询、不重试、不自行 recovery；Core 负责 transaction、snapshot readback 和 session health。RF ON 必须同时满足完整 safety 配置、端接与 dBm 参考阻抗一致、频率与功率均在范围内、调制／Pulse／Sweep 已关闭、无 blocking protection condition，以及所有必要状态可读。
+已完成已冻结的 `:OUTP ON|OFF` 映射、独立 readback 和端口级安全预检。DSG830 driver 的 `set_rf_output()` 每次只发送 `:OUTP ON` 或 `:OUTP OFF`，不查询、不重试、不自行 recovery；Core 负责 transaction、snapshot readback 和 session health。RF ON 必须同时满足完整 safety 配置、端接与 dBm 参考阻抗一致、频率与功率均在范围内、调制／Pulse／Sweep 已关闭、无 blocking protection condition，以及所有必要状态可读。
 
 ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 session health 允许时，Core 才在受 guard 的预算内最多执行一次同端口 RF OFF recovery 并回读 OFF。RF OFF 不依赖频率、功率、端接或 protection readback；其结果不明时不重试。A2 通过前，production descriptor 不声明 `rf_source.output`。
 

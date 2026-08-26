@@ -7,7 +7,7 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 ## 当前状态
 
-版本 `0.2.0` 已完成 RF M0 只读迁移和 M1 的离线 CW 映射，并在推进 M2 的离线输出映射：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV` 与 `:OUTP ON|OFF` 的单次 driver 映射。
+版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射和 M2 离线输出映射：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV` 与 `:OUTP ON|OFF` 的单次 driver 映射。
 
 A1 只读实机证据已经完成并复核。production descriptor 现在只声明 `rf_source.idn` 和 `rf_source.snapshot`，因此 Core Service、CLI 和 `rf_source.status` run step 可以在已配置的 `read_only` session 中读取快照。M1／M2 的离线代码需要 fake descriptor 才能进入测试，不能授权真实仪器的 RF 输出、频率或功率控制。
 

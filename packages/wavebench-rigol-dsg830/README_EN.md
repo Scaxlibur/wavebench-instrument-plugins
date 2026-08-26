@@ -7,8 +7,8 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 
 ## Current status
 
-Version `0.2.0` completes the RF M0 read-only migration and M1 offline CW mapping, and is progressing
-the M2 offline output mapping: its descriptor uses `kind="rf_source"`, declares one `rf_out` port with
+Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, and M2 offline output
+mapping: its descriptor uses `kind="rf_source"`, declares one `rf_out` port with
 static limits and a 50-ohm dBm reference, and ships a strict snapshot parser plus one-write
 `:FREQ`/`:LEV`/`:OUTP ON|OFF` driver mappings.
 
