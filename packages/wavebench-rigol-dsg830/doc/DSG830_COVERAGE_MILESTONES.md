@@ -22,7 +22,7 @@
 | M2 | 离线完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production capability 仍关闭。 |
 | M3 | 未开始 | 已声明的内部 Sine AM／FM／PM 子集。 |
 | M4 | 未开始 | 已声明的 Pulse 与 frequency-only Step Sweep 子集。 |
-| A1–A5 | A1 已完成；A2–A5 未开始 | A1 为只读快照证据；其余为独立授权的受控实机证据。 |
+| A1–A5 | A1 已完成；A2 harness 与回归测试已完成，实机未执行；A3–A5 未开始 | A1 为只读快照证据；其余为独立授权的受控实机证据。 |
 
 ## Seed：历史包边界
 
@@ -101,3 +101,29 @@ A1 已使用一次性、非 production 的本地 evidence harness 完成并经�
 失败，固件不可用则使查询后的证据失败。该表不能从连接器标签、scope coupling 或型号名称推导实际端接。
 
 本地源码 checkout 保留 `tools/a1_snapshot_evidence.py`，它不进入 wheel 或 sdist，用于保留当时的只读协议与回归测试。A1 提升后，脚本会因 production descriptor 已声明 snapshot 而以 `production_snapshot_gate_changed` 拒绝重跑；它不是当前状态查询入口。输出路径必须是尚不存在的本地文件。脚本不会创建目录、不会写入配置，也不会打印资源、完整 IDN、原始响应或命令日志。
+
+### A2：受控 RF 输出证据（harness 已实现，实机未执行）
+
+源码 checkout 的 `tools/a2_output_evidence.py` 是一次性的本地 harness，不进入 wheel 或 sdist，也不修改
+production descriptor。它要求三份本地输入：只读 RF TOML、只读 scope TOML，以及不含资源地址的 A2 setup TOML。
+公开模板为 `tools/a2_output_evidence.setup.template.toml`。setup 的端口固定为 `rf_out`，并明确记录实际端接、
+已确认选件、频率范围、低功率上限和 CH1／CH2 观察条件；功率上限必须不高于 `-40 dBm`。
+
+不带 `--execute` 时，harness 只进行静态预检，不建立 transport，也不写入仪器。只有显式传入 `--execute` 和一个
+尚不存在的本地 `--output` 文件时，才会为本次操作在内存中创建受限的 `read_write` 配置与仅含
+`rf_source.output` 的临时 descriptor。RF 配置必须原本为 `read_only`，读重试必须关闭；scope 配置也必须原本为
+`read_only`、关闭错误队列与读重试，且其资源必须与 RF 信号源不同。harness 以 `0600` 创建脱敏 JSON 证据文件，
+不创建目录，也不打印资源、完整 IDN、原始响应、SCPI 命令或波形。
+
+主序列为初始 snapshot、一次 RF ON、独立 readback、可选 scope 观察、一次 RF OFF 和独立 readback。初始输出为
+ON 或输出状态未知时，A2 仍失败；在 session 健康且尚未开始 RF OFF transaction 的条件下，harness 会请求一次受限的
+RF OFF 以降低残留输出风险。RF ON 的结果不明时，Core 负责最多一次授权的 OFF recovery；只有该 recovery 明确回读
+OFF，harness 才记录最终 OFF 已确认。RF OFF transaction 已开始后，其结果不明不会由 harness 重试。
+
+scope 观察必须显式传入 `--observe-scope`。它只读取 CH1 和 CH2 的当前 `DEF` 缓冲区，每个通道最多一次，不执行
+`SINGle`、触发或自动量程。CH2 的 50 Ω 输入必须由 setup 中的 `allow_ch2_50ohm = true` 单独确认；scope fetch
+可能改变通道显示和波形传输字段，harness 会将这些未恢复字段写入证据。CH2 在高频下未观察到波形、以及 CH1 的
+低频辅助观察，都只产生 warning，不替代 RF 的类型化 readback 和最终 OFF 判定，也不证明 RF 与低频输出之间存在控制关联。
+
+A2 的 production capability 仍保持关闭。只有证据状态为 `passed`、最终 RF OFF 已确认且脱敏证据经人工复核后，
+才可以将 `rf_source.output` 加入 production descriptor。

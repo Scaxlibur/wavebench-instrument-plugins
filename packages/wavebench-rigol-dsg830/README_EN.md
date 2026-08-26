@@ -17,6 +17,11 @@ A1 read-only hardware evidence has completed and been reviewed. The production d
 snapshot through a configured `read_only` session. M1/M2 offline code requires a fake descriptor for tests and
 does not authorize live RF-output, frequency, or power control.
 
+The local A2 controlled-output harness, regression tests, and resource-free setup template are present in the
+source checkout, but hardware evidence has not yet been collected. It creates a bounded write session only with
+explicit `--execute`; the production descriptor keeps `rf_source.output` closed until passed evidence confirms
+the final RF-OFF state.
+
 The production descriptor declares no error queue, CW write, RF-output control, modulation, Pulse, Sweep,
 trigger, or arbitrary SCPI passthrough. Each later capability remains behind its A1–A5 evidence gate.
 
@@ -24,6 +29,7 @@ trigger, or arbitrary SCPI passthrough. Each later capability remains behind its
 
 - [DSG830 plugin documentation](doc/README_EN.md)
 - [DSG830 coverage milestones](doc/DSG830_COVERAGE_MILESTONES_EN.md)
+- [A2 local-evidence setup template](tools/a2_output_evidence.setup.template.toml)
 
 The milestone document distinguishes the current seed, offline contracts, and A1–A5 hardware evidence. A
 production descriptor capability is not promoted by seed code or fake-transport tests alone.

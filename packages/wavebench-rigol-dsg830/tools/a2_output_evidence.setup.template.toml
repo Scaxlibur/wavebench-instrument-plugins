@@ -1,0 +1,33 @@
+# A2 本地证据配置模板。
+#
+# 此文件只记录人工确认的安全事实，不得包含仪器资源、序列号、原始响应或波形。
+# 复制到被忽略的私有路径后，与独立的只读 RF 配置和只读示波器配置一起使用。
+
+[a2_evidence]
+# A2 仅允许 DSG830 的 RF 主输出端口。
+port_id = "rf_out"
+
+# 实际 RF 端接，必须经接线和仪器输入设置确认；不能从连接器标签推断。
+actual_termination_ohm = 50
+
+# 已确认时显式写入空列表；有选件时使用已排序、无重复的安全标识。
+installed_options = []
+
+# A2 只允许在已声明端口范围内验证当前状态，不设置频率或功率。
+minimum_frequency_hz = 9000
+maximum_frequency_hz = 3000000000
+
+# 这是启用 RF 前的硬上限，必须不高于 -40 dBm。模板使用更保守的 -50 dBm。
+maximum_power_dbm = -50
+
+[scope_observation]
+# 仅抓取当前显示缓冲区；不执行 SINGle、触发或自动量程。
+ch1 = 1
+ch2 = 2
+
+# 仅在 CH2 已按物理接线确认采用 50 Ω 端接时才可设为 true。
+allow_ch2_50ohm = true
+points = "def"
+
+# 仅用于补充观察的可见信号阈值；不影响 A2 的主通过条件。
+minimum_observable_vpp_v = 0.001

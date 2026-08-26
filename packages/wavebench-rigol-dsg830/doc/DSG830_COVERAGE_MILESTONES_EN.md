@@ -22,7 +22,7 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | M2 | Offline complete | One-write RF ON/OFF mapping, Core safety preflight, independent readback, and one-shot OFF recovery; the production capability remains closed. |
 | M3 | Not started | Declared internal-sine AM/FM/PM subset. |
 | M4 | Not started | Declared Pulse and frequency-only Step Sweep subset. |
-| A1–A5 | A1 complete; A2–A5 not started | A1 is read-only snapshot evidence; the remaining items need separately authorized controlled hardware evidence. |
+| A1–A5 | A1 complete; A2 harness and regression tests complete, hardware evidence pending; A3–A5 not started | A1 is read-only snapshot evidence; the remaining items need separately authorized controlled hardware evidence. |
 
 ## Seed: historical package boundary
 
@@ -69,3 +69,15 @@ before the transport is opened; unavailable firmware fails the evidence after th
 actual termination from a connector label, scope coupling, or model name.
 
 The source checkout retains `tools/a1_snapshot_evidence.py`, excluded from wheel and sdist, as the historical protocol and regression test. After the A1 promotion, it rejects a rerun with `production_snapshot_gate_changed` because the production descriptor now declares snapshot; it is not the current status-query entry point. The script does not create directories or edit configuration, and it never prints a resource, full IDN, raw response, or command log.
+
+### A2: controlled RF-output evidence (harness implemented; hardware evidence pending)
+
+The source checkout contains `tools/a2_output_evidence.py`, a one-shot local harness excluded from wheel and sdist. It never changes the production descriptor. It requires three local inputs: a read-only RF TOML, a read-only scope TOML, and a resource-free A2 setup TOML. The public template is `tools/a2_output_evidence.setup.template.toml`. The setup fixes `rf_out` and records the reviewed physical termination, installed options, frequency range, low-power limit, and CH1/CH2 observation conditions; its power limit must be no higher than `-40 dBm`.
+
+Without `--execute`, the harness performs static preflight only: it opens no transport and writes no instrument. With an explicit `--execute` and a new local `--output` file, it creates a bounded in-memory `read_write` configuration and an in-memory descriptor containing only `rf_source.output`. The RF config must start as `read_only` with query retries disabled. The scope config must also start as `read_only`, with error draining and retries disabled, and must identify a resource different from the RF source. The harness creates a redacted JSON evidence file with mode `0600`; it creates no directories and prints no resource, full IDN, raw response, SCPI command, or waveform.
+
+The primary sequence is an initial snapshot, one RF ON, independent readback, optional scope observation, one RF OFF, and independent readback. An initially ON or unknown RF-output state fails A2; if the session is healthy and no RF-OFF transaction has started, the harness requests one bounded RF OFF to reduce residual-output risk. For an unverified RF-ON result, Core owns at most one authorized OFF recovery. The harness accepts the final OFF condition only when that recovery independently verifies OFF. Once an RF-OFF transaction begins, an unverified result is not retried by the harness.
+
+Scope observation requires `--observe-scope`. It reads the current `DEF` buffer on CH1 and CH2 at most once per channel and does not issue `SINGle`, trigger, or autoscale. CH2 50-ohm input requires the separate `allow_ch2_50ohm = true` setup declaration. Scope fetch may change channel-display and waveform-transfer fields, which the harness records as unrestored. A missing high-frequency CH2 waveform and the low-frequency CH1 auxiliary observation are warnings only. They do not replace typed RF readback or final-OFF verification, and do not prove a control relationship between RF and LF outputs.
+
+The A2 production gate remains closed. Only a `passed` record with confirmed final RF OFF and a review of redacted evidence may add `rf_source.output` to the production descriptor.

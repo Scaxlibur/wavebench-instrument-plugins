@@ -11,12 +11,15 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 A1 只读实机证据已经完成并复核。production descriptor 现在只声明 `rf_source.idn` 和 `rf_source.snapshot`，因此 Core Service、CLI 和 `rf_source.status` run step 可以在已配置的 `read_only` session 中读取快照。M1／M2 的离线代码需要 fake descriptor 才能进入测试，不能授权真实仪器的 RF 输出、频率或功率控制。
 
+A2 的本地受控输出 harness、回归测试和不含资源地址的 setup 模板已经加入源码 checkout，但尚未执行实机证据。它仅在显式 `--execute` 时临时创建受限写 session；production descriptor 继续关闭 `rf_source.output`，直到取得并复核通过的最终 RF OFF 证据。
+
 production descriptor 不声明错误队列、CW 写入、RF 输出控制、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。后续 capability 必须经过对应的 A1–A5 实机证据门。
 
 ## 开发文档
 
 - [DSG830 插件文档入口](doc/README.md)
 - [DSG830 功能覆盖里程碑](doc/DSG830_COVERAGE_MILESTONES.md)
+- [A2 本地证据 setup 模板](tools/a2_output_evidence.setup.template.toml)
 
 里程碑明确区分当前种子、离线合同和 A1–A5 实机证据。production descriptor 的 capability 不会因种子代码或 fake transport 测试自动提升。
 
