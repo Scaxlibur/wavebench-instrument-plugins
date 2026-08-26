@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import importlib.util
 from pathlib import Path
 import stat
@@ -52,7 +53,25 @@ def _script_module():
 def _production_descriptor():
     from wavebench_rigol_dsg830.descriptor import descriptor
 
-    return descriptor()
+    production = descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    return replace(
+        production,
+        capabilities=tuple(
+            capability
+            for capability in production.capabilities
+            if capability != "rf_source.pulse_configure"
+        ),
+        rf_source_extensions=replace(
+            extensions,
+            features=tuple(
+                feature
+                for feature in extensions.features
+                if feature.feature is not RfFeature.PULSE
+            ),
+        ),
+    )
 
 
 def _config(*, resource: str = "TCPIP::198.51.100.83::INSTR") -> WaveBenchConfig:
