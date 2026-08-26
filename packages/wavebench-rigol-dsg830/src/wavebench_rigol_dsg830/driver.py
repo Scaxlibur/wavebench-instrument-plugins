@@ -1,14 +1,15 @@
-"""M0 snapshot driver plus staged M1/M2/M3 mappings for the RIGOL DSG830.
+"""RF-source driver with bounded M0--M4 mappings for the RIGOL DSG830.
 
 A1 hardware evidence authorizes the public ``rf_source.snapshot`` capability.
 ``get_rf_snapshot()`` remains observational only: it performs the fixed query
 set and does not configure frequency or power, switch RF output, or control
 modulation, Pulse, Sweep, trigger, or arbitrary SCPI.
 
-``set_rf_output()`` and ``configure_cw()`` are available through the
-production descriptor after A2/A3 evidence. ``configure_rf_modulation()``
-remains available only to Core M3 tests and fake descriptors until the
-separate A4 modulation evidence is independently reviewed.
+``set_rf_output()``, ``configure_cw()``, ``configure_rf_modulation()``,
+``configure_rf_pulse()``, and ``configure_rf_sweep()`` are exposed only by
+their independently evidenced production capabilities.  The A5-0
+``get_rf_trigger_snapshot()`` mapping is query-only and remains absent from
+the production descriptor until a separate trigger-path evidence decision.
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ import re
 from wavebench.instruments.rf_source_extensions import (
     RfAvailability,
     RfCwRequest,
+    RfExternalGatePolarity,
+    RfExternalTriggerEdge,
     RfModulationDisableRequest,
     RfModulationKind,
     RfModulationRequest,
@@ -35,6 +38,7 @@ from wavebench.instruments.rf_source_extensions import (
     RfPulseConfigureRequest,
     RfPulseMode,
     RfPulsePolarity,
+    RfPulseTriggerMode,
     RfPulseSnapshot,
     RfPulseSource,
     RfPulseState,
@@ -42,11 +46,14 @@ from wavebench.instruments.rf_source_extensions import (
     RfSourceSnapshot,
     RfSweepConfigureRequest,
     RfSweepDirection,
+    RfSweepMode,
     RfSweepShape,
     RfSweepSnapshot,
     RfSweepSpacing,
     RfSweepState,
     RfSweepType,
+    RfSweepTriggerMode,
+    RfTriggerSnapshot,
 )
 
 
@@ -103,6 +110,15 @@ _SNAPSHOT_QUERIES = (
     ":STAT:QUES:POW:COND?",
 )
 
+_TRIGGER_SNAPSHOT_QUERIES = (
+    ":PULM:TRIG:MODE?",
+    ":PULM:TRIG:EXT:SLOP?",
+    ":PULM:TRIG:EXT:GATE:POL?",
+    ":SWE:MODE?",
+    ":SWE:SWE:TRIG:TYPE?",
+    ":SWE:POIN:TRIG:TYPE?",
+)
+
 
 class DSG830RfSource:
     """Strictly parse documented, read-only DSG830 snapshot queries."""
@@ -142,6 +158,37 @@ class DSG830RfSource:
                 ),
             ),
             protection=_parse_protection_status(responses[":STAT:QUES:POW:COND?"]),
+        )
+
+    def get_rf_trigger_snapshot(self, port_id: str) -> RfTriggerSnapshot:
+        """Read logical trigger configuration without triggering or writing state.
+
+        The queried settings govern the named RF output's Pulse/Sweep behavior;
+        ``port_id`` is not treated as a physical trigger connector.  This
+        method sends only the documented query forms and is intentionally not
+        exposed by the DSG830 production descriptor.
+        """
+
+        _require_trigger_port(port_id)
+        responses = {
+            command: self.transport.query(command) for command in _TRIGGER_SNAPSHOT_QUERIES
+        }
+        return RfTriggerSnapshot(
+            port_id=port_id,
+            pulse_trigger_mode=_parse_pulse_trigger_mode(responses[":PULM:TRIG:MODE?"]),
+            pulse_external_trigger_edge=_parse_external_trigger_edge(
+                responses[":PULM:TRIG:EXT:SLOP?"]
+            ),
+            pulse_external_gate_polarity=_parse_external_gate_polarity(
+                responses[":PULM:TRIG:EXT:GATE:POL?"]
+            ),
+            sweep_mode=_parse_sweep_mode(responses[":SWE:MODE?"]),
+            sweep_period_trigger_mode=_parse_sweep_trigger_mode(
+                responses[":SWE:SWE:TRIG:TYPE?"]
+            ),
+            sweep_point_trigger_mode=_parse_sweep_trigger_mode(
+                responses[":SWE:POIN:TRIG:TYPE?"]
+            ),
         )
 
     def configure_cw(self, request: RfCwRequest) -> None:
@@ -651,6 +698,39 @@ def _parse_pulse_polarity(response: object) -> RfPulsePolarity:
     raise ValueError("DSG830 pulse polarity response must be NORMAL or INVERSE")
 
 
+def _parse_pulse_trigger_mode(response: object) -> RfPulseTriggerMode:
+    value = _clean_response(response, "pulse trigger mode").upper()
+    if value in {"AUTO", "AUTOMATIC"}:
+        return RfPulseTriggerMode.AUTOMATIC
+    if value == "BUS":
+        return RfPulseTriggerMode.BUS
+    if value in {"EXT", "EXTERNAL"}:
+        return RfPulseTriggerMode.EXTERNAL
+    if value in {"EGAT", "EGATE", "EXTERNAL_GATE"}:
+        return RfPulseTriggerMode.EXTERNAL_GATE
+    if value == "KEY":
+        return RfPulseTriggerMode.KEY
+    raise ValueError("DSG830 pulse trigger mode response has an unsupported value")
+
+
+def _parse_external_trigger_edge(response: object) -> RfExternalTriggerEdge:
+    value = _clean_response(response, "external trigger edge").upper()
+    if value in {"POS", "POSITIVE"}:
+        return RfExternalTriggerEdge.POSITIVE
+    if value in {"NEG", "NEGATIVE"}:
+        return RfExternalTriggerEdge.NEGATIVE
+    raise ValueError("DSG830 external trigger edge response has an unsupported value")
+
+
+def _parse_external_gate_polarity(response: object) -> RfExternalGatePolarity:
+    value = _clean_response(response, "external gate polarity").upper()
+    if value in {"NORM", "NORMAL"}:
+        return RfExternalGatePolarity.NORMAL
+    if value in {"INV", "INVERSE", "INVERTED"}:
+        return RfExternalGatePolarity.INVERTED
+    raise ValueError("DSG830 external gate polarity response has an unsupported value")
+
+
 def _parse_sweep_type(response: object) -> RfSweepType:
     value = _clean_response(response, "Sweep type").upper()
     if value == "STEP":
@@ -677,6 +757,28 @@ def _parse_sweep_spacing(response: object) -> RfSweepSpacing:
     if value in {"LIN", "LINEAR"}:
         return RfSweepSpacing.LINEAR
     raise ValueError("DSG830 Sweep spacing response must be LIN")
+
+
+def _parse_sweep_mode(response: object) -> RfSweepMode:
+    value = _clean_response(response, "Sweep mode").upper()
+    if value in {"CONT", "CONTINUE", "CONTINUOUS"}:
+        return RfSweepMode.CONTINUOUS
+    if value in {"SING", "SINGLE"}:
+        return RfSweepMode.SINGLE
+    raise ValueError("DSG830 Sweep mode response has an unsupported value")
+
+
+def _parse_sweep_trigger_mode(response: object) -> RfSweepTriggerMode:
+    value = _clean_response(response, "Sweep trigger mode").upper()
+    if value in {"AUTO", "AUTOMATIC"}:
+        return RfSweepTriggerMode.AUTOMATIC
+    if value == "BUS":
+        return RfSweepTriggerMode.BUS
+    if value in {"EXT", "EXTERNAL"}:
+        return RfSweepTriggerMode.EXTERNAL
+    if value == "KEY":
+        return RfSweepTriggerMode.KEY
+    raise ValueError("DSG830 Sweep trigger mode response has an unsupported value")
 
 
 def _parse_sweep_points(response: object) -> int:
@@ -736,6 +838,11 @@ def _require_pulse_port(port_id: object) -> None:
 def _require_sweep_port(port_id: object) -> None:
     if port_id != "rf_out":
         raise ValueError("DSG830 Sweep configuration requires port_id='rf_out'")
+
+
+def _require_trigger_port(port_id: object) -> None:
+    if port_id != "rf_out":
+        raise ValueError("DSG830 trigger configuration requires port_id='rf_out'")
 
 
 def _modulation_prefix(kind: RfModulationKind) -> str:

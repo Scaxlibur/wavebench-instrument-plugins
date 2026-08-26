@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+from dataclasses import replace
 
 from wavebench.instruments.capabilities import validate_declared_capabilities
+from wavebench.instruments.rf_source_capabilities import validate_rf_source_descriptor
 from wavebench.instruments.rf_source_extensions import (
     RF_SOURCE_CONTRACT_VERSION,
+    RfExternalGatePolarity,
+    RfExternalTriggerEdge,
     RfFeature,
+    RfFeatureCapability,
     RfFeatureDirection,
     RfCwProfile,
     RfModulationKind,
@@ -17,11 +22,15 @@ from wavebench.instruments.rf_source_extensions import (
     RfPulsePolarity,
     RfPulseProfile,
     RfPulseSource,
+    RfPulseTriggerMode,
     RfSweepDirection,
+    RfSweepMode,
     RfSweepProfile,
     RfSweepShape,
     RfSweepSpacing,
     RfSweepType,
+    RfSweepTriggerMode,
+    RfTriggerProfile,
 )
 
 
@@ -178,3 +187,57 @@ def test_factory_opens_one_configured_transport_without_instrument_io() -> None:
     assert context.open_calls == 1
     assert driver.transport is transport
     validate_declared_capabilities(descriptor, driver)
+
+
+def test_trigger_snapshot_mapping_requires_an_in_memory_nonproduction_descriptor() -> None:
+    production = _descriptor_module().descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    assert "rf_source.trigger_snapshot" not in production.capabilities
+    assert all(feature.feature is not RfFeature.TRIGGER for feature in extensions.features)
+
+    trigger_feature = RfFeatureCapability(
+        feature=RfFeature.TRIGGER,
+        directions=(RfFeatureDirection.READ,),
+        port_ids=("rf_out",),
+        profile=RfTriggerProfile(
+            state_readable=True,
+            pulse_trigger_modes=(
+                RfPulseTriggerMode.AUTOMATIC,
+                RfPulseTriggerMode.BUS,
+                RfPulseTriggerMode.EXTERNAL,
+                RfPulseTriggerMode.EXTERNAL_GATE,
+                RfPulseTriggerMode.KEY,
+            ),
+            pulse_external_trigger_edges=(
+                RfExternalTriggerEdge.NEGATIVE,
+                RfExternalTriggerEdge.POSITIVE,
+            ),
+            pulse_external_gate_polarities=(
+                RfExternalGatePolarity.INVERTED,
+                RfExternalGatePolarity.NORMAL,
+            ),
+            sweep_modes=(RfSweepMode.CONTINUOUS, RfSweepMode.SINGLE),
+            sweep_period_trigger_modes=(
+                RfSweepTriggerMode.AUTOMATIC,
+                RfSweepTriggerMode.BUS,
+                RfSweepTriggerMode.EXTERNAL,
+                RfSweepTriggerMode.KEY,
+            ),
+            sweep_point_trigger_modes=(
+                RfSweepTriggerMode.AUTOMATIC,
+                RfSweepTriggerMode.BUS,
+                RfSweepTriggerMode.EXTERNAL,
+                RfSweepTriggerMode.KEY,
+            ),
+        ),
+    )
+    evidence_descriptor = replace(
+        production,
+        capabilities=(*production.capabilities, "rf_source.trigger_snapshot"),
+        rf_source_extensions=replace(extensions, features=(*extensions.features, trigger_feature)),
+    )
+
+    validate_rf_source_descriptor(evidence_descriptor)
+    driver_type = importlib.import_module("wavebench_rigol_dsg830.driver").DSG830RfSource
+    validate_declared_capabilities(evidence_descriptor, driver_type(transport=object()))

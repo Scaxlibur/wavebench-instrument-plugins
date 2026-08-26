@@ -8,6 +8,8 @@ import pytest
 from wavebench.instruments.rf_source_extensions import (
     RfAvailability,
     RfCwRequest,
+    RfExternalGatePolarity,
+    RfExternalTriggerEdge,
     RfModulationDisableRequest,
     RfModulationKind,
     RfModulationRequest,
@@ -17,15 +19,18 @@ from wavebench.instruments.rf_source_extensions import (
     RfPulseConfigureRequest,
     RfPulseMode,
     RfPulsePolarity,
+    RfPulseTriggerMode,
     RfPulseSource,
     RfPulseState,
     RfReasonCode,
     RfSweepConfigureRequest,
     RfSweepDirection,
+    RfSweepMode,
     RfSweepShape,
     RfSweepSpacing,
     RfSweepState,
     RfSweepType,
+    RfSweepTriggerMode,
 )
 
 
@@ -193,6 +198,133 @@ def test_driver_returns_fail_closed_unknown_observations_for_unknown_sweep_or_pr
     assert snapshot.ports[0].sweep.reason_code is RfReasonCode.RESPONSE_INVALID_VALUE
     assert snapshot.protection.availability is RfAvailability.UNKNOWN
     assert snapshot.protection.reason_code is RfReasonCode.RESPONSE_INVALID_VALUE
+
+
+def _trigger_responses(**changes: str) -> dict[str, str]:
+    responses = {
+        ":PULM:TRIG:MODE?": "AUTO\n",
+        ":PULM:TRIG:EXT:SLOP?": "POS\n",
+        ":PULM:TRIG:EXT:GATE:POL?": "NORM\n",
+        ":SWE:MODE?": "CONT\n",
+        ":SWE:SWE:TRIG:TYPE?": "AUTO\n",
+        ":SWE:POIN:TRIG:TYPE?": "AUTO\n",
+    }
+    responses.update(changes)
+    return responses
+
+
+def test_driver_reads_trigger_configuration_in_fixed_query_only_order() -> None:
+    transport = FakeTransport(_trigger_responses())
+
+    snapshot = _driver_type()(transport=transport).get_rf_trigger_snapshot("rf_out")
+
+    assert transport.query_calls == [
+        ":PULM:TRIG:MODE?",
+        ":PULM:TRIG:EXT:SLOP?",
+        ":PULM:TRIG:EXT:GATE:POL?",
+        ":SWE:MODE?",
+        ":SWE:SWE:TRIG:TYPE?",
+        ":SWE:POIN:TRIG:TYPE?",
+    ]
+    assert all(command.endswith("?") for command in transport.query_calls)
+    assert transport.write_calls == []
+    assert snapshot.port_id == "rf_out"
+    assert snapshot.pulse_trigger_mode is RfPulseTriggerMode.AUTOMATIC
+    assert snapshot.pulse_external_trigger_edge is RfExternalTriggerEdge.POSITIVE
+    assert snapshot.pulse_external_gate_polarity is RfExternalGatePolarity.NORMAL
+    assert snapshot.sweep_mode is RfSweepMode.CONTINUOUS
+    assert snapshot.sweep_period_trigger_mode is RfSweepTriggerMode.AUTOMATIC
+    assert snapshot.sweep_point_trigger_mode is RfSweepTriggerMode.AUTOMATIC
+
+
+@pytest.mark.parametrize(
+    ("responses", "expected"),
+    (
+        (
+            {
+                ":PULM:TRIG:MODE?": "EGAT\n",
+                ":PULM:TRIG:EXT:SLOP?": "NEGATIVE\n",
+                ":PULM:TRIG:EXT:GATE:POL?": "INVERSE\n",
+                ":SWE:MODE?": "SINGLE\n",
+                ":SWE:SWE:TRIG:TYPE?": "BUS\n",
+                ":SWE:POIN:TRIG:TYPE?": "EXT\n",
+            },
+            (
+                RfPulseTriggerMode.EXTERNAL_GATE,
+                RfExternalTriggerEdge.NEGATIVE,
+                RfExternalGatePolarity.INVERTED,
+                RfSweepMode.SINGLE,
+                RfSweepTriggerMode.BUS,
+                RfSweepTriggerMode.EXTERNAL,
+            ),
+        ),
+        (
+            {
+                ":PULM:TRIG:MODE?": "EXTERNAL\n",
+                ":PULM:TRIG:EXT:SLOP?": "POSITIVE\n",
+                ":PULM:TRIG:EXT:GATE:POL?": "INVERTED\n",
+                ":SWE:MODE?": "CONTINUE\n",
+                ":SWE:SWE:TRIG:TYPE?": "KEY\n",
+                ":SWE:POIN:TRIG:TYPE?": "EXTERNAL\n",
+            },
+            (
+                RfPulseTriggerMode.EXTERNAL,
+                RfExternalTriggerEdge.POSITIVE,
+                RfExternalGatePolarity.INVERTED,
+                RfSweepMode.CONTINUOUS,
+                RfSweepTriggerMode.KEY,
+                RfSweepTriggerMode.EXTERNAL,
+            ),
+        ),
+    ),
+)
+def test_driver_normalizes_documented_trigger_query_aliases(
+    responses: dict[str, str],
+    expected: tuple[object, ...],
+) -> None:
+    transport = FakeTransport(_trigger_responses(**responses))
+
+    snapshot = _driver_type()(transport=transport).get_rf_trigger_snapshot("rf_out")
+
+    assert (
+        snapshot.pulse_trigger_mode,
+        snapshot.pulse_external_trigger_edge,
+        snapshot.pulse_external_gate_polarity,
+        snapshot.sweep_mode,
+        snapshot.sweep_period_trigger_mode,
+        snapshot.sweep_point_trigger_mode,
+    ) == expected
+    assert transport.write_calls == []
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        ":PULM:TRIG:MODE?",
+        ":PULM:TRIG:EXT:SLOP?",
+        ":PULM:TRIG:EXT:GATE:POL?",
+        ":SWE:MODE?",
+        ":SWE:SWE:TRIG:TYPE?",
+        ":SWE:POIN:TRIG:TYPE?",
+    ),
+)
+def test_driver_rejects_malformed_trigger_readback_without_write(command: str) -> None:
+    transport = FakeTransport(_trigger_responses(**{command: "unsupported\n"}))
+
+    with pytest.raises(ValueError, match="unsupported value"):
+        _driver_type()(transport=transport).get_rf_trigger_snapshot("rf_out")
+
+    assert transport.write_calls == []
+
+
+def test_driver_rejects_trigger_snapshot_for_another_port_before_io() -> None:
+    transport = FakeTransport(_trigger_responses())
+
+    with pytest.raises(ValueError, match="port_id"):
+        _driver_type()(transport=transport).get_rf_trigger_snapshot("other")
+
+    assert transport.query_calls == []
+    assert transport.write_calls == []
 
 
 def _modulation_responses(
