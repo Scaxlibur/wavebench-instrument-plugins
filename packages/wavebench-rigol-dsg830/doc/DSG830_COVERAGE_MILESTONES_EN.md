@@ -46,3 +46,16 @@ After offline M0, the production descriptor declares only `rf_source.idn` until 
 - M4 is limited to declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.
 
 Every hardware acceptance needs separate authorization. An unknown final RF-OFF state fails acceptance and cannot promote any capability.
+
+### A1: package-specific read-only acceptance
+
+A1 uses a one-shot, non-production local evidence harness. It must not temporarily alter the descriptor or use
+`rf-source status` to bypass the `rf_source.snapshot` gate. With an isolated TOML copy whose `[rf_source]` sets
+`access = "read_only"`, a guarded single session may query only `*IDN?`, `:FREQ?`, `:LEV?`,
+`:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`, `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`. No retry, error queue,
+RF-output switch, setter, trigger, or network discovery is permitted.
+
+Acceptance requires a successful parser, an explicitly OFF `rf_out`, a healthy closed session, and a guard audit
+showing `read_only` with zero write counters. Keep only a redacted typed snapshot and audit summary; never keep a
+resource, serial number, full IDN, raw response, or command log. An unknown/ON output, parser failure, or session
+failure does not promote a capability and must not trigger automatic RF OFF in this read-only flow.

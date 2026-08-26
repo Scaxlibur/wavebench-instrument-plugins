@@ -80,3 +80,16 @@ ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 s
 | A5 | 外部 trigger 或同步接线 | trigger／fire／同步相关 capability |
 
 每项实机验收都需要单独授权。写入前后必须记录可公开的脱敏证据、输出状态和恢复结果；无法确认最终 RF OFF 时，验收失败且不能提升 capability。
+
+### A1：本包只读验收要求
+
+A1 使用一次性、非 production 的本地 evidence harness；不能临时修改 descriptor，也不能用
+`rf-source status` 绕过 `rf_source.snapshot` 门禁。harness 仅在隔离 TOML 副本的 `[rf_source]` 设置
+`access = "read_only"` 时，通过受 guard 的单一 session 查询 `*IDN?`、`:FREQ?`、`:LEV?`、
+`:OUTP?`、`:MOD:STAT?`、`:PULM:STAT?`、`:SWE:STAT?` 和 `:STAT:QUES:POW:COND?`。不允许重试、
+错误队列、RF 输出切换、任意 setter、trigger 或网络发现。
+
+验收成功必须同时证明 parser 成功、`rf_out` 明确为 OFF、session 正常关闭、guard audit 为
+`read_only` 且所有写计数为零。证据只保存脱敏的类型化 snapshot 和 audit 摘要；不得保存资源、序列号、
+完整 IDN、原始响应或命令日志。任何未知／ON 输出、解析异常或 session 异常都不提升 capability，也不在
+只读流程中尝试自动 RF OFF。
