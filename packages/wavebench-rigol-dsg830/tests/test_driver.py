@@ -531,7 +531,7 @@ def test_driver_accepts_grouped_pulse_time_responses_from_rigol_firmware() -> No
         _pulse_responses(
             **{
                 ":PULM:PER?": "1.000000000 000s\n",
-                ":PULM:WIDT?": "100.000000 000us\n",
+                ":PULM:WIDT?": "100.000 000 000us\n",
             }
         )
     )
@@ -657,9 +657,9 @@ def test_driver_accepts_grouped_step_sweep_frequency_and_dwell_responses() -> No
     transport = FakeTransport(
         _sweep_responses(
             **{
-                ":SWE:STEP:STAR:FREQ?": "1.000000000 000MHz\n",
-                ":SWE:STEP:STOP:FREQ?": "2.000000000 000MHz\n",
-                ":SWE:STEP:DWEL?": "20.000000 000ms\n",
+                ":SWE:STEP:STAR:FREQ?": "1.000 000 000MHz\n",
+                ":SWE:STEP:STOP:FREQ?": "2.000 000 000MHz\n",
+                ":SWE:STEP:DWEL?": "20.000 000 000ms\n",
             }
         )
     )

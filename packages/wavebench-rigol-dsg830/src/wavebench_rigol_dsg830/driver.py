@@ -77,14 +77,14 @@ _FREQUENCY_RESPONSE = re.compile(
     re.IGNORECASE,
 )
 _FREQUENCY_FRACTION_GROUP_RESPONSE = re.compile(
-    r"^(?P<leading>[+-]?\d+\.\d+) (?P<trailing>\d+)(?P<unit>Hz|kHz|MHz|GHz)?$",
+    r"^(?P<leading>[+-]?\d+\.\d+)(?P<trailing>(?: \d+)+)(?P<unit>Hz|kHz|MHz|GHz)?$",
     re.IGNORECASE,
 )
 _DECIMAL_RESPONSE = re.compile(rf"^{_NUMBER}$")
 _RAD_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})(?:rad)?$", re.IGNORECASE)
 _TIME_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})\s*(?P<unit>s|ms|us|ns)?$", re.IGNORECASE)
 _TIME_FRACTION_GROUP_RESPONSE = re.compile(
-    r"^(?P<leading>[+-]?\d+\.\d+) (?P<trailing>\d+)(?P<unit>s|ms|us|ns)?$",
+    r"^(?P<leading>[+-]?\d+\.\d+)(?P<trailing>(?: \d+)+)(?P<unit>s|ms|us|ns)?$",
     re.IGNORECASE,
 )
 _INTEGER_RESPONSE = re.compile(r"^\d+$")
@@ -494,7 +494,7 @@ def _parse_frequency_response_hz(
         if grouped is not None:
             normalized = (
                 grouped.group("leading")
-                + grouped.group("trailing")
+                + grouped.group("trailing").replace(" ", "")
                 + (grouped.group("unit") or "")
             )
             match = _FREQUENCY_RESPONSE.fullmatch(normalized)
@@ -576,7 +576,7 @@ def _parse_seconds(
         if grouped is not None:
             normalized = (
                 grouped.group("leading")
-                + grouped.group("trailing")
+                + grouped.group("trailing").replace(" ", "")
                 + (grouped.group("unit") or "")
             )
             match = _TIME_RESPONSE.fullmatch(normalized)
