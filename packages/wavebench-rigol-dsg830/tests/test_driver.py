@@ -20,6 +20,12 @@ from wavebench.instruments.rf_source_extensions import (
     RfPulseSource,
     RfPulseState,
     RfReasonCode,
+    RfSweepConfigureRequest,
+    RfSweepDirection,
+    RfSweepShape,
+    RfSweepSpacing,
+    RfSweepState,
+    RfSweepType,
 )
 
 
@@ -599,6 +605,154 @@ def test_driver_rejects_malformed_pulse_readback_without_write() -> None:
 
     with pytest.raises(ValueError, match="pulse source response"):
         _driver_type()(transport=transport).get_rf_pulse_snapshot("rf_out")
+
+    assert transport.write_calls == []
+
+
+def _sweep_responses(**changes: str) -> dict[str, str]:
+    responses = {
+        ":SWE:TYPE?": "STEP\n",
+        ":SWE:DIR?": "FWD\n",
+        ":SWE:STEP:SHAP?": "RAMP\n",
+        ":SWE:STEP:SPAC?": "LIN\n",
+        ":SWE:STEP:STAR:FREQ?": "1.000000000MHz\n",
+        ":SWE:STEP:STOP:FREQ?": "2.000000000MHz\n",
+        ":SWE:STEP:POIN?": "11\n",
+        ":SWE:STEP:DWEL?": "20.000000ms\n",
+        ":SWE:STAT?": "OFF\n",
+    }
+    responses.update(changes)
+    return responses
+
+
+def test_driver_reads_complete_disabled_frequency_only_step_sweep_profile() -> None:
+    transport = FakeTransport(_sweep_responses())
+
+    snapshot = _driver_type()(transport=transport).get_rf_sweep_snapshot("rf_out")
+
+    assert transport.query_calls == [
+        ":SWE:TYPE?",
+        ":SWE:DIR?",
+        ":SWE:STEP:SHAP?",
+        ":SWE:STEP:SPAC?",
+        ":SWE:STEP:STAR:FREQ?",
+        ":SWE:STEP:STOP:FREQ?",
+        ":SWE:STEP:POIN?",
+        ":SWE:STEP:DWEL?",
+        ":SWE:STAT?",
+    ]
+    assert transport.write_calls == []
+    assert snapshot.sweep_type is RfSweepType.STEP
+    assert snapshot.direction is RfSweepDirection.FORWARD
+    assert snapshot.shape is RfSweepShape.RAMP
+    assert snapshot.spacing is RfSweepSpacing.LINEAR
+    assert snapshot.start_frequency_hz == 1_000_000.0
+    assert snapshot.stop_frequency_hz == 2_000_000.0
+    assert snapshot.points == 11
+    assert snapshot.dwell_s == 20e-3
+    assert snapshot.state is RfSweepState.DISABLED
+
+
+def test_driver_accepts_grouped_step_sweep_frequency_and_dwell_responses() -> None:
+    transport = FakeTransport(
+        _sweep_responses(
+            **{
+                ":SWE:STEP:STAR:FREQ?": "1.000000000 000MHz\n",
+                ":SWE:STEP:STOP:FREQ?": "2.000000000 000MHz\n",
+                ":SWE:STEP:DWEL?": "20.000000 000ms\n",
+            }
+        )
+    )
+
+    snapshot = _driver_type()(transport=transport).get_rf_sweep_snapshot("rf_out")
+
+    assert snapshot.start_frequency_hz == 1_000_000.0
+    assert snapshot.stop_frequency_hz == 2_000_000.0
+    assert snapshot.dwell_s == 20e-3
+
+
+def test_driver_maps_one_disabled_frequency_only_step_sweep_request_to_fixed_writes() -> None:
+    transport = FakeTransport({})
+    request = RfSweepConfigureRequest(
+        port_id="rf_out",
+        start_frequency_hz=1_000_000.0,
+        stop_frequency_hz=2_000_000.0,
+        points=11,
+        dwell_s=20e-3,
+    )
+
+    _driver_type()(transport=transport).configure_rf_sweep(request)
+
+    assert transport.query_calls == []
+    assert transport.write_calls == [
+        ":SWE:TYPE STEP",
+        ":SWE:DIR FWD",
+        ":SWE:STEP:SHAP RAMP",
+        ":SWE:STEP:SPAC LIN",
+        ":SWE:STEP:STAR:FREQ 1000000Hz",
+        ":SWE:STEP:STOP:FREQ 2000000Hz",
+        ":SWE:STEP:POIN 11",
+        ":SWE:STEP:DWEL 0.02s",
+        ":SWE:STAT OFF",
+    ]
+    assert ":SWE:EXEC" not in transport.write_calls
+    assert ":SWE:STAT FREQ" not in transport.write_calls
+    assert not any(
+        "TRIG" in command or command.startswith(":OUTP") or ":LEV" in command
+        for command in transport.write_calls
+    )
+
+
+@pytest.mark.parametrize(
+    "sweep_request",
+    (
+        RfSweepConfigureRequest(
+            port_id="other",
+            start_frequency_hz=1_000_000.0,
+            stop_frequency_hz=2_000_000.0,
+            points=11,
+            dwell_s=20e-3,
+        ),
+        RfSweepConfigureRequest(
+            port_id="rf_out",
+            start_frequency_hz=8_000.0,
+            stop_frequency_hz=1_000_000.0,
+            points=11,
+            dwell_s=20e-3,
+        ),
+        RfSweepConfigureRequest(
+            port_id="rf_out",
+            start_frequency_hz=1_000_000.0,
+            stop_frequency_hz=2_000_000.0,
+            points=65_536,
+            dwell_s=20e-3,
+        ),
+        RfSweepConfigureRequest(
+            port_id="rf_out",
+            start_frequency_hz=1_000_000.0,
+            stop_frequency_hz=2_000_000.0,
+            points=11,
+            dwell_s=10e-3,
+        ),
+    ),
+)
+def test_driver_rejects_invalid_step_sweep_targets_or_ranges_before_write(
+    sweep_request: RfSweepConfigureRequest,
+) -> None:
+    transport = FakeTransport({})
+
+    with pytest.raises(ValueError):
+        _driver_type()(transport=transport).configure_rf_sweep(sweep_request)
+
+    assert transport.query_calls == []
+    assert transport.write_calls == []
+
+
+def test_driver_rejects_malformed_step_sweep_readback_without_write() -> None:
+    transport = FakeTransport(_sweep_responses(**{":SWE:TYPE?": "LIST\n"}))
+
+    with pytest.raises(ValueError, match="Sweep type response"):
+        _driver_type()(transport=transport).get_rf_sweep_snapshot("rf_out")
 
     assert transport.write_calls == []
 

@@ -40,7 +40,13 @@ from wavebench.instruments.rf_source_extensions import (
     RfPulseState,
     RfReasonCode,
     RfSourceSnapshot,
+    RfSweepConfigureRequest,
+    RfSweepDirection,
+    RfSweepShape,
+    RfSweepSnapshot,
+    RfSweepSpacing,
     RfSweepState,
+    RfSweepType,
 )
 
 
@@ -61,6 +67,10 @@ _PULSE_PERIOD_MAX_S = 170.0
 _PULSE_WIDTH_MIN_S = 10e-9
 _PULSE_WIDTH_MAX_S = _PULSE_PERIOD_MAX_S - _PULSE_WIDTH_MIN_S
 _PULSE_MINIMUM_OFF_TIME_S = 10e-9
+_SWEEP_POINTS_MIN = 2
+_SWEEP_POINTS_MAX = 65_535
+_SWEEP_DWELL_MIN_S = 20e-3
+_SWEEP_DWELL_MAX_S = 100.0
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?"
 _FREQUENCY_RESPONSE = re.compile(
     rf"^(?P<value>{_NUMBER})(?P<unit>Hz|kHz|MHz|GHz)?$",
@@ -296,13 +306,13 @@ class DSG830RfSource:
             port_id=port_id,
             source=_parse_pulse_source(responses[":PULM:SOUR?"]),
             mode=_parse_pulse_mode(responses[":PULM:MODE?"]),
-            period_s=_parse_pulse_seconds(
+            period_s=_parse_seconds(
                 responses[":PULM:PER?"],
                 "pulse period",
                 minimum_s=_PULSE_PERIOD_MIN_S,
                 maximum_s=_PULSE_PERIOD_MAX_S,
             ),
-            width_s=_parse_pulse_seconds(
+            width_s=_parse_seconds(
                 responses[":PULM:WIDT?"],
                 "pulse width",
                 minimum_s=_PULSE_WIDTH_MIN_S,
@@ -334,6 +344,76 @@ class DSG830RfSource:
         self.transport.write(f":PULM:WIDT {_format_scpi_real(request.width_s)}s")
         self.transport.write(f":PULM:POL {polarity}")
         self.transport.write(":PULM:STAT OFF")
+
+    def get_rf_sweep_snapshot(self, port_id: str) -> RfSweepSnapshot:
+        """Read one Step Sweep profile without arming, firing, or triggering it."""
+
+        _require_sweep_port(port_id)
+        commands = (
+            ":SWE:TYPE?",
+            ":SWE:DIR?",
+            ":SWE:STEP:SHAP?",
+            ":SWE:STEP:SPAC?",
+            ":SWE:STEP:STAR:FREQ?",
+            ":SWE:STEP:STOP:FREQ?",
+            ":SWE:STEP:POIN?",
+            ":SWE:STEP:DWEL?",
+            ":SWE:STAT?",
+        )
+        responses = {command: self.transport.query(command) for command in commands}
+        return RfSweepSnapshot(
+            port_id=port_id,
+            sweep_type=_parse_sweep_type(responses[":SWE:TYPE?"]),
+            direction=_parse_sweep_direction(responses[":SWE:DIR?"]),
+            shape=_parse_sweep_shape(responses[":SWE:STEP:SHAP?"]),
+            spacing=_parse_sweep_spacing(responses[":SWE:STEP:SPAC?"]),
+            start_frequency_hz=_parse_frequency_response_hz(
+                responses[":SWE:STEP:STAR:FREQ?"],
+                "Sweep start frequency",
+                minimum_hz=_FREQUENCY_MIN_HZ,
+                maximum_hz=_FREQUENCY_MAX_HZ,
+            ),
+            stop_frequency_hz=_parse_frequency_response_hz(
+                responses[":SWE:STEP:STOP:FREQ?"],
+                "Sweep stop frequency",
+                minimum_hz=_FREQUENCY_MIN_HZ,
+                maximum_hz=_FREQUENCY_MAX_HZ,
+            ),
+            points=_parse_sweep_points(responses[":SWE:STEP:POIN?"]),
+            dwell_s=_parse_seconds(
+                responses[":SWE:STEP:DWEL?"],
+                "Sweep dwell",
+                minimum_s=_SWEEP_DWELL_MIN_S,
+                maximum_s=_SWEEP_DWELL_MAX_S,
+            ),
+            state=_parse_sweep_snapshot_state(responses[":SWE:STAT?"]),
+        )
+
+    def configure_rf_sweep(self, request: RfSweepConfigureRequest) -> None:
+        """Configure one disabled frequency-only Step Sweep without triggering.
+
+        Core owns the RF-OFF preflight and independent profile readback. This
+        mapping never selects Level Sweep, arms or fires Sweep, writes a
+        trigger setting, changes RF output, or issues ``:SWE:EXEC``.
+        """
+
+        if not isinstance(request, RfSweepConfigureRequest):
+            raise ValueError("DSG830 Sweep configuration requires RfSweepConfigureRequest")
+        _require_sweep_port(request.port_id)
+        _validate_sweep_request_range(request)
+        self.transport.write(":SWE:TYPE STEP")
+        self.transport.write(":SWE:DIR FWD")
+        self.transport.write(":SWE:STEP:SHAP RAMP")
+        self.transport.write(":SWE:STEP:SPAC LIN")
+        self.transport.write(
+            f":SWE:STEP:STAR:FREQ {_format_scpi_real(request.start_frequency_hz)}Hz"
+        )
+        self.transport.write(
+            f":SWE:STEP:STOP:FREQ {_format_scpi_real(request.stop_frequency_hz)}Hz"
+        )
+        self.transport.write(f":SWE:STEP:POIN {request.points}")
+        self.transport.write(f":SWE:STEP:DWEL {_format_scpi_real(request.dwell_s)}s")
+        self.transport.write(":SWE:STAT OFF")
 
     def set_rf_output(self, request: RfOutputRequest) -> None:
         """Map one offline M2 output request to one documented setter.
@@ -482,7 +562,7 @@ def _parse_pm_deviation_rad(response: object) -> float:
     return deviation
 
 
-def _parse_pulse_seconds(
+def _parse_seconds(
     response: object,
     label: str,
     *,
@@ -571,6 +651,44 @@ def _parse_pulse_polarity(response: object) -> RfPulsePolarity:
     raise ValueError("DSG830 pulse polarity response must be NORMAL or INVERSE")
 
 
+def _parse_sweep_type(response: object) -> RfSweepType:
+    value = _clean_response(response, "Sweep type").upper()
+    if value == "STEP":
+        return RfSweepType.STEP
+    raise ValueError("DSG830 Sweep type response must be STEP")
+
+
+def _parse_sweep_direction(response: object) -> RfSweepDirection:
+    value = _clean_response(response, "Sweep direction").upper()
+    if value in {"FWD", "FORWARD"}:
+        return RfSweepDirection.FORWARD
+    raise ValueError("DSG830 Sweep direction response must be FWD")
+
+
+def _parse_sweep_shape(response: object) -> RfSweepShape:
+    value = _clean_response(response, "Sweep shape").upper()
+    if value == "RAMP":
+        return RfSweepShape.RAMP
+    raise ValueError("DSG830 Sweep shape response must be RAMP")
+
+
+def _parse_sweep_spacing(response: object) -> RfSweepSpacing:
+    value = _clean_response(response, "Sweep spacing").upper()
+    if value in {"LIN", "LINEAR"}:
+        return RfSweepSpacing.LINEAR
+    raise ValueError("DSG830 Sweep spacing response must be LIN")
+
+
+def _parse_sweep_points(response: object) -> int:
+    value = _clean_response(response, "Sweep points")
+    if _INTEGER_RESPONSE.fullmatch(value) is None:
+        raise ValueError("DSG830 Sweep points response must be an integer")
+    points = int(value)
+    if not _SWEEP_POINTS_MIN <= points <= _SWEEP_POINTS_MAX:
+        raise ValueError("DSG830 Sweep points response is outside the documented range")
+    return points
+
+
 def _parse_modulation_waveform(response: object) -> RfModulationWaveform:
     value = _clean_response(response, "modulation waveform").upper()
     if value == "SINE":
@@ -613,6 +731,11 @@ def _require_modulation_port(port_id: object) -> None:
 def _require_pulse_port(port_id: object) -> None:
     if port_id != "rf_out":
         raise ValueError("DSG830 pulse configuration requires port_id='rf_out'")
+
+
+def _require_sweep_port(port_id: object) -> None:
+    if port_id != "rf_out":
+        raise ValueError("DSG830 Sweep configuration requires port_id='rf_out'")
 
 
 def _modulation_prefix(kind: RfModulationKind) -> str:
@@ -665,6 +788,17 @@ def _validate_pulse_request_range(request: RfPulseConfigureRequest) -> None:
         raise ValueError("DSG830 pulse width violates the documented minimum off time")
 
 
+def _validate_sweep_request_range(request: RfSweepConfigureRequest) -> None:
+    if not _FREQUENCY_MIN_HZ <= request.start_frequency_hz <= _FREQUENCY_MAX_HZ:
+        raise ValueError("DSG830 Sweep start frequency is outside the documented range")
+    if not _FREQUENCY_MIN_HZ <= request.stop_frequency_hz <= _FREQUENCY_MAX_HZ:
+        raise ValueError("DSG830 Sweep stop frequency is outside the documented range")
+    if not _SWEEP_POINTS_MIN <= request.points <= _SWEEP_POINTS_MAX:
+        raise ValueError("DSG830 Sweep points is outside the documented range")
+    if not _SWEEP_DWELL_MIN_S <= request.dwell_s <= _SWEEP_DWELL_MAX_S:
+        raise ValueError("DSG830 Sweep dwell is outside the documented range")
+
+
 def _parse_binary(response: object, label: str) -> bool:
     value = _clean_response(response, label)
     if value == "0":
@@ -690,6 +824,13 @@ def _parse_sweep_state(response: object) -> RfObserved[RfSweepState]:
     }:
         return RfObserved.value_of(RfSweepState.ENABLED)
     return RfObserved.missing(RfAvailability.UNKNOWN, RfReasonCode.RESPONSE_INVALID_VALUE)
+
+
+def _parse_sweep_snapshot_state(response: object) -> RfSweepState:
+    observed = _parse_sweep_state(response)
+    if observed.availability is RfAvailability.VALUE and isinstance(observed.value, RfSweepState):
+        return observed.value
+    raise ValueError("DSG830 Sweep state response has an invalid value")
 
 
 def _parse_protection_status(response: object) -> RfObserved[RfProtectionStatus]:
