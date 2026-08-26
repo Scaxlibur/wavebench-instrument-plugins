@@ -1,0 +1,6 @@
+# A5-0 only records logical Pulse/Sweep trigger configuration. It does not
+# define or validate a physical trigger/sync connector, wiring, or level.
+# Keep the real RF resource only in a private read_only TOML, never here.
+
+[a5_trigger_snapshot_evidence]
+port_id = "rf_out"
