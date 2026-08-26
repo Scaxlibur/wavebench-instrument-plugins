@@ -8,14 +8,14 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 ## Current status
 
 Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, M2 offline output
-mapping, M3 internal-sine modulation mapping, and M4 Pulse plus frequency-only Step Sweep offline subsets: its descriptor uses
+mapping, M3 internal-sine modulation mapping, and M4 Pulse plus the production frequency-only Step Sweep subset: its descriptor uses
 `kind="rf_source"`, declares one `rf_out` port with static limits and a 50-ohm dBm reference, and ships a
 strict snapshot parser plus one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings, internal-sine AM/FM/PM
 configuration/readback mappings, internal/single Pulse timing/polarity mapping, and a disabled Step Sweep profile mapping.
 
-A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, and A4 Pulse evidence have completed and been reviewed.
+A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, A4 Pulse evidence, and A4 Step Sweep evidence have completed and been reviewed.
 The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`,
-`rf_source.output`, and `rf_source.pulse_configure`. A `read_write` CW or Pulse request requires target RF OFF and the complete OFF-only preflight; RF ON/OFF
+`rf_source.output`, `rf_source.pulse_configure`, and `rf_source.sweep_configure`. A `read_write` CW, Pulse, or Step Sweep request requires target RF OFF and the complete OFF-only preflight; RF ON/OFF
 also requires complete per-port safety configuration, a fresh snapshot, and independent readback. The example
 configuration remains `read_only` and does not enable writes by default.
 
@@ -60,16 +60,15 @@ direction, shape, spacing, start/stop frequency, points, dwell, and state; `conf
 profile and ends with `:SWE:STAT OFF`. It never writes `:SWE:EXEC`, any trigger, Level Sweep, list setup, RF output,
 or rear-panel I/O. Core requires RF output, modulation, Pulse, and Sweep OFF with no active protection before and
 after the write, then independently reads the complete profile. The source checkout includes
-`tools/a4_step_sweep_evidence.py` and a resource-free template, both covered by fake regressions: `--diagnose` has
+`tools/a4_step_sweep_evidence.py` and a resource-free template, both covered by fake regressions and controlled hardware acceptance: `--diagnose` has
 25 queries and zero writes, while a successful explicit `--execute` path has 41 queries and 9 configuration writes.
-It does not read scope, invoke RF output, or arm/fire Sweep. There is no hardware evidence yet.
+It does not read scope, invoke RF output, or arm/fire Sweep. Both paths passed, with an independent final confirmation that RF output, modulation, Pulse, and Sweep were disabled and no protection condition was active. The historical harness rejects reruns after the promotion.
 
-The production descriptor declares no error queue, modulation, Step Sweep, trigger, or arbitrary SCPI passthrough.
+The production descriptor declares no error queue, modulation, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
 `rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
-internal/single profile and leaves Pulse OFF. `rf_source.modulation_configure` remains behind PM-covering A4 hardware
-evidence; `rf_source.sweep_configure` requires independent Step Sweep evidence. A driver method or an offline test
-does not promote it. Every other capability remains behind its A4–A5
+internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
+`rf_source.modulation_configure` remains behind PM-covering A4 hardware evidence. Every other capability remains behind its A4–A5
 evidence gate.
 
 ## Development documentation
