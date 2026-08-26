@@ -5,7 +5,12 @@ import importlib.util
 
 import pytest
 
-from wavebench.instruments.rf_source_extensions import RfAvailability, RfCwRequest, RfReasonCode
+from wavebench.instruments.rf_source_extensions import (
+    RfAvailability,
+    RfCwRequest,
+    RfOutputRequest,
+    RfReasonCode,
+)
 
 
 class FakeTransport:
@@ -112,6 +117,28 @@ def test_driver_rejects_an_offline_cw_request_for_another_port_before_write() ->
     with pytest.raises(ValueError, match="port_id"):
         _driver_type()(transport=transport).configure_cw(
             RfCwRequest(port_id="other", frequency_hz=4_000_000.0)
+        )
+
+    assert transport.write_calls == []
+
+
+def test_driver_maps_each_offline_rf_output_request_to_one_documented_write() -> None:
+    transport = FakeTransport(_snapshot_responses())
+    driver = _driver_type()(transport=transport)
+
+    driver.set_rf_output(RfOutputRequest(port_id="rf_out", enabled=True))
+    driver.set_rf_output(RfOutputRequest(port_id="rf_out", enabled=False))
+
+    assert transport.query_calls == []
+    assert transport.write_calls == [":OUTP ON", ":OUTP OFF"]
+
+
+def test_driver_rejects_an_offline_rf_output_request_for_another_port_before_write() -> None:
+    transport = FakeTransport(_snapshot_responses())
+
+    with pytest.raises(ValueError, match="port_id"):
+        _driver_type()(transport=transport).set_rf_output(
+            RfOutputRequest(port_id="other", enabled=True)
         )
 
     assert transport.write_calls == []

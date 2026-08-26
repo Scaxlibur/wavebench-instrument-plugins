@@ -5,9 +5,9 @@ A1 hardware evidence authorizes the public ``rf_source.snapshot`` capability.
 set and does not configure frequency or power, switch RF output, or control
 modulation, Pulse, Sweep, trigger, or arbitrary SCPI.
 
-``configure_cw()`` is present for Core M1 fake-descriptor tests only. The
-production descriptor does not declare ``rf_source.cw_configure`` until A3
-evidence exists.
+``configure_cw()`` and ``set_rf_output()`` are present for Core M1/M2
+fake-descriptor tests only. The production descriptor does not declare their
+write capabilities until the corresponding hardware evidence exists.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from wavebench.instruments.rf_source_extensions import (
     RfCwRequest,
     RfModulationState,
     RfObserved,
+    RfOutputRequest,
     RfPortSnapshot,
     RfProtectionStatus,
     RfPulseState,
@@ -117,6 +118,20 @@ class DSG830RfSource:
         if not _POWER_MIN_DBM <= request.power_dbm <= _POWER_MAX_DBM:
             raise ValueError("DSG830 CW power is outside the documented range")
         self.transport.write(f":LEV {_format_scpi_real(request.power_dbm)}dBm")
+
+    def set_rf_output(self, request: RfOutputRequest) -> None:
+        """Map one offline M2 output request to one documented setter.
+
+        Core owns the safety preflight, independent readback, and bounded
+        OFF recovery. This driver sends one write only and never queries,
+        retries, or recovers on its own.
+        """
+
+        if not isinstance(request, RfOutputRequest):
+            raise ValueError("DSG830 RF output control requires RfOutputRequest")
+        if request.port_id != "rf_out":
+            raise ValueError("DSG830 RF output control requires port_id='rf_out'")
+        self.transport.write(":OUTP ON" if request.enabled else ":OUTP OFF")
 
     def a1_snapshot_firmware(self) -> str | None:
         """Return the safe firmware token from the current A1 snapshot query set.
