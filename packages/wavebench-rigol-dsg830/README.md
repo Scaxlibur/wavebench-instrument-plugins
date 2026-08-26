@@ -23,7 +23,9 @@ M4 Pulse 只覆盖 internal／single 子集。`configure_rf_pulse()` 固定设�
 
 M4 frequency-only Step Sweep 仅覆盖固定的 `STEP`／`FWD`／`RAMP`／`LIN` profile。`get_rf_sweep_snapshot()` 查询 type、direction、shape、spacing、起止频率、点数、驻留时间和状态；`configure_rf_sweep()` 只写这些 profile 字段，并以 `:SWE:STAT OFF` 收尾。它不写 `:SWE:EXEC`、任何 trigger、Level Sweep、list、RF 输出或后面板接口命令。Core 在写前和写后都要求 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection，写后独立读回完整 profile。源码 checkout 的 `tools/a4_step_sweep_evidence.py` 与无资源 setup 模板已通过 fake 回归和专项实机验收：`--diagnose` 固定 25 次 query、零 write，显式 `--execute` 的成功路径固定 41 次 query、9 条配置 write。工具不读取 Scope、不调用 RF output、不 arm／fire Sweep；最终独立复核 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection。证据复核后，`rf_source.sweep_configure` 已进入 production descriptor，historical harness 会拒绝重跑。
 
-production descriptor 不声明错误队列、`rf_source.modulation_disable`、调制开启时的 RF 输出、trigger、Sweep execute／fire、Level Sweep、list 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，`rf_source.modulation_configure` 只覆盖已验收的 RF-OFF 内部 Sine profile（PM 精确 `1.25 rad`），`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF，`rf_source.sweep_configure` 只覆盖已验收的 fixed profile 配置并保持 Sweep disabled；其余 capability 继续经过对应的 A4–A5 实机证据门。
+A5-0 已在离线代码中提供 `get_rf_trigger_snapshot()`：它固定读取 Pulse trigger mode、external trigger edge、external gate polarity、Sweep mode、Sweep period trigger 与 Sweep point trigger，并严格拒绝未知响应。六条命令均为 query；driver 不发送 setter、`*TRG`、`:TRIG:PULS`、`:TRIG:SWE`、`:SWE:EXEC`、`:PULM:OUT` 或 RF 输出写入。该映射只观察逻辑 configuration，`rf_out` 不是物理 trigger／sync connector。
+
+production descriptor 不声明错误队列、`rf_source.modulation_disable`、调制开启时的 RF 输出、`rf_source.trigger_snapshot`、trigger、Sweep execute／fire、Level Sweep、list 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，`rf_source.modulation_configure` 只覆盖已验收的 RF-OFF 内部 Sine profile（PM 精确 `1.25 rad`），`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF，`rf_source.sweep_configure` 只覆盖已验收的 fixed profile 配置并保持 Sweep disabled；其余 capability 继续经过对应的 A4–A5 实机证据门。
 
 ## 开发文档
 

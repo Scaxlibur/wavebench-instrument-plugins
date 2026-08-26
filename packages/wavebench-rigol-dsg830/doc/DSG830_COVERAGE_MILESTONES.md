@@ -23,7 +23,8 @@
 | M3 | A4 已通过并提升 | 内部 Sine AM／FM／PM 的固定写入序列、严格 readback 与 Core 配置事务／CLI／run／artifact；按模式关闭仅供本地证据与私有恢复，production 已开放 `rf_source.modulation_configure`。PM production profile 固定为 `1.25 rad`。 |
 | M4（Pulse） | 离线完成；A4 Pulse 已通过 | internal／single Pulse 的 period／width／polarity 映射、独立 readback、Core 事务／CLI／run／artifact 与本地 evidence harness；production 已开放 `rf_source.pulse_configure`。 |
 | M4（Step Sweep） | A4 已完成并提升 | fixed `STEP`／`FWD`／`RAMP`／`LIN` frequency-only profile、严格 readback、Core 配置事务／CLI／run／artifact 与本地 evidence harness；production 已开放保持 Sweep disabled 的 `rf_source.sweep_configure`。 |
-| A1–A5 | A1、A2、A3、A4 调制／Pulse／Step Sweep 已完成；A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW；A4 分别提升 RF-OFF 调制、OFF-only Pulse 与保持 Sweep disabled 的 Step Sweep 配置。 |
+| A5-0 | 离线完成；不属于物理 A5 证据 | 六条固定 trigger configuration query、严格 enum parser、Core 的只读 Service／CLI／run／artifact；production descriptor 保持不变。 |
+| A1–A5 | A1、A2、A3、A4 调制／Pulse／Step Sweep 已完成；物理 A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW；A4 分别提升 RF-OFF 调制、OFF-only Pulse 与保持 Sweep disabled 的 Step Sweep 配置。A5-0 不提升 capability。 |
 
 ## Seed：历史包边界
 
@@ -64,7 +65,7 @@ ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 s
 
 ## M3：内部正弦调制（A4 已通过并提升）
 
-M3 的离线实现和 A4 实机验收均已完成。范围只包含内部 Sine AM／FM／PM；下表同时标示 driver 离线映射与当前 production profile：
+M3 的离线实现和 A4 实机验收均已完成。范围只包含内部 Sine AM／FM／PM；下表同时标识 driver 离线映射与当前 production profile：
 
 | 模式 | 固定 driver 配置 | 离线／production 值范围 | 内部频率范围 |
 | --- | --- | --- | --- |
@@ -106,7 +107,7 @@ frequency-only Step Sweep 的生产子集只接受起止频率、点数和驻留
 
 源码 checkout 的 `tools/a4_step_sweep_evidence.py` 和 `tools/a4_step_sweep_evidence.setup.template.toml` 已完成离线回归和专项实机验收。静态预检要求独立 `read_only` RF 配置、关闭读重试、精确 production descriptor 和人工确认的 50 Ω 端接。`--diagnose` 只读取初始／最终 RF snapshot 与完整 Step Sweep profile，成功路径固定为 25 次 query、零 write；显式 `--execute` 才在内存中创建受限 `read_write` descriptor，成功路径固定为 41 次 query、9 条配置 write。两条路径都不读取 scope、不调用 RF output、不 arm／fire Sweep 或发送 trigger，且证据以 `0600` 保存。诊断与受控配置均通过，最终独立复核 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection；historical harness 在 capability 提升后拒绝重跑。
 
-Pulse trigger、Sweep execute／fire、全部外部接口、Level Sweep 与 list 仍未实现。fake descriptor 可以用于后续 trigger／fire 事务测试；这些 production capability 仍要等待 A4 或 A5 的对应证据。
+Pulse trigger、Sweep execute／fire、全部物理外部接口、Level Sweep 与 list 仍未实现。A5-0 只读取逻辑 trigger configuration，不发送 trigger，也不定义物理 connector；fake descriptor 可以用于后续 trigger／fire 事务测试；这些 production capability 仍要等待 A4 或 A5 的对应证据。
 
 ## A1–A5 实机证据
 
@@ -120,7 +121,13 @@ Pulse trigger、Sweep execute／fire、全部外部接口、Level Sweep 与 list
 
 每项实机验收都需要单独授权。写入前后必须记录可公开的脱敏证据、输出状态和恢复结果；无法确认最终 RF OFF 时，验收失败且不能提升 capability。
 
-### A5：DSG830 后面板接口进入条件（未开始）
+### A5-0：逻辑 trigger configuration 读取（离线完成）
+
+`get_rf_trigger_snapshot()` 固定依次查询 `:PULM:TRIG:MODE?`、`:PULM:TRIG:EXT:SLOP?`、`:PULM:TRIG:EXT:GATE:POL?`、`:SWE:MODE?`、`:SWE:SWE:TRIG:TYPE?` 和 `:SWE:POIN:TRIG:TYPE?`。它将 Pulse trigger mode、external trigger edge、external gate polarity、Sweep mode、Sweep period trigger 与 Sweep point trigger 解析为封闭 enum；未知响应失败关闭。所有命令均为 query，driver 不发送 setter、`*TRG`、`:TRIG:PULS`、`:TRIG:SWE`、`:SWE:EXEC`、`:PULM:OUT` 或 RF output 写入。
+
+Core 将这条路径建模为 `rf_source.trigger_snapshot`、`wavebench rf-source trigger status --port PORT_ID` 和 `rf_source.trigger_status`。它要求 `TRIGGER / READ` profile，且只在非 production descriptor 中声明。`port_id` 仅表示相关逻辑设置影响的 RF 输出，不是 `TRIGGER IN`、`PULSE IN/OUT` 或 sync connector。DSG830 production descriptor 不声明该 capability 或 feature；因此当前普通配置拒绝该入口，不进行硬件 I/O。
+
+### A5：DSG830 后面板接口进入条件（物理验收未开始）
 
 DSG830 当前 production descriptor 只声明 `rf_out`，其 50 Ω dBm 参考不描述后面板 trigger／Pulse／sync 接口。手册中的 external trigger 命令只构成候选映射，不能替代接口电平、阻抗或接线验证。`TRIGGER IN` 与 `PULSE IN/OUT` 必须视为不同物理接口；不得从 CH2 的 50 Ω 或 A2–A4 的 RF 路径推断它们的电气边界。
 
@@ -128,9 +135,9 @@ A5 开始前，需要为本次唯一目标行为提供：源端与目的端接�
 
 推荐实现顺序为：
 
-1. 对一个明确的外部输入路径建立 Core typed contract、descriptor profile、driver 严格 readback 和 fake transport 回归；production descriptor 保持不变。
-2. 提供保持原始 `read_only` 配置的零写诊断，只读取已声明的状态，不触发 Pulse 或 Sweep。
-3. 在物理接线与电气边界已确认后，设计一次独立 A5 受控验收；任何 fire／trigger、RF 输出或后面板辅助输出都必须有单独的 safety 决定与最终 RF OFF 复核。
+1. 已完成 A5-0 的逻辑 configuration readback、Core profile／artifact、严格 driver parser 与 fake transport 零写回归；production descriptor 保持不变。
+2. 提供保持原始 `read_only` 配置的私有零写诊断，只读取已声明的 A5-0 状态，不触发 Pulse 或 Sweep。
+3. 在物理接线与电气边界已确认后，对一个明确的物理路径设计独立 A5 受控验收；任何 fire／trigger、RF 输出或后面板辅助输出都必须有单独的 safety 决定与最终 RF OFF 复核。
 
 ### A1：已完成的本包只读验收
 

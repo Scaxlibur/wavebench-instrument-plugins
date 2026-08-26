@@ -23,7 +23,8 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | M3 | A4 complete and promoted | Fixed internal-sine AM/FM/PM write sequences, strict readback, and Core configuration transaction/CLI/run/artifact; mode-specific disable is only for local evidence/private recovery, and production exposes `rf_source.modulation_configure`. PM is fixed to the `1.25 rad` production profile. |
 | M4 (Pulse) | Offline complete; A4 Pulse passed | Internal/single Pulse period/width/polarity mapping, independent readback, Core transaction/CLI/run/artifact, and a local evidence harness; production exposes `rf_source.pulse_configure`. |
 | M4 (Step Sweep) | A4 complete and promoted | Fixed `STEP`/`FWD`/`RAMP`/`LIN` frequency-only profile, strict readback, Core configuration transaction/CLI/run/artifact, and a local evidence harness; production exposes `rf_source.sweep_configure` while Sweep remains disabled. |
-| A1–A5 | A1, A2, A3, and A4 modulation/Pulse/Step Sweep complete; A5 is not started | A1 promotes read-only snapshot, A2 per-port RF output, A3 OFF-only CW, and A4 separately promotes RF-OFF modulation, OFF-only Pulse, and disabled Step Sweep configuration. |
+| A5-0 | Offline complete; not physical A5 evidence | Six fixed trigger-configuration queries, strict enum parsing, and the Core read-only Service/CLI/run/artifact; the production descriptor remains unchanged. |
+| A1–A5 | A1, A2, A3, and A4 modulation/Pulse/Step Sweep complete; physical A5 is not started | A1 promotes read-only snapshot, A2 per-port RF output, A3 OFF-only CW, and A4 separately promotes RF-OFF modulation, OFF-only Pulse, and disabled Step Sweep configuration. A5-0 does not promote a capability. |
 
 ## Seed: historical package boundary
 
@@ -48,11 +49,17 @@ A1 has completed and been reviewed, so the production descriptor declares `rf_so
 - `tools/a4_pulse_evidence.py` and its resource-free template completed the controlled A4 Pulse acceptance. Static preflight requires a `read_only` RF configuration, disabled read retries, an exact production descriptor, and a reviewed 50-ohm termination. Normal and inverted polarity each completed one `--execute` configuration through an in-memory write descriptor, with independent readback and final RF/Pulse OFF; each successful path has 38 queries and 6 configuration writes. `--diagnose` keeps `read_only` with 22 queries and zero writes. Neither path reads scope, CH1/CH2, rear Pulse I/O, or trigger. After evidence review, `rf_source.pulse_configure` is production-declared and the historical harness rejects reruns.
 - The production frequency-only Step Sweep subset accepts only start/stop frequency, points, and dwell, with a fixed `STEP`/`FWD`/`RAMP`/`LIN` profile. `get_rf_sweep_snapshot()` strictly reads type, direction, shape, spacing, start/stop frequency, points, dwell, and state; `configure_rf_sweep()` writes only those profile fields and ends with `:SWE:STAT OFF`. It never writes `:SWE:EXEC`, `*TRG`, any `:TRIG:*`, `:SWE:STAT FREQ`, Level Sweep, list setup, `:OUTP`, or rear-panel I/O. Core requires RF output, modulation, Pulse, and Sweep OFF with no active protection before and after the write, then independently reads the complete profile and requires Sweep to remain disabled. After A4 Step Sweep evidence, the production descriptor declares `rf_source.sweep_configure`; ordinary CLI and run requests still require `read_write`, a matching profile, and fresh OFF-only preflight.
 - The source checkout includes `tools/a4_step_sweep_evidence.py` and `tools/a4_step_sweep_evidence.setup.template.toml`, both covered by offline regression and controlled hardware acceptance. Static preflight requires a separate `read_only` RF config, disabled read retries, the exact production descriptor, and a reviewed 50-ohm termination. `--diagnose` reads only initial/final RF snapshots and the complete Step Sweep profile, with 25 queries and zero writes on the successful path. Explicit `--execute` creates a bounded in-memory `read_write` descriptor and has 41 queries with 9 configuration writes on the successful path. Neither path reads scope, invokes RF output, arms/fires Sweep, or sends a trigger; evidence files use mode `0600`. Both paths passed with independent final confirmation that RF output, modulation, Pulse, and Sweep were disabled and no protection condition was active; the historical harness now rejects reruns.
-- Pulse trigger, Sweep execution/fire, external trigger, auxiliary output, reference clock, synchronization, Level Sweep, and list control remain unimplemented. Fake descriptors may cover later trigger/fire transactions; production capabilities require their own A4/A5 evidence.
+- Pulse trigger, Sweep execution/fire, physical external interfaces, auxiliary output, reference clock, synchronization, Level Sweep, and list control remain unimplemented. A5-0 only reads logical trigger configuration; it does not fire a trigger or define a physical connector. Fake descriptors may cover later trigger/fire transactions; production capabilities require their own A4/A5 evidence.
 
 Every hardware acceptance needs separate authorization. An unknown final RF-OFF state fails acceptance and cannot promote any capability.
 
-### A5: DSG830 rear-panel entry conditions (not started)
+### A5-0: logical trigger-configuration readback (offline complete)
+
+`get_rf_trigger_snapshot()` queries, in fixed order, `:PULM:TRIG:MODE?`, `:PULM:TRIG:EXT:SLOP?`, `:PULM:TRIG:EXT:GATE:POL?`, `:SWE:MODE?`, `:SWE:SWE:TRIG:TYPE?`, and `:SWE:POIN:TRIG:TYPE?`. It parses Pulse trigger mode, external edge, external-gate polarity, Sweep mode, Sweep-period trigger, and Sweep-point trigger into closed enums; unknown responses fail closed. Every command is a query: the driver sends no setter, `*TRG`, `:TRIG:PULS`, `:TRIG:SWE`, `:SWE:EXEC`, `:PULM:OUT`, or RF-output write.
+
+Core models this path as `rf_source.trigger_snapshot`, `wavebench rf-source trigger status --port PORT_ID`, and `rf_source.trigger_status`. It requires a `TRIGGER / READ` profile and is declared only by a non-production descriptor. `port_id` means the RF output whose behavior the logical settings govern; it is not a `TRIGGER IN`, `PULSE IN/OUT`, or sync connector. The DSG830 production descriptor declares neither this capability nor feature, so ordinary configuration rejects the operation before hardware I/O.
+
+### A5: DSG830 rear-panel entry conditions (physical acceptance not started)
 
 The DSG830 production descriptor currently declares only `rf_out`; its 50-ohm dBm reference does not describe rear-panel trigger, Pulse, or synchronization interfaces. Manual external-trigger commands are candidate mappings only, not proof of interface levels, impedance, or wiring. Treat `TRIGGER IN` and `PULSE IN/OUT` as distinct physical interfaces. Do not infer their electrical boundary from CH2's 50-ohm input or from the A2–A4 RF path.
 
@@ -60,9 +67,9 @@ For one A5 target behavior, record the source and destination interfaces, every 
 
 Recommended implementation order:
 
-1. Build a Core typed contract, descriptor profile, strict driver readback, and fake-transport regression for one named external-input path; leave the production descriptor unchanged.
-2. Provide a zero-write diagnostic that retains the original `read_only` configuration and does not trigger Pulse or Sweep.
-3. After physical wiring and electrical limits are confirmed, design one independent A5 controlled acceptance. Any fire/trigger action, RF output, or rear-panel auxiliary output needs a separate safety decision and final RF-OFF verification.
+1. A5-0 logical-configuration readback, Core profile/artifact, strict driver parsing, and fake-transport zero-write regression are complete; leave the production descriptor unchanged.
+2. Provide a zero-write diagnostic that retains the original `read_only` configuration and reads only declared A5-0 state without triggering Pulse or Sweep.
+3. After physical wiring and electrical limits are confirmed, design one independent A5 controlled acceptance for one named physical path. Any fire/trigger action, RF output, or rear-panel auxiliary output needs a separate safety decision and final RF-OFF verification.
 
 ### A4: AM/FM/PM passed and promoted
 

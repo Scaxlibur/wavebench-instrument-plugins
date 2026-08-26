@@ -64,7 +64,9 @@ after the write, then independently reads the complete profile. The source check
 25 queries and zero writes, while a successful explicit `--execute` path has 41 queries and 9 configuration writes.
 It does not read scope, invoke RF output, or arm/fire Sweep. Both paths passed, with an independent final confirmation that RF output, modulation, Pulse, and Sweep were disabled and no protection condition was active. The historical harness rejects reruns after the promotion.
 
-The production descriptor declares no error queue, `rf_source.modulation_disable`, modulated RF output, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
+The A5-0 offline mapping adds `get_rf_trigger_snapshot()`, which strictly reads logical Pulse/Sweep trigger configuration through six fixed query forms. It sends no setter, `*TRG`, `:TRIG:PULS`, `:TRIG:SWE`, `:SWE:EXEC`, `:PULM:OUT`, or RF-output write. It is not a physical trigger/sync connector contract; `rf_out` only identifies the RF output whose behavior the settings govern.
+
+The production descriptor declares no error queue, `rf_source.modulation_disable`, modulated RF output, `rf_source.trigger_snapshot`, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
 `rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
 internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
