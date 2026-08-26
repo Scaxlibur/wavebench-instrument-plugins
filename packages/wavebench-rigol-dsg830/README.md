@@ -21,7 +21,7 @@ M3 driver 已实现状态读取、`get_rf_modulation_snapshot()`、`configure_rf
 
 M4 Pulse 只覆盖 internal／single 子集。`configure_rf_pulse()` 固定设置 source、mode、period、width 和 polarity，并以 `:PULM:STAT OFF` 收尾；它不调用 RF 输出、后面板 Pulse I/O 或 trigger。源码 checkout 的 `tools/a4_pulse_evidence.py`、fake 回归与无资源 setup 模板已完成受控实机验证：normal／inverted 两种 polarity 都经过一次 RF-OFF／Pulse-OFF 配置、独立读回和最终关闭复核；每次成功路径均为 38 次 query、6 次配置 write。`--diagnose` 保持 `read_only` 且零写；两种模式均不读取 CH1／CH2。证据复核后，`rf_source.pulse_configure` 已进入 production descriptor，historical harness 会拒绝重跑。
 
-M4 frequency-only Step Sweep 仅覆盖固定的 `STEP`／`FWD`／`RAMP`／`LIN` profile。`get_rf_sweep_snapshot()` 查询 type、direction、shape、spacing、起止频率、点数、驻留时间和状态；`configure_rf_sweep()` 只写这些 profile 字段，并以 `:SWE:STAT OFF` 收尾。它不写 `:SWE:EXEC`、任何 trigger、Level Sweep、list、RF 输出或后面板接口命令。Core 在写前和写后都要求 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection，写后独立读回完整 profile。该实现只有 fake transport 证据，尚未建立专项 evidence harness 或实机证据。
+M4 frequency-only Step Sweep 仅覆盖固定的 `STEP`／`FWD`／`RAMP`／`LIN` profile。`get_rf_sweep_snapshot()` 查询 type、direction、shape、spacing、起止频率、点数、驻留时间和状态；`configure_rf_sweep()` 只写这些 profile 字段，并以 `:SWE:STAT OFF` 收尾。它不写 `:SWE:EXEC`、任何 trigger、Level Sweep、list、RF 输出或后面板接口命令。Core 在写前和写后都要求 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection，写后独立读回完整 profile。源码 checkout 的 `tools/a4_step_sweep_evidence.py` 与无资源 setup 模板已通过 fake 回归：`--diagnose` 固定 25 次 query、零 write，显式 `--execute` 的成功路径固定 41 次 query、9 条配置 write。工具不读取 Scope、不调用 RF output、不 arm／fire Sweep；尚无实机证据。
 
 production descriptor 不声明错误队列、调制、Step Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF；`rf_source.modulation_configure` 仍等待覆盖 PM 的 A4 实机证据，`rf_source.sweep_configure` 仍等待独立的 Step Sweep 证据。其余 capability 继续经过对应的 A4–A5 实机证据门。
 
@@ -33,6 +33,7 @@ production descriptor 不声明错误队列、调制、Step Sweep、trigger 或�
 - [A3 本地证据 setup 模板](tools/a3_cw_evidence.setup.template.toml)
 - [A4 本地证据 setup 模板](tools/a4_modulation_evidence.setup.template.toml)
 - [A4 Pulse 本地证据 setup 模板](tools/a4_pulse_evidence.setup.template.toml)
+- [A4 Step Sweep 本地证据 setup 模板](tools/a4_step_sweep_evidence.setup.template.toml)
 
 里程碑明确区分当前种子、离线合同和 A1–A5 实机证据。production descriptor 的 capability 不会因种子代码或 fake transport 测试自动提升。
 

@@ -59,8 +59,10 @@ The M4 frequency-only Step Sweep subset fixes `STEP`/`FWD`/`RAMP`/`LIN`. `get_rf
 direction, shape, spacing, start/stop frequency, points, dwell, and state; `configure_rf_sweep()` writes only that
 profile and ends with `:SWE:STAT OFF`. It never writes `:SWE:EXEC`, any trigger, Level Sweep, list setup, RF output,
 or rear-panel I/O. Core requires RF output, modulation, Pulse, and Sweep OFF with no active protection before and
-after the write, then independently reads the complete profile. This has fake-transport evidence only; it has neither
-a dedicated evidence harness nor hardware evidence.
+after the write, then independently reads the complete profile. The source checkout includes
+`tools/a4_step_sweep_evidence.py` and a resource-free template, both covered by fake regressions: `--diagnose` has
+25 queries and zero writes, while a successful explicit `--execute` path has 41 queries and 9 configuration writes.
+It does not read scope, invoke RF output, or arm/fire Sweep. There is no hardware evidence yet.
 
 The production descriptor declares no error queue, modulation, Step Sweep, trigger, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
@@ -78,6 +80,7 @@ evidence gate.
 - [A3 local-evidence setup template](tools/a3_cw_evidence.setup.template.toml)
 - [A4 local-evidence setup template](tools/a4_modulation_evidence.setup.template.toml)
 - [A4 Pulse local-evidence setup template](tools/a4_pulse_evidence.setup.template.toml)
+- [A4 Step Sweep local-evidence setup template](tools/a4_step_sweep_evidence.setup.template.toml)
 
 The milestone document distinguishes the current seed, offline contracts, and A1–A5 hardware evidence. A
 production descriptor capability is not promoted by seed code or fake-transport tests alone.
