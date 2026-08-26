@@ -15,7 +15,9 @@ A2 的本地受控输出 harness、回归测试和不含资源地址的 setup �
 
 A3 的本地 CW 环回 harness、回归测试和不含资源地址的 setup 模板也保留在源码 checkout。它确认初始 RF OFF、两次 OFF-only CW 写入的独立回读、一次低功率 RF ON/OFF、CH2 的当前缓冲区可见信号和最终 RF OFF；CH2 只用于确认可见信号，频率与功率仍以源端 readback 为准。脱敏证据通过后，`rf_source.cw_configure` 已单独进入 production descriptor。
 
-M3 driver 已实现 `get_rf_modulation_snapshot()` 与 `configure_rf_modulation()` 的离线映射。范围仅为内部 Sine：AM 深度 `0–100 %`、FM 频偏 `0.1 Hz–1 MHz`、PM 相偏 `0–5 rad`，三种模式的内部频率均为 `10 Hz–100 kHz`。Core 在写入前要求 RF OFF、AM／FM／PM 全部关闭、Pulse／Sweep 关闭和无活动 protection condition。FM／PM 的共享选择位会被单独读回：三种模式均关闭时可从另一选择切换到目标类型，写后必须独立确认目标类型、仅目标模式与全局调制开关开启。M3 不打开 RF 输出，也不重试结果不明的写入。
+M3 driver 已实现状态读取、`get_rf_modulation_snapshot()`、`configure_rf_modulation()` 与 `disable_rf_modulation()` 的离线映射。范围仅为内部 Sine：AM 深度 `0–100 %`、FM 频偏 `0.1 Hz–1 MHz`、PM 相偏 `0–5 rad`，三种模式的内部频率均为 `10 Hz–100 kHz`。Core 在配置写入前要求 RF OFF、AM／FM／PM 全部关闭、Pulse／Sweep 关闭和无活动 protection condition。FM／PM 的共享选择位会被单独读回：三种模式均关闭时可从另一选择切换到目标类型，写后必须独立确认目标类型、仅目标模式与全局调制开关开启。`disable_rf_modulation()` 只在 RF OFF 且仅目标模式活动时关闭该模式和全局调制；它不是 reset，也不重试结果不明的写入。
+
+源码 checkout 已提供 A4 的 RF-OFF 调制 evidence harness、fake 回归与不含资源地址的 setup 模板。每次只能验证一个内部 Sine 模式；成功路径在配置读回后关闭同一模式，并在最终状态确认 `rf_out` 与调制均为关闭。显式 `--recover` 只恢复已明确识别的单一活动模式，并写入私有恢复记录。A4 不读取 CH2、不调用 RF 输出控制，也不把恢复记录当作 capability 提升证据。A4 已进入受控硬件验证，但尚未取得合格证据。
 
 production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；`rf_source.modulation_configure` 仍等待 A4 实机证据，不能因 driver 方法或离线测试而提前声明。其余 capability 继续经过对应的 A4–A5 实机证据门。
 
@@ -25,6 +27,7 @@ production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger �
 - [DSG830 功能覆盖里程碑](doc/DSG830_COVERAGE_MILESTONES.md)
 - [A2 本地证据 setup 模板](tools/a2_output_evidence.setup.template.toml)
 - [A3 本地证据 setup 模板](tools/a3_cw_evidence.setup.template.toml)
+- [A4 本地证据 setup 模板](tools/a4_modulation_evidence.setup.template.toml)
 
 里程碑明确区分当前种子、离线合同和 A1–A5 实机证据。production descriptor 的 capability 不会因种子代码或 fake transport 测试自动提升。
 

@@ -20,9 +20,9 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | M0 | Offline complete; A1 complete | `rf_source`, `rf_out` topology, a strict snapshot parser, and production read-only status. |
 | M1 | Offline complete; A3 complete | OFF-only CW frequency/dBm configuration, independent readback, and production `rf_source.cw_configure`. |
 | M2 | Offline complete; A2 complete | One-write RF ON/OFF mapping, Core safety preflight, independent readback, and one-shot OFF recovery; production exposes `rf_source.output`. |
-| M3 | Offline complete; A4 not started | Fixed internal-sine AM/FM/PM write sequences, strict readback, and Core transaction/CLI/run/artifact; production capability remains closed. |
+| M3 | Offline complete; A4 controlled validation in progress, not yet accepted | Fixed internal-sine AM/FM/PM write sequences, strict readback, and Core configuration transaction/CLI/run/artifact; mode-specific disable is only for local evidence/private recovery, and production capability remains closed. |
 | M4 | Not started | Declared Pulse and frequency-only Step Sweep subset. |
-| A1–A5 | A1, A2, and A3 complete; A4 and A5 are not started | A1 promotes read-only snapshot, A2 per-port RF output, and A3 OFF-only CW. |
+| A1–A5 | A1, A2, and A3 complete; A4 has no qualifying evidence; A5 is not started | A1 promotes read-only snapshot, A2 per-port RF output, and A3 OFF-only CW. |
 
 ## Seed: historical package boundary
 
@@ -42,10 +42,40 @@ A1 has completed and been reviewed, so the production descriptor declares `rf_so
 
 - M1 has a one-write `:FREQ`/`:LEV` mapping, independent readback contract, Core CLI, run step, and redacted artifact while RF is OFF. A3 completed with independent source readback, a bounded low-power RF ON/OFF observation, visible CH2 signal, and confirmed final RF OFF. The production descriptor now declares `rf_source.cw_configure`; a `read_write` session still requires the complete OFF-only preflight before each single-field CW write.
 - M2 has an offline `:OUTP ON|OFF` mapping, independent readback, per-port preflight, and at most one guarded same-port OFF recovery when session health permits. The driver sends exactly one output write and leaves preflight, readback, and recovery to Core. A2 completed and `rf_source.output` is production-declared; the separate A3 result promotes M1 CW, but not M3/M4 capabilities.
-- M3 is offline-complete for a bounded internal-sine AM/FM/PM subset. AM is `0–100 %`, FM is `0.1 Hz–1 MHz`, PM is `0–5 rad`, and every mode uses a `10 Hz–100 kHz` internal frequency. The driver uses fixed `INT`/`SINE` sequences, reads global and per-mode state, and records the shared FM/PM selection separately from the queried profile. When all modes are disabled, preflight may observe a different inactive selection; the fixed write selects the requested type, and postcondition requires it. External source, non-Sine waveform, unknown modulation-condition bits, or mismatched postcondition readback fail closed. Core requires RF OFF, all AM/FM/PM modes disabled, Pulse/Sweep disabled, and no active protection condition; postcondition requires RF still OFF, exactly the target mode enabled, and global modulation enabled. No retry, RF enable, or output recovery occurs. A4 is still required before a production modulation capability.
+- M3 is offline-complete for a bounded internal-sine AM/FM/PM subset. AM is `0–100 %`, FM is `0.1 Hz–1 MHz`, PM is `0–5 rad`, and every mode uses a `10 Hz–100 kHz` internal frequency. `get_rf_modulation_state()` reads only global/per-mode state for safe preflight, while the full target profile is read after configuration or when explicitly required. The driver uses fixed `INT`/`SINE` sequences and records the shared FM/PM selection separately from the queried profile. When all modes are disabled, preflight may observe a different inactive selection; the fixed write selects the requested type, and postcondition requires it. External source, non-Sine waveform, unknown modulation-condition bits, or mismatched postcondition readback fail closed. Core requires RF OFF, all AM/FM/PM modes disabled, Pulse/Sweep disabled, and no active protection condition; postcondition requires RF still OFF, exactly the target mode enabled, and global modulation enabled. No retry, RF enable, or output recovery occurs. `disable_rf_modulation()` only disables a requested mode and global modulation when RF is OFF and that mode is the only active mode; it independently reads back the disabled state, returns without a write for an already-consistent disabled state, and is used only by local A4 evidence/recovery. A4 is still required before a production modulation capability.
 - M4 is limited to declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.
 
 Every hardware acceptance needs separate authorization. An unknown final RF-OFF state fails acceptance and cannot promote any capability.
+
+### A4: controlled validation in progress, no qualifying evidence yet
+
+The source checkout now contains `tools/a4_modulation_evidence.py`, its regression tests, and
+`tools/a4_modulation_evidence.setup.template.toml`. This one-shot local harness is excluded from wheel and sdist;
+the production descriptor still does not declare modulation capability before A4.
+
+Static preflight requires a `read_only` RF configuration with retries disabled, exact driver/model/current-production
+capability matching, and a setup containing only `rf_out`, human-confirmed termination, confirmed options,
+`modulation_kind`, one matching mode value, and internal frequency. The setup contains no resource, serial number,
+raw response, or scope data. The harness adds the complete internal-Sine modulation profile plus
+`rf_source.modulation_configure` and `rf_source.modulation_disable` only in memory; it never registers, writes back,
+or promotes that descriptor.
+
+With `--execute`, one invocation validates AM, FM, or PM only: the initial RF snapshot must establish RF OFF with
+modulation/Pulse/Sweep disabled and no active protection; Core reads modulation state, performs one fixed mode-specific
+configuration sequence, independently reads it back, then performs the bounded disable transaction for that same mode.
+The final independent snapshot must establish both RF OFF and modulation disabled. The successful AM budget is 72
+queries and 8 completed writes; FM/PM are 73 queries and 9 completed writes. Every write is a modulation-configuration
+or disable command: A4 does not call `set_rf_output()`, read scope, enable RF, or attempt output recovery.
+
+With `--recover`, the harness only restores the one known active mode named in setup, or records a consistent
+already-disabled no-write result. It requires the same RF-OFF safety preconditions and creates a private `0600` recovery
+record; that record is not A4 capability-promotion evidence.
+
+Unknown or mismatched initial/postcondition/final RF-OFF state, mode/value/frequency mismatch, unknown write outcome,
+audit-budget mismatch, unhealthy session, or changed counters after close fails acceptance. Controlled validation has
+not produced a qualifying record for `rf_source.modulation_configure`, so the production descriptor remains closed.
+Even after a future successful A4 run, the evidence would prove only that one internal-Sine profile was configured, read
+back, and disabled while RF stayed OFF; it would not prove modulated RF output, CH2 signal, Pulse, Sweep, or trigger behavior.
 
 ### A1: completed package-specific read-only acceptance
 

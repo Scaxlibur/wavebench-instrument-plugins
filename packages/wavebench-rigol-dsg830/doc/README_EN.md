@@ -19,4 +19,10 @@ The checkout also provides an [`A3 local-evidence setup template`](../tools/a3_c
 its harness. A3 has completed and been reviewed, so the production descriptor now declares
 `rf_source.cw_configure`; modulation, Pulse, Sweep, and trigger remain closed.
 
-Package `0.2.0` has completed the `rf_source` M0 read-only migration, M1 CW mapping, M2 output transaction, and M3 internal-sine AM/FM/PM offline mapping. A1, A2, and A3 controlled hardware evidence have completed and been reviewed, so the production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, and `rf_source.output`; `rf_source.modulation_configure` remains gated by A4, while M4/external-trigger capabilities remain gated by A4–A5. The milestone document defines the boundary and promotion gates.
+The checkout also provides an [`A4 local-evidence setup template`](../tools/a4_modulation_evidence.setup.template.toml)
+and its harness, which has entered controlled hardware validation. It configures one internal-Sine AM/FM/PM mode per
+invocation, then disables that same mode after configuration readback; the final snapshot must establish both RF output
+and modulation OFF. It does not read scope or invoke RF-output control. Explicit `--recover` only writes a private
+recovery record and is not A4 capability-promotion evidence.
+
+Package `0.2.0` has completed the `rf_source` M0 read-only migration, M1 CW mapping, M2 output transaction, M3 internal-sine AM/FM/PM offline mapping, and mode-specific disable. A1, A2, and A3 controlled hardware evidence have completed and been reviewed, so the production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, and `rf_source.output`; no qualifying A4 evidence exists yet, so `rf_source.modulation_configure` and `rf_source.modulation_disable` remain outside the production descriptor while M4/external-trigger capabilities remain gated by A4–A5. The milestone document defines the boundary and promotion gates.

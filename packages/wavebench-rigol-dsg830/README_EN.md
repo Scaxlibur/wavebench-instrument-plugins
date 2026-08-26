@@ -28,12 +28,20 @@ They require initial RF OFF, independent readback for two OFF-only CW writes, on
 CH2-buffer signal observation. CH2 only establishes visible signal; source readback remains the frequency and power
 evidence. Its completed, reviewed evidence separately promotes `rf_source.cw_configure`.
 
-The M3 driver implements offline `get_rf_modulation_snapshot()` and `configure_rf_modulation()` mappings for internal
-Sine only: AM depth `0–100 %`, FM deviation `0.1 Hz–1 MHz`, PM deviation `0–5 rad`, and a `10 Hz–100 kHz` internal
-frequency for each mode. Core requires RF OFF, all AM/FM/PM modes disabled, Pulse/Sweep disabled, and no active
-protection condition before the write. The shared FM/PM selection is read separately: when all modes are disabled, a
-different inactive selection may be changed to the requested type, and postcondition then requires that target type,
-exactly the target mode, and the global modulation switch. M3 never enables RF output and does not retry an uncertain write.
+The M3 driver implements offline state readback plus `get_rf_modulation_snapshot()`, `configure_rf_modulation()`, and
+`disable_rf_modulation()` mappings for internal Sine only: AM depth `0–100 %`, FM deviation `0.1 Hz–1 MHz`, PM
+deviation `0–5 rad`, and a `10 Hz–100 kHz` internal frequency for each mode. Core requires RF OFF, all AM/FM/PM modes
+disabled, Pulse/Sweep disabled, and no active protection condition before a configuration write. The shared FM/PM
+selection is read separately: when all modes are disabled, a different inactive selection may be changed to the
+requested type, and postcondition then requires that target type, exactly the target mode, and the global modulation
+switch. `disable_rf_modulation()` only disables the requested mode and global modulation when RF is OFF and that mode is
+the only active one; it is not a reset and does not retry an uncertain write.
+
+The source checkout includes an A4 RF-OFF modulation-evidence harness, fake regressions, and a resource-free setup
+template. Each invocation validates one internal-Sine mode; after configuration readback, it disables that same mode and
+the final state must establish both RF output and modulation OFF. Explicit `--recover` only restores a known single
+active mode and writes a private recovery record. A4 does not read CH2, invoke RF-output control, or treat recovery as
+capability-promotion evidence. Controlled hardware validation has started, but no qualifying A4 evidence exists yet.
 
 The production descriptor declares no error queue, modulation, Pulse, Sweep, trigger, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
@@ -46,6 +54,7 @@ a driver method or an offline test does not promote it. Every other capability r
 - [DSG830 coverage milestones](doc/DSG830_COVERAGE_MILESTONES_EN.md)
 - [A2 local-evidence setup template](tools/a2_output_evidence.setup.template.toml)
 - [A3 local-evidence setup template](tools/a3_cw_evidence.setup.template.toml)
+- [A4 local-evidence setup template](tools/a4_modulation_evidence.setup.template.toml)
 
 The milestone document distinguishes the current seed, offline contracts, and A1–A5 hardware evidence. A
 production descriptor capability is not promoted by seed code or fake-transport tests alone.
