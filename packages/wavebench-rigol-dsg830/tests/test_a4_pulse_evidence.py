@@ -441,12 +441,14 @@ def test_a4_pulse_setup_rejects_extra_fields_and_output_is_private(tmp_path: Pat
 @pytest.mark.parametrize(
     ("message", "expected"),
     (
-        ("DSG830 pulse source response must be INT or EXT", "diagnostic_pulse_source_read_invalid"),
-        ("DSG830 pulse mode response must be SINGLE or TRAIN", "diagnostic_pulse_mode_read_invalid"),
-        ("DSG830 pulse period response has an invalid format", "diagnostic_pulse_period_read_invalid"),
-        ("DSG830 pulse width response has an invalid format", "diagnostic_pulse_width_read_invalid"),
-        ("DSG830 pulse polarity response must be NORMAL or INVERSE", "diagnostic_pulse_polarity_read_invalid"),
-        ("DSG830 pulse state response must be 0 or 1", "diagnostic_pulse_state_read_invalid"),
+        ("DSG830 pulse source response must be INT or EXT", "diagnostic_pulse_source_format_invalid"),
+        ("DSG830 pulse mode response must be SINGLE or TRAIN", "diagnostic_pulse_mode_format_invalid"),
+        ("DSG830 pulse period response has an invalid format", "diagnostic_pulse_period_format_invalid"),
+        ("DSG830 pulse width response has an invalid format", "diagnostic_pulse_width_format_invalid"),
+        ("DSG830 pulse polarity response must be NORMAL or INVERSE", "diagnostic_pulse_polarity_format_invalid"),
+        ("DSG830 pulse state response must be 0 or 1", "diagnostic_pulse_state_format_invalid"),
+        ("DSG830 pulse period response is outside the documented range", "diagnostic_pulse_period_outside_documented_range"),
+        ("DSG830 pulse width response must be finite", "diagnostic_pulse_width_not_finite"),
         ("unclassified error", "diagnostic_pulse_read_failed"),
     ),
 )

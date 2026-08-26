@@ -539,15 +539,24 @@ def _diagnostic_pulse_read_failure_code(error: Exception) -> str:
     """Classify a fixed driver parser error without retaining its raw response."""
 
     message = str(error)
-    labels = {
-        "pulse source": "diagnostic_pulse_source_read_invalid",
-        "pulse mode": "diagnostic_pulse_mode_read_invalid",
-        "pulse period": "diagnostic_pulse_period_read_invalid",
-        "pulse width": "diagnostic_pulse_width_read_invalid",
-        "pulse polarity": "diagnostic_pulse_polarity_read_invalid",
-        "pulse state": "diagnostic_pulse_state_read_invalid",
-    }
-    return next((code for label, code in labels.items() if label in message), "diagnostic_pulse_read_failed")
+    labels = (
+        ("pulse source", "source"),
+        ("pulse mode", "mode"),
+        ("pulse period", "period"),
+        ("pulse width", "width"),
+        ("pulse polarity", "polarity"),
+        ("pulse state", "state"),
+    )
+    field = next((field for label, field in labels if label in message), None)
+    if field is None:
+        return "diagnostic_pulse_read_failed"
+    if "invalid format" in message or "must be INT or EXT" in message or "must be SINGLE or TRAIN" in message or "must be NORMAL or INVERSE" in message or "must be 0 or 1" in message:
+        return f"diagnostic_pulse_{field}_format_invalid"
+    if "outside the documented range" in message:
+        return f"diagnostic_pulse_{field}_outside_documented_range"
+    if "must be finite" in message:
+        return f"diagnostic_pulse_{field}_not_finite"
+    return f"diagnostic_pulse_{field}_read_invalid"
 
 
 def _expected_a4_pulse_queries() -> int:
