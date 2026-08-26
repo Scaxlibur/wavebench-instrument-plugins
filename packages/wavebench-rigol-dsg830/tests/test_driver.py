@@ -8,6 +8,7 @@ import pytest
 from wavebench.instruments.rf_source_extensions import (
     RfAvailability,
     RfCwRequest,
+    RfModulationDisableRequest,
     RfModulationKind,
     RfModulationRequest,
     RfModulationSource,
@@ -366,6 +367,19 @@ def test_driver_reports_an_inactive_external_square_profile_without_rejecting_re
     assert transport.write_calls == []
 
 
+def test_driver_accepts_the_documented_frequency_response_with_one_fraction_group_space() -> None:
+    transport = FakeTransport(
+        _modulation_responses(RfModulationKind.AM, **{":AM:FREQ?": "1.000 00kHz\n"})
+    )
+
+    snapshot = _driver_type()(transport=transport).get_rf_modulation_snapshot(
+        "rf_out",
+        RfModulationKind.AM,
+    )
+
+    assert snapshot.internal_frequency_hz == 1_000.0
+
+
 @pytest.mark.parametrize(
     ("modulation_request", "expected_writes"),
     (
@@ -433,6 +447,23 @@ def test_driver_maps_each_internal_sine_modulation_request_to_fixed_writes(
     assert transport.write_calls == expected_writes
 
 
+@pytest.mark.parametrize(
+    "kind",
+    (RfModulationKind.AM, RfModulationKind.FM, RfModulationKind.PM),
+)
+def test_driver_maps_each_modulation_disable_request_to_fixed_mode_and_global_writes(
+    kind: RfModulationKind,
+) -> None:
+    transport = FakeTransport({})
+
+    _driver_type()(transport=transport).disable_rf_modulation(
+        RfModulationDisableRequest(port_id="rf_out", kind=kind)
+    )
+
+    assert transport.query_calls == []
+    assert transport.write_calls == [f":{kind.value.upper()}:STAT OFF", ":MOD:STAT OFF"]
+
+
 def test_driver_rejects_invalid_modulation_target_or_readback_before_unsafe_use() -> None:
     transport = FakeTransport({})
     driver = _driver_type()(transport=transport)
@@ -445,6 +476,10 @@ def test_driver_rejects_invalid_modulation_target_or_readback_before_unsafe_use(
 
     with pytest.raises(ValueError, match="port_id"):
         driver.configure_rf_modulation(invalid_port)
+    with pytest.raises(ValueError, match="port_id"):
+        driver.disable_rf_modulation(
+            RfModulationDisableRequest(port_id="other", kind=RfModulationKind.AM)
+        )
     with pytest.raises(ValueError, match="frequency"):
         driver.configure_rf_modulation(
             RfModulationRequest(

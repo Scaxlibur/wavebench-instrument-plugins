@@ -19,6 +19,7 @@ from wavebench.config import (
 )
 from wavebench.instruments.rf_source_extensions import (
     RfFeature,
+    RfModulationDisableRequest,
     RfModulationKind,
     RfModulationRequest,
     RfModulationSnapshot,
@@ -202,6 +203,7 @@ class _FakeDriver:
         self.transport = transport
         self.close_calls = 0
         self.modulation_requests: list[RfModulationRequest] = []
+        self.modulation_disable_requests: list[RfModulationDisableRequest] = []
         self.output_requests: list[object] = []
 
     def a1_snapshot_firmware(self) -> str:
@@ -252,6 +254,38 @@ def _artifact(
     }
 
 
+def _disable_artifact(
+    request: RfModulationDisableRequest,
+    *,
+    matching: bool = True,
+    write_completed: bool = True,
+) -> dict[str, object]:
+    enabled_modes = [] if matching else [request.kind.value]
+    return {
+        "operation": "rf_source.modulation_disable",
+        "result": {"write_completed": write_completed},
+        "postcondition_snapshot": {
+            "ports": [
+                {
+                    "output_enabled": {"availability": "value", "value": False},
+                    "modulation": {
+                        "availability": "value",
+                        "value": "disabled" if matching else "enabled",
+                    },
+                    "pulse": {"availability": "value", "value": "disabled"},
+                    "sweep": {"availability": "value", "value": "disabled"},
+                }
+            ]
+        },
+        "postcondition_modulation_state": {
+            "port_id": request.port_id,
+            "enabled_modes": enabled_modes,
+            "global_enabled": not matching,
+            "fault_codes": [],
+        },
+    }
+
+
 class _FakeRfSourceService:
     def __init__(
         self,
@@ -282,6 +316,22 @@ class _FakeRfSourceService:
         return SimpleNamespace(port_id=request.port_id), _artifact(
             request,
             matching=getattr(self.driver, "artifact_matches", True),
+        )
+
+    def disable_modulation_with_artifact(self, request: RfModulationDisableRequest):
+        self.driver.modulation_disable_requests.append(request)
+        write_completed = getattr(self.driver, "disable_write_completed", True)
+        self.transport.query_calls += 8 + 5 + (8 + 5 if write_completed else 0)
+        self.transport.write_calls += 2 if write_completed else 0
+        if getattr(self.driver, "disable_error", None) is not None:
+            raise self.driver.disable_error
+        return SimpleNamespace(
+            port_id=request.port_id,
+            write_completed=write_completed,
+        ), _disable_artifact(
+            request,
+            matching=getattr(self.driver, "disable_artifact_matches", True),
+            write_completed=write_completed,
         )
 
     def set_output_with_artifact(self, request):
@@ -333,7 +383,10 @@ def test_preflight_builds_in_memory_m3_descriptor_without_production_promotion(m
         "rf_source.cw_configure",
         "rf_source.output",
     )
-    assert preflight.evidence_descriptor.capabilities[-1] == "rf_source.modulation_configure"
+    assert preflight.evidence_descriptor.capabilities[-2:] == (
+        "rf_source.modulation_configure",
+        "rf_source.modulation_disable",
+    )
     assert preflight.evidence_descriptor.rf_source_extensions is not None
     assert tuple(
         feature.feature for feature in preflight.evidence_descriptor.rf_source_extensions.features
@@ -348,9 +401,9 @@ def test_preflight_builds_in_memory_m3_descriptor_without_production_promotion(m
 @pytest.mark.parametrize(
     ("kind", "expected_queries", "expected_writes"),
     (
-        (RfModulationKind.AM, 46, 6),
-        (RfModulationKind.FM, 47, 7),
-        (RfModulationKind.PM, 47, 7),
+        (RfModulationKind.AM, 72, 8),
+        (RfModulationKind.FM, 73, 9),
+        (RfModulationKind.PM, 73, 9),
     ),
 )
 def test_collects_one_rf_off_internal_sine_mode_without_output_control(
@@ -367,7 +420,7 @@ def test_collects_one_rf_off_internal_sine_mode_without_output_control(
     driver = _FakeDriver(transport)
     driver.snapshots = [
         _rf_snapshot(),
-        _rf_snapshot(modulation=RfModulationState.ENABLED),
+        _rf_snapshot(),
     ]
     calls, opener = _collector(production, driver)
     preflight = module.validate_a4_preflight(_config(), setup)
@@ -383,6 +436,9 @@ def test_collects_one_rf_off_internal_sine_mode_without_output_control(
     assert evidence["status"] == "passed"
     assert evidence["failure_codes"] == []
     assert driver.modulation_requests == [setup.request]
+    assert driver.modulation_disable_requests == [
+        RfModulationDisableRequest(port_id="rf_out", kind=kind)
+    ]
     assert driver.output_requests == []
     assert evidence["rf_audit"]["before_close"]["counters"]["query_calls"] == expected_queries
     assert evidence["rf_audit"]["before_close"]["counters"]["write_completed"] == expected_writes
@@ -410,6 +466,7 @@ def test_initial_output_on_fails_without_modulation_or_output_write(monkeypatch)
     assert "initial_rf_output_not_off" in evidence["failure_codes"]
     assert "final_rf_off_not_confirmed" in evidence["failure_codes"]
     assert driver.modulation_requests == []
+    assert driver.modulation_disable_requests == []
     assert driver.output_requests == []
     assert transport.write_calls == 0
 
@@ -432,6 +489,7 @@ def test_modulation_failure_does_not_attempt_output_or_final_snapshot(monkeypatc
     assert "rf_modulation_configure_failed" in evidence["failure_codes"]
     assert evidence["final_snapshot"] is None
     assert driver.modulation_requests == [setup.request]
+    assert driver.modulation_disable_requests == []
     assert driver.output_requests == []
 
 
@@ -443,7 +501,7 @@ def test_invalid_postcondition_or_final_output_state_never_invokes_output_contro
 
     bad_artifact_transport = _FakeTransport(module)
     bad_artifact_driver = _FakeDriver(bad_artifact_transport)
-    bad_artifact_driver.snapshots = [_rf_snapshot()]
+    bad_artifact_driver.snapshots = [_rf_snapshot(), _rf_snapshot()]
     bad_artifact_driver.artifact_matches = False
     _, bad_artifact_opener = _collector(production, bad_artifact_driver)
     preflight = module.validate_a4_preflight(_config(), setup)
@@ -454,13 +512,14 @@ def test_invalid_postcondition_or_final_output_state_never_invokes_output_contro
         opener=bad_artifact_opener,
     )
     assert "rf_modulation_readback_invalid" in bad_artifact["failure_codes"]
+    assert len(bad_artifact_driver.modulation_disable_requests) == 1
     assert bad_artifact_driver.output_requests == []
 
     final_output_transport = _FakeTransport(module)
     final_output_driver = _FakeDriver(final_output_transport)
     final_output_driver.snapshots = [
         _rf_snapshot(),
-        _rf_snapshot(output_enabled=True, modulation=RfModulationState.ENABLED),
+        _rf_snapshot(output_enabled=True),
     ]
     _, final_output_opener = _collector(production, final_output_driver)
     final_output = module.collect_a4_evidence(
@@ -472,6 +531,89 @@ def test_invalid_postcondition_or_final_output_state_never_invokes_output_contro
     assert "final_rf_output_not_off" in final_output["failure_codes"]
     assert "final_rf_off_not_confirmed" in final_output["failure_codes"]
     assert final_output_driver.output_requests == []
+
+
+def test_modulation_disable_failure_does_not_retry_or_attempt_output_or_final_snapshot(monkeypatch) -> None:
+    module = _script_module()
+    production = _production_descriptor()
+    _install_common_patches(monkeypatch, module, production)
+    transport = _FakeTransport(module)
+    driver = _FakeDriver(transport)
+    driver.snapshots = [_rf_snapshot()]
+    driver.disable_error = RuntimeError("redacted")
+    _, opener = _collector(production, driver)
+    setup = _setup(module)
+    preflight = module.validate_a4_preflight(_config(), setup)
+
+    evidence = module.collect_a4_evidence(_config(), preflight, setup, opener=opener)
+
+    assert evidence["status"] == "failed"
+    assert "rf_modulation_disable_failed" in evidence["failure_codes"]
+    assert evidence["final_snapshot"] is None
+    assert len(driver.modulation_disable_requests) == 1
+    assert driver.output_requests == []
+
+
+def test_collects_a_private_mode_specific_recovery_without_configuration_or_output_control(
+    monkeypatch,
+) -> None:
+    module = _script_module()
+    production = _production_descriptor()
+    _install_common_patches(monkeypatch, module, production)
+    transport = _FakeTransport(module)
+    driver = _FakeDriver(transport)
+    driver.snapshots = [
+        _rf_snapshot(modulation=RfModulationState.ENABLED),
+        _rf_snapshot(),
+    ]
+    calls, opener = _collector(production, driver)
+    setup = _setup(module)
+    preflight = module.validate_a4_preflight(_config(), setup)
+
+    evidence = module.collect_a4_recovery_evidence(
+        _config(),
+        preflight,
+        setup,
+        opener=opener,
+        timestamp_utc="2026-08-27T00:00:00Z",
+    )
+
+    assert evidence["status"] == "passed"
+    assert evidence["operation_mode"] == "recovery"
+    assert evidence["modulation_configure"] is None
+    assert driver.modulation_requests == []
+    assert driver.modulation_disable_requests == [
+        RfModulationDisableRequest(port_id="rf_out", kind=RfModulationKind.AM)
+    ]
+    assert driver.output_requests == []
+    assert evidence["rf_audit"]["before_close"]["counters"]["query_calls"] == 42
+    assert evidence["rf_audit"]["before_close"]["counters"]["write_completed"] == 2
+    assert calls[0]["lease"].operation == "dsg830.a4_modulation_recovery"
+
+
+def test_recovery_records_an_already_disabled_consistent_state_without_write(monkeypatch) -> None:
+    module = _script_module()
+    production = _production_descriptor()
+    _install_common_patches(monkeypatch, module, production)
+    transport = _FakeTransport(module)
+    driver = _FakeDriver(transport)
+    driver.disable_write_completed = False
+    driver.snapshots = [_rf_snapshot(), _rf_snapshot()]
+    _, opener = _collector(production, driver)
+    setup = _setup(module)
+    preflight = module.validate_a4_preflight(_config(), setup)
+
+    evidence = module.collect_a4_recovery_evidence(
+        _config(),
+        preflight,
+        setup,
+        opener=opener,
+    )
+
+    assert evidence["status"] == "passed"
+    assert evidence["modulation_disable"]["result"]["write_completed"] is False
+    assert transport.write_calls == 0
+    assert evidence["rf_audit"]["before_close"]["counters"]["query_calls"] == 29
 
 
 def test_setup_parser_and_evidence_file_are_strict_and_private(tmp_path: Path) -> None:

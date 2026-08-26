@@ -7,9 +7,10 @@ uses the scope.  A private read-only RF config and a resource-free A4 setup
 file are required; ``--execute`` is the explicit write boundary.
 
 One invocation validates exactly one internal-sine AM, FM, or PM profile.  The
-RF output must be confirmed OFF before the fixed configuration sequence and by
-an independent final snapshot.  A successful M3 configuration leaves the
-selected modulation mode enabled while RF remains OFF; it is not evidence that
+RF output must be confirmed OFF before the fixed configuration sequence.  A
+successful configuration is immediately followed by a bounded, mode-specific
+modulation-disable transaction and an independent final snapshot.  The final
+state must keep RF output and modulation disabled; this is not evidence that
 modulated RF output is safe or authorized.
 """
 
@@ -34,6 +35,7 @@ from wavebench.instruments import (
     RfFeature,
     RfFeatureCapability,
     RfFeatureDirection,
+    RfModulationDisableRequest,
     RfModulationKind,
     RfModulationModeProfile,
     RfModulationProfile,
@@ -286,7 +288,11 @@ def _build_evidence_descriptor(production: InstrumentDescriptor) -> InstrumentDe
         raise A4PreflightError("production_output_contract_invalid")
     modulation_feature = RfFeatureCapability(
         feature=RfFeature.MODULATION,
-        directions=(RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ),
+        directions=(
+            RfFeatureDirection.CONFIGURE,
+            RfFeatureDirection.DISABLE,
+            RfFeatureDirection.READ,
+        ),
         port_ids=(_PORT_ID,),
         profile=RfModulationProfile(
             state_readable=True,
@@ -296,7 +302,11 @@ def _build_evidence_descriptor(production: InstrumentDescriptor) -> InstrumentDe
     )
     evidence = replace(
         production,
-        capabilities=(*production.capabilities, "rf_source.modulation_configure"),
+        capabilities=(
+            *production.capabilities,
+            "rf_source.modulation_configure",
+            "rf_source.modulation_disable",
+        ),
         rf_source_extensions=replace(
             extensions,
             features=tuple(sorted((*features, modulation_feature), key=lambda item: item.feature.value)),
@@ -377,11 +387,13 @@ def _base_evidence(
     setup: A4EvidenceSetup,
     *,
     timestamp_utc: str,
+    operation_mode: str = "configuration",
 ) -> dict[str, object]:
     request = setup.request
     return {
         "schema": A4_EVIDENCE_SCHEMA,
         "evidence": "A4",
+        "operation_mode": operation_mode,
         "timestamp_utc": timestamp_utc,
         "driver_id": preflight.production_descriptor.driver_id,
         "model": _MODEL,
@@ -403,6 +415,7 @@ def _base_evidence(
         "failure_codes": [],
         "initial_snapshot": None,
         "modulation_configure": None,
+        "modulation_disable": None,
         "final_snapshot": None,
         "rf_audit": {"before_close": None, "after_close": None},
     }
@@ -459,7 +472,7 @@ def _snapshot_failure_codes(
     snapshot: RfSourceSnapshot,
     *,
     phase: str,
-    expected_modulation: RfModulationState,
+    expected_modulation: RfModulationState | None,
 ) -> list[str]:
     port = _snapshot_port(snapshot)
     if port is None:
@@ -479,7 +492,7 @@ def _snapshot_failure_codes(
         return codes
     if port.output_enabled.value is not False:
         codes.append(f"{phase}_rf_output_not_off")
-    if port.modulation.value is not expected_modulation:
+    if expected_modulation is not None and port.modulation.value is not expected_modulation:
         codes.append(f"{phase}_modulation_state_invalid")
     if port.pulse.value is not RfPulseState.DISABLED:
         codes.append(f"{phase}_pulse_not_disabled")
@@ -549,6 +562,42 @@ def _modulation_artifact_matches(artifact: object, request: RfModulationRequest)
     )
 
 
+def _modulation_disable_artifact_matches(
+    artifact: object,
+    request: RfModulationRequest,
+    *,
+    require_write: bool = True,
+) -> bool:
+    if not isinstance(artifact, Mapping) or artifact.get("operation") != "rf_source.modulation_disable":
+        return False
+    result = artifact.get("result")
+    if not isinstance(result, Mapping) or not isinstance(result.get("write_completed"), bool):
+        return False
+    if require_write and result.get("write_completed") is not True:
+        return False
+    postcondition = artifact.get("postcondition_snapshot")
+    if not isinstance(postcondition, Mapping):
+        return False
+    ports = postcondition.get("ports")
+    if not isinstance(ports, list) or len(ports) != 1 or not isinstance(ports[0], Mapping):
+        return False
+    if not (
+        _observed_artifact_value(ports[0], "output_enabled", False)
+        and _observed_artifact_value(ports[0], "modulation", RfModulationState.DISABLED.value)
+        and _observed_artifact_value(ports[0], "pulse", RfPulseState.DISABLED.value)
+        and _observed_artifact_value(ports[0], "sweep", RfSweepState.DISABLED.value)
+    ):
+        return False
+    modulation = artifact.get("postcondition_modulation_state")
+    return (
+        isinstance(modulation, Mapping)
+        and modulation.get("port_id") == request.port_id
+        and modulation.get("enabled_modes") == []
+        and modulation.get("global_enabled") is False
+        and modulation.get("fault_codes") == []
+    )
+
+
 def _expected_a4_io(request: RfModulationRequest) -> tuple[int, int]:
     postcondition_modulation_query_count = 9 if request.kind is RfModulationKind.AM else 10
     driver_write_count = 6 if request.kind is RfModulationKind.AM else 7
@@ -559,16 +608,19 @@ def _expected_a4_io(request: RfModulationRequest) -> tuple[int, int]:
         + _SNAPSHOT_QUERY_COUNT
         + postcondition_modulation_query_count
         + _SNAPSHOT_QUERY_COUNT
+        + 5
+        + _SNAPSHOT_QUERY_COUNT
+        + 5
+        + _SNAPSHOT_QUERY_COUNT
     )
-    return query_count, driver_write_count
+    return query_count, driver_write_count + 2
 
 
 def _rf_audit_failure_codes(
     before_close: dict[str, object] | None,
     after_close: dict[str, object] | None,
     *,
-    request: RfModulationRequest,
-    completed: bool,
+    expected_io: tuple[int, int] | None,
 ) -> list[str]:
     codes: list[str] = []
     if before_close is None:
@@ -583,8 +635,8 @@ def _rf_audit_failure_codes(
         codes.append("rf_write_outcome_unknown")
     if counters["blocked_session_io"] != 0:
         codes.append("rf_blocked_session_io")
-    if completed:
-        expected_queries, expected_writes = _expected_a4_io(request)
+    if expected_io is not None:
+        expected_queries, expected_writes = expected_io
         if counters["query_calls"] != expected_queries:
             codes.append("unexpected_rf_query_count")
         for key in (
@@ -610,6 +662,12 @@ def _rf_audit_failure_codes(
         if after_close["session_health"] != "closed":
             codes.append("rf_session_not_closed")
     return codes
+
+
+def _expected_a4_recovery_io(*, write_completed: bool) -> tuple[int, int]:
+    if write_completed:
+        return (_SNAPSHOT_QUERY_COUNT + 26 + _SNAPSHOT_QUERY_COUNT, 2)
+    return (_SNAPSHOT_QUERY_COUNT + _SNAPSHOT_QUERY_COUNT + 5 + _SNAPSHOT_QUERY_COUNT, 0)
 
 
 def _base_descriptor_matches(preflight: A4Preflight, current: InstrumentDescriptor) -> bool:
@@ -639,7 +697,10 @@ def collect_a4_evidence(
     rf_driver: object | None = None
     rf_transport: object | None = None
     rf_service: RfSourceService | None = None
+    configure_completed = False
     configure_confirmed = False
+    disable_completed = False
+    disable_confirmed = False
     final_rf_off_confirmed = False
 
     try:
@@ -698,19 +759,36 @@ def collect_a4_evidence(
             try:
                 _, artifact = rf_service.configure_modulation_with_artifact(setup.request)
                 evidence["modulation_configure"] = artifact
+                configure_completed = True
                 if _modulation_artifact_matches(artifact, setup.request):
                     configure_confirmed = True
                 else:
                     failure_codes.append("rf_modulation_readback_invalid")
             except Exception:
                 failure_codes.append("rf_modulation_configure_failed")
-        if configure_confirmed:
+        if configure_completed:
+            try:
+                _, artifact = rf_service.disable_modulation_with_artifact(
+                    RfModulationDisableRequest(
+                        port_id=setup.request.port_id,
+                        kind=setup.request.kind,
+                    )
+                )
+                evidence["modulation_disable"] = artifact
+                disable_completed = True
+                if _modulation_disable_artifact_matches(artifact, setup.request):
+                    disable_confirmed = True
+                else:
+                    failure_codes.append("rf_modulation_disable_readback_invalid")
+            except Exception:
+                failure_codes.append("rf_modulation_disable_failed")
+        if disable_completed:
             final = rf_service.snapshot()
             evidence["final_snapshot"] = rf_source_snapshot_operation_artifact(final)
             final_failures = _snapshot_failure_codes(
                 final,
                 phase="final",
-                expected_modulation=RfModulationState.ENABLED,
+                expected_modulation=RfModulationState.DISABLED,
             )
             failure_codes.extend(final_failures)
             final_rf_off_confirmed = not final_failures
@@ -730,8 +808,166 @@ def collect_a4_evidence(
                 _rf_audit_failure_codes(
                     before_close,
                     after_close,
-                    request=setup.request,
-                    completed=configure_confirmed and final_rf_off_confirmed,
+                    expected_io=(
+                        _expected_a4_io(setup.request)
+                        if configure_confirmed and disable_confirmed and final_rf_off_confirmed
+                        else None
+                    ),
+                )
+            )
+
+    if not final_rf_off_confirmed:
+        failure_codes.append("final_rf_off_not_confirmed")
+    if not _runtime_versions_available(evidence["runtime"]):
+        failure_codes.append("runtime_version_unavailable")
+    evidence["failure_codes"] = sorted(set(failure_codes))
+    evidence["status"] = "passed" if not evidence["failure_codes"] else "failed"
+    return evidence
+
+
+def collect_a4_recovery_evidence(
+    rf_config: WaveBenchConfig,
+    preflight: A4Preflight,
+    setup: A4EvidenceSetup,
+    *,
+    opener: Callable[..., Any] = open_instrument_driver,
+    timestamp_utc: str | None = None,
+) -> dict[str, object]:
+    """Restore one known M3 mode to the RF-OFF, modulation-disabled baseline.
+
+    This is a local recovery record, not A4 acceptance evidence.  It never
+    enables RF output and uses the same temporary descriptor as the normal A4
+    harness.  The Service only writes when state proves that exactly the
+    requested mode is active; an already-disabled consistent state is recorded
+    as a verified no-write result.
+    """
+
+    current = validate_a4_preflight(rf_config, setup)
+    if not _base_descriptor_matches(preflight, current.production_descriptor):
+        raise A4PreflightError("descriptor_changed_after_preflight")
+    evidence = _base_evidence(
+        preflight,
+        setup,
+        timestamp_utc=timestamp_utc or _utc_now(),
+        operation_mode="recovery",
+    )
+    failure_codes: list[str] = []
+    rf_driver: object | None = None
+    rf_transport: object | None = None
+    disable_completed = False
+    disable_confirmed = False
+    disable_write_completed: bool | None = None
+    final_rf_off_confirmed = False
+
+    try:
+        a4_rf_config = _a4_rf_config(rf_config)
+        rf_source = a4_rf_config.rf_source
+        assert rf_source is not None
+        opened = opener(
+            driver_reference=rf_source.driver,
+            expected_kind="rf_source",
+            resource=rf_source.resource or "",
+            configured_backend=a4_rf_config.connection.backend,
+            timeout_ms=a4_rf_config.connection.timeout_ms,
+            opc_timeout_ms=a4_rf_config.connection.opc_timeout_ms,
+            read_retry_attempts=0,
+            read_retry_delay_ms=0,
+            logger=CommandLogger(),
+            options=rf_source.options,
+            access="read_write",
+            lease=ResourceLease(
+                resource=rf_source.resource or "",
+                mode="exclusive",
+                operation="dsg830.a4_modulation_recovery",
+            ),
+        )
+        rf_driver = opened.driver
+        rf_transport = opened.transport
+        if getattr(opened, "descriptor", None) != preflight.production_descriptor:
+            raise A4PreflightError("descriptor_changed_after_preflight")
+        try:
+            validate_declared_capabilities(preflight.evidence_descriptor, rf_driver)
+        except Exception as exc:
+            raise A4PreflightError("a4_evidence_driver_invalid") from exc
+        rf_service = RfSourceService(
+            config=a4_rf_config,
+            logger=CommandLogger(),
+            session=rf_driver,
+            descriptor=preflight.evidence_descriptor,
+            transport=rf_transport,
+            session_state=opened.session_state,
+        )
+        initial = rf_service.snapshot()
+        evidence["initial_snapshot"] = rf_source_snapshot_operation_artifact(initial)
+        hardware = evidence["hardware"]
+        assert isinstance(hardware, dict)
+        hardware["firmware"] = _firmware(rf_driver)
+        if hardware["firmware"] is None:
+            failure_codes.append("snapshot_firmware_unavailable")
+        failure_codes.extend(
+            _snapshot_failure_codes(
+                initial,
+                phase="initial",
+                expected_modulation=None,
+            )
+        )
+        if not failure_codes:
+            try:
+                result, artifact = rf_service.disable_modulation_with_artifact(
+                    RfModulationDisableRequest(
+                        port_id=setup.request.port_id,
+                        kind=setup.request.kind,
+                    )
+                )
+                evidence["modulation_disable"] = artifact
+                disable_completed = True
+                write_completed = getattr(result, "write_completed", None)
+                if not isinstance(write_completed, bool):
+                    failure_codes.append("rf_modulation_disable_result_invalid")
+                elif _modulation_disable_artifact_matches(
+                    artifact,
+                    setup.request,
+                    require_write=False,
+                ):
+                    disable_write_completed = write_completed
+                    disable_confirmed = True
+                else:
+                    failure_codes.append("rf_modulation_disable_readback_invalid")
+            except Exception:
+                failure_codes.append("rf_modulation_disable_failed")
+        if disable_completed:
+            final = rf_service.snapshot()
+            evidence["final_snapshot"] = rf_source_snapshot_operation_artifact(final)
+            final_failures = _snapshot_failure_codes(
+                final,
+                phase="final",
+                expected_modulation=RfModulationState.DISABLED,
+            )
+            failure_codes.extend(final_failures)
+            final_rf_off_confirmed = not final_failures
+    except A4PreflightError as exc:
+        failure_codes.append(exc.code)
+    except Exception:
+        failure_codes.append("local_harness_failed")
+    finally:
+        if rf_driver is not None:
+            before_close = _audit_snapshot(rf_transport)
+            rf_close_error = _close_driver(rf_driver)
+            after_close = _audit_snapshot(rf_transport)
+            evidence["rf_audit"] = {"before_close": before_close, "after_close": after_close}
+            if rf_close_error is not None:
+                failure_codes.append(rf_close_error)
+            expected_io = None
+            if disable_confirmed and final_rf_off_confirmed:
+                assert disable_write_completed is not None
+                expected_io = _expected_a4_recovery_io(
+                    write_completed=disable_write_completed
+                )
+            failure_codes.extend(
+                _rf_audit_failure_codes(
+                    before_close,
+                    after_close,
+                    expected_io=expected_io,
                 )
             )
 
@@ -770,6 +1006,7 @@ def _summary(evidence: Mapping[str, object]) -> str:
             "schema": A4_EVIDENCE_SCHEMA,
             "status": evidence["status"],
             "failure_codes": evidence["failure_codes"],
+            "operation_mode": evidence.get("operation_mode"),
             "modulation_kind": setup.get("modulation_kind") if isinstance(setup, Mapping) else None,
             "rf_output_confirmed_off": evidence["status"] == "passed",
         },
@@ -783,10 +1020,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rf-config", required=True, type=Path, help="Private read-only RF TOML")
     parser.add_argument("--setup", required=True, type=Path, help="Private A4 setup TOML without resources")
     parser.add_argument("--output", type=Path, help="New local JSON evidence file")
-    parser.add_argument(
+    execution_mode = parser.add_mutually_exclusive_group()
+    execution_mode.add_argument(
         "--execute",
         action="store_true",
-        help="Explicitly permit one RF-OFF internal-sine AM, FM, or PM configuration sequence",
+        help="Explicitly permit one RF-OFF configuration, readback, and modulation-disable sequence",
+    )
+    execution_mode.add_argument(
+        "--recover",
+        action="store_true",
+        help="Explicitly restore one known modulation mode to the RF-OFF disabled baseline",
     )
     args = parser.parse_args(argv)
 
@@ -801,7 +1044,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "preflight_failed", "failure_code": "config_or_descriptor_invalid"}))
         return 2
 
-    if not args.execute:
+    if not args.execute and not args.recover:
         print(
             json.dumps(
                 {
@@ -823,7 +1066,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.output is None:
-        parser.error("--output is required with --execute")
+        parser.error("--output is required with --execute or --recover")
 
     output: TextIO | None = None
     try:
@@ -848,12 +1091,26 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         try:
-            evidence = collect_a4_evidence(rf_config, preflight, setup)
+            evidence = (
+                collect_a4_evidence(rf_config, preflight, setup)
+                if args.execute
+                else collect_a4_recovery_evidence(rf_config, preflight, setup)
+            )
         except A4PreflightError as exc:
-            evidence = _base_evidence(preflight, setup, timestamp_utc=_utc_now())
+            evidence = _base_evidence(
+                preflight,
+                setup,
+                timestamp_utc=_utc_now(),
+                operation_mode="recovery" if args.recover else "configuration",
+            )
             evidence["failure_codes"] = [exc.code]
         except Exception:
-            evidence = _base_evidence(preflight, setup, timestamp_utc=_utc_now())
+            evidence = _base_evidence(
+                preflight,
+                setup,
+                timestamp_utc=_utc_now(),
+                operation_mode="recovery" if args.recover else "configuration",
+            )
             evidence["failure_codes"] = ["local_harness_failed"]
         _replace_evidence(output, evidence)
     except Exception:

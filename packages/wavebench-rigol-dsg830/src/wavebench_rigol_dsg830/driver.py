@@ -19,6 +19,7 @@ import re
 from wavebench.instruments.rf_source_extensions import (
     RfAvailability,
     RfCwRequest,
+    RfModulationDisableRequest,
     RfModulationKind,
     RfModulationRequest,
     RfModulationStateSnapshot,
@@ -52,6 +53,10 @@ _PM_DEVIATION_MAX_RAD = 5.0
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?"
 _FREQUENCY_RESPONSE = re.compile(
     rf"^(?P<value>{_NUMBER})(?P<unit>Hz|kHz|MHz|GHz)?$",
+    re.IGNORECASE,
+)
+_FREQUENCY_FRACTION_GROUP_RESPONSE = re.compile(
+    r"^(?P<leading>[+-]?\d+\.\d+) (?P<trailing>\d+)(?P<unit>Hz|kHz|MHz|GHz)?$",
     re.IGNORECASE,
 )
 _DECIMAL_RESPONSE = re.compile(rf"^{_NUMBER}$")
@@ -243,6 +248,21 @@ class DSG830RfSource:
         self.transport.write(f":{prefix}:STAT ON")
         self.transport.write(":MOD:STAT ON")
 
+    def disable_rf_modulation(self, request: RfModulationDisableRequest) -> None:
+        """Send the fixed M3 mode/global disable sequence without readback.
+
+        Core owns the RF-OFF preflight and independent state-only readback.
+        This method only disables the explicitly requested mode and then the
+        global modulation switch; it never changes RF output or retries writes.
+        """
+
+        if not isinstance(request, RfModulationDisableRequest):
+            raise ValueError("DSG830 modulation disable requires RfModulationDisableRequest")
+        _require_modulation_target(request.port_id, request.kind)
+        prefix = _modulation_prefix(request.kind)
+        self.transport.write(f":{prefix}:STAT OFF")
+        self.transport.write(":MOD:STAT OFF")
+
     def set_rf_output(self, request: RfOutputRequest) -> None:
         """Map one offline M2 output request to one documented setter.
 
@@ -317,6 +337,15 @@ def _parse_frequency_response_hz(
 ) -> float:
     value = _clean_response(response, label)
     match = _FREQUENCY_RESPONSE.fullmatch(value)
+    if match is None:
+        grouped = _FREQUENCY_FRACTION_GROUP_RESPONSE.fullmatch(value)
+        if grouped is not None:
+            normalized = (
+                grouped.group("leading")
+                + grouped.group("trailing")
+                + (grouped.group("unit") or "")
+            )
+            match = _FREQUENCY_RESPONSE.fullmatch(normalized)
     if match is None:
         raise ValueError(f"DSG830 {label} response has an invalid format")
     frequency = _parse_finite(match.group("value"), label)
