@@ -1,0 +1,17 @@
+# MSO8104 相关 WaveBench RFC
+
+本目录记录 MSO8104 插件曾无法通过 WaveBench 公开接口安全表达的合同缺口。部分 RFC 已在 core 开发分支实现 R1；这些接口可用于受控开发和验收，但在 core 正式发布前不构成兼容性 wheel 发布依据。
+
+| RFC | 状态 | 影响 |
+| --- | --- | --- |
+| [RFC-0001：非重放文本查询](0001-nonreplayable-text-query.md) | core R1 已实现（未发布） | 受控声明 `scope.error_drain_v1`；legacy `scope.errors` 继续不声明 |
+| [RFC-0002：示波器通道输入状态](0002-scope-channel-input-state.md) | core R1 已实现（未发布） | 插件受控声明 `scope.channel_input_state_v2` |
+| [RFC-0003：示波器截图 framing 与菜单合同](0003-scope-screenshot-framing-and-menu-contract.md) | Core 当前分支已实现；插件受限实机验收完成 | 插件声明 `scope.screenshot_profile`／`scope.screenshot_v2`；仅 `png/device/device`、`SAVE:IMAGe:DATA?` definite block、BMP24→PNG、`8,388,608`-byte 预算 |
+| [RFC-0004：可移植的示波器数字通道状态模型](0004-portable-scope-digital-status.md) | core R1 已实现（未发布） | 受控声明 `scope.digital_status_v2`；D0/D8 静态状态回包已验证，digital waveform 暂不声明 |
+| [RFC-0005：可组合的示波器状态快照](0005-portable-scope-snapshot.md) | core R1 已实现（未发布） | 受控声明 `scope.snapshot_v2` 的 identity/授权选件子集；其他 55 个字段暂 unavailable |
+| [RFC-0006：可移植的示波器采集状态与平均采集合同](0006-portable-scope-acquisition-contracts.md) | core R1 已实现（未发布） | 受控声明 acquisition status V2 静态子集；平均模式远程进入前提实机失败，`scope.capture_average_v2` 暂不声明 |
+| [RFC-0007：可移植的示波器统计、FFT 与光标读取合同](0007-portable-scope-analysis-reads.md) | core R1 已实现（未发布） | 受控声明 statistics/FFT/cursor V2；FFT MATH1 状态回包已验证 |
+| [RFC-0008：有界示波器波形块的尾随字节合同](0008-bounded-waveform-block-trailing-contract.md) | core R1 已实现（未发布） | 受控声明 bounded fetch 与 `DEF + BYTE` capture；单／多通道 capture 已完成实机验收 |
+| [RFC-0009：已验证 SINGLE 模式下的即时 STOP 完成合同](0009-single-mode-readback-terminal-stop.md) | core R1 已实现（未发布） | 以模式读回限定即时 STOP completion；`scope.acquisition_control` 已受控声明，capture 仍以独立 13 字段验收为依据 |
+
+core 正式发布后，插件必须提高最低 WaveBench 版本并重新完成核心集成测试，才可发布相应 compatibility wheel。不能只根据 RFC 文本调用不存在的方法。

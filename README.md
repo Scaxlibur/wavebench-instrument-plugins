@@ -6,10 +6,10 @@ WaveBench 仪器插件的独立源码仓库。仓库计划按「一台仪器或�
 
 ## 当前状态
 
-正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 M3.5，保留最小 query-only descriptor 并提供五项经认证的厂商专用 RF-OFF 控制；`wavebench-siglent-sdg2000x` 已完成 Source V2 A0、A1、有限 A2、Basic A3 与 C3 候选包审计；`wavebench-siglent-sds3000` 严格支持 SDS3054 固件 `8.4.1`，已采用 WaveBench `0.8.24` transport/session P0；`wavebench-siglent-sds800x-hd` `0.6.0` 已提供 Scope R1.3 PNG 截图与独立采集控制，并完成 SDS804X HD 实机恢复验收。前五个包是 WaveBench 预装驱动的可选外置发行版，用于独立升级、特定 transport 或后续扩展，并不替代主包的开箱即用基线。WaveBench 提供本地 package check、受管安装、状态查询、升级／降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
+正式源码包已进入独立维护：`wavebench-rigol-ds1000z`、`wavebench-rigol-dg4000`、LAN-only 的 `wavebench-rigol-dm3000`、`wavebench-rigol-dp800` 与 `wavebench-rohde-schwarz-rtm2000` 已完成离线、受管生命周期和受控实机验收；`wavebench-shengpu-sp3000a` 已进入 SP30120 M3.5，保留最小 query-only descriptor 并提供五项经认证的厂商专用 RF-OFF 控制；`wavebench-siglent-sdg2000x` 已完成 Source V2 A0、A1、有限 A2、Basic A3 与 C3 候选包审计；`wavebench-siglent-sds3000` 严格支持 SDS3054 固件 `8.4.1`，已采用 WaveBench `0.8.24` transport/session P0；`wavebench-siglent-sds800x-hd` `0.6.0` 已提供 Scope R1.3 PNG 截图与独立采集控制，并完成 SDS804X HD 实机恢复验收。`wavebench-rigol-mso8000` `0.9.0` 面向 MSO8104，已在记录型号、固件和 LAN/PyVISA 条件下完成有界 waveform/capture、截图 V2、采集控制和光标读数的受控验收。前五个包是 WaveBench 预装驱动的可选外置发行版，用于独立升级、特定 transport 或后续扩展，并不替代主包的开箱即用基线。WaveBench 提供本地 package check、受管安装、状态查询、升级／降级、卸载和保守事务恢复；本仓库只维护插件源码，不重复实现安装器或远程 catalog。
 
 > [!IMPORTANT]
-> WaveBench `v0.7.0` 尚不包含 Instrument API V2、受管插件生命周期或覆盖槽位。本仓库各包分别声明自身的 `0.8.x` 最低版本；SDS800X HD `0.6.0` 要求 `wavebench>=0.8.23,<0.9`，SDG2000X `0.8.2` 与 SDS3000 均要求 `wavebench>=0.8.24,<0.9`。所有包都不自动假定兼容未来 `0.9`。
+> WaveBench `v0.7.0` 尚不包含 Instrument API V2、受管插件生命周期或覆盖槽位。本仓库各包分别声明自身的 `0.8.x` 最低版本；SDS800X HD `0.6.0` 要求 `wavebench>=0.8.23,<0.9`，SDG2000X `0.8.2`、SDS3000 与 MSO8000 均要求 `wavebench>=0.8.24,<0.9`。MSO8000 依赖的当前 Core API 尚未独立发布，不能据此宣称兼容性 wheel 已发布。所有包都不自动假定兼容未来 `0.9`。
 
 ## 计划结构
 
@@ -19,6 +19,7 @@ packages/
 ├── wavebench-rigol-dm3000/
 ├── wavebench-rigol-dp800/
 ├── wavebench-rigol-ds1000z/
+├── wavebench-rigol-mso8000/
 ├── wavebench-rohde-schwarz-rtm2000/
 ├── wavebench-shengpu-sp3000a/
 ├── wavebench-siglent-sdg2000x/
@@ -40,6 +41,7 @@ WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五�
 ## 当前插件
 
 - [`wavebench-rigol-ds1000z`](packages/wavebench-rigol-ds1000z/README.md)：四通道 RIGOL DS1104Z / DS1000Z 系列，canonical ID `rigol.ds1000z`。
+- [`wavebench-rigol-mso8000`](packages/wavebench-rigol-mso8000/README.md)：RIGOL MSO8104 混合信号示波器，canonical ID `rigol.mso8104`；有界 waveform/capture、截图 V2、采集控制、状态和光标读数已在记录的型号、固件与 LAN/PyVISA 条件下完成受控验收，完整边界见包内说明。
 - [`wavebench-rigol-dg4000`](packages/wavebench-rigol-dg4000/README.md)：双通道 RIGOL DG4202 / DG4000 系列，canonical ID `rigol.dg4202`。
 - [`wavebench-rigol-dm3000`](packages/wavebench-rigol-dm3000/README.md)：LAN-only RIGOL DM3000 / DM3058 数字万用表，canonical ID `rigol.dm3000`；短 alias 保留内建双 backend fallback。
 - [`wavebench-rigol-dp800`](packages/wavebench-rigol-dp800/README.md)：RIGOL DP800 / DP832 / DP832A 可编程直流电源，canonical ID `rigol.dp800`；短 alias 保留内建 fallback。
