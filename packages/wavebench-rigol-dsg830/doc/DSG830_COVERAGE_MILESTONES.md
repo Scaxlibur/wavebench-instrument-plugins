@@ -95,6 +95,8 @@ descriptor 不注册、不写回、不提前提升。
 
 带 `--recover` 时，harness 只恢复 setup 指定的一个已知活动模式，或记录已一致关闭的零写结果。它要求同样的 RF-OFF 安全前置条件，以权限 `0600` 创建私有恢复记录；恢复记录不计入 A4 能力提升证据。
 
+带 `--diagnose` 时，harness 保留原始 `read_only` 配置和 production descriptor，只读取初始／最终 RF snapshot 与 setup 指定模式的完整 profile。初始与最终状态均须确认 RF OFF、调制／Pulse／Sweep 关闭且无活动 protection；guard audit 必须确认零写、固定 query 预算和健康关闭。诊断记录以权限 `0600` 保存，只用于定位 PM 严格读回差异，不计入 A4 能力提升证据。
+
 任何初始／postcondition／最终 RF OFF 不明或不符、模式／数值／内部频率 readback 不符、未知 write outcome、审计计数偏差、
 session 异常或关闭后计数变化均为失败。当前受控验证已通过 AM、FM 的 RF-OFF 配置、读回和关闭序列；PM 仍在严格读回中不匹配请求值，且每次异常后均通过独立恢复回到关闭基线。M3 capability 同时覆盖 AM／FM／PM，因此 production descriptor 继续关闭调制 capability。即使后续 A4 完整通过，证据也只证明「RF 始终 OFF 时的一个内部 Sine 调制 profile 被配置、读回并关闭」，不证明 RF 调制输出、CH2 信号、Pulse、Sweep 或 trigger。
 

@@ -40,9 +40,10 @@ the only active one; it is not a reset and does not retry an uncertain write.
 The source checkout includes an A4 RF-OFF modulation-evidence harness, fake regressions, and a resource-free setup
 template. Each invocation validates one internal-Sine mode; after configuration readback, it disables that same mode and
 the final state must establish both RF output and modulation OFF. Explicit `--recover` only restores a known single
-active mode and writes a private recovery record. A4 does not read CH2, invoke RF-output control, or treat recovery as
-capability-promotion evidence. The AM and FM RF-OFF sequences passed; PM still has a strict readback mismatch, so the
-overall modulation capability remains closed.
+active mode and writes a private recovery record. Explicit `--diagnose` retains the original `read_only` configuration,
+reads the initial/final RF snapshots and one requested profile, and requires a zero-write transport audit. A4 does not
+read CH2 or invoke RF-output control; recovery and diagnostic records are not capability-promotion evidence. The AM and
+FM RF-OFF sequences passed; PM still has a strict readback mismatch, so the overall modulation capability remains closed.
 
 The production descriptor declares no error queue, modulation, Pulse, Sweep, trigger, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and

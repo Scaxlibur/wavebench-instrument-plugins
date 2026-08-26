@@ -71,6 +71,12 @@ With `--recover`, the harness only restores the one known active mode named in s
 already-disabled no-write result. It requires the same RF-OFF safety preconditions and creates a private `0600` recovery
 record; that record is not A4 capability-promotion evidence.
 
+With `--diagnose`, the harness retains the original `read_only` configuration and production descriptor. It reads only
+the initial/final RF snapshots and the complete profile for the setup-selected mode. Both snapshots must establish RF
+OFF with modulation/Pulse/Sweep disabled and no active protection; the guard audit must establish zero writes, the fixed
+query budget, and healthy close. The private `0600` diagnostic record is only for investigating the PM strict-readback
+mismatch and is not A4 capability-promotion evidence.
+
 Unknown or mismatched initial/postcondition/final RF-OFF state, mode/value/frequency mismatch, unknown write outcome,
 audit-budget mismatch, unhealthy session, or changed counters after close fails acceptance. Controlled validation passed
 the AM and FM RF-OFF configuration/readback/disable sequences; PM still does not match the requested value on strict
