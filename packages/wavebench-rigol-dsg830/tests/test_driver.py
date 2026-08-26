@@ -427,7 +427,7 @@ def test_driver_accepts_the_documented_frequency_response_with_one_fraction_grou
                 ":FMPM:TYPE PM",
                 ":PM:SOUR INT",
                 ":PM:WAVE SINE",
-                ":PM:DEV 2rad",
+                ":PM:DEV 2",
                 ":PM:FREQ 1000Hz",
                 ":PM:STAT ON",
                 ":MOD:STAT ON",

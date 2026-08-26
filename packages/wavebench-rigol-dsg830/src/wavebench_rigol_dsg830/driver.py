@@ -496,7 +496,11 @@ def _modulation_value_write(request: RfModulationRequest) -> str:
         return f":{prefix}:DEPT {_format_scpi_real(request.value)}"
     if request.kind is RfModulationKind.FM:
         return f":{prefix}:DEV {_format_scpi_real(request.value)}Hz"
-    return f":{prefix}:DEV {_format_scpi_real(request.value)}rad"
+    # The DSG800 guide defines radians as the default unit and uses a bare
+    # numeric PM-deviation write in its canonical example.  Keep the driver on
+    # that representation so the wire value matches the device's documented
+    # readback convention.
+    return f":{prefix}:DEV {_format_scpi_real(request.value)}"
 
 
 def _validate_modulation_request_range(request: RfModulationRequest) -> None:
