@@ -1,13 +1,14 @@
-"""M0 snapshot driver plus the offline M1 mapping for the RIGOL DSG830.
+"""M0 snapshot driver plus staged M1/M2 mappings for the RIGOL DSG830.
 
 A1 hardware evidence authorizes the public ``rf_source.snapshot`` capability.
 ``get_rf_snapshot()`` remains observational only: it performs the fixed query
 set and does not configure frequency or power, switch RF output, or control
 modulation, Pulse, Sweep, trigger, or arbitrary SCPI.
 
-``configure_cw()`` and ``set_rf_output()`` are present for Core M1/M2
-fake-descriptor tests only. The production descriptor does not declare their
-write capabilities until the corresponding hardware evidence exists.
+``set_rf_output()`` is available through the production descriptor after A2
+evidence. ``configure_cw()`` remains available only to Core M1 tests and the
+local A3 evidence descriptor until CW hardware evidence is independently
+reviewed.
 """
 
 from __future__ import annotations
