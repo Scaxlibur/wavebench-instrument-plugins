@@ -13,6 +13,7 @@ separate A4 modulation evidence is independently reviewed.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from math import isfinite
 import re
 
@@ -31,6 +32,11 @@ from wavebench.instruments.rf_source_extensions import (
     RfOutputRequest,
     RfPortSnapshot,
     RfProtectionStatus,
+    RfPulseConfigureRequest,
+    RfPulseMode,
+    RfPulsePolarity,
+    RfPulseSnapshot,
+    RfPulseSource,
     RfPulseState,
     RfReasonCode,
     RfSourceSnapshot,
@@ -50,6 +56,11 @@ _FM_DEVIATION_MIN_HZ = 0.1
 _FM_DEVIATION_MAX_HZ = 1_000_000.0
 _PM_DEVIATION_MIN_RAD = 0.0
 _PM_DEVIATION_MAX_RAD = 5.0
+_PULSE_PERIOD_MIN_S = 40e-9
+_PULSE_PERIOD_MAX_S = 170.0
+_PULSE_WIDTH_MIN_S = 10e-9
+_PULSE_WIDTH_MAX_S = _PULSE_PERIOD_MAX_S - _PULSE_WIDTH_MIN_S
+_PULSE_MINIMUM_OFF_TIME_S = 10e-9
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?"
 _FREQUENCY_RESPONSE = re.compile(
     rf"^(?P<value>{_NUMBER})(?P<unit>Hz|kHz|MHz|GHz)?$",
@@ -61,6 +72,7 @@ _FREQUENCY_FRACTION_GROUP_RESPONSE = re.compile(
 )
 _DECIMAL_RESPONSE = re.compile(rf"^{_NUMBER}$")
 _RAD_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})(?:rad)?$", re.IGNORECASE)
+_TIME_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})(?P<unit>s|ms|us|ns)?$", re.IGNORECASE)
 _INTEGER_RESPONSE = re.compile(r"^\d+$")
 _IDN_VENDOR = "RIGOL TECHNOLOGIES"
 _IDN_MODEL = "DSG830"
@@ -263,6 +275,62 @@ class DSG830RfSource:
         self.transport.write(f":{prefix}:STAT OFF")
         self.transport.write(":MOD:STAT OFF")
 
+    def get_rf_pulse_snapshot(self, port_id: str) -> RfPulseSnapshot:
+        """Read the documented pulse profile without touching Pulse I/O or triggers."""
+
+        _require_pulse_port(port_id)
+        commands = (
+            ":PULM:SOUR?",
+            ":PULM:MODE?",
+            ":PULM:PER?",
+            ":PULM:WIDT?",
+            ":PULM:POL?",
+            ":PULM:STAT?",
+        )
+        responses = {command: self.transport.query(command) for command in commands}
+        return RfPulseSnapshot(
+            port_id=port_id,
+            source=_parse_pulse_source(responses[":PULM:SOUR?"]),
+            mode=_parse_pulse_mode(responses[":PULM:MODE?"]),
+            period_s=_parse_pulse_seconds(
+                responses[":PULM:PER?"],
+                "pulse period",
+                minimum_s=_PULSE_PERIOD_MIN_S,
+                maximum_s=_PULSE_PERIOD_MAX_S,
+            ),
+            width_s=_parse_pulse_seconds(
+                responses[":PULM:WIDT?"],
+                "pulse width",
+                minimum_s=_PULSE_WIDTH_MIN_S,
+                maximum_s=_PULSE_WIDTH_MAX_S,
+            ),
+            polarity=_parse_pulse_polarity(responses[":PULM:POL?"]),
+            state=_as_pulse_state(_parse_binary(responses[":PULM:STAT?"], "pulse state")),
+        )
+
+    def configure_rf_pulse(self, request: RfPulseConfigureRequest) -> None:
+        """Configure one disabled internal single-pulse profile without triggering.
+
+        Core owns RF-OFF preflight and independent profile readback. This
+        mapping never touches `:PULM:OUT`, trigger commands, or RF output, and
+        ends by explicitly keeping pulse modulation disabled.
+        """
+
+        if not isinstance(request, RfPulseConfigureRequest):
+            raise ValueError("DSG830 pulse configuration requires RfPulseConfigureRequest")
+        _require_pulse_port(request.port_id)
+        _validate_pulse_request_range(request)
+        polarity = {
+            RfPulsePolarity.NORMAL: "NORM",
+            RfPulsePolarity.INVERTED: "INV",
+        }[request.polarity]
+        self.transport.write(":PULM:SOUR INT")
+        self.transport.write(":PULM:MODE SING")
+        self.transport.write(f":PULM:PER {_format_scpi_real(request.period_s)}s")
+        self.transport.write(f":PULM:WIDT {_format_scpi_real(request.width_s)}s")
+        self.transport.write(f":PULM:POL {polarity}")
+        self.transport.write(":PULM:STAT OFF")
+
     def set_rf_output(self, request: RfOutputRequest) -> None:
         """Map one offline M2 output request to one documented setter.
 
@@ -410,6 +478,34 @@ def _parse_pm_deviation_rad(response: object) -> float:
     return deviation
 
 
+def _parse_pulse_seconds(
+    response: object,
+    label: str,
+    *,
+    minimum_s: float,
+    maximum_s: float,
+) -> float:
+    value = _clean_response(response, label)
+    match = _TIME_RESPONSE.fullmatch(value)
+    if match is None:
+        raise ValueError(f"DSG830 {label} response has an invalid format")
+    seconds = float(
+        Decimal(match.group("value"))
+        * {
+            None: Decimal("1"),
+            "S": Decimal("1"),
+            "MS": Decimal("1e-3"),
+            "US": Decimal("1e-6"),
+            "NS": Decimal("1e-9"),
+        }[match.group("unit").upper() if match.group("unit") is not None else None]
+    )
+    if not isfinite(seconds):
+        raise ValueError(f"DSG830 {label} response must be finite")
+    if not minimum_s <= seconds <= maximum_s:
+        raise ValueError(f"DSG830 {label} response is outside the documented range")
+    return seconds
+
+
 def _parse_decimal_range(
     response: object,
     label: str,
@@ -433,6 +529,33 @@ def _parse_modulation_source(response: object) -> RfModulationSource:
     if value in {"EXT", "EXTERNAL"}:
         return RfModulationSource.EXTERNAL
     raise ValueError("DSG830 modulation source response must be INT or EXT")
+
+
+def _parse_pulse_source(response: object) -> RfPulseSource:
+    value = _clean_response(response, "pulse source").upper()
+    if value in {"INT", "INTERNAL"}:
+        return RfPulseSource.INTERNAL
+    if value in {"EXT", "EXTERNAL"}:
+        return RfPulseSource.EXTERNAL
+    raise ValueError("DSG830 pulse source response must be INT or EXT")
+
+
+def _parse_pulse_mode(response: object) -> RfPulseMode:
+    value = _clean_response(response, "pulse mode").upper()
+    if value in {"SING", "SINGLE"}:
+        return RfPulseMode.SINGLE
+    if value == "TRAIN":
+        return RfPulseMode.TRAIN
+    raise ValueError("DSG830 pulse mode response must be SINGLE or TRAIN")
+
+
+def _parse_pulse_polarity(response: object) -> RfPulsePolarity:
+    value = _clean_response(response, "pulse polarity").upper()
+    if value in {"NORM", "NORMAL"}:
+        return RfPulsePolarity.NORMAL
+    if value in {"INV", "INVERSE"}:
+        return RfPulsePolarity.INVERTED
+    raise ValueError("DSG830 pulse polarity response must be NORMAL or INVERSE")
 
 
 def _parse_modulation_waveform(response: object) -> RfModulationWaveform:
@@ -474,6 +597,11 @@ def _require_modulation_port(port_id: object) -> None:
         raise ValueError("DSG830 modulation configuration requires port_id='rf_out'")
 
 
+def _require_pulse_port(port_id: object) -> None:
+    if port_id != "rf_out":
+        raise ValueError("DSG830 pulse configuration requires port_id='rf_out'")
+
+
 def _modulation_prefix(kind: RfModulationKind) -> str:
     return {
         RfModulationKind.AM: "AM",
@@ -513,6 +641,15 @@ def _validate_modulation_request_range(request: RfModulationRequest) -> None:
     }[request.kind]
     if not minimum <= request.value <= maximum:
         raise ValueError("DSG830 modulation value is outside the documented range")
+
+
+def _validate_pulse_request_range(request: RfPulseConfigureRequest) -> None:
+    if not _PULSE_PERIOD_MIN_S <= request.period_s <= _PULSE_PERIOD_MAX_S:
+        raise ValueError("DSG830 pulse period is outside the documented range")
+    if not _PULSE_WIDTH_MIN_S <= request.width_s <= _PULSE_WIDTH_MAX_S:
+        raise ValueError("DSG830 pulse width is outside the documented range")
+    if request.width_s > request.period_s - _PULSE_MINIMUM_OFF_TIME_S:
+        raise ValueError("DSG830 pulse width violates the documented minimum off time")
 
 
 def _parse_binary(response: object, label: str) -> bool:

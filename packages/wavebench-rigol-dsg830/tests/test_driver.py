@@ -14,6 +14,11 @@ from wavebench.instruments.rf_source_extensions import (
     RfModulationSource,
     RfModulationWaveform,
     RfOutputRequest,
+    RfPulseConfigureRequest,
+    RfPulseMode,
+    RfPulsePolarity,
+    RfPulseSource,
+    RfPulseState,
     RfReasonCode,
 )
 
@@ -462,6 +467,108 @@ def test_driver_maps_each_modulation_disable_request_to_fixed_mode_and_global_wr
 
     assert transport.query_calls == []
     assert transport.write_calls == [f":{kind.value.upper()}:STAT OFF", ":MOD:STAT OFF"]
+
+
+def _pulse_responses(**changes: str) -> dict[str, str]:
+    responses = {
+        ":PULM:SOUR?": "INT\n",
+        ":PULM:MODE?": "SINGLE\n",
+        ":PULM:PER?": "1.000000000s\n",
+        ":PULM:WIDT?": "100.000000us\n",
+        ":PULM:POL?": "NORMAL\n",
+        ":PULM:STAT?": "0\n",
+    }
+    responses.update(changes)
+    return responses
+
+
+def test_driver_reads_complete_disabled_internal_single_pulse_profile() -> None:
+    transport = FakeTransport(_pulse_responses())
+
+    snapshot = _driver_type()(transport=transport).get_rf_pulse_snapshot("rf_out")
+
+    assert transport.query_calls == [
+        ":PULM:SOUR?",
+        ":PULM:MODE?",
+        ":PULM:PER?",
+        ":PULM:WIDT?",
+        ":PULM:POL?",
+        ":PULM:STAT?",
+    ]
+    assert transport.write_calls == []
+    assert snapshot.source is RfPulseSource.INTERNAL
+    assert snapshot.mode is RfPulseMode.SINGLE
+    assert snapshot.period_s == 1.0
+    assert snapshot.width_s == 100e-6
+    assert snapshot.polarity is RfPulsePolarity.NORMAL
+    assert snapshot.state is RfPulseState.DISABLED
+
+
+def test_driver_maps_one_disabled_internal_single_pulse_request_to_fixed_writes() -> None:
+    transport = FakeTransport({})
+    request = RfPulseConfigureRequest(
+        port_id="rf_out",
+        period_s=1e-3,
+        width_s=100e-6,
+        polarity=RfPulsePolarity.INVERTED,
+    )
+
+    _driver_type()(transport=transport).configure_rf_pulse(request)
+
+    assert transport.query_calls == []
+    assert transport.write_calls == [
+        ":PULM:SOUR INT",
+        ":PULM:MODE SING",
+        ":PULM:PER 0.001s",
+        ":PULM:WIDT 0.0001s",
+        ":PULM:POL INV",
+        ":PULM:STAT OFF",
+    ]
+    assert not any("OUT" in command or "TRIG" in command for command in transport.write_calls)
+
+
+@pytest.mark.parametrize(
+    "pulse_request",
+    (
+        RfPulseConfigureRequest(
+            port_id="other",
+            period_s=1e-3,
+            width_s=100e-6,
+            polarity=RfPulsePolarity.NORMAL,
+        ),
+        RfPulseConfigureRequest(
+            port_id="rf_out",
+            period_s=30e-9,
+            width_s=10e-9,
+            polarity=RfPulsePolarity.NORMAL,
+        ),
+        RfPulseConfigureRequest(
+            port_id="rf_out",
+            period_s=40e-9,
+            width_s=35e-9,
+            polarity=RfPulsePolarity.NORMAL,
+        ),
+    ),
+)
+def test_driver_rejects_invalid_pulse_targets_or_ranges_before_write(
+    pulse_request: RfPulseConfigureRequest,
+) -> None:
+    transport = FakeTransport({})
+
+    with pytest.raises(ValueError):
+        _driver_type()(transport=transport).configure_rf_pulse(pulse_request)
+
+    assert transport.query_calls == []
+    assert transport.write_calls == []
+
+
+def test_driver_rejects_malformed_pulse_readback_without_write() -> None:
+    transport = FakeTransport(_pulse_responses(**{":PULM:SOUR?": "unsupported\n"}))
+
+    with pytest.raises(ValueError, match="pulse source response"):
+        _driver_type()(transport=transport).get_rf_pulse_snapshot("rf_out")
+
+    assert transport.write_calls == []
 
 
 def test_driver_rejects_invalid_modulation_target_or_readback_before_unsafe_use() -> None:
