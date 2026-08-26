@@ -50,14 +50,17 @@ The M4 Pulse subset is internal/single only. `configure_rf_pulse()` fixes source
 then ends with `:PULM:STAT OFF`; it never invokes RF output, rear Pulse I/O, or trigger commands. The source checkout
 now includes `tools/a4_pulse_evidence.py`, fake regressions, and a resource-free setup template. Its `--execute` path
 allows one RF-OFF/Pulse-OFF configuration and independent readback, while `--diagnose` preserves `read_only` and has a
-zero-write audit. Neither path reads CH1/CH2. Hardware evidence is still pending, so `rf_source.pulse_configure` remains
-outside the production descriptor.
+zero-write audit. Neither path reads CH1/CH2. Controlled hardware validation has now passed for both normal and
+inverted polarity, with one RF-OFF/Pulse-OFF configuration, independent readback, and final-off verification per run;
+each successful path has 38 queries and 6 configuration writes. After evidence review,
+`rf_source.pulse_configure` is production-declared and the historical harness rejects reruns.
 
-The production descriptor declares no error queue, modulation, Pulse, Sweep, trigger, or arbitrary SCPI passthrough.
+The production descriptor declares no error queue, modulation, Sweep, trigger, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
-`rf_source.output` only audited `rf_out` ON/OFF. `rf_source.modulation_configure` and
-`rf_source.pulse_configure` remain behind their A4 hardware evidence; a driver method or an offline test does not
-promote either. Every other capability remains behind its A4–A5 evidence gate.
+`rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
+internal/single profile and leaves Pulse OFF. `rf_source.modulation_configure` remains behind PM-covering A4 hardware
+evidence; a driver method or an offline test does not promote it. Every other capability remains behind its A4–A5
+evidence gate.
 
 ## Development documentation
 

@@ -19,9 +19,9 @@ M3 driver 已实现状态读取、`get_rf_modulation_snapshot()`、`configure_rf
 
 源码 checkout 已提供 A4 的 RF-OFF 调制 evidence harness、fake 回归与不含资源地址的 setup 模板。每次只能验证一个内部 Sine 模式；成功路径在配置读回后关闭同一模式，并在最终状态确认 `rf_out` 与调制均为关闭。显式 `--recover` 只恢复已明确识别的单一活动模式，并写入私有恢复记录。显式 `--diagnose` 保留原始 `read_only` 配置，只读取初始／最终 RF snapshot 与指定模式 profile，并要求 transport audit 为零写。A4 不读取 CH2、不调用 RF 输出控制，恢复或诊断记录均不构成 capability 提升证据。AM、FM 的 RF-OFF 序列已通过；PM 仍有严格读回不匹配，因此整体调制 capability 尚未提升。
 
-M4 Pulse 只覆盖 internal／single 子集。`configure_rf_pulse()` 固定设置 source、mode、period、width 和 polarity，并以 `:PULM:STAT OFF` 收尾；它不调用 RF 输出、后面板 Pulse I/O 或 trigger。源码 checkout 的 `tools/a4_pulse_evidence.py`、fake 回归与无资源 setup 模板已完成离线验证。工具的 `--execute` 仅允许一次 RF-OFF／Pulse-OFF 配置与独立读回，`--diagnose` 保持 `read_only` 且零写；两者不读取 CH1／CH2。A4 Pulse 的实机证据尚未执行，因此 `rf_source.pulse_configure` 仍不进入 production descriptor。
+M4 Pulse 只覆盖 internal／single 子集。`configure_rf_pulse()` 固定设置 source、mode、period、width 和 polarity，并以 `:PULM:STAT OFF` 收尾；它不调用 RF 输出、后面板 Pulse I/O 或 trigger。源码 checkout 的 `tools/a4_pulse_evidence.py`、fake 回归与无资源 setup 模板已完成受控实机验证：normal／inverted 两种 polarity 都经过一次 RF-OFF／Pulse-OFF 配置、独立读回和最终关闭复核；每次成功路径均为 38 次 query、6 次配置 write。`--diagnose` 保持 `read_only` 且零写；两种模式均不读取 CH1／CH2。证据复核后，`rf_source.pulse_configure` 已进入 production descriptor，historical harness 会拒绝重跑。
 
-production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；`rf_source.modulation_configure` 与 `rf_source.pulse_configure` 仍等待各自的 A4 实机证据，不能因 driver 方法或离线测试而提前声明。其余 capability 继续经过对应的 A4–A5 实机证据门。
+production descriptor 不声明错误队列、调制、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF；`rf_source.modulation_configure` 仍等待覆盖 PM 的 A4 实机证据。其余 capability 继续经过对应的 A4–A5 实机证据门。
 
 ## 开发文档
 

@@ -21,9 +21,9 @@
 | M1 | 离线完成；A3 已完成 | OFF-only CW 频率／dBm 功率配置、独立 readback 与 production `rf_source.cw_configure`。 |
 | M2 | 离线完成；A2 已完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production 已开放 `rf_source.output`。 |
 | M3 | 离线完成；A4 的 AM、FM 已通过，PM 待定位 | 内部 Sine AM／FM／PM 的固定写入序列、严格 readback 与 Core 配置事务／CLI／run／artifact；按模式关闭仅供本地证据与私有恢复，production capability 仍关闭。 |
-| M4（Pulse） | 离线完成；A4 Pulse 待实机执行 | internal／single Pulse 的 period／width／polarity 映射、独立 readback、Core 事务／CLI／run／artifact 与本地 evidence harness；production capability 仍关闭。 |
+| M4（Pulse） | 离线完成；A4 Pulse 已通过 | internal／single Pulse 的 period／width／polarity 映射、独立 readback、Core 事务／CLI／run／artifact 与本地 evidence harness；production 已开放 `rf_source.pulse_configure`。 |
 | M4（Step Sweep） | 未开始 | frequency-only Step Sweep 子集。 |
-| A1–A5 | A1、A2、A3 已完成；A4 的 AM、FM 已通过，PM 尚无合格证据；A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW。 |
+| A1–A5 | A1、A2、A3、A4 Pulse 已完成；A4 的 AM、FM 已通过，PM 尚无合格证据；A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW；A4 Pulse 提升 OFF-only Pulse 配置。 |
 
 ## Seed：历史包边界
 
@@ -107,7 +107,7 @@ M4 当前先完成 Pulse，再处理 frequency-only Step Sweep。外部 trigger�
 
 Pulse 只覆盖 `rf_out` 的 internal／single 配置。driver 固定写入 `:PULM:SOUR INT`、`:PULM:MODE SING`、period、width 与 polarity，并以 `:PULM:STAT OFF` 收尾；它不写 `:PULM:OUT`、不调用 `:OUTP`，也不发送 trigger。Core 要求初始与写后 RF 输出、调制、Pulse、Sweep 均关闭且无活动 protection，并独立读回 source、mode、period、width、polarity 和 Pulse 状态。失败不重试，也不追加恢复 setter。
 
-源码 checkout 的 `tools/a4_pulse_evidence.py` 和 `tools/a4_pulse_evidence.setup.template.toml` 为 A4 Pulse 提供受控实机入口。静态预检要求 `read_only` RF 配置、关闭读重试、精确 production descriptor 和人工确认的 50 Ω 端接。`--execute` 才在内存中启用临时 write descriptor，成功路径固定为 38 次 query、6 次配置 write 和最终 RF／Pulse OFF；`--diagnose` 保持 `read_only`，固定 22 次 query、零 write。它不读取 scope、不使用 CH1／CH2、不操作后面板 Pulse I/O 或 trigger。实机证据尚未执行，`rf_source.pulse_configure` 不进入 production descriptor。
+源码 checkout 的 `tools/a4_pulse_evidence.py` 和 `tools/a4_pulse_evidence.setup.template.toml` 已完成 A4 Pulse 受控实机验收。静态预检要求 `read_only` RF 配置、关闭读重试、精确 production descriptor 和人工确认的 50 Ω 端接。normal／inverted 两种 polarity 都以 `--execute` 完成一次临时 write descriptor 下的配置、独立读回和最终 RF／Pulse OFF；每次成功路径均为 38 次 query、6 次配置 write。`--diagnose` 保持 `read_only`，固定 22 次 query、零 write。它不读取 scope、不使用 CH1／CH2、不操作后面板 Pulse I/O 或 trigger。证据复核后，`rf_source.pulse_configure` 已加入 production descriptor，historical harness 现在会拒绝重跑。
 
 Step Sweep、Pulse trigger 与全部外部接口仍未实现。fake descriptor 可以用于后续 trigger／fire 事务测试；production capability 要等待 A4 或 A5 的对应证据。
 
