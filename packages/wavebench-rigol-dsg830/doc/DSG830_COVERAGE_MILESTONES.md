@@ -20,10 +20,10 @@
 | M0 | 离线完成；A1 已完成 | `rf_source`、`rf_out` topology、严格 snapshot parser 与生产只读状态查询。 |
 | M1 | 离线完成；A3 已完成 | OFF-only CW 频率／dBm 功率配置、独立 readback 与 production `rf_source.cw_configure`。 |
 | M2 | 离线完成；A2 已完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production 已开放 `rf_source.output`。 |
-| M3 | 离线完成；A4 的 AM、FM 已通过，PM 待定位 | 内部 Sine AM／FM／PM 的固定写入序列、严格 readback 与 Core 配置事务／CLI／run／artifact；按模式关闭仅供本地证据与私有恢复，production capability 仍关闭。 |
+| M3 | A4 已通过并提升 | 内部 Sine AM／FM／PM 的固定写入序列、严格 readback 与 Core 配置事务／CLI／run／artifact；按模式关闭仅供本地证据与私有恢复，production 已开放 `rf_source.modulation_configure`。PM production profile 固定为 `1.25 rad`。 |
 | M4（Pulse） | 离线完成；A4 Pulse 已通过 | internal／single Pulse 的 period／width／polarity 映射、独立 readback、Core 事务／CLI／run／artifact 与本地 evidence harness；production 已开放 `rf_source.pulse_configure`。 |
 | M4（Step Sweep） | A4 已完成并提升 | fixed `STEP`／`FWD`／`RAMP`／`LIN` frequency-only profile、严格 readback、Core 配置事务／CLI／run／artifact 与本地 evidence harness；production 已开放保持 Sweep disabled 的 `rf_source.sweep_configure`。 |
-| A1–A5 | A1、A2、A3、A4 Pulse、A4 Step Sweep 已完成；A4 的 AM、FM 已通过，PM 尚无合格证据；A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW；A4 分别提升 OFF-only Pulse 与保持 Sweep disabled 的 Step Sweep 配置。 |
+| A1–A5 | A1、A2、A3、A4 调制／Pulse／Step Sweep 已完成；A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW；A4 分别提升 RF-OFF 调制、OFF-only Pulse 与保持 Sweep disabled 的 Step Sweep 配置。 |
 
 ## Seed：历史包边界
 
@@ -48,7 +48,7 @@ Seed 不包含错误队列、snapshot、频率、功率、RF 输出、调制、P
 - 已覆盖每条 query、正常值、未知值、格式异常和 protection 位映射的 fake transport 测试；
 - 已将 wheel 的 `Requires-Dist: wavebench` 与 descriptor 版本门同步为 `>=0.8.25,<0.9`。
 
-A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`。M2 的 A2 受控输出证据已另外完成并提升 `rf_source.output`；M1 的 A3 CW 环回证据也已完成并提升 `rf_source.cw_configure`；M4 Pulse 与 Step Sweep 的 A4 证据已分别提升 `rf_source.pulse_configure`、`rf_source.sweep_configure`。M3 capability 仍只能存在于 fake descriptor 或离线 driver 测试中，直到取得覆盖 AM／FM／PM 的完整实机证据。
+A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`。M2 的 A2 受控输出证据已另外完成并提升 `rf_source.output`；M1 的 A3 CW 环回证据也已完成并提升 `rf_source.cw_configure`；M3 调制与 M4 Pulse、Step Sweep 的 A4 证据已分别提升 `rf_source.modulation_configure`、`rf_source.pulse_configure`、`rf_source.sweep_configure`。`rf_source.modulation_disable` 仍只供私有证据与恢复，不进入 production descriptor。
 
 ## M1：OFF-only CW
 
@@ -62,15 +62,15 @@ A3 的本地 harness 和离线回归已经通过受控实机验收：它在内�
 
 ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 session health 允许时，Core 才在受 guard 的预算内最多执行一次同端口 RF OFF recovery 并回读 OFF。RF OFF 不依赖频率、功率、端接或 protection readback；其结果不明时不重试。A2 已通过并经复核，production descriptor 现在声明 `rf_source.output`；随后通过的 A3 单独提升了 M1 的 CW，不提升 M3／M4 capability。
 
-## M3：内部正弦调制
+## M3：内部正弦调制（A4 已通过并提升）
 
-M3 的离线实现已完成，但不属于当前 production capability。范围只包含手册和严格 fake transport 测试共同约束的内部 Sine AM／FM／PM：
+M3 的离线实现和 A4 实机验收均已完成。范围只包含内部 Sine AM／FM／PM；下表同时标示 driver 离线映射与当前 production profile：
 
-| 模式 | 固定 driver 配置 | 值范围 | 内部频率范围 |
+| 模式 | 固定 driver 配置 | 离线／production 值范围 | 内部频率范围 |
 | --- | --- | --- | --- |
 | AM | `:AM:SOUR INT`、`:AM:WAVE SINE`、`:AM:DEPT`、`:AM:FREQ`、`:AM:STAT ON`、`:MOD:STAT ON` | `0–100 %` | `10 Hz–100 kHz` |
 | FM | `:FMPM:TYPE FM`、`:FM:SOUR INT`、`:FM:WAVE SINE`、`:FM:DEV`、`:FM:FREQ`、`:FM:STAT ON`、`:MOD:STAT ON` | `0.1 Hz–1 MHz` | `10 Hz–100 kHz` |
-| PM | `:FMPM:TYPE PM`、`:PM:SOUR INT`、`:PM:WAVE SINE`、`:PM:DEV`、`:PM:FREQ`、`:PM:STAT ON`、`:MOD:STAT ON` | `0–5 rad` | `10 Hz–100 kHz` |
+| PM | `:FMPM:TYPE PM`、`:PM:SOUR INT`、`:PM:WAVE SINE`、`:PM:DEV`、`:PM:FREQ`、`:PM:STAT ON`、`:MOD:STAT ON` | 离线 `0–5 rad`；production 精确 `1.25 rad` | `10 Hz–100 kHz` |
 
 `get_rf_modulation_state()` 只读取全局 `:MOD:STAT?`、AM／FM／PM 的 enable 状态和 `:STAT:QUES:MOD:COND?`，用于配置前的安全判断。`get_rf_modulation_snapshot()` 在写后或明确需要 profile 时，再读取目标模式的 source、waveform、数值和内部频率；FM／PM 额外读取 `:FMPM:TYPE?` 并将共享选择位与被查询 profile 分开记录。三种模式均 disabled 时，preflight 可接受与目标不同的当前 FM／PM 选择，因为固定写入会先设置目标类型；postcondition 必须确认目标类型。外部 source、非 Sine waveform、未知状态响应或未知调制 condition 位都失败关闭，不用猜测值继续写入。
 
@@ -78,28 +78,21 @@ Core M3 preflight 要求 `rf_out` 明确 OFF、AM／FM／PM 三种模式均 disa
 
 `disable_rf_modulation()` 只关闭明确请求的 AM、FM 或 PM 模式及全局调制开关。Core 仅在 RF OFF、Pulse／Sweep disabled、无活动 protection，且状态证明该请求模式是唯一活动模式时允许写入；随后独立回读 RF snapshot 和调制状态。已一致关闭时零写返回；混合、未知或矛盾状态不写入。该能力只用于本地 A4 证据与恢复，不进入 production descriptor。
 
-A4 前 production descriptor 不声明 `rf_source.modulation_configure`。当前 M2 的 RF ON 合同要求调制 disabled，因此即使将来 A4 提升 M3 的配置 capability，也不能据此推导已获准在调制开启时输出 RF；这种输出场景需要单独的安全合同和实机证据。
+production descriptor 已声明 `rf_source.modulation_configure`，但只接受上述 production profile。当前 M2 的 RF ON 合同要求调制 disabled，因此 M3 配置 capability 不授权在调制开启时输出 RF；这种输出场景仍需要单独的安全合同和实机证据。
 
-### A4：AM、FM 已通过；PM 读回待定位
+### A4：AM／FM／PM 已通过并提升
 
 源码 checkout 的 `tools/a4_modulation_evidence.py`、回归测试和
-`tools/a4_modulation_evidence.setup.template.toml` 已冻结 A4 的第一段验收范围。它是一次性本地 harness，不进入
-wheel 或 sdist；production descriptor 在 A4 前仍不声明调制 capability。
+`tools/a4_modulation_evidence.setup.template.toml` 保留了 A4 验收协议。它是一次性本地 harness，不进入
+wheel 或 sdist；A4 通过后，production descriptor 已声明调制 capability，historical harness 会拒绝重跑，避免用临时 descriptor 绕过当前 capability 边界。
 
-静态预检要求 RF 配置为 `read_only`、读重试关闭、driver／型号／当前 production capability 与已提升边界完全匹配，
-并且 setup 只包含 `rf_out`、人工确认的端接、已确认选件、`modulation_kind`、一个匹配的模式值和内部频率。setup 不含资源、
-序列号、原始响应或 scope 参数。harness 只在内存中添加 `rf_source.modulation_configure`、`rf_source.modulation_disable` 和完整的内部 Sine profile；
-descriptor 不注册、不写回、不提前提升。
+验收 setup 只包含 `rf_out`、人工确认的端接、已确认选件、`modulation_kind`、一个匹配的模式值和内部频率；它不含资源、序列号、原始响应或 scope 参数。受控验证使用独立的 `read_only` 预检和受限 `read_write` session；写入结果或严格 postcondition 不明时不重试。
 
-带 `--execute` 时，一次运行只验证 AM、FM 或 PM 中的一个模式：初始 RF snapshot 必须确认 RF OFF、调制／Pulse／Sweep
-关闭且无活动 protection；Core 读取调制状态、执行一次固定的 mode-specific 配置序列并独立回读，然后执行同一模式的受限关闭事务。最终独立 RF snapshot 必须同时确认 RF OFF 和调制关闭。AM 成功路径固定为 72 次 query、8 次 completed write，FM／PM 为 73 次 query、9 次 completed write；所有 write 都是调制配置或关闭命令。A4 不调用 `set_rf_output()`、不读取 scope、不开启 RF，也不在失败后尝试 output recovery。
+受控验收一次只验证 AM、FM 或 PM 中的一个模式：初始 RF snapshot 必须确认 RF OFF、调制／Pulse／Sweep关闭且无活动 protection；Core 读取调制状态、执行一次固定的 mode-specific 配置序列并独立回读，然后在新的恢复 session 中执行同一模式的受限关闭事务。最终独立 RF snapshot 必须同时确认 RF OFF 和调制关闭。AM 成功路径固定为 72 次 query、8 次 completed write，FM／PM 为 73 次 query、9 次 completed write；所有 write 都是调制配置或关闭命令。A4 不调用 `set_rf_output()`、不读取 scope、不开启 RF，也不在失败后尝试 output recovery。
 
-带 `--recover` 时，harness 只恢复 setup 指定的一个已知活动模式，或记录已一致关闭的零写结果。它要求同样的 RF-OFF 安全前置条件，以权限 `0600` 创建私有恢复记录；恢复记录不计入 A4 能力提升证据。
+显式 `--recover` 只恢复 setup 指定的一个已知活动模式，或记录已一致关闭的零写结果；显式 `--diagnose` 保留原始 `read_only` 配置，只读取初始／最终 RF snapshot 与 setup 指定模式的完整 profile。两类记录均以权限 `0600` 保存，不计入新的 capability 提升证据。
 
-带 `--diagnose` 时，harness 保留原始 `read_only` 配置和 production descriptor，只读取初始／最终 RF snapshot 与 setup 指定模式的完整 profile。初始与最终状态均须确认 RF OFF、调制／Pulse／Sweep 关闭且无活动 protection；guard audit 必须确认零写、固定 query 预算和健康关闭。诊断记录以权限 `0600` 保存，只用于定位 PM 严格读回差异，不计入 A4 能力提升证据。
-
-任何初始／postcondition／最终 RF OFF 不明或不符、模式／数值／内部频率 readback 不符、未知 write outcome、审计计数偏差、
-session 异常或关闭后计数变化均为失败。当前受控验证已通过 AM、FM 的 RF-OFF 配置、读回和关闭序列；PM 仍在严格读回中不匹配请求值，且每次异常后均通过独立恢复回到关闭基线。M3 capability 同时覆盖 AM／FM／PM，因此 production descriptor 继续关闭调制 capability。即使后续 A4 完整通过，证据也只证明「RF 始终 OFF 时的一个内部 Sine 调制 profile 被配置、读回并关闭」，不证明 RF 调制输出、CH2 信号、Pulse、Sweep 或 trigger。
+任何初始／postcondition／最终 RF OFF 不明或不符、模式／数值／内部频率 readback 不符、未知 write outcome、审计计数偏差、session 异常或关闭后计数变化均为失败。受控验证已通过 AM／FM／PM 的 RF-OFF 配置、严格读回和关闭序列；PM production profile 固定为 `1.25 rad`，不将更宽的离线映射外推为实机覆盖。该证据只证明「RF 始终 OFF 时的一个内部 Sine 调制 profile 被配置、读回并关闭」，不证明 RF 调制输出、CH2 信号、Pulse、Sweep 或 trigger。
 
 ## M4：Pulse 与 Step Sweep
 

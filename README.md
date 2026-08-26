@@ -54,7 +54,7 @@ WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五�
 
 ## 孵化中插件
 
-- [`wavebench-rigol-dsg830`](packages/wavebench-rigol-dsg830/README.md)：RIGOL DSG830 射频信号发生器，canonical ID `rigol.dsg830`；`0.2.0` 已完成 A1、A2、A3、A4 Pulse 与 A4 Step Sweep，production descriptor 声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure`、受 safety 限制的 `rf_source.output`、RF-OFF `rf_source.pulse_configure` 与保持 Sweep disabled 的 `rf_source.sweep_configure`。调制、trigger、Sweep execute／fire、Level Sweep、list 与其它后续 capability 继续按独立 A4–A5 证据门控。完整边界见包内[里程碑](packages/wavebench-rigol-dsg830/doc/DSG830_COVERAGE_MILESTONES.md)。
+- [`wavebench-rigol-dsg830`](packages/wavebench-rigol-dsg830/README.md)：RIGOL DSG830 射频信号发生器，canonical ID `rigol.dsg830`；`0.2.0` 已完成 A1、A2、A3 与 A4 调制／Pulse／Step Sweep，production descriptor 声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure`、受 safety 限制的 `rf_source.output`、RF-OFF `rf_source.modulation_configure`、`rf_source.pulse_configure` 与保持 Sweep disabled 的 `rf_source.sweep_configure`。PM production profile 仅为 `1.25 rad`；调制开启时的 RF 输出、`rf_source.modulation_disable`、trigger、Sweep execute／fire、Level Sweep、list 与其它后续 capability 继续按独立 A4–A5 证据门控。完整边界见包内[里程碑](packages/wavebench-rigol-dsg830/doc/DSG830_COVERAGE_MILESTONES.md)。
 
 ## 接口提案
 

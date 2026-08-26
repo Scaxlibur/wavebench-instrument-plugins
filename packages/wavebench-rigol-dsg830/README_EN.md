@@ -13,10 +13,10 @@ mapping, M3 internal-sine modulation mapping, and M4 Pulse plus the production f
 strict snapshot parser plus one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings, internal-sine AM/FM/PM
 configuration/readback mappings, internal/single Pulse timing/polarity mapping, and a disabled Step Sweep profile mapping.
 
-A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, A4 Pulse evidence, and A4 Step Sweep evidence have completed and been reviewed.
+A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, and A4 modulation/Pulse/Step Sweep evidence have completed and been reviewed.
 The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`,
-`rf_source.output`, `rf_source.pulse_configure`, and `rf_source.sweep_configure`. A `read_write` CW, Pulse, or Step Sweep request requires target RF OFF and the complete OFF-only preflight; RF ON/OFF
-also requires complete per-port safety configuration, a fresh snapshot, and independent readback. The example
+`rf_source.output`, `rf_source.modulation_configure`, `rf_source.pulse_configure`, and `rf_source.sweep_configure`. A `read_write` CW, modulation, Pulse, or Step Sweep request requires target RF OFF and the complete OFF-only preflight; RF ON/OFF
+also requires complete per-port safety configuration, a fresh snapshot, and independent readback. RF ON still requires modulation disabled. The example
 configuration remains `read_only` and does not enable writes by default.
 
 The local A2 controlled-output harness, regression tests, and resource-free setup template remain in the source
@@ -31,7 +31,7 @@ evidence. Its completed, reviewed evidence separately promotes `rf_source.cw_con
 
 The M3 driver implements offline state readback plus `get_rf_modulation_snapshot()`, `configure_rf_modulation()`, and
 `disable_rf_modulation()` mappings for internal Sine only: AM depth `0–100 %`, FM deviation `0.1 Hz–1 MHz`, PM
-deviation `0–5 rad`, and a `10 Hz–100 kHz` internal frequency for each mode. Core requires RF OFF, all AM/FM/PM modes
+deviation `0–5 rad`, and a `10 Hz–100 kHz` internal frequency for each mode. The production descriptor narrows this to the verified profile: AM `0–100 %`, FM `0.1 Hz–1 MHz`, PM exactly `1.25 rad`, and `10 Hz–100 kHz` internal frequency. Core requires RF OFF, all AM/FM/PM modes
 disabled, Pulse/Sweep disabled, and no active protection condition before a configuration write. The shared FM/PM
 selection is read separately: when all modes are disabled, a different inactive selection may be changed to the
 requested type, and postcondition then requires that target type, exactly the target mode, and the global modulation
@@ -43,8 +43,8 @@ template. Each invocation validates one internal-Sine mode; after configuration 
 the final state must establish both RF output and modulation OFF. Explicit `--recover` only restores a known single
 active mode and writes a private recovery record. Explicit `--diagnose` retains the original `read_only` configuration,
 reads the initial/final RF snapshots and one requested profile, and requires a zero-write transport audit. A4 does not
-read CH2 or invoke RF-output control; recovery and diagnostic records are not capability-promotion evidence. The AM and
-FM RF-OFF sequences passed; PM still has a strict readback mismatch, so the overall modulation capability remains closed.
+read CH2 or invoke RF-output control; recovery and diagnostic records are not new capability-promotion evidence. AM, FM,
+and PM RF-OFF sequences passed; PM is limited to `1.25 rad` in the production profile to match the strict readback evidence.
 
 The M4 Pulse subset is internal/single only. `configure_rf_pulse()` fixes source, mode, period, width, and polarity,
 then ends with `:PULM:STAT OFF`; it never invokes RF output, rear Pulse I/O, or trigger commands. The source checkout
@@ -64,12 +64,11 @@ after the write, then independently reads the complete profile. The source check
 25 queries and zero writes, while a successful explicit `--execute` path has 41 queries and 9 configuration writes.
 It does not read scope, invoke RF output, or arm/fire Sweep. Both paths passed, with an independent final confirmation that RF output, modulation, Pulse, and Sweep were disabled and no protection condition was active. The historical harness rejects reruns after the promotion.
 
-The production descriptor declares no error queue, modulation, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
+The production descriptor declares no error queue, `rf_source.modulation_disable`, modulated RF output, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
 `rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
 internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
-`rf_source.modulation_configure` remains behind PM-covering A4 hardware evidence. Every other capability remains behind its A4–A5
-evidence gate.
+`rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`. Every other capability remains behind its A4–A5 evidence gate.
 
 ## Development documentation
 
