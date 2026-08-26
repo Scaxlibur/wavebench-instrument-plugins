@@ -7,7 +7,7 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 ## 当前状态
 
-版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射和 M2 离线输出映射：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV` 与 `:OUTP ON|OFF` 的单次 driver 映射。
+版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射、M2 离线输出映射和 M3 内部正弦调制映射：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV`／`:OUTP ON|OFF` 的单次 driver 映射，以及 AM／FM／PM 的内部 Sine 配置与 readback。
 
 A1 只读证据、A2 受控输出证据和 A3 CW 环回证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure` 和 `rf_source.output`。在 `read_write` session 中，CW 写入要求目标端口明确 OFF 和完整 OFF-only preflight；RF ON/OFF 还要求完整端口 safety 配置、fresh snapshot 与独立 readback。示例配置仍保持 `read_only`，不会默认开放写入。
 
@@ -15,7 +15,9 @@ A2 的本地受控输出 harness、回归测试和不含资源地址的 setup �
 
 A3 的本地 CW 环回 harness、回归测试和不含资源地址的 setup 模板也保留在源码 checkout。它确认初始 RF OFF、两次 OFF-only CW 写入的独立回读、一次低功率 RF ON/OFF、CH2 的当前缓冲区可见信号和最终 RF OFF；CH2 只用于确认可见信号，频率与功率仍以源端 readback 为准。脱敏证据通过后，`rf_source.cw_configure` 已单独进入 production descriptor。
 
-production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；其余 capability 仍须经过对应的 A4–A5 实机证据门。
+M3 driver 已实现 `get_rf_modulation_snapshot()` 与 `configure_rf_modulation()` 的离线映射。范围仅为内部 Sine：AM 深度 `0–100 %`、FM 频偏 `0.1 Hz–1 MHz`、PM 相偏 `0–5 rad`，三种模式的内部频率均为 `10 Hz–100 kHz`。Core 在写入前要求 RF OFF、AM／FM／PM 全部关闭、Pulse／Sweep 关闭和无活动 protection condition；写后独立确认仅目标模式与全局调制开关开启。M3 不打开 RF 输出，也不重试结果不明的写入。
+
+production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；`rf_source.modulation_configure` 仍等待 A4 实机证据，不能因 driver 方法或离线测试而提前声明。其余 capability 继续经过对应的 A4–A5 实机证据门。
 
 ## 开发文档
 

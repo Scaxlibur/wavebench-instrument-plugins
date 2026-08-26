@@ -20,7 +20,7 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | M0 | Offline complete; A1 complete | `rf_source`, `rf_out` topology, a strict snapshot parser, and production read-only status. |
 | M1 | Offline complete; A3 complete | OFF-only CW frequency/dBm configuration, independent readback, and production `rf_source.cw_configure`. |
 | M2 | Offline complete; A2 complete | One-write RF ON/OFF mapping, Core safety preflight, independent readback, and one-shot OFF recovery; production exposes `rf_source.output`. |
-| M3 | Not started | Declared internal-sine AM/FM/PM subset. |
+| M3 | Offline complete; A4 not started | Fixed internal-sine AM/FM/PM write sequences, strict readback, and Core transaction/CLI/run/artifact; production capability remains closed. |
 | M4 | Not started | Declared Pulse and frequency-only Step Sweep subset. |
 | A1–A5 | A1, A2, and A3 complete; A4 and A5 are not started | A1 promotes read-only snapshot, A2 per-port RF output, and A3 OFF-only CW. |
 
@@ -42,7 +42,7 @@ A1 has completed and been reviewed, so the production descriptor declares `rf_so
 
 - M1 has a one-write `:FREQ`/`:LEV` mapping, independent readback contract, Core CLI, run step, and redacted artifact while RF is OFF. A3 completed with independent source readback, a bounded low-power RF ON/OFF observation, visible CH2 signal, and confirmed final RF OFF. The production descriptor now declares `rf_source.cw_configure`; a `read_write` session still requires the complete OFF-only preflight before each single-field CW write.
 - M2 has an offline `:OUTP ON|OFF` mapping, independent readback, per-port preflight, and at most one guarded same-port OFF recovery when session health permits. The driver sends exactly one output write and leaves preflight, readback, and recovery to Core. A2 completed and `rf_source.output` is production-declared; the separate A3 result promotes M1 CW, but not M3/M4 capabilities.
-- M3 is limited to a bounded internal-sine AM/FM/PM subset. A4 is required before production modulation capability.
+- M3 is offline-complete for a bounded internal-sine AM/FM/PM subset. AM is `0–100 %`, FM is `0.1 Hz–1 MHz`, PM is `0–5 rad`, and every mode uses a `10 Hz–100 kHz` internal frequency. The driver uses fixed `INT`/`SINE` sequences, reads global and per-mode state, validates the FM/PM shared type, and rejects external source, non-Sine waveform, unknown modulation-condition bits, or mismatched readback. Core requires RF OFF, all AM/FM/PM modes disabled, Pulse/Sweep disabled, and no active protection condition; postcondition requires RF still OFF, exactly the target mode enabled, and global modulation enabled. No retry, RF enable, or output recovery occurs. A4 is still required before a production modulation capability.
 - M4 is limited to declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.
 
 Every hardware acceptance needs separate authorization. An unknown final RF-OFF state fails acceptance and cannot promote any capability.

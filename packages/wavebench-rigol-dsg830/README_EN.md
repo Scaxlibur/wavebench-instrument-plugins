@@ -7,10 +7,10 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 
 ## Current status
 
-Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, and M2 offline output
-mapping: its descriptor uses `kind="rf_source"`, declares one `rf_out` port with
-static limits and a 50-ohm dBm reference, and ships a strict snapshot parser plus one-write
-`:FREQ`/`:LEV`/`:OUTP ON|OFF` driver mappings.
+Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, M2 offline output
+mapping, and M3 internal-sine modulation mapping: its descriptor uses `kind="rf_source"`, declares one
+`rf_out` port with static limits and a 50-ohm dBm reference, and ships a strict snapshot parser plus
+one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings and internal-sine AM/FM/PM configuration/readback mappings.
 
 A1 read-only evidence, A2 controlled-output evidence, and A3 CW-loopback evidence have completed and been reviewed.
 The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, and
@@ -28,9 +28,16 @@ They require initial RF OFF, independent readback for two OFF-only CW writes, on
 CH2-buffer signal observation. CH2 only establishes visible signal; source readback remains the frequency and power
 evidence. Its completed, reviewed evidence separately promotes `rf_source.cw_configure`.
 
+The M3 driver implements offline `get_rf_modulation_snapshot()` and `configure_rf_modulation()` mappings for internal
+Sine only: AM depth `0–100 %`, FM deviation `0.1 Hz–1 MHz`, PM deviation `0–5 rad`, and a `10 Hz–100 kHz` internal
+frequency for each mode. Core requires RF OFF, all AM/FM/PM modes disabled, Pulse/Sweep disabled, and no active
+protection condition before the write; independent readback then requires exactly the target mode and global modulation
+switch to be enabled. M3 never enables RF output and does not retry an uncertain write.
+
 The production descriptor declares no error queue, modulation, Pulse, Sweep, trigger, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
-`rf_source.output` only audited `rf_out` ON/OFF; every other capability remains behind its A4–A5 evidence gate.
+`rf_source.output` only audited `rf_out` ON/OFF. `rf_source.modulation_configure` remains behind A4 hardware evidence;
+a driver method or an offline test does not promote it. Every other capability remains behind its A4–A5 evidence gate.
 
 ## Development documentation
 

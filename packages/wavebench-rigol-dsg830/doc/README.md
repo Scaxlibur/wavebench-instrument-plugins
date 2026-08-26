@@ -18,4 +18,4 @@
 CW 环回验收使用。A3 已完成并经复核，production descriptor 现在声明 `rf_source.cw_configure`；调制、Pulse、Sweep
 和 trigger 仍保持关闭。
 
-当前包 `0.2.0` 已完成 `rf_source` M0 的只读迁移、M1 CW 映射和 M2 输出事务。A1、A2 与 A3 受控实机证据已经完成并复核，production descriptor 声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure` 和 `rf_source.output`；M3／M4 capability 仍分别由 A4–A5 实机证据门控。边界与提升条件见里程碑文档。
+当前包 `0.2.0` 已完成 `rf_source` M0 的只读迁移、M1 CW 映射、M2 输出事务和 M3 内部 Sine AM／FM／PM 离线映射。A1、A2 与 A3 受控实机证据已经完成并复核，production descriptor 声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure` 和 `rf_source.output`；`rf_source.modulation_configure` 仍由 A4 门控，M4／外部 trigger 继续由 A4–A5 门控。边界与提升条件见里程碑文档。

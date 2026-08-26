@@ -20,7 +20,7 @@
 | M0 | 离线完成；A1 已完成 | `rf_source`、`rf_out` topology、严格 snapshot parser 与生产只读状态查询。 |
 | M1 | 离线完成；A3 已完成 | OFF-only CW 频率／dBm 功率配置、独立 readback 与 production `rf_source.cw_configure`。 |
 | M2 | 离线完成；A2 已完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production 已开放 `rf_source.output`。 |
-| M3 | 未开始 | 已声明的内部 Sine AM／FM／PM 子集。 |
+| M3 | 离线完成；A4 未开始 | 内部 Sine AM／FM／PM 的固定写入序列、严格 readback、Core 事务／CLI／run／artifact；production capability 仍关闭。 |
 | M4 | 未开始 | 已声明的 Pulse 与 frequency-only Step Sweep 子集。 |
 | A1–A5 | A1、A2、A3 已完成；A4、A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW。 |
 
@@ -61,9 +61,21 @@ A3 的本地 harness 和离线回归已经通过受控实机验收：它在内�
 
 ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 session health 允许时，Core 才在受 guard 的预算内最多执行一次同端口 RF OFF recovery 并回读 OFF。RF OFF 不依赖频率、功率、端接或 protection readback；其结果不明时不重试。A2 已通过并经复核，production descriptor 现在声明 `rf_source.output`；随后通过的 A3 单独提升了 M1 的 CW，不提升 M3／M4 capability。
 
-## M3：调制
+## M3：内部正弦调制
 
-只评审可由手册与离线测试共同约束的内部 Sine AM／FM／PM 子集。输出未 OFF、profile 不匹配或 postcondition 不一致时必须零写拒绝。A4 前不对 production descriptor 声明调制 capability。
+M3 的离线实现已完成，但不属于当前 production capability。范围只包含手册和严格 fake transport 测试共同约束的内部 Sine AM／FM／PM：
+
+| 模式 | 固定 driver 配置 | 值范围 | 内部频率范围 |
+| --- | --- | --- | --- |
+| AM | `:AM:SOUR INT`、`:AM:WAVE SINE`、`:AM:DEPT`、`:AM:FREQ`、`:AM:STAT ON`、`:MOD:STAT ON` | `0–100 %` | `10 Hz–100 kHz` |
+| FM | `:FMPM:TYPE FM`、`:FM:SOUR INT`、`:FM:WAVE SINE`、`:FM:DEV`、`:FM:FREQ`、`:FM:STAT ON`、`:MOD:STAT ON` | `0.1 Hz–1 MHz` | `10 Hz–100 kHz` |
+| PM | `:FMPM:TYPE PM`、`:PM:SOUR INT`、`:PM:WAVE SINE`、`:PM:DEV`、`:PM:FREQ`、`:PM:STAT ON`、`:MOD:STAT ON` | `0–5 rad` | `10 Hz–100 kHz` |
+
+`get_rf_modulation_snapshot()` 先读取全局 `:MOD:STAT?`、AM／FM／PM 的 enable 状态和 `:STAT:QUES:MOD:COND?`；FM／PM 额外核对 `:FMPM:TYPE?`，再读取目标模式的 source、waveform、数值和内部频率。外部 source、非 Sine waveform、未知状态响应、未知调制 condition 位或不匹配的 FM／PM type 都失败关闭，不用猜测值继续写入。
+
+Core M3 preflight 要求 `rf_out` 明确 OFF、AM／FM／PM 三种模式均 disabled、Pulse／Sweep disabled 且没有活动 protection condition。driver 只发送每种模式对应的固定 bounded sequence；Core 随后重新读取 RF snapshot 和目标调制 snapshot，确认 RF 仍 OFF、仅目标模式 enabled、全局调制开启、内部 source／Sine waveform／数值／内部频率匹配。写入或 postcondition 结果不明时不重试，session 记为不确定；M3 不隐式打开 RF 输出，也不执行输出 recovery。
+
+A4 前 production descriptor 不声明 `rf_source.modulation_configure`。当前 M2 的 RF ON 合同要求调制 disabled，因此即使将来 A4 提升 M3 的配置 capability，也不能据此推导已获准在调制开启时输出 RF；这种输出场景需要单独的安全合同和实机证据。
 
 ## M4：Pulse 与 Step Sweep
 
