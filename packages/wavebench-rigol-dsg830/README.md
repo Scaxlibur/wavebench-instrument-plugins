@@ -7,9 +7,9 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 ## 当前状态
 
-版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射、M2 离线输出映射、M3 内部正弦调制映射，以及 M4 Pulse 的首个离线子集：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV`／`:OUTP ON|OFF` 的单次 driver 映射、AM／FM／PM 的内部 Sine 配置与 readback，以及 internal／single Pulse 的 period／width／polarity 配置与读回。
+版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射、M2 离线输出映射、M3 内部正弦调制映射，以及 M4 的 Pulse 与 frequency-only Step Sweep 离线子集：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV`／`:OUTP ON|OFF` 的单次 driver 映射、AM／FM／PM 的内部 Sine 配置与 readback、internal／single Pulse 的 period／width／polarity 配置与读回，以及保持 Sweep disabled 的 Step Sweep profile 映射。
 
-A1 只读证据、A2 受控输出证据和 A3 CW 环回证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure` 和 `rf_source.output`。在 `read_write` session 中，CW 写入要求目标端口明确 OFF 和完整 OFF-only preflight；RF ON/OFF 还要求完整端口 safety 配置、fresh snapshot 与独立 readback。示例配置仍保持 `read_only`，不会默认开放写入。
+A1 只读证据、A2 受控输出证据、A3 CW 环回证据和 A4 Pulse 证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure`、`rf_source.output` 和 `rf_source.pulse_configure`。在 `read_write` session 中，CW 与 Pulse 配置要求目标端口明确 OFF 和完整 OFF-only preflight；RF ON/OFF 还要求完整端口 safety 配置、fresh snapshot 与独立 readback。示例配置仍保持 `read_only`，不会默认开放写入。
 
 A2 的本地受控输出 harness、回归测试和不含资源地址的 setup 模板保留在源码 checkout，作为验收协议的回归保护。证据已确认最终 RF OFF；harness 在 production descriptor 已声明 `rf_source.output` 后会拒绝重跑，避免用临时 descriptor 绕过正式 capability。A2 本身不授权 CW，后者由独立 A3 证据提升。
 
@@ -21,7 +21,9 @@ M3 driver 已实现状态读取、`get_rf_modulation_snapshot()`、`configure_rf
 
 M4 Pulse 只覆盖 internal／single 子集。`configure_rf_pulse()` 固定设置 source、mode、period、width 和 polarity，并以 `:PULM:STAT OFF` 收尾；它不调用 RF 输出、后面板 Pulse I/O 或 trigger。源码 checkout 的 `tools/a4_pulse_evidence.py`、fake 回归与无资源 setup 模板已完成受控实机验证：normal／inverted 两种 polarity 都经过一次 RF-OFF／Pulse-OFF 配置、独立读回和最终关闭复核；每次成功路径均为 38 次 query、6 次配置 write。`--diagnose` 保持 `read_only` 且零写；两种模式均不读取 CH1／CH2。证据复核后，`rf_source.pulse_configure` 已进入 production descriptor，historical harness 会拒绝重跑。
 
-production descriptor 不声明错误队列、调制、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF；`rf_source.modulation_configure` 仍等待覆盖 PM 的 A4 实机证据。其余 capability 继续经过对应的 A4–A5 实机证据门。
+M4 frequency-only Step Sweep 仅覆盖固定的 `STEP`／`FWD`／`RAMP`／`LIN` profile。`get_rf_sweep_snapshot()` 查询 type、direction、shape、spacing、起止频率、点数、驻留时间和状态；`configure_rf_sweep()` 只写这些 profile 字段，并以 `:SWE:STAT OFF` 收尾。它不写 `:SWE:EXEC`、任何 trigger、Level Sweep、list、RF 输出或后面板接口命令。Core 在写前和写后都要求 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection，写后独立读回完整 profile。该实现只有 fake transport 证据，尚未建立专项 evidence harness 或实机证据。
+
+production descriptor 不声明错误队列、调制、Step Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF；`rf_source.modulation_configure` 仍等待覆盖 PM 的 A4 实机证据，`rf_source.sweep_configure` 仍等待独立的 Step Sweep 证据。其余 capability 继续经过对应的 A4–A5 实机证据门。
 
 ## 开发文档
 

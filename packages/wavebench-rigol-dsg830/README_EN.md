@@ -8,14 +8,14 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 ## Current status
 
 Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, M2 offline output
-mapping, M3 internal-sine modulation mapping, and the first M4 Pulse subset: its descriptor uses
+mapping, M3 internal-sine modulation mapping, and M4 Pulse plus frequency-only Step Sweep offline subsets: its descriptor uses
 `kind="rf_source"`, declares one `rf_out` port with static limits and a 50-ohm dBm reference, and ships a
 strict snapshot parser plus one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings, internal-sine AM/FM/PM
-configuration/readback mappings, and internal/single Pulse timing/polarity mapping.
+configuration/readback mappings, internal/single Pulse timing/polarity mapping, and a disabled Step Sweep profile mapping.
 
-A1 read-only evidence, A2 controlled-output evidence, and A3 CW-loopback evidence have completed and been reviewed.
-The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, and
-`rf_source.output`. A `read_write` CW request requires target RF OFF and the complete OFF-only preflight; RF ON/OFF
+A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, and A4 Pulse evidence have completed and been reviewed.
+The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`,
+`rf_source.output`, and `rf_source.pulse_configure`. A `read_write` CW or Pulse request requires target RF OFF and the complete OFF-only preflight; RF ON/OFF
 also requires complete per-port safety configuration, a fresh snapshot, and independent readback. The example
 configuration remains `read_only` and does not enable writes by default.
 
@@ -55,11 +55,19 @@ inverted polarity, with one RF-OFF/Pulse-OFF configuration, independent readback
 each successful path has 38 queries and 6 configuration writes. After evidence review,
 `rf_source.pulse_configure` is production-declared and the historical harness rejects reruns.
 
-The production descriptor declares no error queue, modulation, Sweep, trigger, or arbitrary SCPI passthrough.
+The M4 frequency-only Step Sweep subset fixes `STEP`/`FWD`/`RAMP`/`LIN`. `get_rf_sweep_snapshot()` reads type,
+direction, shape, spacing, start/stop frequency, points, dwell, and state; `configure_rf_sweep()` writes only that
+profile and ends with `:SWE:STAT OFF`. It never writes `:SWE:EXEC`, any trigger, Level Sweep, list setup, RF output,
+or rear-panel I/O. Core requires RF output, modulation, Pulse, and Sweep OFF with no active protection before and
+after the write, then independently reads the complete profile. This has fake-transport evidence only; it has neither
+a dedicated evidence harness nor hardware evidence.
+
+The production descriptor declares no error queue, modulation, Step Sweep, trigger, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
 `rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
 internal/single profile and leaves Pulse OFF. `rf_source.modulation_configure` remains behind PM-covering A4 hardware
-evidence; a driver method or an offline test does not promote it. Every other capability remains behind its A4–A5
+evidence; `rf_source.sweep_configure` requires independent Step Sweep evidence. A driver method or an offline test
+does not promote it. Every other capability remains behind its A4–A5
 evidence gate.
 
 ## Development documentation

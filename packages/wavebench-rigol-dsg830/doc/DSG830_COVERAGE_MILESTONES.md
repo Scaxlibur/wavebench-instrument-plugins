@@ -22,7 +22,7 @@
 | M2 | 离线完成；A2 已完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production 已开放 `rf_source.output`。 |
 | M3 | 离线完成；A4 的 AM、FM 已通过，PM 待定位 | 内部 Sine AM／FM／PM 的固定写入序列、严格 readback 与 Core 配置事务／CLI／run／artifact；按模式关闭仅供本地证据与私有恢复，production capability 仍关闭。 |
 | M4（Pulse） | 离线完成；A4 Pulse 已通过 | internal／single Pulse 的 period／width／polarity 映射、独立 readback、Core 事务／CLI／run／artifact 与本地 evidence harness；production 已开放 `rf_source.pulse_configure`。 |
-| M4（Step Sweep） | 未开始 | frequency-only Step Sweep 子集。 |
+| M4（Step Sweep） | 离线完成；专项 A4 证据未开始 | fixed `STEP`／`FWD`／`RAMP`／`LIN` frequency-only profile、严格 readback、Core 配置事务／CLI／run／artifact；production capability 仍关闭。 |
 | A1–A5 | A1、A2、A3、A4 Pulse 已完成；A4 的 AM、FM 已通过，PM 尚无合格证据；A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW；A4 Pulse 提升 OFF-only Pulse 配置。 |
 
 ## Seed：历史包边界
@@ -48,7 +48,7 @@ Seed 不包含错误队列、snapshot、频率、功率、RF 输出、调制、P
 - 已覆盖每条 query、正常值、未知值、格式异常和 protection 位映射的 fake transport 测试；
 - 已将 wheel 的 `Requires-Dist: wavebench` 与 descriptor 版本门同步为 `>=0.8.25,<0.9`。
 
-A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`。M2 的 A2 受控输出证据已另外完成并提升 `rf_source.output`；M1 的 A3 CW 环回证据也已完成并提升 `rf_source.cw_configure`。M3／M4 capability 仍只能存在于 fake descriptor 或离线 driver 测试中，直到取得各自的实机证据。
+A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`。M2 的 A2 受控输出证据已另外完成并提升 `rf_source.output`；M1 的 A3 CW 环回证据也已完成并提升 `rf_source.cw_configure`；M4 Pulse 的 A4 证据已提升 `rf_source.pulse_configure`。M3 与 Step Sweep capability 仍只能存在于 fake descriptor 或离线 driver 测试中，直到取得各自的实机证据。
 
 ## M1：OFF-only CW
 
@@ -109,7 +109,9 @@ Pulse 只覆盖 `rf_out` 的 internal／single 配置。driver 固定写入 `:PU
 
 源码 checkout 的 `tools/a4_pulse_evidence.py` 和 `tools/a4_pulse_evidence.setup.template.toml` 已完成 A4 Pulse 受控实机验收。静态预检要求 `read_only` RF 配置、关闭读重试、精确 production descriptor 和人工确认的 50 Ω 端接。normal／inverted 两种 polarity 都以 `--execute` 完成一次临时 write descriptor 下的配置、独立读回和最终 RF／Pulse OFF；每次成功路径均为 38 次 query、6 次配置 write。`--diagnose` 保持 `read_only`，固定 22 次 query、零 write。它不读取 scope、不使用 CH1／CH2、不操作后面板 Pulse I/O 或 trigger。证据复核后，`rf_source.pulse_configure` 已加入 production descriptor，historical harness 现在会拒绝重跑。
 
-Step Sweep、Pulse trigger 与全部外部接口仍未实现。fake descriptor 可以用于后续 trigger／fire 事务测试；production capability 要等待 A4 或 A5 的对应证据。
+frequency-only Step Sweep 的离线合同已完成。Core request 只接受起止频率、点数和驻留时间，静态 profile 固定为 `STEP`／`FWD`／`RAMP`／`LIN`。`get_rf_sweep_snapshot()` 严格读取 type、direction、shape、spacing、起止频率、点数、驻留时间和状态；`configure_rf_sweep()` 只写这些 profile 字段并以 `:SWE:STAT OFF` 收尾。它不写 `:SWE:EXEC`、`*TRG`、任意 `:TRIG:*`、`:SWE:STAT FREQ`、Level Sweep、list、`:OUTP` 或后面板接口。Core 在写前和写后都要求 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection，并独立读回完整 profile 后确认 Sweep 仍为 disabled。CLI 与 `rf_source.sweep_configure` run step 已接入，但当前 production descriptor 不声明 capability，因此日常 DSG830 请求会在 transport I/O 前被拒绝。
+
+Step Sweep 专项 evidence harness、实机证据、Pulse trigger 与全部外部接口仍未实现。fake descriptor 可以用于后续 trigger／fire 事务测试；production capability 要等待 A4 或 A5 的对应证据。
 
 ## A1–A5 实机证据
 
