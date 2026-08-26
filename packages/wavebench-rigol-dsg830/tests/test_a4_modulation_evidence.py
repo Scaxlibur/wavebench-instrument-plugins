@@ -50,10 +50,34 @@ def _script_module():
     return module
 
 
-def _production_descriptor():
+def _promoted_production_descriptor():
     from wavebench_rigol_dsg830.descriptor import descriptor
 
     return descriptor()
+
+
+def _production_descriptor():
+    """Rebuild the pre-M3 production contract for the historical A4 harness tests."""
+
+    production = _promoted_production_descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    return replace(
+        production,
+        capabilities=tuple(
+            capability
+            for capability in production.capabilities
+            if capability != "rf_source.modulation_configure"
+        ),
+        rf_source_extensions=replace(
+            extensions,
+            features=tuple(
+                feature
+                for feature in extensions.features
+                if feature.feature is not RfFeature.MODULATION
+            ),
+        ),
+    )
 
 
 def _config(*, resource: str = "TCPIP::198.51.100.83::INSTR") -> WaveBenchConfig:
@@ -428,6 +452,15 @@ def test_preflight_builds_in_memory_m3_descriptor_without_production_promotion(m
 
     changed = preflight.evidence_descriptor
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: changed)
+    with pytest.raises(module.A4PreflightError, match="production_modulation_gate_changed"):
+        module.validate_a4_preflight(_config(), _setup(module))
+
+
+def test_a4_historical_harness_rejects_the_promoted_production_descriptor(monkeypatch) -> None:
+    module = _script_module()
+    production = _promoted_production_descriptor()
+    _install_common_patches(monkeypatch, module, production)
+
     with pytest.raises(module.A4PreflightError, match="production_modulation_gate_changed"):
         module.validate_a4_preflight(_config(), _setup(module))
 

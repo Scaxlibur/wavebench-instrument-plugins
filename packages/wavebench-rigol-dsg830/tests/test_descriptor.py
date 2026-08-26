@@ -9,6 +9,9 @@ from wavebench.instruments.rf_source_extensions import (
     RfFeature,
     RfFeatureDirection,
     RfCwProfile,
+    RfModulationKind,
+    RfModulationProfile,
+    RfModulationValueUnit,
     RfOutputProfile,
     RfPulseMode,
     RfPulsePolarity,
@@ -42,6 +45,7 @@ def test_descriptor_declares_production_output_contract() -> None:
         "rf_source.snapshot",
         "rf_source.cw_configure",
         "rf_source.output",
+        "rf_source.modulation_configure",
         "rf_source.pulse_configure",
         "rf_source.sweep_configure",
     )
@@ -69,8 +73,8 @@ def test_descriptor_declares_production_output_contract() -> None:
         "alc_unlocked",
         "output_power_protection",
     )
-    assert len(descriptor.rf_source_extensions.features) == 4
-    cw, output, pulse, sweep = descriptor.rf_source_extensions.features
+    assert len(descriptor.rf_source_extensions.features) == 5
+    cw, modulation, output, pulse, sweep = descriptor.rf_source_extensions.features
     assert cw.feature is RfFeature.CW
     assert cw.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
     assert cw.port_ids == ("rf_out",)
@@ -79,6 +83,38 @@ def test_descriptor_declares_production_output_contract() -> None:
     assert cw.profile.power_readable is True
     assert cw.profile.frequency_configurable is True
     assert cw.profile.power_configurable is True
+    assert modulation.feature is RfFeature.MODULATION
+    assert modulation.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
+    assert modulation.port_ids == ("rf_out",)
+    assert isinstance(modulation.profile, RfModulationProfile)
+    assert modulation.profile.state_readable is True
+    assert modulation.profile.configuration_readable is True
+    assert tuple(item.kind for item in modulation.profile.mode_profiles) == (
+        RfModulationKind.AM,
+        RfModulationKind.FM,
+        RfModulationKind.PM,
+    )
+    am, fm, pm = modulation.profile.mode_profiles
+    assert (am.value_unit, am.value_min, am.value_max) == (
+        RfModulationValueUnit.PERCENT,
+        0.0,
+        100.0,
+    )
+    assert (fm.value_unit, fm.value_min, fm.value_max) == (
+        RfModulationValueUnit.HZ,
+        0.1,
+        1_000_000.0,
+    )
+    assert (pm.value_unit, pm.value_min, pm.value_max) == (
+        RfModulationValueUnit.RAD,
+        1.25,
+        1.25,
+    )
+    assert all(
+        item.internal_frequency_min_hz == 10.0
+        and item.internal_frequency_max_hz == 100_000.0
+        for item in modulation.profile.mode_profiles
+    )
     assert output.feature is RfFeature.OUTPUT
     assert output.directions == (
         RfFeatureDirection.DISABLE,
