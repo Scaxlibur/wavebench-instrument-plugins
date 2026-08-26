@@ -183,7 +183,12 @@ def test_driver_returns_fail_closed_unknown_observations_for_unknown_sweep_or_pr
     assert snapshot.protection.reason_code is RfReasonCode.RESPONSE_INVALID_VALUE
 
 
-def _modulation_responses(kind: RfModulationKind, **changes: str) -> dict[str, str]:
+def _modulation_responses(
+    kind: RfModulationKind,
+    *,
+    selected_fm_pm_kind: RfModulationKind | None = None,
+    **changes: str,
+) -> dict[str, str]:
     responses = {
         ":MOD:STAT?": "0\n",
         ":AM:STAT?": "0\n",
@@ -198,10 +203,12 @@ def _modulation_responses(kind: RfModulationKind, **changes: str) -> dict[str, s
     if kind is RfModulationKind.AM:
         responses[":AM:DEPT?"] = "50.00\n"
     elif kind is RfModulationKind.FM:
-        responses[":FMPM:TYPE?"] = "FM\n"
+        selected = selected_fm_pm_kind or RfModulationKind.FM
+        responses[":FMPM:TYPE?"] = f"{selected.value.upper()}\n"
         responses[":FM:DEV?"] = "20.00000000kHz\n"
     else:
-        responses[":FMPM:TYPE?"] = "PM\n"
+        selected = selected_fm_pm_kind or RfModulationKind.PM
+        responses[":FMPM:TYPE?"] = f"{selected.value.upper()}\n"
         responses[":PM:DEV?"] = "2.000000rad\n"
     responses.update(changes)
     return responses
@@ -276,6 +283,9 @@ def test_driver_reads_complete_internal_sine_modulation_profile(
     assert transport.write_calls == []
     assert snapshot.port_id == "rf_out"
     assert snapshot.kind is kind
+    assert snapshot.selected_fm_pm_kind is (
+        kind if kind in {RfModulationKind.FM, RfModulationKind.PM} else None
+    )
     assert snapshot.source is RfModulationSource.INTERNAL
     assert snapshot.waveform is RfModulationWaveform.SINE
     assert snapshot.internal_frequency_hz == 1_000.0
@@ -283,6 +293,28 @@ def test_driver_reads_complete_internal_sine_modulation_profile(
     assert snapshot.enabled_modes == ()
     assert snapshot.global_enabled is False
     assert snapshot.fault_codes == ()
+
+
+@pytest.mark.parametrize(
+    ("kind", "selected_fm_pm_kind"),
+    (
+        (RfModulationKind.FM, RfModulationKind.PM),
+        (RfModulationKind.PM, RfModulationKind.FM),
+    ),
+)
+def test_driver_reports_a_different_inactive_fm_pm_selection_without_rejecting_profile_readback(
+    kind: RfModulationKind,
+    selected_fm_pm_kind: RfModulationKind,
+) -> None:
+    transport = FakeTransport(
+        _modulation_responses(kind, selected_fm_pm_kind=selected_fm_pm_kind)
+    )
+
+    snapshot = _driver_type()(transport=transport).get_rf_modulation_snapshot("rf_out", kind)
+
+    assert snapshot.kind is kind
+    assert snapshot.selected_fm_pm_kind is selected_fm_pm_kind
+    assert transport.write_calls == []
 
 
 @pytest.mark.parametrize(

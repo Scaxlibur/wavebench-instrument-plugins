@@ -31,8 +31,9 @@ evidence. Its completed, reviewed evidence separately promotes `rf_source.cw_con
 The M3 driver implements offline `get_rf_modulation_snapshot()` and `configure_rf_modulation()` mappings for internal
 Sine only: AM depth `0–100 %`, FM deviation `0.1 Hz–1 MHz`, PM deviation `0–5 rad`, and a `10 Hz–100 kHz` internal
 frequency for each mode. Core requires RF OFF, all AM/FM/PM modes disabled, Pulse/Sweep disabled, and no active
-protection condition before the write; independent readback then requires exactly the target mode and global modulation
-switch to be enabled. M3 never enables RF output and does not retry an uncertain write.
+protection condition before the write. The shared FM/PM selection is read separately: when all modes are disabled, a
+different inactive selection may be changed to the requested type, and postcondition then requires that target type,
+exactly the target mode, and the global modulation switch. M3 never enables RF output and does not retry an uncertain write.
 
 The production descriptor declares no error queue, modulation, Pulse, Sweep, trigger, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and

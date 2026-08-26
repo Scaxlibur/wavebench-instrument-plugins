@@ -15,7 +15,7 @@ A2 的本地受控输出 harness、回归测试和不含资源地址的 setup �
 
 A3 的本地 CW 环回 harness、回归测试和不含资源地址的 setup 模板也保留在源码 checkout。它确认初始 RF OFF、两次 OFF-only CW 写入的独立回读、一次低功率 RF ON/OFF、CH2 的当前缓冲区可见信号和最终 RF OFF；CH2 只用于确认可见信号，频率与功率仍以源端 readback 为准。脱敏证据通过后，`rf_source.cw_configure` 已单独进入 production descriptor。
 
-M3 driver 已实现 `get_rf_modulation_snapshot()` 与 `configure_rf_modulation()` 的离线映射。范围仅为内部 Sine：AM 深度 `0–100 %`、FM 频偏 `0.1 Hz–1 MHz`、PM 相偏 `0–5 rad`，三种模式的内部频率均为 `10 Hz–100 kHz`。Core 在写入前要求 RF OFF、AM／FM／PM 全部关闭、Pulse／Sweep 关闭和无活动 protection condition；写后独立确认仅目标模式与全局调制开关开启。M3 不打开 RF 输出，也不重试结果不明的写入。
+M3 driver 已实现 `get_rf_modulation_snapshot()` 与 `configure_rf_modulation()` 的离线映射。范围仅为内部 Sine：AM 深度 `0–100 %`、FM 频偏 `0.1 Hz–1 MHz`、PM 相偏 `0–5 rad`，三种模式的内部频率均为 `10 Hz–100 kHz`。Core 在写入前要求 RF OFF、AM／FM／PM 全部关闭、Pulse／Sweep 关闭和无活动 protection condition。FM／PM 的共享选择位会被单独读回：三种模式均关闭时可从另一选择切换到目标类型，写后必须独立确认目标类型、仅目标模式与全局调制开关开启。M3 不打开 RF 输出，也不重试结果不明的写入。
 
 production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；`rf_source.modulation_configure` 仍等待 A4 实机证据，不能因 driver 方法或离线测试而提前声明。其余 capability 继续经过对应的 A4–A5 实机证据门。
 

@@ -71,7 +71,7 @@ M3 的离线实现已完成，但不属于当前 production capability。范围�
 | FM | `:FMPM:TYPE FM`、`:FM:SOUR INT`、`:FM:WAVE SINE`、`:FM:DEV`、`:FM:FREQ`、`:FM:STAT ON`、`:MOD:STAT ON` | `0.1 Hz–1 MHz` | `10 Hz–100 kHz` |
 | PM | `:FMPM:TYPE PM`、`:PM:SOUR INT`、`:PM:WAVE SINE`、`:PM:DEV`、`:PM:FREQ`、`:PM:STAT ON`、`:MOD:STAT ON` | `0–5 rad` | `10 Hz–100 kHz` |
 
-`get_rf_modulation_snapshot()` 先读取全局 `:MOD:STAT?`、AM／FM／PM 的 enable 状态和 `:STAT:QUES:MOD:COND?`；FM／PM 额外核对 `:FMPM:TYPE?`，再读取目标模式的 source、waveform、数值和内部频率。外部 source、非 Sine waveform、未知状态响应、未知调制 condition 位或不匹配的 FM／PM type 都失败关闭，不用猜测值继续写入。
+`get_rf_modulation_snapshot()` 先读取全局 `:MOD:STAT?`、AM／FM／PM 的 enable 状态和 `:STAT:QUES:MOD:COND?`；FM／PM 额外读取 `:FMPM:TYPE?` 并将共享选择位与被查询 profile 分开记录，再读取目标模式的 source、waveform、数值和内部频率。三种模式均 disabled 时，preflight 可接受与目标不同的当前 FM／PM 选择，因为固定写入会先设置目标类型；postcondition 必须确认目标类型。外部 source、非 Sine waveform、未知状态响应或未知调制 condition 位都失败关闭，不用猜测值继续写入。
 
 Core M3 preflight 要求 `rf_out` 明确 OFF、AM／FM／PM 三种模式均 disabled、Pulse／Sweep disabled 且没有活动 protection condition。driver 只发送每种模式对应的固定 bounded sequence；Core 随后重新读取 RF snapshot 和目标调制 snapshot，确认 RF 仍 OFF、仅目标模式 enabled、全局调制开启、内部 source／Sine waveform／数值／内部频率匹配。写入或 postcondition 结果不明时不重试，session 记为不确定；M3 不隐式打开 RF 输出，也不执行输出 recovery。
 

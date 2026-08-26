@@ -157,10 +157,11 @@ class DSG830RfSource:
             command = f":{prefix}:{suffix}"
             responses[command] = self.transport.query(command)
 
-        if kind in {RfModulationKind.FM, RfModulationKind.PM}:
-            selected = _parse_fm_pm_type(responses[":FMPM:TYPE?"])
-            if selected is not kind:
-                raise ValueError("DSG830 current FM/PM type does not match requested modulation kind")
+        selected_fm_pm_kind = (
+            _parse_fm_pm_type(responses[":FMPM:TYPE?"])
+            if kind in {RfModulationKind.FM, RfModulationKind.PM}
+            else None
+        )
         enabled_modes = tuple(
             mode
             for mode, command in (
@@ -181,6 +182,7 @@ class DSG830RfSource:
                 responses[f":{prefix}:FREQ?"],
                 f"{kind.value} modulation frequency",
             ),
+            "selected_fm_pm_kind": selected_fm_pm_kind,
             "enabled_modes": enabled_modes,
             "global_enabled": _parse_binary(
                 responses[":MOD:STAT?"],
