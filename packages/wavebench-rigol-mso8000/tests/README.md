@@ -18,7 +18,7 @@ M5 截图测试覆盖 `PNG` 类型预检、单次 `:SAVE:IMAGe:DATA?` definite-b
 
 M7 数学元数据测试通过 MATH 显示预检和状态化 FakeTransport 验证完整 transfer 事务、NORM/BYTE preamble、六字段传输状态恢复、错误锁存与零数据读取；不证明数学运算结果或 FFT 精度。
 
-M7 cursor 测试覆盖预先配置的手动同源 `TIME + SEC` 与 `AMPL + SOUR` 读取、`VBA`／非手动模式和无效数值的读取前拒绝，以及其余模式和单位的默认拒绝；不移动光标，也不证明读数准确度。
+M7 cursor 测试覆盖预先配置的手动 `TIME/AMPL` 读取，以及 `TRAC` 在 `MAIN/ROLL`、模拟通道、同单位与不同/未知单位下的 A/B/差值读取或 `ΔY` not applicable；还覆盖 `VBA`、Math、XY、测量、无效 source/unit/数值的读取前拒绝。所有路径不移动光标，也不证明读数准确度。
 
 统计测量 V2 测试覆盖显式 `item + sources` selector、6 条固定纯读取查询、双 source 延时/相位项、允许的数字周期 source、无 buffer 预检、有限数和整数 count 解析，以及失败后的停止查询行为；不配置统计项、不清零设备历史，也不证明统计准确度。
 

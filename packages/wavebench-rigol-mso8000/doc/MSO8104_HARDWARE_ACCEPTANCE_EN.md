@@ -109,7 +109,11 @@ This firmware initially returned `*OPC? = 0` after the recovery-write batch. The
 
 With both source outputs OFF, `scope.channel_input_state_v2` successfully read independent coupling, termination, and impedance for CH1 and CH2. This step did not write input settings.
 
-`scope.cursor_readout_v2` accepts only a preconfigured global manual `TIME/AMPL` cursor and never moves or reconfigures it. The device returned `VBA`; the driver correctly rejected before any value query, so this is not cursor-readout acceptance. The final source snapshot again confirmed both outputs OFF, `consistent`, and `healthy`.
+An earlier `scope.cursor_readout_v2` probe covered only the negative front-panel `VBA` path: the driver rejected before every value query and did not establish readout evidence. That historical result remains a negative-path check, not a substitute for `TRAC` semantics.
+
+The public `ScopeService.cursor_readout_v2(None, configured_cursor=True)` call then used a front-panel preconfigured tracking cursor. Before and after the call, source CH1/CH2 were OFF, `consistent`, and `healthy`, and CH1/CH2 were high impedance. The scope remained acquiring before and after the call; the driver sent no STOP, cursor setter, or other scope write. The result was `mode=TRAC`, `function=TRACK`, `source_a=CHAN2`, and `source_b=CHAN2`; X A/B/delta, `1/ΔX`, and Y A/B/delta were all finite. The current configuration reported seconds for X, Hz for `1/ΔX`, and `V` from the channel-unit query, so all three Y quantities were `source + V`. This same-source procedure used 12 pure-text queries; the descriptor reserves up to 13 when two different channels require separate unit reads.
+
+This establishes only the recorded model, firmware, LAN/PyVISA transport, front-panel `TRAC + CHAN2/CHAN2`, and current timebase. Math sources, XY, measurement, `NONE`, LA, and unknown or unequal vertical units remain outside the successful path; the latter two do not read `ΔY`. It does not prove cursor display position, visual correspondence of A/B to the waveform, cross-source unit conversion, or measurement accuracy.
 
 `scope.measurement_statistics_v2` uses an `item + sources` selector and does not access the legacy slot route. After separately enabling CH1 and CH2 for brief runs, it issued only CURRENT, AVERages, DEViation, MINimum, MAXimum, and CNT queries for `VPP,CHAN1` and `VPP,CHAN2`. It sent no statistics configuration, reset, display, or scope write.
 
@@ -146,6 +150,6 @@ This evidence covers only identity and licensed-option status for the recorded m
 
 ## Acceptance boundary and unverified items
 
-This record covers the current-screen `DEF + LF` 1000-point path, the recorded stopped-state `MAX/DMAX + LF` 10000-point path, stopped-MAIN `DEF + BYTE` single/multi-channel capture at 1000 samples per channel, and restricted BMP24-to-PNG Screenshot V2. Every result is limited to the recorded model, firmware, transport, memory depth, and procedure. It is not general X/Y conversion, screenshot visual, or measurement-accuracy evidence across ranges, timebases, or probe conditions.
+This record covers the current-screen `DEF + LF` 1000-point path, the recorded stopped-state `MAX/DMAX + LF` 10000-point path, stopped-MAIN `DEF + BYTE` single/multi-channel capture at 1000 samples per channel, restricted BMP24-to-PNG Screenshot V2, and read-only cursor V2 for front-panel `TRAC + CHAN2/CHAN2`. Every result is limited to the recorded model, firmware, transport, memory depth, and procedure. It is not general X/Y conversion, screenshot visual, or measurement-accuracy evidence across ranges, timebases, or probe conditions.
 
 Running-state MAX, other memory depths, capture lengths, timebases, channel sets, transports, throughput, timeout, general waveform accuracy, and screenshot behavior for other screen states, maximum payloads, or non-BMP24 responses remain outside this evidence. Average capture, record/replay, digital waveform, and every other undeclared capability remain unchanged.

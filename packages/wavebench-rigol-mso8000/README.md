@@ -39,7 +39,7 @@
 
 ## M8 离线发行证据
 
-- MSO8104 包测试：373 项通过；全仓 Ruff 通过。
+- MSO8104 包测试：390 项通过；全仓 Ruff 通过。
 - 根测试：在一次性同级 WaveBench core 布局中 715 项通过，2 项 SP3000A 私有实机证据测试按预期跳过。
 - 当前 WaveBench `0.8.24` 开发环境的 package check：源码目录和真实 wheel 均通过。
 - wheel/sdist：唯一仪器 entry point、WaveBench runtime dependency、MIT 许可证和公开内容符合合同；vendor-local 未进入制品。
@@ -62,7 +62,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `scope.math_metadata` 只接受已显示的 MATH1～MATH4 和 MAIN 时基。driver 保存六项 waveform 传输状态，按手册要求先切换到 NORM，再选择 MATH 源与 BYTE 格式，只查询 preamble 后恢复原状态；不读取波形数据。记录的 MATH1 调用已返回 1000 点、有限轴和 8 位 BYTE 元数据，并完成六字段最终恢复复核。返回的 `values_per_sample` 仍为未知；数学运算内容、其他槽位／operator 的轴语义和 FFT 精度不由该能力推断。
 
-`scope.cursor_readout` 保留兼容接口，只读取调用方确认已配置的全局手动光标，公共 `cursor_index` 固定为 `1`。新增的 `scope.cursor_readout_v2` 使用全局寻址，要求 `cursor_index=None`，可读取手动 `TIME/AMPL` 的独立 A/B source、秒/赫兹/角度/百分比或 source/百分比单位，以及 A、B、差值读数；driver 不移动或重配光标。追踪、XY、测量模式、NONE 和 LA 幅度仍默认拒绝。当前实机光标为 `VBA`，V2 在读取数值前拒绝；光标读数准确度仍未实机验证。
+`scope.cursor_readout` 保留兼容接口，只读取调用方确认已配置的全局手动光标，公共 `cursor_index` 固定为 `1`。`scope.cursor_readout_v2` 使用全局寻址，要求 `cursor_index=None`；除手动 `TIME/AMPL` 外，还读取预配置的 `TRAC` 追踪光标。追踪路径仅接受 `MAIN/ROLL` 时基和 `CHAN1`～`CHAN4`，读取 A/B source、时基、通道幅度单位和 A/B/差值。X 值为秒、`1/ΔX` 为 Hz；Y 值保留设备报告的 `V`、`A` 或 `W` source unit。仅当 A/B 纵轴单位相同且已知时才读取 `ΔY`，否则将其标为 not applicable。当前实机的 `TRAC + CHAN2/CHAN2` 返回全部有限读数与 `V` 纵轴单位；driver 不移动或重配光标。Math source、XY、测量模式、`NONE`、LA 和未知或不同的纵轴单位保持 fail closed，光标读数准确度仍未验证。
 
 `scope.measurement_statistics_v2` 覆盖手册列出的统计 item，使用规范化的大写 item token 和显式 `CHAN1`～`CHAN4`、`MATH1`～`MATH4` source；`D0`～`D15` 仅接受手册明确允许的周期、频率、宽度、占空比、延时和相位项。延时与相位项必须给出两个 source，其他 item 必须给出一个 source。driver 只查询 CURRENT、AVERages、DEViation、MINimum、MAXimum 与 CNT，不发送统计配置、清零或显示写入。受控实机已确认 `VPP,CHAN1` 与 `VPP,CHAN2` 的 6 个数值字段和 `CNT=1000` 可读取；设备既有统计历史未被修改，因此平均、标准差、最小值和最大值不作为信号准确度或统计窗口语义的证据。legacy `scope.measurement_statistics` 继续不声明。
 
