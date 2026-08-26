@@ -19,6 +19,7 @@ packages/
 ├── wavebench-rigol-dm3000/
 ├── wavebench-rigol-dp800/
 ├── wavebench-rigol-ds1000z/
+├── wavebench-rigol-dsg830/
 ├── wavebench-rigol-mso8000/
 ├── wavebench-rohde-schwarz-rtm2000/
 ├── wavebench-shengpu-sp3000a/
@@ -50,6 +51,7 @@ WaveBench permanently bundles the RTM2000, DS1000Z, DG4000, DP800, and DM3000 fa
 
 ## Incubating plugin
 
+- [`wavebench-rigol-dsg830`](../packages/wavebench-rigol-dsg830/README_EN.md): RIGOL DSG830 RF signal generator, canonical ID `rigol.dsg830`; `0.2.0` completes the offline `rf_source` M0 migration and requires Core `>=0.8.25,<0.9`, but its production descriptor remains `rf_source.idn` only and declares neither snapshot nor control before A1. The package [milestones](../packages/wavebench-rigol-dsg830/doc/DSG830_COVERAGE_MILESTONES_EN.md) define the boundary.
 - [`wavebench-shengpu-sp3000a`](../packages/wavebench-shengpu-sp3000a/README_EN.md): Shengpu SP30120 sweep-analyzer driver, canonical ID `shengpu.sp30120`; its descriptor declares identity only, while five certified typed vendor-specific RF-OFF controls are available and trace plus generic configuration remain disabled.
 - [`wavebench-siglent-sdg2000x`](../packages/wavebench-siglent-sdg2000x/README_EN.md): SIGLENT SDG2042X / SDG2082X / SDG2122X function/arbitrary waveform generator, canonical ID `siglent.sdg2000x`; it retains the V1 basic surface and declares Source V2 snapshot, Basic, Output, and Harmonic Disable for the accepted SDG2122X model/firmware scope.
 - [`wavebench-siglent-sds800x-hd`](../packages/wavebench-siglent-sds800x-hd/README_EN.md): SIGLENT SDS800X HD oscilloscope-family `0.6.0` driver, canonical ID `siglent.sds800x-hd`; it declares identity, coupling, waveform/capture, read-only statistics, PNG screenshot, and standalone acquisition-control capabilities, with SDS804X HD hardware acceptance complete.

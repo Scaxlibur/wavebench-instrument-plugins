@@ -19,6 +19,7 @@ packages/
 ├── wavebench-rigol-dm3000/
 ├── wavebench-rigol-dp800/
 ├── wavebench-rigol-ds1000z/
+├── wavebench-rigol-dsg830/
 ├── wavebench-rigol-mso8000/
 ├── wavebench-rohde-schwarz-rtm2000/
 ├── wavebench-shengpu-sp3000a/
@@ -50,6 +51,10 @@ WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五�
 - [`wavebench-siglent-sdg2000x`](packages/wavebench-siglent-sdg2000x/README.md)：SIGLENT SDG2042X／SDG2082X／SDG2122X 函数／任意波形发生器，canonical ID `siglent.sdg2000x`；保留 V1 基础能力，并在精确 SDG2122X 型号／固件范围内声明 Source V2 snapshot、Basic、Output 与 Harmonic Disable。
 - [`wavebench-siglent-sds3000`](packages/wavebench-siglent-sds3000/README.md)：早期 SIGLENT SDS3000 示波器驱动，canonical ID `siglent.sds3000`；严格支持 SDS3054 固件 `8.4.1`，已采用 WaveBench `0.8.24` transport/session P0。
 - [`wavebench-siglent-sds800x-hd`](packages/wavebench-siglent-sds800x-hd/README.md)：SIGLENT SDS800X HD 系列示波器 `0.6.0` 驱动，canonical ID `siglent.sds800x-hd`；声明身份、coupling、波形与单次/多通道采集、只读测量统计、PNG 截图和独立采集控制，已完成 SDS804X HD 实机验收。
+
+## 孵化中插件
+
+- [`wavebench-rigol-dsg830`](packages/wavebench-rigol-dsg830/README.md)：RIGOL DSG830 射频信号发生器，canonical ID `rigol.dsg830`；`0.2.0` 已完成 `rf_source` M0 离线迁移并依赖 Core `>=0.8.25,<0.9`，但 production descriptor 仍只有 `rf_source.idn`，A1 前不声明 snapshot 或控制能力。完整边界见包内[里程碑](packages/wavebench-rigol-dsg830/doc/DSG830_COVERAGE_MILESTONES.md)。
 
 ## 接口提案
 
