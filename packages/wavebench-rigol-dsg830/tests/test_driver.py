@@ -8,6 +8,10 @@ import pytest
 from wavebench.instruments.rf_source_extensions import (
     RfAvailability,
     RfCwRequest,
+    RfModulationKind,
+    RfModulationRequest,
+    RfModulationSource,
+    RfModulationWaveform,
     RfOutputRequest,
     RfReasonCode,
 )
@@ -177,6 +181,211 @@ def test_driver_returns_fail_closed_unknown_observations_for_unknown_sweep_or_pr
     assert snapshot.ports[0].sweep.reason_code is RfReasonCode.RESPONSE_INVALID_VALUE
     assert snapshot.protection.availability is RfAvailability.UNKNOWN
     assert snapshot.protection.reason_code is RfReasonCode.RESPONSE_INVALID_VALUE
+
+
+def _modulation_responses(kind: RfModulationKind, **changes: str) -> dict[str, str]:
+    responses = {
+        ":MOD:STAT?": "0\n",
+        ":AM:STAT?": "0\n",
+        ":FM:STAT?": "0\n",
+        ":PM:STAT?": "0\n",
+        ":STAT:QUES:MOD:COND?": "0\n",
+    }
+    prefix = kind.value.upper()
+    responses[f":{prefix}:SOUR?"] = "INT\n"
+    responses[f":{prefix}:WAVE?"] = "SINE\n"
+    responses[f":{prefix}:FREQ?"] = "1.00000000kHz\n"
+    if kind is RfModulationKind.AM:
+        responses[":AM:DEPT?"] = "50.00\n"
+    elif kind is RfModulationKind.FM:
+        responses[":FMPM:TYPE?"] = "FM\n"
+        responses[":FM:DEV?"] = "20.00000000kHz\n"
+    else:
+        responses[":FMPM:TYPE?"] = "PM\n"
+        responses[":PM:DEV?"] = "2.000000rad\n"
+    responses.update(changes)
+    return responses
+
+
+@pytest.mark.parametrize(
+    ("kind", "value_field", "expected_value", "expected_queries"),
+    (
+        (
+            RfModulationKind.AM,
+            "depth_percent",
+            50.0,
+            [
+                ":MOD:STAT?",
+                ":AM:STAT?",
+                ":FM:STAT?",
+                ":PM:STAT?",
+                ":STAT:QUES:MOD:COND?",
+                ":AM:SOUR?",
+                ":AM:WAVE?",
+                ":AM:DEPT?",
+                ":AM:FREQ?",
+            ],
+        ),
+        (
+            RfModulationKind.FM,
+            "frequency_deviation_hz",
+            20_000.0,
+            [
+                ":MOD:STAT?",
+                ":AM:STAT?",
+                ":FM:STAT?",
+                ":PM:STAT?",
+                ":STAT:QUES:MOD:COND?",
+                ":FMPM:TYPE?",
+                ":FM:SOUR?",
+                ":FM:WAVE?",
+                ":FM:DEV?",
+                ":FM:FREQ?",
+            ],
+        ),
+        (
+            RfModulationKind.PM,
+            "phase_deviation_rad",
+            2.0,
+            [
+                ":MOD:STAT?",
+                ":AM:STAT?",
+                ":FM:STAT?",
+                ":PM:STAT?",
+                ":STAT:QUES:MOD:COND?",
+                ":FMPM:TYPE?",
+                ":PM:SOUR?",
+                ":PM:WAVE?",
+                ":PM:DEV?",
+                ":PM:FREQ?",
+            ],
+        ),
+    ),
+)
+def test_driver_reads_complete_internal_sine_modulation_profile(
+    kind: RfModulationKind,
+    value_field: str,
+    expected_value: float,
+    expected_queries: list[str],
+) -> None:
+    transport = FakeTransport(_modulation_responses(kind))
+
+    snapshot = _driver_type()(transport=transport).get_rf_modulation_snapshot("rf_out", kind)
+
+    assert transport.query_calls == expected_queries
+    assert transport.write_calls == []
+    assert snapshot.port_id == "rf_out"
+    assert snapshot.kind is kind
+    assert snapshot.source is RfModulationSource.INTERNAL
+    assert snapshot.waveform is RfModulationWaveform.SINE
+    assert snapshot.internal_frequency_hz == 1_000.0
+    assert getattr(snapshot, value_field) == expected_value
+    assert snapshot.enabled_modes == ()
+    assert snapshot.global_enabled is False
+    assert snapshot.fault_codes == ()
+
+
+@pytest.mark.parametrize(
+    ("modulation_request", "expected_writes"),
+    (
+        (
+            RfModulationRequest(
+                port_id="rf_out",
+                kind=RfModulationKind.AM,
+                internal_frequency_hz=1_000.0,
+                depth_percent=50.0,
+            ),
+            [
+                ":AM:SOUR INT",
+                ":AM:WAVE SINE",
+                ":AM:DEPT 50",
+                ":AM:FREQ 1000Hz",
+                ":AM:STAT ON",
+                ":MOD:STAT ON",
+            ],
+        ),
+        (
+            RfModulationRequest(
+                port_id="rf_out",
+                kind=RfModulationKind.FM,
+                internal_frequency_hz=1_000.0,
+                frequency_deviation_hz=20_000.0,
+            ),
+            [
+                ":FMPM:TYPE FM",
+                ":FM:SOUR INT",
+                ":FM:WAVE SINE",
+                ":FM:DEV 20000Hz",
+                ":FM:FREQ 1000Hz",
+                ":FM:STAT ON",
+                ":MOD:STAT ON",
+            ],
+        ),
+        (
+            RfModulationRequest(
+                port_id="rf_out",
+                kind=RfModulationKind.PM,
+                internal_frequency_hz=1_000.0,
+                phase_deviation_rad=2.0,
+            ),
+            [
+                ":FMPM:TYPE PM",
+                ":PM:SOUR INT",
+                ":PM:WAVE SINE",
+                ":PM:DEV 2rad",
+                ":PM:FREQ 1000Hz",
+                ":PM:STAT ON",
+                ":MOD:STAT ON",
+            ],
+        ),
+    ),
+)
+def test_driver_maps_each_internal_sine_modulation_request_to_fixed_writes(
+    modulation_request: RfModulationRequest,
+    expected_writes: list[str],
+) -> None:
+    transport = FakeTransport({})
+
+    _driver_type()(transport=transport).configure_rf_modulation(modulation_request)
+
+    assert transport.query_calls == []
+    assert transport.write_calls == expected_writes
+
+
+def test_driver_rejects_invalid_modulation_target_or_readback_before_unsafe_use() -> None:
+    transport = FakeTransport({})
+    driver = _driver_type()(transport=transport)
+    invalid_port = RfModulationRequest(
+        port_id="other",
+        kind=RfModulationKind.AM,
+        internal_frequency_hz=1_000.0,
+        depth_percent=50.0,
+    )
+
+    with pytest.raises(ValueError, match="port_id"):
+        driver.configure_rf_modulation(invalid_port)
+    with pytest.raises(ValueError, match="frequency"):
+        driver.configure_rf_modulation(
+            RfModulationRequest(
+                port_id="rf_out",
+                kind=RfModulationKind.FM,
+                internal_frequency_hz=1.0,
+                frequency_deviation_hz=20_000.0,
+            )
+        )
+    assert transport.write_calls == []
+
+    malformed = FakeTransport(
+        _modulation_responses(
+            RfModulationKind.AM,
+            **{":AM:SOUR?": "EXT", ":STAT:QUES:MOD:COND?": "2"},
+        )
+    )
+    with pytest.raises(ValueError, match="source response"):
+        _driver_type()(transport=malformed).get_rf_modulation_snapshot(
+            "rf_out",
+            RfModulationKind.AM,
+        )
 
 
 @pytest.mark.parametrize(
