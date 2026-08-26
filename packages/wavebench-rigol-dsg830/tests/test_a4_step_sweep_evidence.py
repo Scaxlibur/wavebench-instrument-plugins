@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from dataclasses import replace
 from pathlib import Path
 import stat
 import sys
@@ -53,6 +54,28 @@ def _production_descriptor():
     from wavebench_rigol_dsg830.descriptor import descriptor
 
     return descriptor()
+
+
+def _historical_pre_promotion_descriptor():
+    production = _production_descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    return replace(
+        production,
+        capabilities=tuple(
+            capability
+            for capability in production.capabilities
+            if capability != "rf_source.sweep_configure"
+        ),
+        rf_source_extensions=replace(
+            extensions,
+            features=tuple(
+                feature
+                for feature in extensions.features
+                if feature.feature is not RfFeature.SWEEP
+            ),
+        ),
+    )
 
 
 def _config(*, access: str = "read_only") -> WaveBenchConfig:
@@ -259,7 +282,7 @@ class _FakeDriver:
 
 
 def _preflight(module, monkeypatch, config: WaveBenchConfig, setup):
-    production = _production_descriptor()
+    production = _historical_pre_promotion_descriptor()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: production)
     monkeypatch.setattr(
         module,
@@ -310,7 +333,7 @@ def test_a4_step_sweep_harness_rejects_a_promoted_production_descriptor(monkeypa
     module = _script_module()
     config = _config()
     setup = _setup(module)
-    promoted = module._build_evidence_descriptor(_production_descriptor())
+    promoted = _production_descriptor()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: promoted)
     monkeypatch.setattr(
         module,

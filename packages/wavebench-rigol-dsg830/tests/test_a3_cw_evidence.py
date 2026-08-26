@@ -61,14 +61,19 @@ def _pre_a3_descriptor():
         capabilities=tuple(
             capability
             for capability in production.capabilities
-            if capability not in {"rf_source.cw_configure", "rf_source.pulse_configure"}
+            if capability
+            not in {
+                "rf_source.cw_configure",
+                "rf_source.pulse_configure",
+                "rf_source.sweep_configure",
+            }
         ),
         rf_source_extensions=replace(
             extensions,
             features=tuple(
                 feature
                 for feature in extensions.features
-                if feature.feature not in {RfFeature.CW, RfFeature.PULSE}
+                if feature.feature not in {RfFeature.CW, RfFeature.PULSE, RfFeature.SWEEP}
             ),
         ),
     )

@@ -14,6 +14,11 @@ from wavebench.instruments.rf_source_extensions import (
     RfPulsePolarity,
     RfPulseProfile,
     RfPulseSource,
+    RfSweepDirection,
+    RfSweepProfile,
+    RfSweepShape,
+    RfSweepSpacing,
+    RfSweepType,
 )
 
 
@@ -38,6 +43,7 @@ def test_descriptor_declares_production_output_contract() -> None:
         "rf_source.cw_configure",
         "rf_source.output",
         "rf_source.pulse_configure",
+        "rf_source.sweep_configure",
     )
     assert descriptor.idn_patterns == ("RIGOL TECHNOLOGIES,DSG830",)
     assert descriptor.backends == ("pyvisa",)
@@ -63,8 +69,8 @@ def test_descriptor_declares_production_output_contract() -> None:
         "alc_unlocked",
         "output_power_protection",
     )
-    assert len(descriptor.rf_source_extensions.features) == 3
-    cw, output, pulse = descriptor.rf_source_extensions.features
+    assert len(descriptor.rf_source_extensions.features) == 4
+    cw, output, pulse, sweep = descriptor.rf_source_extensions.features
     assert cw.feature is RfFeature.CW
     assert cw.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
     assert cw.port_ids == ("rf_out",)
@@ -98,6 +104,24 @@ def test_descriptor_declares_production_output_contract() -> None:
     assert mode.width_min_s == 10e-9
     assert mode.width_max_s == 170.0 - 10e-9
     assert mode.minimum_off_time_s == 10e-9
+    assert sweep.feature is RfFeature.SWEEP
+    assert sweep.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
+    assert sweep.port_ids == ("rf_out",)
+    assert isinstance(sweep.profile, RfSweepProfile)
+    assert sweep.profile.state_readable is True
+    assert sweep.profile.configuration_readable is True
+    assert len(sweep.profile.mode_profiles) == 1
+    sweep_mode = sweep.profile.mode_profiles[0]
+    assert sweep_mode.sweep_type is RfSweepType.STEP
+    assert sweep_mode.direction is RfSweepDirection.FORWARD
+    assert sweep_mode.shape is RfSweepShape.RAMP
+    assert sweep_mode.spacing is RfSweepSpacing.LINEAR
+    assert sweep_mode.frequency_min_hz == 9_000.0
+    assert sweep_mode.frequency_max_hz == 3_000_000_000.0
+    assert sweep_mode.points_min == 2
+    assert sweep_mode.points_max == 65_535
+    assert sweep_mode.dwell_min_s == 20e-3
+    assert sweep_mode.dwell_max_s == 100.0
 
 
 def test_factory_opens_one_configured_transport_without_instrument_io() -> None:

@@ -17,6 +17,12 @@ from wavebench.instruments.rf_source_extensions import (
     RfPulseSource,
     RfSourceDescriptorExtensions,
     RfSourceTopology,
+    RfSweepDirection,
+    RfSweepModeProfile,
+    RfSweepProfile,
+    RfSweepShape,
+    RfSweepSpacing,
+    RfSweepType,
 )
 
 
@@ -34,13 +40,14 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="RIGOL Technologies",
         models=("DSG830",),
         aliases=(),
-        # A1/A2/A3 and A4 Pulse evidence passed; only their scoped capabilities are open.
+        # A1/A2/A3 and A4 Pulse/Step Sweep evidence passed; only their scoped capabilities are open.
         capabilities=(
             "rf_source.idn",
             "rf_source.snapshot",
             "rf_source.cw_configure",
             "rf_source.output",
             "rf_source.pulse_configure",
+            "rf_source.sweep_configure",
         ),
         idn_patterns=("RIGOL TECHNOLOGIES,DSG830",),
         backends=("pyvisa",),
@@ -50,7 +57,7 @@ def descriptor() -> InstrumentDescriptor:
         summary=(
             "RIGOL DSG830 RF signal-source driver; production descriptor exposes identity, "
             "a read-only snapshot, OFF-only CW configuration, safety-gated RF output control, "
-            "and RF-OFF internal single-pulse configuration."
+            "RF-OFF internal single-pulse configuration, and RF-OFF disabled Step Sweep configuration."
         ),
         wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",
@@ -120,6 +127,29 @@ def descriptor() -> InstrumentDescriptor:
                                 width_min_s=10e-9,
                                 width_max_s=170.0 - 10e-9,
                                 minimum_off_time_s=10e-9,
+                            ),
+                        ),
+                    ),
+                ),
+                RfFeatureCapability(
+                    feature=RfFeature.SWEEP,
+                    directions=(RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ),
+                    port_ids=("rf_out",),
+                    profile=RfSweepProfile(
+                        state_readable=True,
+                        configuration_readable=True,
+                        mode_profiles=(
+                            RfSweepModeProfile(
+                                sweep_type=RfSweepType.STEP,
+                                direction=RfSweepDirection.FORWARD,
+                                shape=RfSweepShape.RAMP,
+                                spacing=RfSweepSpacing.LINEAR,
+                                frequency_min_hz=9_000.0,
+                                frequency_max_hz=3_000_000_000.0,
+                                points_min=2,
+                                points_max=65_535,
+                                dwell_min_s=20e-3,
+                                dwell_max_s=100.0,
                             ),
                         ),
                     ),
