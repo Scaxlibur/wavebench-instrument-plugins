@@ -122,7 +122,7 @@ class ScopeCursorReadoutV2:
 
 core 当前开发分支已实现 selector、statistics、FFT 与 cursor 的 V2 合同。MSO8104 在受控开发中声明 `scope.measurement_statistics_v2`：只接受 `item_sources`、不支持统计 buffer，并以 6 条纯读取查询返回完整聚合值；legacy `scope.measurement_statistics` 仍不声明。`scope.fft_status_v2` 先确认 math operator 为 `FFT`，再读取 source、window、vertical unit 与起止频率；average-complete、RBW 和 FFT sample rate 保持 unavailable。受控实机的前面板 MATH1 返回 `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`；FFT 准确度仍待单独验证。
 
-当前 `scope.cursor_readout` 只声明上述无损子集。MSO8104 已受限声明 `scope.cursor_readout_v2`：手动 `TIME/AMPL` 使用既有 A/B、单位和读数路径；`TRAC` 仅接受 `MAIN/ROLL` 时基及 `CHAN1`～`CHAN4`。追踪路径读取 source、时基、模拟通道幅度单位与 A/B/差值，X 使用秒、`1/ΔX` 使用 Hz、Y 以 `source` 加设备报告的 `V`/`A`/`W` 表示；只有 A/B 的已知单位相同时才读取 `ΔY`。受控实机的 `TRAC + CHAN2/CHAN2` 已返回有限读数与 `V` 单位。Math source、XY、measurement、`NONE`、LA、未知或不同纵轴单位仍须逐项取得证据后再开放或保持 not applicable。
+当前 `scope.cursor_readout` 只声明上述无损子集。MSO8104 已受限声明 `scope.cursor_readout_v2`：手动 `TIME/AMPL` 使用既有 A/B、单位和读数路径；`TRAC` 仅接受 `MAIN/ROLL` 时基及 `CHAN1`～`CHAN4`。受控实机的 `MAN + TIME + CHAN1/CHAN1` 已返回有限 X A/B、`ΔX` 和 `1/ΔX`，单位为秒和 Hz。追踪路径读取 source、时基、模拟通道幅度单位与 A/B/差值，X 使用秒、`1/ΔX` 使用 Hz、Y 以 `source` 加设备报告的 `V`/`A`/`W` 表示；只有 A/B 的已知单位相同时才读取 `ΔY`。受控实机的 `TRAC + CHAN2/CHAN2` 已返回有限读数与 `V` 单位。Math source、XY、measurement、`NONE`、LA、未知或不同纵轴单位仍须逐项取得证据后再开放或保持 not applicable。
 
 `scope.reference_metadata` 与 `scope.history_timestamps` 不属于本 RFC 的核心缺口。MSO8000 手册没有 reference waveform 的轴/点数查询，也没有逐帧 relative/calendar timestamp；这两项是厂商证据缺口，当前直接不声明 capability。
 

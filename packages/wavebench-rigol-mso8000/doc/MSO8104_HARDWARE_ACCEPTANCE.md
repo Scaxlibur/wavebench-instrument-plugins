@@ -111,6 +111,10 @@ bounded `scope.fetch_waveform` 使用 `LF` trailing、no-replay、每响应最�
 
 早期 `scope.cursor_readout_v2` 只验收过前面板 `VBA` 的负向路径：driver 在读取任意数值前拒绝，未形成读数证据。该历史路径继续保留，不作为 `TRAC` 的语义替代。
 
+随后以前面板预配置的手动光标执行公开 `ScopeService.cursor_readout_v2(None, configured_cursor=True)`。调用前后 source CH1/CH2 均 OFF、`consistent`、`healthy`，CH1/CH2 均为 high_z；scope 在调用前后均为 acquiring，driver 没有发送 STOP、cursor setter 或其他 scope 写入。实际回包为 `mode=MAN`、`function=TIME`、`source_a=CHAN1`、`source_b=CHAN1`；X A/B、`ΔX` 与 `1/ΔX` 均为有限数，单位分别为秒和 Hz。该手动步骤使用 9 条纯文本 query。
+
+该证据只覆盖记录型号、固件、LAN/PyVISA、前面板 `MAN + TIME + CHAN1/CHAN1` 与当前时基；它不证明光标显示位置、A/B 与波形的视觉对应关系或测量准确度。`AMPL`、双 source、Math source、XY、measurement、LA 和其他手动单位仍未取得正向实机证据。
+
 随后以前面板预配置的追踪光标执行公开 `ScopeService.cursor_readout_v2(None, configured_cursor=True)`。调用前后 source CH1/CH2 均 OFF、`consistent`、`healthy`，CH1/CH2 均为 high_z；scope 在调用前后均为 acquiring，driver 没有发送 STOP、cursor setter 或其他 scope 写入。实际回包为 `mode=TRAC`、`function=TRACK`、`source_a=CHAN2`、`source_b=CHAN2`；X A/B/差值、`1/ΔX`、Y A/B/差值均为有限数。当前配置的 X unit 为秒、`1/ΔX` 为 Hz；通道单位查询返回 `V`，因此三个 Y quantity 均为 `source + V`。该同源步骤实际使用 12 条纯文本 query，descriptor 为双源不同通道时的额外单位查询预留最多 13 条。
 
 该证据只覆盖记录型号、固件、LAN/PyVISA、前面板 `TRAC + CHAN2/CHAN2` 与当前时基。Math source、XY、measurement、`NONE`、LA、未知或不同纵轴单位仍不进入成功路径；后两类不会读取 `ΔY`。结果不证明光标显示位置、A/B 与波形的视觉对应关系、跨 source 单位换算或测量准确度。
@@ -150,6 +154,6 @@ Core 将 start、stop 和完成式 SINGLE 绑定为同一 `scope.acquisition_con
 
 ## 验收范围与未覆盖项
 
-本记录证明当前屏幕 `DEF + LF` 1000 点、记录的停止态 `MAX/DMAX + LF` 10000 点、已停止 MAIN `DEF + BYTE` 的单／双通道 capture 每通道 1000 点、受限 BMP24→PNG screenshot V2，以及前面板 `TRAC + CHAN2/CHAN2` 的只读 cursor V2。所有结论均限于记录的型号、固件、transport、memory depth 与步骤，不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算、截图视觉或测量准确度证明。
+本记录证明当前屏幕 `DEF + LF` 1000 点、记录的停止态 `MAX/DMAX + LF` 10000 点、已停止 MAIN `DEF + BYTE` 的单／双通道 capture 每通道 1000 点、受限 BMP24→PNG screenshot V2，以及前面板 `MAN + TIME + CHAN1/CHAN1` 和 `TRAC + CHAN2/CHAN2` 的只读 cursor V2。所有结论均限于记录的型号、固件、transport、memory depth 与步骤，不构成跨量程、跨时基、跨探头条件的通用 X/Y 换算、截图视觉或测量准确度证明。
 
 运行态 MAX、其他 memory depth、capture 点数、时基、通道组合、transport、吞吐、timeout、一般波形准确度，以及 screenshot 的其他屏幕状态／最大 payload／非 BMP24 返回格式仍无实机结论。平均采集、record/replay、数字 waveform 及其他未声明 capability 的边界不因本次验收改变。

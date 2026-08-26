@@ -62,7 +62,7 @@ descriptor 导入不得打开 transport、扫描端口、发送 SCPI 或创建�
 
 `scope.math_metadata` 只接受已显示的 MATH1～MATH4 和 MAIN 时基。driver 保存六项 waveform 传输状态，按手册要求先切换到 NORM，再选择 MATH 源与 BYTE 格式，只查询 preamble 后恢复原状态；不读取波形数据。记录的 MATH1 调用已返回 1000 点、有限轴和 8 位 BYTE 元数据，并完成六字段最终恢复复核。返回的 `values_per_sample` 仍为未知；数学运算内容、其他槽位／operator 的轴语义和 FFT 精度不由该能力推断。
 
-`scope.cursor_readout` 保留兼容接口，只读取调用方确认已配置的全局手动光标，公共 `cursor_index` 固定为 `1`。`scope.cursor_readout_v2` 使用全局寻址，要求 `cursor_index=None`；除手动 `TIME/AMPL` 外，还读取预配置的 `TRAC` 追踪光标。追踪路径仅接受 `MAIN/ROLL` 时基和 `CHAN1`～`CHAN4`，读取 A/B source、时基、通道幅度单位和 A/B/差值。X 值为秒、`1/ΔX` 为 Hz；Y 值保留设备报告的 `V`、`A` 或 `W` source unit。仅当 A/B 纵轴单位相同且已知时才读取 `ΔY`，否则将其标为 not applicable。当前实机的 `TRAC + CHAN2/CHAN2` 返回全部有限读数与 `V` 纵轴单位；driver 不移动或重配光标。Math source、XY、测量模式、`NONE`、LA 和未知或不同的纵轴单位保持 fail closed，光标读数准确度仍未验证。
+`scope.cursor_readout` 保留兼容接口，只读取调用方确认已配置的全局手动光标，公共 `cursor_index` 固定为 `1`。`scope.cursor_readout_v2` 使用全局寻址，要求 `cursor_index=None`；除手动 `TIME/AMPL` 外，还读取预配置的 `TRAC` 追踪光标。公开实机的 `MAN + TIME + CHAN1/CHAN1` 已返回有限 X A/B、`ΔX` 与 `1/ΔX`，单位分别为秒和 Hz。追踪路径仅接受 `MAIN/ROLL` 时基和 `CHAN1`～`CHAN4`，读取 A/B source、时基、通道幅度单位和 A/B/差值；当前 `TRAC + CHAN2/CHAN2` 返回全部有限读数与 `V` 纵轴单位。仅当 A/B 纵轴单位相同且已知时才读取 `ΔY`，否则将其标为 not applicable。driver 不移动或重配光标。Math source、XY、测量模式、`NONE`、LA 和未知或不同的纵轴单位保持 fail closed，光标读数准确度仍未验证。
 
 `scope.measurement_statistics_v2` 覆盖手册列出的统计 item，使用规范化的大写 item token 和显式 `CHAN1`～`CHAN4`、`MATH1`～`MATH4` source；`D0`～`D15` 仅接受手册明确允许的周期、频率、宽度、占空比、延时和相位项。延时与相位项必须给出两个 source，其他 item 必须给出一个 source。driver 只查询 CURRENT、AVERages、DEViation、MINimum、MAXimum 与 CNT，不发送统计配置、清零或显示写入。受控实机已确认 `VPP,CHAN1` 与 `VPP,CHAN2` 的 6 个数值字段和 `CNT=1000` 可读取；设备既有统计历史未被修改，因此平均、标准差、最小值和最大值不作为信号准确度或统计窗口语义的证据。legacy `scope.measurement_statistics` 继续不声明。
 
