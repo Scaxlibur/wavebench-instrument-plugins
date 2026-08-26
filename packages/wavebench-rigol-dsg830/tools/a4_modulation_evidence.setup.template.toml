@@ -1,0 +1,27 @@
+# A4 本地证据配置模板。
+#
+# 此文件只记录人工确认的安全事实，不得包含仪器资源、序列号、原始响应或波形。
+# 复制到被忽略的私有路径后，与独立的只读 RF 配置一起使用。
+#
+# 每次运行只验证一种内部 Sine 调制模式，且 RF 输出必须从开始到结束保持 OFF。
+# 这不是「调制开启后 RF 输出」的验收；当前生产 output 合同仍要求调制关闭。
+
+[a4_evidence]
+# A4 仅允许 DSG830 的 RF 主输出端口。
+port_id = "rf_out"
+
+# 保留为已人工核对的 RF 路径事实。A4 不会打开 RF 输出，不能从这一字段推导输出授权。
+actual_termination_ohm = 50
+
+# 已确认时显式写入空列表；有选件时使用已排序、无重复的安全标识。
+installed_options = []
+
+# 仅允许 "am"、"fm" 或 "pm"。下方只能保留与所选模式匹配的一个值字段。
+modulation_kind = "am"
+depth_percent = 25
+internal_frequency_hz = 1000
+
+# AM：depth_percent = 0..100
+# FM：frequency_deviation_hz = 0.1..1000000
+# PM：phase_deviation_rad = 0..5
+# 三种模式的 internal_frequency_hz 均为 10..100000。
