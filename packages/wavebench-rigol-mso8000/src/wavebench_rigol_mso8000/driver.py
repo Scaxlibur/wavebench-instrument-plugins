@@ -93,6 +93,8 @@ from .parsers import (
     parse_positive_scientific_integer,
     parse_rigol_waveform_preamble,
     parse_screenshot_image_type,
+    parse_tracking_cursor_source,
+    parse_tracking_cursor_source_unit,
     parse_timebase_mode,
     parse_trigger_sweep,
     parse_trigger_status,
@@ -149,6 +151,15 @@ _CURSOR_TIME_UNITS = {
 _CURSOR_VERTICAL_UNITS = {
     "SOUR": "source",
     "PERC": "percent",
+}
+_TRACKING_CURSOR_ANALOG_SOURCES = frozenset(
+    f"CHAN{index}" for index in _ANALOG_CHANNELS
+)
+_TRACKING_CURSOR_SOURCE_UNITS = {
+    "VOLT": "V",
+    "AMP": "A",
+    "WATT": "W",
+    "UNKN": None,
 }
 _FFT_STATUS_V2_UNAVAILABLE_FIELDS = (
     "average_complete",
@@ -2165,9 +2176,12 @@ class MSO8104Scope:
         with self._io_lock:
             self._require_open()
             mode = parse_cursor_mode(self.transport.query(":CURSor:MODE?"))
+            if mode == "TRAC":
+                return self._read_tracking_cursor_readout_v2(mode)
             if mode != "MAN":
                 raise ConfigError(
-                    "MSO8104 cursor readout V2 supports only the preconfigured manual mode; "
+                    "MSO8104 cursor readout V2 supports only preconfigured manual or "
+                    "tracking modes; "
                     f"current mode is {mode}"
                 )
             cursor_type = parse_manual_cursor_type(
@@ -2286,6 +2300,124 @@ class MSO8104Scope:
                     "inverse_x_delta",
                 ),
             )
+
+    def _read_tracking_cursor_readout_v2(
+        self,
+        mode: str,
+    ) -> ScopeCursorReadoutV2:
+        source_a = parse_tracking_cursor_source(
+            self.transport.query(":CURSor:TRACk:SOURce1?")
+        )
+        source_b = parse_tracking_cursor_source(
+            self.transport.query(":CURSor:TRACk:SOURce2?")
+        )
+        if source_a == "NONE" or source_b == "NONE":
+            raise ConfigError(
+                "MSO8104 tracking cursor readout V2 requires non-NONE sources, "
+                f"got {source_a} and {source_b}"
+            )
+        if (
+            source_a not in _TRACKING_CURSOR_ANALOG_SOURCES
+            or source_b not in _TRACKING_CURSOR_ANALOG_SOURCES
+        ):
+            raise ConfigError(
+                "MSO8104 tracking cursor readout V2 currently supports only analog "
+                f"channel sources, got {source_a} and {source_b}"
+            )
+        timebase_mode = parse_timebase_mode(self.transport.query(":TIMebase:MODE?"))
+        if timebase_mode not in {"MAIN", "ROLL"}:
+            raise ConfigError(
+                "MSO8104 tracking cursor readout V2 requires MAIN or ROLL timebase "
+                f"mode, got {timebase_mode}"
+            )
+        source_a_unit = self._read_tracking_cursor_source_unit(source_a)
+        source_b_unit = (
+            source_a_unit
+            if source_b == source_a
+            else self._read_tracking_cursor_source_unit(source_b)
+        )
+        x_a = ScopeCursorQuantity(
+            parse_finite_float(
+                self.transport.query(":CURSor:TRACk:AXValue?"),
+                field="tracking cursor A X value",
+            ),
+            "s",
+        )
+        x_b = ScopeCursorQuantity(
+            parse_finite_float(
+                self.transport.query(":CURSor:TRACk:BXValue?"),
+                field="tracking cursor B X value",
+            ),
+            "s",
+        )
+        x_delta = ScopeCursorQuantity(
+            parse_finite_float(
+                self.transport.query(":CURSor:TRACk:XDELta?"),
+                field="tracking cursor X delta",
+            ),
+            "s",
+        )
+        inverse_x_delta = ScopeCursorQuantity(
+            parse_finite_float(
+                self.transport.query(":CURSor:TRACk:IXDelta?"),
+                field="tracking cursor inverse X delta",
+            ),
+            "Hz",
+        )
+        y_a = ScopeCursorQuantity(
+            parse_finite_float(
+                self.transport.query(":CURSor:TRACk:AYValue?"),
+                field="tracking cursor A Y value",
+            ),
+            "source",
+            source_a_unit,
+        )
+        y_b = ScopeCursorQuantity(
+            parse_finite_float(
+                self.transport.query(":CURSor:TRACk:BYValue?"),
+                field="tracking cursor B Y value",
+            ),
+            "source",
+            source_b_unit,
+        )
+        y_delta = (
+            None
+            if source_a_unit is None or source_a_unit != source_b_unit
+            else ScopeCursorQuantity(
+                parse_finite_float(
+                    self.transport.query(":CURSor:TRACk:YDELta?"),
+                    field="tracking cursor Y delta",
+                ),
+                "source",
+                source_a_unit,
+            )
+        )
+        return ScopeCursorReadoutV2(
+            cursor_index=None,
+            mode=mode,
+            function="TRACK",
+            source_a=source_a,
+            source_b=source_b,
+            x_a=x_a,
+            x_b=x_b,
+            x_delta=x_delta,
+            inverse_x_delta=inverse_x_delta,
+            y_a=y_a,
+            y_b=y_b,
+            y_delta=y_delta,
+            not_applicable_fields=(
+                ("cursor_index",)
+                if y_delta is not None
+                else ("cursor_index", "y_delta")
+            ),
+        )
+
+    def _read_tracking_cursor_source_unit(self, source: str) -> str | None:
+        channel = source.removeprefix("CHAN")
+        token = parse_tracking_cursor_source_unit(
+            self.transport.query(f":CHANnel{channel}:UNITs?")
+        )
+        return _TRACKING_CURSOR_SOURCE_UNITS[token]
 
     @staticmethod
     def _validate_measurement_statistics_request(

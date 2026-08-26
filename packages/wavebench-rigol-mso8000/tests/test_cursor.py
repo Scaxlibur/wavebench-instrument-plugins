@@ -26,6 +26,18 @@ class CursorTransport:
             ":CURSor:MANual:AYValue?": "0.125",
             ":CURSor:MANual:BYValue?": "-0.125",
             ":CURSor:MANual:YDELta?": "-0.25",
+            ":CURSor:TRACk:SOURce1?": "CHAN1",
+            ":CURSor:TRACk:SOURce2?": "CHAN2",
+            ":TIMebase:MODE?": "MAIN",
+            ":CHANnel1:UNITs?": "VOLT",
+            ":CHANnel2:UNITs?": "VOLT",
+            ":CURSor:TRACk:AXValue?": "-1.25e-6",
+            ":CURSor:TRACk:AYValue?": "0.125",
+            ":CURSor:TRACk:BXValue?": "1.25e-6",
+            ":CURSor:TRACk:BYValue?": "-0.125",
+            ":CURSor:TRACk:XDELta?": "2.5e-6",
+            ":CURSor:TRACk:YDELta?": "-0.25",
+            ":CURSor:TRACk:IXDelta?": "4e5",
             **(responses or {}),
         }
         self.queries: list[str] = []
@@ -224,6 +236,219 @@ def test_cursor_readout_v2_preserves_vertical_units(
     ]
 
 
+@pytest.mark.parametrize("timebase_mode", ["MAIN", "ROLL"])
+def test_cursor_readout_v2_reads_global_tracking_values(
+    timebase_mode: str,
+) -> None:
+    transport = CursorTransport(
+        {
+            ":CURSor:MODE?": "TRAC",
+            ":TIMebase:MODE?": timebase_mode,
+        }
+    )
+
+    readout = MSO8104Scope(transport=transport).get_cursor_readout_v2(
+        None,
+        configured_cursor=True,
+    )
+
+    assert readout == ScopeCursorReadoutV2(
+        cursor_index=None,
+        mode="TRAC",
+        function="TRACK",
+        source_a="CHAN1",
+        source_b="CHAN2",
+        x_a=ScopeCursorQuantity(-1.25e-6, "s"),
+        x_b=ScopeCursorQuantity(1.25e-6, "s"),
+        x_delta=ScopeCursorQuantity(2.5e-6, "s"),
+        inverse_x_delta=ScopeCursorQuantity(4e5, "Hz"),
+        y_a=ScopeCursorQuantity(0.125, "source", "V"),
+        y_b=ScopeCursorQuantity(-0.125, "source", "V"),
+        y_delta=ScopeCursorQuantity(-0.25, "source", "V"),
+        not_applicable_fields=("cursor_index",),
+    )
+    assert transport.queries == [
+        ":CURSor:MODE?",
+        ":CURSor:TRACk:SOURce1?",
+        ":CURSor:TRACk:SOURce2?",
+        ":TIMebase:MODE?",
+        ":CHANnel1:UNITs?",
+        ":CHANnel2:UNITs?",
+        ":CURSor:TRACk:AXValue?",
+        ":CURSor:TRACk:BXValue?",
+        ":CURSor:TRACk:XDELta?",
+        ":CURSor:TRACk:IXDelta?",
+        ":CURSor:TRACk:AYValue?",
+        ":CURSor:TRACk:BYValue?",
+        ":CURSor:TRACk:YDELta?",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("channel_unit", "source_unit"),
+    [("AMP", "A"), ("WATT", "W")],
+)
+def test_cursor_readout_v2_reads_one_tracking_source_unit_for_matching_sources(
+    channel_unit: str,
+    source_unit: str,
+) -> None:
+    transport = CursorTransport(
+        {
+            ":CURSor:MODE?": "TRAC",
+            ":CURSor:TRACk:SOURce1?": "CHAN2",
+            ":CURSor:TRACk:SOURce2?": "CHAN2",
+            ":CHANnel2:UNITs?": channel_unit,
+        }
+    )
+
+    readout = MSO8104Scope(transport=transport).get_cursor_readout_v2(
+        None,
+        configured_cursor=True,
+    )
+
+    assert readout.y_a == ScopeCursorQuantity(0.125, "source", source_unit)
+    assert readout.y_b == ScopeCursorQuantity(-0.125, "source", source_unit)
+    assert readout.y_delta == ScopeCursorQuantity(-0.25, "source", source_unit)
+    assert transport.queries.count(":CHANnel2:UNITs?") == 1
+    assert len(transport.queries) == 12
+
+
+@pytest.mark.parametrize(
+    ("source_a_unit", "source_b_unit"),
+    [("AMP", "VOLT"), ("UNKN", "UNKN")],
+)
+def test_cursor_readout_v2_marks_tracking_y_delta_not_applicable_without_common_unit(
+    source_a_unit: str,
+    source_b_unit: str,
+) -> None:
+    transport = CursorTransport(
+        {
+            ":CURSor:MODE?": "TRAC",
+            ":CHANnel1:UNITs?": source_a_unit,
+            ":CHANnel2:UNITs?": source_b_unit,
+        }
+    )
+
+    readout = MSO8104Scope(transport=transport).get_cursor_readout_v2(
+        None,
+        configured_cursor=True,
+    )
+
+    assert readout.y_delta is None
+    assert readout.not_applicable_fields == ("cursor_index", "y_delta")
+    assert ":CURSor:TRACk:YDELta?" not in transport.queries
+
+
+@pytest.mark.parametrize(
+    ("source_a", "source_b", "expected_message"),
+    [
+        ("NONE", "CHAN1", "non-NONE"),
+        ("CHAN1", "MATH1", "analog channel"),
+        ("LA", "CHAN1", "tracking cursor source"),
+    ],
+)
+def test_cursor_readout_v2_rejects_unsupported_tracking_sources_before_values(
+    source_a: str,
+    source_b: str,
+    expected_message: str,
+) -> None:
+    transport = CursorTransport(
+        {
+            ":CURSor:MODE?": "TRAC",
+            ":CURSor:TRACk:SOURce1?": source_a,
+            ":CURSor:TRACk:SOURce2?": source_b,
+        }
+    )
+
+    with pytest.raises((ConfigError, DataError), match=expected_message):
+        MSO8104Scope(transport=transport).get_cursor_readout_v2(
+            None,
+            configured_cursor=True,
+        )
+
+    assert ":TIMebase:MODE?" not in transport.queries
+    assert not any("Value?" in command or "DELta?" in command for command in transport.queries)
+
+
+@pytest.mark.parametrize("timebase_mode", ["XY", "BROKEN"])
+def test_cursor_readout_v2_rejects_unsupported_tracking_timebase_before_values(
+    timebase_mode: str,
+) -> None:
+    transport = CursorTransport(
+        {
+            ":CURSor:MODE?": "TRAC",
+            ":TIMebase:MODE?": timebase_mode,
+        }
+    )
+
+    with pytest.raises((ConfigError, DataError)):
+        MSO8104Scope(transport=transport).get_cursor_readout_v2(
+            None,
+            configured_cursor=True,
+        )
+
+    assert transport.queries == [
+        ":CURSor:MODE?",
+        ":CURSor:TRACk:SOURce1?",
+        ":CURSor:TRACk:SOURce2?",
+        ":TIMebase:MODE?",
+    ]
+
+
+@pytest.mark.parametrize("invalid_value", ["nan", "inf", "-inf", ""])
+def test_cursor_readout_v2_rejects_invalid_tracking_values_without_continuing(
+    invalid_value: str,
+) -> None:
+    transport = CursorTransport(
+        {
+            ":CURSor:MODE?": "TRAC",
+            ":CURSor:TRACk:AXValue?": invalid_value,
+        }
+    )
+
+    with pytest.raises(DataError, match="tracking cursor A X value"):
+        MSO8104Scope(transport=transport).get_cursor_readout_v2(
+            None,
+            configured_cursor=True,
+        )
+
+    assert transport.queries == [
+        ":CURSor:MODE?",
+        ":CURSor:TRACk:SOURce1?",
+        ":CURSor:TRACk:SOURce2?",
+        ":TIMebase:MODE?",
+        ":CHANnel1:UNITs?",
+        ":CHANnel2:UNITs?",
+        ":CURSor:TRACk:AXValue?",
+    ]
+
+
+@pytest.mark.parametrize("invalid_unit", ["", "OHM", "BROKEN"])
+def test_cursor_readout_v2_rejects_invalid_tracking_source_unit_before_values(
+    invalid_unit: str,
+) -> None:
+    transport = CursorTransport(
+        {
+            ":CURSor:MODE?": "TRAC",
+            ":CHANnel1:UNITs?": invalid_unit,
+        }
+    )
+
+    with pytest.raises(DataError, match="tracking cursor source unit"):
+        MSO8104Scope(transport=transport).get_cursor_readout_v2(
+            None,
+            configured_cursor=True,
+        )
+
+    assert transport.queries == [
+        ":CURSor:MODE?",
+        ":CURSor:TRACk:SOURce1?",
+        ":CURSor:TRACk:SOURce2?",
+        ":TIMebase:MODE?",
+        ":CHANnel1:UNITs?",
+    ]
+
+
 @pytest.mark.parametrize(
     ("cursor_index", "configured_cursor"),
     [(1, True), (0, True), (None, False), (None, 1)],
@@ -276,7 +501,7 @@ def test_cursor_readout_v2_rejects_unsupported_manual_states_before_values(
     assert not any("Value?" in command or "DELta?" in command for command in transport.queries)
 
 
-@pytest.mark.parametrize("mode", ["TRAC", "XY", "MEAS", "BROKEN"])
+@pytest.mark.parametrize("mode", ["XY", "MEAS", "BROKEN"])
 def test_cursor_readout_v2_rejects_unsupported_or_invalid_mode_before_manual_queries(
     mode: str,
 ) -> None:

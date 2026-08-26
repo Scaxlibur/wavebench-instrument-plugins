@@ -156,7 +156,7 @@ def test_descriptor_is_executable_v2_metadata_without_io() -> None:
     cursor_profile = descriptor.scope_extensions.cursor_readout_profile_v2
     assert isinstance(cursor_profile, ScopeCursorReadoutProfileV2)
     assert cursor_profile.addressing == "global"
-    assert cursor_profile.max_queries == 9
+    assert cursor_profile.max_queries == 13
     assert cursor_profile.readable_fields == (
         "source_a",
         "source_b",

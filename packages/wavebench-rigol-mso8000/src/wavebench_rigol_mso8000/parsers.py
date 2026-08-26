@@ -362,6 +362,28 @@ def parse_cursor_source(response: str) -> str:
     )
 
 
+def parse_tracking_cursor_source(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="tracking cursor source",
+        allowed=frozenset(
+            {
+                *(f"CHAN{index}" for index in range(1, 5)),
+                *(f"MATH{index}" for index in range(1, 5)),
+                "NONE",
+            }
+        ),
+    )
+
+
+def parse_tracking_cursor_source_unit(response: str) -> str:
+    return _parse_enum(
+        response,
+        field="tracking cursor source unit",
+        allowed=frozenset({"VOLT", "AMP", "WATT", "UNKN"}),
+    )
+
+
 def parse_cursor_time_unit(response: str) -> str:
     return _parse_enum(
         response,

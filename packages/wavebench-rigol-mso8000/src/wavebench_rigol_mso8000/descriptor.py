@@ -112,7 +112,7 @@ _CURSOR_READOUT_PROFILE_V2 = ScopeCursorReadoutProfileV2(
         "y_delta",
     ),
     addressing="global",
-    max_queries=9,
+    max_queries=13,
 )
 _MEASUREMENT_STATISTICS_PROFILE_V2 = ScopeMeasurementStatisticsProfileV2(
     selector_modes=("item_sources",),
