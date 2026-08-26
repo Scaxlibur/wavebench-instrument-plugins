@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
@@ -563,7 +564,9 @@ installed_options = ["OPT01"]
     monkeypatch.syspath_prepend(str(PACKAGE_ROOT / "src"))
     from wavebench_rigol_dsg830 import descriptor as source_descriptor
 
-    descriptor = source_descriptor()
+    # A1 is a historical, pre-promotion harness. Exercise its real Core factory
+    # path with the descriptor shape that existed while evidence was collected.
+    descriptor = replace(source_descriptor(), capabilities=("rf_source.idn",))
 
     def validate_reference(reference: str, *, expected_kind: str) -> None:
         if expected_kind == "rf_source":

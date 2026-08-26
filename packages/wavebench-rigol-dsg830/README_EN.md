@@ -10,10 +10,10 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 Version `0.2.0` completes the offline RF M0 migration: its descriptor uses `kind="rf_source"`, declares one
 `rf_out` port with static limits and a 50-ohm dBm reference, and ships a strict read-only snapshot parser.
 
-The production descriptor still declares only `rf_source.idn`. It does not declare `rf_source.snapshot` until
-A1 hardware evidence is complete, so Core Service, CLI, and run-plan routes reject a snapshot before opening a
-transport. The parser exists only for offline command review and fake-transport tests; it does not prove the
-live instrument's RF output, frequency, or power state.
+A1 read-only hardware evidence has completed and been reviewed. The production descriptor now declares
+`rf_source.idn` and `rf_source.snapshot`, so Core Service, CLI, and the `rf_source.status` run step may read a
+snapshot through a configured `read_only` session. This capability observes current state only; it does not
+authorize live RF-output, frequency, or power control.
 
 This package declares no error queue, CW write, RF-output control, modulation, Pulse, Sweep, trigger, or
 arbitrary SCPI passthrough. Each later capability remains behind its A1–A5 evidence gate.
@@ -54,10 +54,9 @@ The RIGOL download page records version `V1.0` and date `2019-09-30`. Its introd
 DSG800 series includes DSG830 and DSG815 and uses DSG830 as the default command example. Do not add the
 original PDF or converted copy to Git or a distribution.
 
-## Current configuration (identity only)
+## Current configuration (read-only identity and status)
 
-This example uses an RFC 5737 documentation address and starts with `read_only` access for the current seed
-identity query:
+This example uses an RFC 5737 documentation address and uses `read_only` access for identity and status queries:
 
 ```toml
 [rf_source]
@@ -66,7 +65,7 @@ resource = "TCPIP::192.0.2.83::INSTR"
 access = "read_only"
 ```
 
-This `[rf_source]` configuration is only for the production descriptor's `rf_source.idn`. It is outside the
+This `[rf_source]` configuration is for the production descriptor's `rf_source.idn` and `rf_source.snapshot`. It is outside the
 normal source Vpp, channel, and run-plan workflow. Future energy-related capabilities also require complete
 per-`port_id` safety configuration and a physical-termination declaration; the package never infers actual
 termination from a connector label.
@@ -76,8 +75,8 @@ termination from a connector label.
 - Descriptor import does not create a transport, scan ports, or send SCPI.
 - The factory opens only the configured transport through `DriverContext`.
 - Default tests use fake transport only and never connect to hardware.
-- The snapshot parser issues only `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`,
-  `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`; the production capability does not expose that path yet.
+- The snapshot path issues only `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`,
+  `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`; A1 exposes this read-only path as a production capability.
 - The plugin does not reset the device or change RF output, power, frequency, trigger, modulation, or sweep.
 - Hardware testing requires separate authorization and a reviewed resource, firmware, terminator, RF-output
   state, safety limit, and restoration procedure.

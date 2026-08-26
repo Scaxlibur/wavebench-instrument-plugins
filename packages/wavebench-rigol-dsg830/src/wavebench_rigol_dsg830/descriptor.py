@@ -24,8 +24,8 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="RIGOL Technologies",
         models=("DSG830",),
         aliases=(),
-        # A1 hardware evidence is required before production may declare snapshot.
-        capabilities=("rf_source.idn",),
+        # A1 read-only evidence passed; RF write capabilities remain gated.
+        capabilities=("rf_source.idn", "rf_source.snapshot"),
         idn_patterns=("RIGOL TECHNOLOGIES,DSG830",),
         backends=("pyvisa",),
         option_specs=(),
@@ -33,7 +33,7 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "RIGOL DSG830 RF signal-source driver; production descriptor exposes identity "
-            "only until A1 snapshot evidence is recorded."
+            "and a read-only snapshot. RF write capabilities remain gated."
         ),
         wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",

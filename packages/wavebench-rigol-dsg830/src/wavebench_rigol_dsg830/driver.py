@@ -1,9 +1,9 @@
 """Read-only M0 driver for the RIGOL DSG830 RF signal generator.
 
-The public production descriptor declares only ``rf_source.idn`` until A1
-hardware evidence exists.  ``get_rf_snapshot()`` is intentionally present for
-strict offline parser tests and is not production-reachable through Core before
-that capability promotion.
+A1 hardware evidence authorizes the public ``rf_source.snapshot`` capability.
+``get_rf_snapshot()`` remains observational only: it performs the fixed query
+set and does not configure frequency or power, switch RF output, or control
+modulation, Pulse, Sweep, trigger, or arbitrary SCPI.
 """
 
 from __future__ import annotations

@@ -13,7 +13,7 @@ def _descriptor_module():
     return importlib.import_module("wavebench_rigol_dsg830.descriptor")
 
 
-def test_descriptor_declares_only_production_identity_contract() -> None:
+def test_descriptor_declares_production_read_only_contract() -> None:
     descriptor = _descriptor_module().descriptor()
 
     assert descriptor.driver_id == "rigol.dsg830"
@@ -22,7 +22,7 @@ def test_descriptor_declares_only_production_identity_contract() -> None:
     assert descriptor.manufacturer == "RIGOL Technologies"
     assert descriptor.models == ("DSG830",)
     assert descriptor.aliases == ()
-    assert descriptor.capabilities == ("rf_source.idn",)
+    assert descriptor.capabilities == ("rf_source.idn", "rf_source.snapshot")
     assert descriptor.idn_patterns == ("RIGOL TECHNOLOGIES,DSG830",)
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb")

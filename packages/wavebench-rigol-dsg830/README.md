@@ -9,7 +9,7 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 版本 `0.2.0` 已完成 RF M0 的离线迁移：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的只读 snapshot parser。
 
-production descriptor 仍只声明 `rf_source.idn`。A1 实机证据完成前，它不声明 `rf_source.snapshot`；因此 Core Service、CLI 和 run plan 会在打开 transport 前拒绝 snapshot。driver 内的 parser 只用于离线命令审计与 fake transport 测试，不能据此推导真实仪器的 RF 输出、频率或功率状态。
+A1 只读实机证据已经完成并复核。production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`，因此 Core Service、CLI 和 `rf_source.status` run step 可以在已配置的 `read_only` session 中读取快照。该能力只观察当前状态，不授权真实仪器的 RF 输出、频率或功率控制。
 
 本包不声明错误队列、CW 写入、RF 输出控制、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。后续 capability 必须经过对应的 A1–A5 实机证据门。
 
@@ -45,9 +45,9 @@ DSG800_ProgrammingGuide_EN.md
 普源官网将其列为 DSG800 系列的 Programming Guide，页面记录版本 `V1.0`、日期 `2019-09-30`。
 手册前言说明该系列包含 DSG830 和 DSG815，且命令说明默认以 DSG830 为例。原始 PDF 和转换稿均不得进入 Git 或发行包。
 
-## 当前配置（仅身份查询）
+## 当前配置（只读身份和状态）
 
-以下示例使用 RFC 5737 文档保留地址，并以 `read_only` 权限执行当前种子的身份查询：
+以下示例使用 RFC 5737 文档保留地址，并以 `read_only` 权限执行身份查询和状态快照：
 
 ```toml
 [rf_source]
@@ -56,14 +56,14 @@ resource = "TCPIP::192.0.2.83::INSTR"
 access = "read_only"
 ```
 
-该 `[rf_source]` 配置只用于 production descriptor 的 `rf_source.idn`。它不属于普通 source 的 Vpp、channel 或 run plan 工作流。未来能量相关 capability 还要求按 `port_id` 提供完整安全配置和真实端接声明；本包不会从连接器标签推断实际端接。
+该 `[rf_source]` 配置用于 production descriptor 的 `rf_source.idn` 与 `rf_source.snapshot`。它不属于普通 source 的 Vpp、channel 或 run plan 工作流。未来能量相关 capability 还要求按 `port_id` 提供完整安全配置和真实端接声明；本包不会从连接器标签推断实际端接。
 
 ## 安全边界
 
 - descriptor 导入不创建 transport、不扫描端口、不发送 SCPI。
 - factory 只通过 `DriverContext` 打开当前配置的 transport。
 - 默认测试只使用 fake transport，不连接真实仪器。
-- snapshot parser 仅发送 `*IDN?`、`:FREQ?`、`:LEV?`、`:OUTP?`、`:MOD:STAT?`、`:PULM:STAT?`、`:SWE:STAT?` 与 `:STAT:QUES:POW:COND?`；production capability 尚未开放该路径。
+- snapshot 仅发送 `*IDN?`、`:FREQ?`、`:LEV?`、`:OUTP?`、`:MOD:STAT?`、`:PULM:STAT?`、`:SWE:STAT?` 与 `:STAT:QUES:POW:COND?`；A1 已使这条只读路径成为 production capability。
 - 不执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、RF 输出状态、安全限制和恢复方式。
 

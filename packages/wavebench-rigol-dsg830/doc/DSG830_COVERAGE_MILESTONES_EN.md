@@ -7,7 +7,7 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 ## Target model and evidence rules
 
 - `DSG830` is the only registered model. The DSG800 manual also covers DSG815, but that does not declare DSG815 compatibility.
-- `0.1.0` is the historical transitional `kind="source"`, `source.idn` seed. Current `0.2.0` has migrated to `kind="rf_source"`, but its production descriptor still declares only `rf_source.idn`.
+- `0.1.0` is the historical transitional `kind="source"`, `source.idn` seed. Current `0.2.0` has migrated to `kind="rf_source"`. After A1 completion, its production descriptor declares `rf_source.idn` and `rf_source.snapshot`.
 - Offline success proves parser, SCPI mapping, fake transport, and packaging boundaries only; it cannot promote a production descriptor capability.
 - Production capabilities are promoted one A1–A5 item at a time, with recorded model, firmware, option, port, termination, and final RF-OFF state.
 - Vendor-local material, real resources, serial numbers, raw responses, waveforms, screenshots, and experiment logs do not enter public documentation or artifacts.
@@ -17,12 +17,12 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | Stage | Status | Scope |
 | --- | --- | --- |
 | Seed | Offline complete | `*IDN?`, zero-I/O descriptor, packaging tests, one entry point, and vendor-local exclusion. |
-| M0 | Offline complete; awaiting A1 | `rf_source`, `rf_out` topology, and a strict snapshot parser; production remains identity only. |
+| M0 | Offline complete; A1 complete | `rf_source`, `rf_out` topology, a strict snapshot parser, and production read-only status. |
 | M1 | Not started | OFF-only CW frequency/dBm configuration with independent readback. |
 | M2 | Not started | RF ON/OFF, safety preflight, and one-shot OFF recovery. |
 | M3 | Not started | Declared internal-sine AM/FM/PM subset. |
 | M4 | Not started | Declared Pulse and frequency-only Step Sweep subset. |
-| A1–A5 | Not started | Separately authorized controlled hardware evidence. |
+| A1–A5 | A1 complete; A2–A5 not started | A1 is read-only snapshot evidence; the remaining items need separately authorized controlled hardware evidence. |
 
 ## Seed: historical package boundary
 
@@ -36,7 +36,7 @@ The prerequisite is met on the Core `0.8.25` development line: `rf_source` kind,
 
 The plugin has migrated its kind, capabilities, and config fields to `rf_source`; declares one `rf_out` port with `9 kHz–3 GHz`, `-110 dBm–20 dBm`, and a 50-ohm dBm reference; and adds a strict parser for `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`, `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`. Fake-transport tests cover every query, normal values, unknown values, malformed responses, and protection-bit mapping. The connector label is not treated as actual termination. The wheel dependency and descriptor gate are both `>=0.8.25,<0.9`.
 
-After offline M0, the production descriptor declares only `rf_source.idn` until A1. `rf_source.snapshot` waits for A1; later M1–M4 capabilities remain in fake descriptors or offline driver tests.
+A1 has completed and been reviewed, so the production descriptor now declares `rf_source.idn` and `rf_source.snapshot`. Later M1–M4 capabilities remain in fake descriptors or offline driver tests until their respective hardware evidence is obtained.
 
 ## M1–M4 and A1–A5
 
@@ -47,13 +47,13 @@ After offline M0, the production descriptor declares only `rf_source.idn` until 
 
 Every hardware acceptance needs separate authorization. An unknown final RF-OFF state fails acceptance and cannot promote any capability.
 
-### A1: package-specific read-only acceptance
+### A1: completed package-specific read-only acceptance
 
-A1 uses a one-shot, non-production local evidence harness. It must not temporarily alter the descriptor or use
-`rf-source status` to bypass the `rf_source.snapshot` gate. With an isolated TOML copy whose `[rf_source]` sets
+A1 used a one-shot, non-production local evidence harness and has been reviewed. It must not temporarily alter the descriptor or use
+`rf-source status` to bypass the then-current `rf_source.snapshot` gate. With an isolated TOML copy whose `[rf_source]` sets
 `access = "read_only"`, a guarded single session may query only `*IDN?`, `:FREQ?`, `:LEV?`,
 `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`, `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`. No retry, error queue,
-RF-output switch, setter, trigger, or network discovery is permitted.
+RF-output switch, setter, or trigger is permitted. The harness itself does not perform network discovery; if discovery is needed, it must happen before acceptance through a bounded, separately authorized process, then be manually reviewed into the isolated TOML without entering the evidence.
 
 Acceptance requires a successful parser, an explicitly OFF `rf_out`, a healthy closed session, and a guard audit
 showing `read_only` with zero write counters. Keep only a redacted typed snapshot and audit summary; never keep a
@@ -68,14 +68,4 @@ response without adding a query. Missing options, termination, or either runtime
 before the transport is opened; unavailable firmware fails the evidence after the query. This table must not infer
 actual termination from a connector label, scope coupling, or model name.
 
-The source checkout provides `tools/a1_snapshot_evidence.py`; it is excluded from both wheel and sdist. Run the
-non-connecting dry run first, then explicitly permit one query only after the configuration and wiring are reviewed:
-
-```bash
-python tools/a1_snapshot_evidence.py --config <private-a1.toml>
-python tools/a1_snapshot_evidence.py --config <private-a1.toml> \
-  --output <local-a1-evidence.json> --execute
-```
-
-The output must be a new local file. The script does not create directories or edit configuration, and it never
-prints a resource, full IDN, raw response, or command log.
+The source checkout retains `tools/a1_snapshot_evidence.py`, excluded from wheel and sdist, as the historical protocol and regression test. After the A1 promotion, it rejects a rerun with `production_snapshot_gate_changed` because the production descriptor now declares snapshot; it is not the current status-query entry point. The script does not create directories or edit configuration, and it never prints a resource, full IDN, raw response, or command log.
