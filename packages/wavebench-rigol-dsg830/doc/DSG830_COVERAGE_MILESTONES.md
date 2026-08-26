@@ -51,7 +51,7 @@ A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` �
 
 ## M1：OFF-only CW
 
-已开始实现已冻结的 `:FREQ`／`:LEV` 映射、一次写入和独立 readback。driver 的离线映射每次只发送一条 setter；Core 必须先确认目标 `rf_out` 为 OFF，并拒绝越界、活动调制／Pulse／Sweep、protection 异常或缺失安全关键状态的请求。完整 CLI、run step 与离线验收仍待完成。
+已开始实现已冻结的 `:FREQ`／`:LEV` 映射、一次写入和独立 readback。driver 的离线映射每次只发送一条 setter；Core CLI 已接入，但 production descriptor 仍缺 `rf_source.cw_configure`，因此不能对真实 DSG830 执行。Core 必须先确认目标 `rf_out` 为 OFF，并拒绝越界、活动调制／Pulse／Sweep、protection 异常或缺失安全关键状态的请求。run step 与完整离线验收仍待完成。
 
 M1 不开放 production CW capability。A3 的频率与 dBm 功率环回证据通过后，才可声明 `rf_source.cw_configure`。
 

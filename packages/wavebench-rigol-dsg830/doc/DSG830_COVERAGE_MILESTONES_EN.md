@@ -40,7 +40,7 @@ A1 has completed and been reviewed, so the production descriptor now declares `r
 
 ## M1–M4 and A1–A5
 
-- M1 now has an offline one-write `:FREQ`/`:LEV` mapping and independent readback contract while RF is OFF. Complete CLI, run-step, and offline acceptance work remains; A3 is still required before `rf_source.cw_configure` is production-declared.
+- M1 now has an offline one-write `:FREQ`/`:LEV` mapping, independent readback contract, and Core CLI while RF is OFF. The production descriptor still lacks `rf_source.cw_configure`, so the CLI cannot operate a live DSG830. Run-step and complete offline acceptance work remain; A3 is still required before `rf_source.cw_configure` is production-declared.
 - M2 is intended to add `:OUTP ON|OFF`, independent readback, per-port preflight, and at most one OFF recovery when session health permits. A2 is required before `rf_source.output` is production-declared.
 - M3 is limited to a bounded internal-sine AM/FM/PM subset. A4 is required before production modulation capability.
 - M4 is limited to declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.
