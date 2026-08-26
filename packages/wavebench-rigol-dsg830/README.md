@@ -9,11 +9,11 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射和 M2 离线输出映射：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV` 与 `:OUTP ON|OFF` 的单次 driver 映射。
 
-A1 只读实机证据已经完成并复核。production descriptor 现在只声明 `rf_source.idn` 和 `rf_source.snapshot`，因此 Core Service、CLI 和 `rf_source.status` run step 可以在已配置的 `read_only` session 中读取快照。M1／M2 的离线代码需要 fake descriptor 才能进入测试，不能授权真实仪器的 RF 输出、频率或功率控制。
+A1 只读证据和 A2 受控输出证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot` 和 `rf_source.output`。在 `read_write` session 且目标端口具备完整 safety 配置时，Core Service、CLI 和 run step 可以执行单端口 RF ON/OFF，并要求 fresh snapshot 与独立 readback。示例配置仍保持 `read_only`，不会默认开放输出。
 
-A2 的本地受控输出 harness、回归测试和不含资源地址的 setup 模板已经加入源码 checkout，但尚未执行实机证据。它仅在显式 `--execute` 时临时创建受限写 session；production descriptor 继续关闭 `rf_source.output`，直到取得并复核通过的最终 RF OFF 证据。
+A2 的本地受控输出 harness、回归测试和不含资源地址的 setup 模板保留在源码 checkout，作为本次验收协议的回归保护。证据已确认最终 RF OFF；harness 在 production descriptor 已声明 `rf_source.output` 后会拒绝重跑，避免用临时 descriptor 绕过正式 capability。M1 的 CW 写入仍需要 A3，不能通过本次 A2 验收授权。
 
-production descriptor 不声明错误队列、CW 写入、RF 输出控制、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。后续 capability 必须经过对应的 A1–A5 实机证据门。
+production descriptor 不声明错误队列、CW 写入、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；其余 capability 仍须经过对应的 A3–A5 实机证据门。
 
 ## 开发文档
 

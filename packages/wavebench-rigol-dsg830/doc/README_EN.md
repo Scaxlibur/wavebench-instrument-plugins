@@ -12,7 +12,7 @@ Current public documentation:
 
 The source checkout also provides a resource-free
 [`A2 local-evidence setup template`](../tools/a2_output_evidence.setup.template.toml). The A2 harness and
-regression tests are implemented, but hardware evidence is pending and the production descriptor still does not
-declare `rf_source.output`.
+regression tests completed the controlled hardware acceptance. The production descriptor now declares
+`rf_source.output`; CW and later RF write capabilities remain closed.
 
-Package `0.2.0` has completed the `rf_source` M0 read-only migration, M1 offline CW mapping, and M2 offline output transaction. A1 controlled read-only hardware evidence has completed and been reviewed, so the production descriptor declares only `rf_source.idn` and `rf_source.snapshot`; M1/M2 remain fake-descriptor-only and A2–A5 still gate every write capability independently. The milestone document defines the boundary and promotion gates.
+Package `0.2.0` has completed the `rf_source` M0 read-only migration, M1 offline CW mapping, and M2 output transaction. A1 and A2 controlled hardware evidence have completed and been reviewed, so the production descriptor declares `rf_source.idn`, `rf_source.snapshot`, and `rf_source.output`; M1 CW and M3/M4 capabilities remain gated by A3–A5. The milestone document defines the boundary and promotion gates.

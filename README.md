@@ -54,7 +54,7 @@ WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五�
 
 ## 孵化中插件
 
-- [`wavebench-rigol-dsg830`](packages/wavebench-rigol-dsg830/README.md)：RIGOL DSG830 射频信号发生器，canonical ID `rigol.dsg830`；`0.2.0` 已完成 `rf_source` M0 与 A1 只读快照证据，production descriptor 声明 `rf_source.idn` 和 `rf_source.snapshot`。RF 控制仍由 A2–A5 分别门控。完整边界见包内[里程碑](packages/wavebench-rigol-dsg830/doc/DSG830_COVERAGE_MILESTONES.md)。
+- [`wavebench-rigol-dsg830`](packages/wavebench-rigol-dsg830/README.md)：RIGOL DSG830 射频信号发生器，canonical ID `rigol.dsg830`；`0.2.0` 已完成 `rf_source` M0、A1 与 A2，production descriptor 声明 `rf_source.idn`、`rf_source.snapshot` 和受 safety 限制的 `rf_source.output`。CW 与后续 capability 仍由 A3–A5 分别门控。完整边界见包内[里程碑](packages/wavebench-rigol-dsg830/doc/DSG830_COVERAGE_MILESTONES.md)。
 
 ## 接口提案
 

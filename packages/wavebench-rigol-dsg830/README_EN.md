@@ -12,18 +12,19 @@ mapping: its descriptor uses `kind="rf_source"`, declares one `rf_out` port with
 static limits and a 50-ohm dBm reference, and ships a strict snapshot parser plus one-write
 `:FREQ`/`:LEV`/`:OUTP ON|OFF` driver mappings.
 
-A1 read-only hardware evidence has completed and been reviewed. The production descriptor declares only
-`rf_source.idn` and `rf_source.snapshot`, so Core Service, CLI, and the `rf_source.status` run step may read a
-snapshot through a configured `read_only` session. M1/M2 offline code requires a fake descriptor for tests and
-does not authorize live RF-output, frequency, or power control.
+A1 read-only evidence and A2 controlled-output evidence have completed and been reviewed. The production descriptor
+declares `rf_source.idn`, `rf_source.snapshot`, and `rf_source.output`. With a `read_write` session and complete
+per-port safety configuration, Core Service, CLI, and the run step may perform one-port RF ON/OFF with a fresh
+snapshot and independent readback. The example configuration remains `read_only` and does not enable output by default.
 
-The local A2 controlled-output harness, regression tests, and resource-free setup template are present in the
-source checkout, but hardware evidence has not yet been collected. It creates a bounded write session only with
-explicit `--execute`; the production descriptor keeps `rf_source.output` closed until passed evidence confirms
-the final RF-OFF state.
+The local A2 controlled-output harness, regression tests, and resource-free setup template remain in the source
+checkout as regression protection for this acceptance protocol. The evidence confirms final RF OFF; after the
+production descriptor declares `rf_source.output`, the harness refuses reruns so a temporary descriptor cannot bypass
+the production capability. M1 CW writes still require A3 and are not authorized by this A2 acceptance.
 
-The production descriptor declares no error queue, CW write, RF-output control, modulation, Pulse, Sweep,
-trigger, or arbitrary SCPI passthrough. Each later capability remains behind its A1–A5 evidence gate.
+The production descriptor declares no error queue, CW write, modulation, Pulse, Sweep, trigger, or arbitrary SCPI
+passthrough. `rf_source.output` covers only audited `rf_out` ON/OFF; every other capability remains behind its A3–A5
+evidence gate.
 
 ## Development documentation
 

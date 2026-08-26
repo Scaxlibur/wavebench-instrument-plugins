@@ -19,10 +19,10 @@
 | Seed | 离线完成 | `*IDN?`、无 I/O descriptor、包装测试、唯一 entry point 和 vendor-local 排除。 |
 | M0 | 离线完成；A1 已完成 | `rf_source`、`rf_out` topology、严格 snapshot parser 与生产只读状态查询。 |
 | M1 | 离线完成 | OFF-only CW 频率／dBm 功率配置与独立 readback；production capability 仍关闭。 |
-| M2 | 离线完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production capability 仍关闭。 |
+| M2 | 离线完成；A2 已完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production 已开放 `rf_source.output`。 |
 | M3 | 未开始 | 已声明的内部 Sine AM／FM／PM 子集。 |
 | M4 | 未开始 | 已声明的 Pulse 与 frequency-only Step Sweep 子集。 |
-| A1–A5 | A1 已完成；A2 harness 与回归测试已完成，实机未执行；A3–A5 未开始 | A1 为只读快照证据；其余为独立授权的受控实机证据。 |
+| A1–A5 | A1、A2 已完成；A3–A5 未开始 | A1 为只读快照证据；A2 仅提升端口级 RF 输出，其余仍为独立授权的受控实机证据。 |
 
 ## Seed：历史包边界
 
@@ -47,7 +47,7 @@ Seed 不包含错误队列、snapshot、频率、功率、RF 输出、调制、P
 - 已覆盖每条 query、正常值、未知值、格式异常和 protection 位映射的 fake transport 测试；
 - 已将 wheel 的 `Requires-Dist: wavebench` 与 descriptor 版本门同步为 `>=0.8.25,<0.9`。
 
-A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`。后续 M1–M4 capability 仍只能存在于 fake descriptor 或离线 driver 测试中，直到取得各自的实机证据。
+A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`。M2 的 A2 受控输出证据已另外完成并提升 `rf_source.output`；M1 的 CW capability 与 M3／M4 capability 仍只能存在于 fake descriptor 或离线 driver 测试中，直到取得各自的实机证据。
 
 ## M1：OFF-only CW
 
@@ -59,7 +59,7 @@ M1 不开放 production CW capability。A3 的频率与 dBm 功率环回证据�
 
 已完成已冻结的 `:OUTP ON|OFF` 映射、独立 readback 和端口级安全预检。DSG830 driver 的 `set_rf_output()` 每次只发送 `:OUTP ON` 或 `:OUTP OFF`，不查询、不重试、不自行 recovery；Core 负责 transaction、snapshot readback 和 session health。RF ON 必须同时满足完整 safety 配置、端接与 dBm 参考阻抗一致、频率与功率均在范围内、调制／Pulse／Sweep 已关闭、无 blocking protection condition，以及所有必要状态可读。
 
-ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 session health 允许时，Core 才在受 guard 的预算内最多执行一次同端口 RF OFF recovery 并回读 OFF。RF OFF 不依赖频率、功率、端接或 protection readback；其结果不明时不重试。A2 通过前，production descriptor 不声明 `rf_source.output`。
+ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 session health 允许时，Core 才在受 guard 的预算内最多执行一次同端口 RF OFF recovery 并回读 OFF。RF OFF 不依赖频率、功率、端接或 protection readback；其结果不明时不重试。A2 已通过并经复核，production descriptor 现在声明 `rf_source.output`；这不提升 M1 的 CW 或 M3／M4 capability。
 
 ## M3：调制
 
@@ -102,7 +102,11 @@ A1 已使用一次性、非 production 的本地 evidence harness 完成并经�
 
 本地源码 checkout 保留 `tools/a1_snapshot_evidence.py`，它不进入 wheel 或 sdist，用于保留当时的只读协议与回归测试。A1 提升后，脚本会因 production descriptor 已声明 snapshot 而以 `production_snapshot_gate_changed` 拒绝重跑；它不是当前状态查询入口。输出路径必须是尚不存在的本地文件。脚本不会创建目录、不会写入配置，也不会打印资源、完整 IDN、原始响应或命令日志。
 
-### A2：受控 RF 输出证据（harness 已实现，实机未执行）
+### A2：已完成的受控 RF 输出验收
+
+受控实机序列已完成并经复核：初始 RF OFF、一次 RF ON、独立 readback、CH1／CH2 的补充 scope 观察、一次 RF OFF
+及其独立 readback 均成功。证据记录已确认型号、受限固件 token、选件、端口、实际端接、最终 RF OFF、session 关闭和
+guard audit；公开状态不包含资源、序列号、原始响应、命令或波形。CH1／CH2 观察只作补充，不替代类型化 RF readback。
 
 源码 checkout 的 `tools/a2_output_evidence.py` 是一次性的本地 harness，不进入 wheel 或 sdist，也不修改
 production descriptor。它要求三份本地输入：只读 RF TOML、只读 scope TOML，以及不含资源地址的 A2 setup TOML。
@@ -125,5 +129,6 @@ scope 观察必须显式传入 `--observe-scope`。它只读取 CH1 和 CH2 的�
 可能改变通道显示和波形传输字段，harness 会将这些未恢复字段写入证据。CH2 在高频下未观察到波形、以及 CH1 的
 低频辅助观察，都只产生 warning，不替代 RF 的类型化 readback 和最终 OFF 判定，也不证明 RF 与低频输出之间存在控制关联。
 
-A2 的 production capability 仍保持关闭。只有证据状态为 `passed`、最终 RF OFF 已确认且脱敏证据经人工复核后，
-才可以将 `rf_source.output` 加入 production descriptor。
+证据状态为 `passed`、最终 RF OFF 已确认且脱敏证据经人工复核后，`rf_source.output` 已加入 production descriptor。
+该 historical harness 现在会以 `production_output_gate_changed` 拒绝重跑；普通输出操作必须使用 production descriptor、
+`read_write` access 与完整端口 safety 配置。
