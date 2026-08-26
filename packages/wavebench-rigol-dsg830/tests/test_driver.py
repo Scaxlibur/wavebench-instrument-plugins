@@ -5,13 +5,14 @@ import importlib.util
 
 import pytest
 
-from wavebench.instruments.rf_source_extensions import RfAvailability, RfReasonCode
+from wavebench.instruments.rf_source_extensions import RfAvailability, RfCwRequest, RfReasonCode
 
 
 class FakeTransport:
     def __init__(self, responses: dict[str, str]) -> None:
         self.responses = dict(responses)
         self.query_calls: list[str] = []
+        self.write_calls: list[str] = []
         self.close_calls = 0
 
     def query(self, command: str) -> str:
@@ -23,6 +24,9 @@ class FakeTransport:
 
     def close(self) -> None:
         self.close_calls += 1
+
+    def write(self, command: str) -> None:
+        self.write_calls.append(command)
 
 
 def _driver_type():
@@ -88,6 +92,29 @@ def test_driver_queries_documented_snapshot_fields_in_fixed_read_only_order() ->
         "output_power_protection",
     )
     assert driver.a1_snapshot_firmware() == "00.01.01"
+    assert transport.write_calls == []
+
+
+def test_driver_maps_one_offline_cw_request_to_one_documented_write() -> None:
+    transport = FakeTransport(_snapshot_responses())
+    driver = _driver_type()(transport=transport)
+
+    driver.configure_cw(RfCwRequest(port_id="rf_out", frequency_hz=4_000_000.0))
+    driver.configure_cw(RfCwRequest(port_id="rf_out", power_dbm=-20.0))
+
+    assert transport.query_calls == []
+    assert transport.write_calls == [":FREQ 4000000Hz", ":LEV -20dBm"]
+
+
+def test_driver_rejects_an_offline_cw_request_for_another_port_before_write() -> None:
+    transport = FakeTransport(_snapshot_responses())
+
+    with pytest.raises(ValueError, match="port_id"):
+        _driver_type()(transport=transport).configure_cw(
+            RfCwRequest(port_id="other", frequency_hz=4_000_000.0)
+        )
+
+    assert transport.write_calls == []
 
 
 def test_driver_a1_firmware_accessor_rejects_unsafe_idn_firmware_without_extra_query() -> None:

@@ -18,7 +18,7 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | --- | --- | --- |
 | Seed | Offline complete | `*IDN?`, zero-I/O descriptor, packaging tests, one entry point, and vendor-local exclusion. |
 | M0 | Offline complete; A1 complete | `rf_source`, `rf_out` topology, a strict snapshot parser, and production read-only status. |
-| M1 | Not started | OFF-only CW frequency/dBm configuration with independent readback. |
+| M1 | Offline in progress | OFF-only CW frequency/dBm configuration with independent readback; the production capability remains closed. |
 | M2 | Not started | RF ON/OFF, safety preflight, and one-shot OFF recovery. |
 | M3 | Not started | Declared internal-sine AM/FM/PM subset. |
 | M4 | Not started | Declared Pulse and frequency-only Step Sweep subset. |
@@ -40,7 +40,7 @@ A1 has completed and been reviewed, so the production descriptor now declares `r
 
 ## M1–M4 and A1–A5
 
-- M1 is intended to add one-write, independently read-back `:FREQ` and `:LEV` mapping while RF is OFF. A3 is required before `rf_source.cw_configure` is production-declared.
+- M1 now has an offline one-write `:FREQ`/`:LEV` mapping and independent readback contract while RF is OFF. Complete CLI, run-step, and offline acceptance work remains; A3 is still required before `rf_source.cw_configure` is production-declared.
 - M2 is intended to add `:OUTP ON|OFF`, independent readback, per-port preflight, and at most one OFF recovery when session health permits. A2 is required before `rf_source.output` is production-declared.
 - M3 is limited to a bounded internal-sine AM/FM/PM subset. A4 is required before production modulation capability.
 - M4 is limited to declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.

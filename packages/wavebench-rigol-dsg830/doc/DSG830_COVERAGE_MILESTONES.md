@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | Seed | 离线完成 | `*IDN?`、无 I/O descriptor、包装测试、唯一 entry point 和 vendor-local 排除。 |
 | M0 | 离线完成；A1 已完成 | `rf_source`、`rf_out` topology、严格 snapshot parser 与生产只读状态查询。 |
-| M1 | 未开始 | OFF-only CW 频率／dBm 功率配置与独立 readback。 |
+| M1 | 离线进行中 | OFF-only CW 频率／dBm 功率配置与独立 readback；production capability 仍关闭。 |
 | M2 | 未开始 | RF ON/OFF、安全预检和一次性 OFF recovery。 |
 | M3 | 未开始 | 已声明的内部 Sine AM／FM／PM 子集。 |
 | M4 | 未开始 | 已声明的 Pulse 与 frequency-only Step Sweep 子集。 |
@@ -51,7 +51,7 @@ A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` �
 
 ## M1：OFF-only CW
 
-目标是已冻结的 `:FREQ`／`:LEV` 映射、一次写入和独立 readback。Core 必须先确认目标 `rf_out` 为 OFF，并拒绝越界、活动调制／Pulse／Sweep、protection 异常或缺失安全关键状态的请求。
+已开始实现已冻结的 `:FREQ`／`:LEV` 映射、一次写入和独立 readback。driver 的离线映射每次只发送一条 setter；Core 必须先确认目标 `rf_out` 为 OFF，并拒绝越界、活动调制／Pulse／Sweep、protection 异常或缺失安全关键状态的请求。完整 CLI、run step 与离线验收仍待完成。
 
 M1 不开放 production CW capability。A3 的频率与 dBm 功率环回证据通过后，才可声明 `rf_source.cw_configure`。
 

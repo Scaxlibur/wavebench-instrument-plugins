@@ -1,9 +1,13 @@
-"""Read-only M0 driver for the RIGOL DSG830 RF signal generator.
+"""M0 snapshot driver plus the offline M1 mapping for the RIGOL DSG830.
 
 A1 hardware evidence authorizes the public ``rf_source.snapshot`` capability.
 ``get_rf_snapshot()`` remains observational only: it performs the fixed query
 set and does not configure frequency or power, switch RF output, or control
 modulation, Pulse, Sweep, trigger, or arbitrary SCPI.
+
+``configure_cw()`` is present for Core M1 fake-descriptor tests only. The
+production descriptor does not declare ``rf_source.cw_configure`` until A3
+evidence exists.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ import re
 
 from wavebench.instruments.rf_source_extensions import (
     RfAvailability,
+    RfCwRequest,
     RfModulationState,
     RfObserved,
     RfPortSnapshot,
@@ -90,6 +95,28 @@ class DSG830RfSource:
             ),
             protection=_parse_protection_status(responses[":STAT:QUES:POW:COND?"]),
         )
+
+    def configure_cw(self, request: RfCwRequest) -> None:
+        """Send one documented CW setter for the single DSG830 RF port.
+
+        Core owns the OFF-only preflight and independent snapshot readback.
+        This method intentionally sends exactly one write and performs neither
+        retry nor RF-output recovery.
+        """
+
+        if not isinstance(request, RfCwRequest):
+            raise ValueError("DSG830 CW configuration requires RfCwRequest")
+        if request.port_id != "rf_out":
+            raise ValueError("DSG830 CW configuration requires port_id='rf_out'")
+        if request.frequency_hz is not None:
+            if not _FREQUENCY_MIN_HZ <= request.frequency_hz <= _FREQUENCY_MAX_HZ:
+                raise ValueError("DSG830 CW frequency is outside the documented range")
+            self.transport.write(f":FREQ {_format_scpi_real(request.frequency_hz)}Hz")
+            return
+        assert request.power_dbm is not None
+        if not _POWER_MIN_DBM <= request.power_dbm <= _POWER_MAX_DBM:
+            raise ValueError("DSG830 CW power is outside the documented range")
+        self.transport.write(f":LEV {_format_scpi_real(request.power_dbm)}dBm")
 
     def a1_snapshot_firmware(self) -> str | None:
         """Return the safe firmware token from the current A1 snapshot query set.
@@ -215,6 +242,14 @@ def _parse_finite(value: str, label: str) -> float:
     if not isfinite(parsed):
         raise ValueError(f"DSG830 {label} response must be finite")
     return parsed
+
+
+def _format_scpi_real(value: float) -> str:
+    """Format a finite SCPI real without locale or non-finite spellings."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+        raise ValueError("DSG830 SCPI real value must be finite")
+    return format(value, ".12g")
 
 
 def _as_modulation_state(enabled: bool) -> RfModulationState:
