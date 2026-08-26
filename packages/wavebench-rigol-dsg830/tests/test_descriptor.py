@@ -8,6 +8,7 @@ from wavebench.instruments.rf_source_extensions import (
     RF_SOURCE_CONTRACT_VERSION,
     RfFeature,
     RfFeatureDirection,
+    RfCwProfile,
     RfOutputProfile,
 )
 
@@ -30,6 +31,7 @@ def test_descriptor_declares_production_output_contract() -> None:
     assert descriptor.capabilities == (
         "rf_source.idn",
         "rf_source.snapshot",
+        "rf_source.cw_configure",
         "rf_source.output",
     )
     assert descriptor.idn_patterns == ("RIGOL TECHNOLOGIES,DSG830",)
@@ -56,8 +58,16 @@ def test_descriptor_declares_production_output_contract() -> None:
         "alc_unlocked",
         "output_power_protection",
     )
-    assert len(descriptor.rf_source_extensions.features) == 1
-    output = descriptor.rf_source_extensions.features[0]
+    assert len(descriptor.rf_source_extensions.features) == 2
+    cw, output = descriptor.rf_source_extensions.features
+    assert cw.feature is RfFeature.CW
+    assert cw.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
+    assert cw.port_ids == ("rf_out",)
+    assert isinstance(cw.profile, RfCwProfile)
+    assert cw.profile.frequency_readable is True
+    assert cw.profile.power_readable is True
+    assert cw.profile.frequency_configurable is True
+    assert cw.profile.power_configurable is True
     assert output.feature is RfFeature.OUTPUT
     assert output.directions == (
         RfFeatureDirection.DISABLE,
