@@ -10,6 +10,11 @@ from wavebench.instruments.rf_source_extensions import (
     RfOutputProfile,
     RfOutputPortProfile,
     RfProtectionConditionPolicy,
+    RfPulseMode,
+    RfPulseModeProfile,
+    RfPulsePolarity,
+    RfPulseProfile,
+    RfPulseSource,
     RfSourceDescriptorExtensions,
     RfSourceTopology,
 )
@@ -29,12 +34,13 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="RIGOL Technologies",
         models=("DSG830",),
         aliases=(),
-        # A1/A2/A3 evidence passed; output and OFF-only CW are production-gated open.
+        # A1/A2/A3 and A4 Pulse evidence passed; only their scoped capabilities are open.
         capabilities=(
             "rf_source.idn",
             "rf_source.snapshot",
             "rf_source.cw_configure",
             "rf_source.output",
+            "rf_source.pulse_configure",
         ),
         idn_patterns=("RIGOL TECHNOLOGIES,DSG830",),
         backends=("pyvisa",),
@@ -43,7 +49,8 @@ def descriptor() -> InstrumentDescriptor:
         factory=_open_driver,
         summary=(
             "RIGOL DSG830 RF signal-source driver; production descriptor exposes identity, "
-            "a read-only snapshot, OFF-only CW configuration, and safety-gated RF output control."
+            "a read-only snapshot, OFF-only CW configuration, safety-gated RF output control, "
+            "and RF-OFF internal single-pulse configuration."
         ),
         wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",
@@ -92,6 +99,30 @@ def descriptor() -> InstrumentDescriptor:
                     ),
                     port_ids=("rf_out",),
                     profile=RfOutputProfile(output_readable=True),
+                ),
+                RfFeatureCapability(
+                    feature=RfFeature.PULSE,
+                    directions=(RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ),
+                    port_ids=("rf_out",),
+                    profile=RfPulseProfile(
+                        state_readable=True,
+                        configuration_readable=True,
+                        mode_profiles=(
+                            RfPulseModeProfile(
+                                source=RfPulseSource.INTERNAL,
+                                mode=RfPulseMode.SINGLE,
+                                polarities=(
+                                    RfPulsePolarity.INVERTED,
+                                    RfPulsePolarity.NORMAL,
+                                ),
+                                period_min_s=40e-9,
+                                period_max_s=170.0,
+                                width_min_s=10e-9,
+                                width_max_s=170.0 - 10e-9,
+                                minimum_off_time_s=10e-9,
+                            ),
+                        ),
+                    ),
                 ),
             ),
         ),

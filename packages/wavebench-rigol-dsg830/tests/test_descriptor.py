@@ -10,6 +10,10 @@ from wavebench.instruments.rf_source_extensions import (
     RfFeatureDirection,
     RfCwProfile,
     RfOutputProfile,
+    RfPulseMode,
+    RfPulsePolarity,
+    RfPulseProfile,
+    RfPulseSource,
 )
 
 
@@ -33,6 +37,7 @@ def test_descriptor_declares_production_output_contract() -> None:
         "rf_source.snapshot",
         "rf_source.cw_configure",
         "rf_source.output",
+        "rf_source.pulse_configure",
     )
     assert descriptor.idn_patterns == ("RIGOL TECHNOLOGIES,DSG830",)
     assert descriptor.backends == ("pyvisa",)
@@ -58,8 +63,8 @@ def test_descriptor_declares_production_output_contract() -> None:
         "alc_unlocked",
         "output_power_protection",
     )
-    assert len(descriptor.rf_source_extensions.features) == 2
-    cw, output = descriptor.rf_source_extensions.features
+    assert len(descriptor.rf_source_extensions.features) == 3
+    cw, output, pulse = descriptor.rf_source_extensions.features
     assert cw.feature is RfFeature.CW
     assert cw.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
     assert cw.port_ids == ("rf_out",)
@@ -77,6 +82,22 @@ def test_descriptor_declares_production_output_contract() -> None:
     assert output.port_ids == ("rf_out",)
     assert isinstance(output.profile, RfOutputProfile)
     assert output.profile.output_readable is True
+    assert pulse.feature is RfFeature.PULSE
+    assert pulse.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
+    assert pulse.port_ids == ("rf_out",)
+    assert isinstance(pulse.profile, RfPulseProfile)
+    assert pulse.profile.state_readable is True
+    assert pulse.profile.configuration_readable is True
+    assert len(pulse.profile.mode_profiles) == 1
+    mode = pulse.profile.mode_profiles[0]
+    assert mode.source is RfPulseSource.INTERNAL
+    assert mode.mode is RfPulseMode.SINGLE
+    assert mode.polarities == (RfPulsePolarity.INVERTED, RfPulsePolarity.NORMAL)
+    assert mode.period_min_s == 40e-9
+    assert mode.period_max_s == 170.0
+    assert mode.width_min_s == 10e-9
+    assert mode.width_max_s == 170.0 - 10e-9
+    assert mode.minimum_off_time_s == 10e-9
 
 
 def test_factory_opens_one_configured_transport_without_instrument_io() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+from dataclasses import replace
 from pathlib import Path
 import stat
 import sys
@@ -52,6 +53,28 @@ def _production_descriptor():
     from wavebench_rigol_dsg830.descriptor import descriptor
 
     return descriptor()
+
+
+def _historical_pre_promotion_descriptor():
+    production = _production_descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    return replace(
+        production,
+        capabilities=tuple(
+            capability
+            for capability in production.capabilities
+            if capability != "rf_source.pulse_configure"
+        ),
+        rf_source_extensions=replace(
+            extensions,
+            features=tuple(
+                feature
+                for feature in extensions.features
+                if feature.feature is not RfFeature.PULSE
+            ),
+        ),
+    )
 
 
 def _config(*, access: str = "read_only") -> WaveBenchConfig:
@@ -247,7 +270,7 @@ class _FakeDriver:
 
 
 def _preflight(module, monkeypatch, config: WaveBenchConfig, setup):
-    production = _production_descriptor()
+    production = _historical_pre_promotion_descriptor()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: production)
     monkeypatch.setattr(
         module,
@@ -292,6 +315,22 @@ def test_a4_pulse_preflight_creates_only_an_in_memory_pulse_capability(monkeypat
         for feature in preflight.evidence_descriptor.rf_source_extensions.features
     )
     assert "rf_source.pulse_configure" not in production.capabilities
+
+
+def test_a4_pulse_historical_harness_rejects_the_promoted_production_descriptor(monkeypatch) -> None:
+    module = _script_module()
+    config = _config()
+    setup = _setup(module)
+    production = _production_descriptor()
+    monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: production)
+    monkeypatch.setattr(
+        module,
+        "_runtime_versions",
+        lambda: {"wavebench_version": "0.8.25", "plugin_version": "0.2.0"},
+    )
+
+    with pytest.raises(module.A4PulsePreflightError, match="production_pulse_gate_changed"):
+        module.validate_a4_pulse_preflight(config, setup)
 
 
 def test_a4_pulse_evidence_configures_once_and_keeps_rf_and_pulse_off(monkeypatch) -> None:
