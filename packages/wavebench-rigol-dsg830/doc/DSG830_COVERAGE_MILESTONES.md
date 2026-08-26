@@ -2,7 +2,7 @@
 
 [English](DSG830_COVERAGE_MILESTONES_EN.md) · [文档入口](README.md)
 
-本文记录 `wavebench-rigol-dsg830` 的型号级交付边界。它与 Core 中的「RF 信号源领域设计」和「RF 信号源开发里程碑」一起使用；本文件不将手册、fake transport 或种子代码写成已可控制真实仪器的能力。独立插件 checkout 应以包内状态和其匹配的 Core 发布版本为准。
+本文记录 `wavebench-rigol-dsg830` 的型号级交付边界。它与 Core 中的「RF 信号源领域设计」和「RF 信号源开发里程碑」一起使用；本文件不将手册、fake transport 或种子代码写成已可控制真实仪器的能力。独立插件 checkout 应以包内状态和匹配的 Core checkout／版本范围为准；正式 wheel 验收还需要已发布的 Core 版本。
 
 ## 目标型号与证据规则
 

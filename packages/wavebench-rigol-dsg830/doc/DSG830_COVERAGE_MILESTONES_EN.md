@@ -2,7 +2,7 @@
 
 [中文](DSG830_COVERAGE_MILESTONES.md) · [Documentation](README_EN.md)
 
-This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg830`. It is used with the Core RF source-domain design and development milestones. It does not turn manual material, fake-transport tests, or seed code into real-device control claims. A standalone plugin checkout follows its package state and the matching released Core version.
+This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg830`. It is used with the Core RF source-domain design and development milestones. It does not turn manual material, fake-transport tests, or seed code into real-device control claims. A standalone plugin checkout follows its package state and a matching Core checkout/version range; formal wheel acceptance also requires a released Core version.
 
 ## Target model and evidence rules
 
@@ -40,9 +40,9 @@ After offline M0, the production descriptor declares only `rf_source.idn` until 
 
 ## M1–M4 and A1–A5
 
-- M1 implements one-write, independently read-back `:FREQ` and `:LEV` mapping while RF is OFF. A3 is required before `rf_source.cw_configure` is production-declared.
-- M2 implements `:OUTP ON|OFF`, independent readback, per-port preflight, and at most one OFF recovery when session health permits. A2 is required before `rf_source.output` is production-declared.
-- M3 reviews only a bounded internal-sine AM/FM/PM subset. A4 is required before production modulation capability.
-- M4 reviews only declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.
+- M1 is intended to add one-write, independently read-back `:FREQ` and `:LEV` mapping while RF is OFF. A3 is required before `rf_source.cw_configure` is production-declared.
+- M2 is intended to add `:OUTP ON|OFF`, independent readback, per-port preflight, and at most one OFF recovery when session health permits. A2 is required before `rf_source.output` is production-declared.
+- M3 is limited to a bounded internal-sine AM/FM/PM subset. A4 is required before production modulation capability.
+- M4 is limited to declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.
 
 Every hardware acceptance needs separate authorization. An unknown final RF-OFF state fails acceptance and cannot promote any capability.
