@@ -241,10 +241,16 @@ class DSG830RfSource:
             self.transport.write(f":FMPM:TYPE {request.kind.value.upper()}")
         self.transport.write(f":{prefix}:SOUR INT")
         self.transport.write(f":{prefix}:WAVE SINE")
-        self.transport.write(_modulation_value_write(request))
-        self.transport.write(
-            f":{prefix}:FREQ {_format_scpi_real(request.internal_frequency_hz)}Hz"
-        )
+        frequency_write = f":{prefix}:FREQ {_format_scpi_real(request.internal_frequency_hz)}Hz"
+        if request.kind is RfModulationKind.PM:
+            # The PM command reference presents frequency before phase deviation.
+            # Preserve that mode-specific order rather than applying a generic
+            # value-then-frequency sequence to all modulation kinds.
+            self.transport.write(frequency_write)
+            self.transport.write(_modulation_value_write(request))
+        else:
+            self.transport.write(_modulation_value_write(request))
+            self.transport.write(frequency_write)
         self.transport.write(f":{prefix}:STAT ON")
         self.transport.write(":MOD:STAT ON")
 
