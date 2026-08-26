@@ -1,0 +1,31 @@
+# A3 本地证据配置模板。
+#
+# 此文件只记录人工确认的安全事实，不得包含仪器资源、序列号、原始响应或波形。
+# 复制到被忽略的私有路径后，与独立的只读 RF 配置和只读示波器配置一起使用。
+
+[a3_evidence]
+# A3 仅允许 DSG830 的 RF 主输出端口。
+port_id = "rf_out"
+
+# 实际 RF 端接，必须经接线和仪器输入设置确认；不能从连接器标签推断。
+actual_termination_ohm = 50
+
+# 已确认时显式写入空列表；有选件时使用已排序、无重复的安全标识。
+installed_options = []
+
+# 成功路径会在 RF OFF 时各写入一次频率和功率。测试结束后，源会保留这两个
+# 设定值，但 RF 输出必须由独立 readback 确认为 OFF。
+frequency_hz = 1000000
+power_dbm = -50
+
+[scope_observation]
+# A3 只读取 RF 路径对应的 CH2 当前显示缓冲区；不读取或控制独立的低频输出。
+# 不执行 SINGle、触发或自动量程。
+ch2 = 2
+
+# 仅在 CH2 已按物理接线确认采用 50 Ω 端接时才可设为 true。
+allow_ch2_50ohm = true
+points = "def"
+
+# 仅用于判定 CH2 是否存在可见信号；不用于估算 dBm 或校准幅度。
+minimum_observable_vpp_v = 0.001

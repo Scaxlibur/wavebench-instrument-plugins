@@ -22,6 +22,11 @@ checkout as regression protection for this acceptance protocol. The evidence con
 production descriptor declares `rf_source.output`, the harness refuses reruns so a temporary descriptor cannot bypass
 the production capability. M1 CW writes still require A3 and are not authorized by this A2 acceptance.
 
+The local A3 CW-loopback harness, regression tests, and resource-free setup template are also in the source checkout.
+They require initial RF OFF, independent readback for two OFF-only CW writes, one low-power RF ON/OFF, and a current
+CH2-buffer signal observation. CH2 only establishes visible signal; source readback remains the frequency and power
+evidence. This harness has not yet produced hardware evidence and cannot pre-authorize `rf_source.cw_configure`.
+
 The production descriptor declares no error queue, CW write, modulation, Pulse, Sweep, trigger, or arbitrary SCPI
 passthrough. `rf_source.output` covers only audited `rf_out` ON/OFF; every other capability remains behind its A3–A5
 evidence gate.
@@ -31,6 +36,7 @@ evidence gate.
 - [DSG830 plugin documentation](doc/README_EN.md)
 - [DSG830 coverage milestones](doc/DSG830_COVERAGE_MILESTONES_EN.md)
 - [A2 local-evidence setup template](tools/a2_output_evidence.setup.template.toml)
+- [A3 local-evidence setup template](tools/a3_cw_evidence.setup.template.toml)
 
 The milestone document distinguishes the current seed, offline contracts, and A1–A5 hardware evidence. A
 production descriptor capability is not promoted by seed code or fake-transport tests alone.
@@ -86,8 +92,9 @@ termination from a connector label.
 - Default tests use fake transport only and never connect to hardware.
 - The snapshot path issues only `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`,
   `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`; A1 exposes this read-only path as a production capability.
-- The production descriptor and default tests do not reset the device or change RF output, power, frequency,
-  trigger, modulation, or sweep; only fake descriptors cover the frozen offline write mappings.
+- Default tests use fake transport and never connect to hardware. A normal production `read_only` configuration does
+  not reset the device or change RF output, power, frequency, trigger, modulation, or sweep; A2 separately opens
+  safety-gated RF output, while the A3 harness still requires explicit `--execute` for controlled CW evidence.
 - Hardware testing requires separate authorization and a reviewed resource, firmware, terminator, RF-output
   state, safety limit, and restoration procedure.
 

@@ -22,7 +22,7 @@
 | M2 | 离线完成；A2 已完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production 已开放 `rf_source.output`。 |
 | M3 | 未开始 | 已声明的内部 Sine AM／FM／PM 子集。 |
 | M4 | 未开始 | 已声明的 Pulse 与 frequency-only Step Sweep 子集。 |
-| A1–A5 | A1、A2 已完成；A3–A5 未开始 | A1 为只读快照证据；A2 仅提升端口级 RF 输出，其余仍为独立授权的受控实机证据。 |
+| A1–A5 | A1、A2 已完成；A3 本地 harness 已完成，实机证据待执行；A4、A5 未开始 | A1 为只读快照证据；A2 仅提升端口级 RF 输出；A3 仍须取得单独的受控实机证据。 |
 
 ## Seed：历史包边界
 
@@ -53,7 +53,7 @@ A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` �
 
 已完成已冻结的 `:FREQ`／`:LEV` 映射、一次写入和独立 readback。driver 的离线映射每次只发送一条 setter；Core CLI、run step 和脱敏 artifact 已接入，但 production descriptor 仍缺 `rf_source.cw_configure`，因此不能对真实 DSG830 执行。Core 必须先确认目标 `rf_out` 为 OFF，并拒绝越界、活动调制／Pulse／Sweep、protection 异常或缺失安全关键状态的请求。离线 fake／guarded transport 验收不提升 production capability。
 
-M1 不开放 production CW capability。A3 的频率与 dBm 功率环回证据通过后，才可声明 `rf_source.cw_configure`。
+M1 不开放 production CW capability。A3 的本地 harness 和离线回归已完成：它在内存中临时加入 CW profile，并要求初始 RF OFF、两次 OFF-only CW 写入的独立回读、低功率 RF ON/OFF 与 CH2 当前缓冲区的可见信号。该工作不构成实机证据；只有 A3 的频率与 dBm 功率环回证据通过并经复核后，才可声明 `rf_source.cw_configure`。
 
 ## M2：RF 输出
 
@@ -132,3 +132,23 @@ scope 观察必须显式传入 `--observe-scope`。它只读取 CH1 和 CH2 的�
 证据状态为 `passed`、最终 RF OFF 已确认且脱敏证据经人工复核后，`rf_source.output` 已加入 production descriptor。
 该 historical harness 现在会以 `production_output_gate_changed` 拒绝重跑；普通输出操作必须使用 production descriptor、
 `read_write` access 与完整端口 safety 配置。
+
+### A3：待执行的 CW 环回验收
+
+源码 checkout 现提供 `tools/a3_cw_evidence.py`、回归测试与不含资源地址的
+`tools/a3_cw_evidence.setup.template.toml`。它只用于取得 A3 前的受控证据，未修改 production descriptor，也不进入
+wheel 或 sdist。A3 的真实执行仍未发生，`rf_source.cw_configure` 继续保持关闭。
+
+A3 的静态预检要求 RF 与 scope 配置各自保持 `read_only`、关闭读重试，且两个资源不同；执行阶段才在内存中生成带有
+精确频点、功率上限和实际端接的 `read_write` 安全配置。setup 中的功率不得高于 `-40 dBm`，模板使用更低的值。成功路径
+仅允许：初始 snapshot、一次频率写入及独立回读、一次功率写入及独立回读、一次 RF ON 及独立回读、一次 CH2 当前 `DEF`
+缓冲区读取、一次 RF OFF 及独立回读。证据 audit 会检查成功路径的写入数量、查询数量、无结果不明写入和关闭状态。
+
+CH2 的 50 Ω 输入必须由 setup 的 `allow_ch2_50ohm = true` 单独确认。CH2 观察只回答「是否有可见信号」；频率和 dBm 功率的
+主证据来自 RF 信号源的类型化独立 readback，不进行 dBm 与 Vpp 换算，也不以 scope 的频率测量替代源端回读。低频输出接入
+CH1 的实验室接线不属于 `rf_out`，A3 不读取或控制它，不能据此推断 RF 与低频输出的开关关系。
+
+不带 `--execute` 时，harness 只做静态预检，不建立 transport，也不写入仪器。带 `--execute` 时必须指定尚不存在的本地
+`--output` 文件；证据以 `0600` 创建，且不保存资源、序列号、完整 IDN、原始响应、命令或波形。成功后 RF 输出必须经独立
+readback 确认为 OFF；频率和功率会保留在 setup 指定的测试值。任一 CW 写入、CH2 可见信号或最终 RF OFF 条件失败时，A3
+不通过且不得提升 capability。

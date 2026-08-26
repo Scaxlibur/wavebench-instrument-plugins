@@ -13,6 +13,8 @@ A1 只读证据和 A2 受控输出证据均已完成并复核。production descr
 
 A2 的本地受控输出 harness、回归测试和不含资源地址的 setup 模板保留在源码 checkout，作为本次验收协议的回归保护。证据已确认最终 RF OFF；harness 在 production descriptor 已声明 `rf_source.output` 后会拒绝重跑，避免用临时 descriptor 绕过正式 capability。M1 的 CW 写入仍需要 A3，不能通过本次 A2 验收授权。
 
+A3 的本地 CW 环回 harness、回归测试和不含资源地址的 setup 模板也已加入源码 checkout。它要求初始 RF OFF、两次 OFF-only CW 写入的独立回读、一次低功率 RF ON/OFF 与 CH2 的当前缓冲区信号观察；CH2 只用于确认可见信号，频率与功率仍以源端 readback 为准。该 harness 尚未形成实机证据，不能提前开放 `rf_source.cw_configure`。
+
 production descriptor 不声明错误队列、CW 写入、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；其余 capability 仍须经过对应的 A3–A5 实机证据门。
 
 ## 开发文档
@@ -20,6 +22,7 @@ production descriptor 不声明错误队列、CW 写入、调制、Pulse、Sweep
 - [DSG830 插件文档入口](doc/README.md)
 - [DSG830 功能覆盖里程碑](doc/DSG830_COVERAGE_MILESTONES.md)
 - [A2 本地证据 setup 模板](tools/a2_output_evidence.setup.template.toml)
+- [A3 本地证据 setup 模板](tools/a3_cw_evidence.setup.template.toml)
 
 里程碑明确区分当前种子、离线合同和 A1–A5 实机证据。production descriptor 的 capability 不会因种子代码或 fake transport 测试自动提升。
 
@@ -67,7 +70,7 @@ access = "read_only"
 - factory 只通过 `DriverContext` 打开当前配置的 transport。
 - 默认测试只使用 fake transport，不连接真实仪器。
 - snapshot 仅发送 `*IDN?`、`:FREQ?`、`:LEV?`、`:OUTP?`、`:MOD:STAT?`、`:PULM:STAT?`、`:SWE:STAT?` 与 `:STAT:QUES:POW:COND?`；A1 已使这条只读路径成为 production capability。
-- production descriptor 与默认测试不执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频；仅 fake descriptor 可覆盖已冻结的离线写映射。
+- 默认测试只使用 fake transport，不会连接硬件。production 的普通 `read_only` 配置不会执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频；A2 已单独开放受 safety 限制的 RF 输出，A3 harness 仍须显式 `--execute` 才能进行受控 CW 取证。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、RF 输出状态、安全限制和恢复方式。
 
 ## 开发验证
