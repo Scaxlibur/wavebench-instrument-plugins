@@ -8,9 +8,10 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 ## Current status
 
 Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, M2 offline output
-mapping, and M3 internal-sine modulation mapping: its descriptor uses `kind="rf_source"`, declares one
-`rf_out` port with static limits and a 50-ohm dBm reference, and ships a strict snapshot parser plus
-one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings and internal-sine AM/FM/PM configuration/readback mappings.
+mapping, M3 internal-sine modulation mapping, and the first M4 Pulse subset: its descriptor uses
+`kind="rf_source"`, declares one `rf_out` port with static limits and a 50-ohm dBm reference, and ships a
+strict snapshot parser plus one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings, internal-sine AM/FM/PM
+configuration/readback mappings, and internal/single Pulse timing/polarity mapping.
 
 A1 read-only evidence, A2 controlled-output evidence, and A3 CW-loopback evidence have completed and been reviewed.
 The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, and
@@ -45,10 +46,18 @@ reads the initial/final RF snapshots and one requested profile, and requires a z
 read CH2 or invoke RF-output control; recovery and diagnostic records are not capability-promotion evidence. The AM and
 FM RF-OFF sequences passed; PM still has a strict readback mismatch, so the overall modulation capability remains closed.
 
+The M4 Pulse subset is internal/single only. `configure_rf_pulse()` fixes source, mode, period, width, and polarity,
+then ends with `:PULM:STAT OFF`; it never invokes RF output, rear Pulse I/O, or trigger commands. The source checkout
+now includes `tools/a4_pulse_evidence.py`, fake regressions, and a resource-free setup template. Its `--execute` path
+allows one RF-OFF/Pulse-OFF configuration and independent readback, while `--diagnose` preserves `read_only` and has a
+zero-write audit. Neither path reads CH1/CH2. Hardware evidence is still pending, so `rf_source.pulse_configure` remains
+outside the production descriptor.
+
 The production descriptor declares no error queue, modulation, Pulse, Sweep, trigger, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
-`rf_source.output` only audited `rf_out` ON/OFF. `rf_source.modulation_configure` remains behind A4 hardware evidence;
-a driver method or an offline test does not promote it. Every other capability remains behind its A4–A5 evidence gate.
+`rf_source.output` only audited `rf_out` ON/OFF. `rf_source.modulation_configure` and
+`rf_source.pulse_configure` remain behind their A4 hardware evidence; a driver method or an offline test does not
+promote either. Every other capability remains behind its A4–A5 evidence gate.
 
 ## Development documentation
 
@@ -57,6 +66,7 @@ a driver method or an offline test does not promote it. Every other capability r
 - [A2 local-evidence setup template](tools/a2_output_evidence.setup.template.toml)
 - [A3 local-evidence setup template](tools/a3_cw_evidence.setup.template.toml)
 - [A4 local-evidence setup template](tools/a4_modulation_evidence.setup.template.toml)
+- [A4 Pulse local-evidence setup template](tools/a4_pulse_evidence.setup.template.toml)
 
 The milestone document distinguishes the current seed, offline contracts, and A1–A5 hardware evidence. A
 production descriptor capability is not promoted by seed code or fake-transport tests alone.

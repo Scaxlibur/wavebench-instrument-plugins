@@ -27,4 +27,11 @@ a strict readback mismatch. Explicit `--recover` only writes a private recovery 
 the `read_only` configuration, reads the selected profile plus initial/final RF snapshots, and records a zero-write
 audit. Neither record is A4 capability-promotion evidence.
 
-Package `0.2.0` has completed the `rf_source` M0 read-only migration, M1 CW mapping, M2 output transaction, M3 internal-sine AM/FM/PM offline mapping, and mode-specific disable. A1, A2, and A3 controlled hardware evidence have completed and been reviewed, so the production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, and `rf_source.output`; A4 has passed for AM and FM but has no qualifying PM evidence, so `rf_source.modulation_configure` and `rf_source.modulation_disable` remain outside the production descriptor while M4/external-trigger capabilities remain gated by A4–A5. The milestone document defines the boundary and promotion gates.
+The checkout also provides an [`A4 Pulse local-evidence setup template`](../tools/a4_pulse_evidence.setup.template.toml)
+and its harness. It only validates an internal/single Pulse configuration on `rf_out`: initial, postcondition, and final
+snapshots must all establish RF output, modulation, Pulse, and Sweep OFF with no active protection. `--execute` fixes
+period, width, and polarity while keeping Pulse OFF; `--diagnose` retains `read_only` and a zero-write audit. It does not
+read scope, invoke RF output, use rear Pulse I/O, or trigger. Hardware evidence remains pending, so it does not promote
+`rf_source.pulse_configure`.
+
+Package `0.2.0` has completed the `rf_source` M0 read-only migration, M1 CW mapping, M2 output transaction, M3 internal-sine AM/FM/PM offline mapping and mode-specific disable, plus the M4 internal/single Pulse offline mapping. A1, A2, and A3 controlled hardware evidence have completed and been reviewed, so the production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, and `rf_source.output`; A4 has passed for AM and FM but has no qualifying PM evidence, and A4 Pulse hardware evidence remains pending. Therefore `rf_source.modulation_configure`, `rf_source.modulation_disable`, and `rf_source.pulse_configure` remain outside the production descriptor while Step Sweep/external-trigger capabilities remain gated by A4–A5. The milestone document defines the boundary and promotion gates.

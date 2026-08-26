@@ -7,7 +7,7 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 ## 当前状态
 
-版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射、M2 离线输出映射和 M3 内部正弦调制映射：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV`／`:OUTP ON|OFF` 的单次 driver 映射，以及 AM／FM／PM 的内部 Sine 配置与 readback。
+版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射、M2 离线输出映射、M3 内部正弦调制映射，以及 M4 Pulse 的首个离线子集：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV`／`:OUTP ON|OFF` 的单次 driver 映射、AM／FM／PM 的内部 Sine 配置与 readback，以及 internal／single Pulse 的 period／width／polarity 配置与读回。
 
 A1 只读证据、A2 受控输出证据和 A3 CW 环回证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure` 和 `rf_source.output`。在 `read_write` session 中，CW 写入要求目标端口明确 OFF 和完整 OFF-only preflight；RF ON/OFF 还要求完整端口 safety 配置、fresh snapshot 与独立 readback。示例配置仍保持 `read_only`，不会默认开放写入。
 
@@ -19,7 +19,9 @@ M3 driver 已实现状态读取、`get_rf_modulation_snapshot()`、`configure_rf
 
 源码 checkout 已提供 A4 的 RF-OFF 调制 evidence harness、fake 回归与不含资源地址的 setup 模板。每次只能验证一个内部 Sine 模式；成功路径在配置读回后关闭同一模式，并在最终状态确认 `rf_out` 与调制均为关闭。显式 `--recover` 只恢复已明确识别的单一活动模式，并写入私有恢复记录。显式 `--diagnose` 保留原始 `read_only` 配置，只读取初始／最终 RF snapshot 与指定模式 profile，并要求 transport audit 为零写。A4 不读取 CH2、不调用 RF 输出控制，恢复或诊断记录均不构成 capability 提升证据。AM、FM 的 RF-OFF 序列已通过；PM 仍有严格读回不匹配，因此整体调制 capability 尚未提升。
 
-production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；`rf_source.modulation_configure` 仍等待 A4 实机证据，不能因 driver 方法或离线测试而提前声明。其余 capability 继续经过对应的 A4–A5 实机证据门。
+M4 Pulse 只覆盖 internal／single 子集。`configure_rf_pulse()` 固定设置 source、mode、period、width 和 polarity，并以 `:PULM:STAT OFF` 收尾；它不调用 RF 输出、后面板 Pulse I/O 或 trigger。源码 checkout 的 `tools/a4_pulse_evidence.py`、fake 回归与无资源 setup 模板已完成离线验证。工具的 `--execute` 仅允许一次 RF-OFF／Pulse-OFF 配置与独立读回，`--diagnose` 保持 `read_only` 且零写；两者不读取 CH1／CH2。A4 Pulse 的实机证据尚未执行，因此 `rf_source.pulse_configure` 仍不进入 production descriptor。
+
+production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；`rf_source.modulation_configure` 与 `rf_source.pulse_configure` 仍等待各自的 A4 实机证据，不能因 driver 方法或离线测试而提前声明。其余 capability 继续经过对应的 A4–A5 实机证据门。
 
 ## 开发文档
 
@@ -28,6 +30,7 @@ production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger �
 - [A2 本地证据 setup 模板](tools/a2_output_evidence.setup.template.toml)
 - [A3 本地证据 setup 模板](tools/a3_cw_evidence.setup.template.toml)
 - [A4 本地证据 setup 模板](tools/a4_modulation_evidence.setup.template.toml)
+- [A4 Pulse 本地证据 setup 模板](tools/a4_pulse_evidence.setup.template.toml)
 
 里程碑明确区分当前种子、离线合同和 A1–A5 实机证据。production descriptor 的 capability 不会因种子代码或 fake transport 测试自动提升。
 
