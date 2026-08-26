@@ -520,6 +520,22 @@ def test_driver_accepts_documented_pulse_time_responses_with_unit_whitespace() -
     assert snapshot.width_s == 100e-6
 
 
+def test_driver_accepts_grouped_pulse_time_responses_from_rigol_firmware() -> None:
+    transport = FakeTransport(
+        _pulse_responses(
+            **{
+                ":PULM:PER?": "1.000000000 000s\n",
+                ":PULM:WIDT?": "100.000000 000us\n",
+            }
+        )
+    )
+
+    snapshot = _driver_type()(transport=transport).get_rf_pulse_snapshot("rf_out")
+
+    assert snapshot.period_s == 1.0
+    assert snapshot.width_s == 100e-6
+
+
 def test_driver_maps_one_disabled_internal_single_pulse_request_to_fixed_writes() -> None:
     transport = FakeTransport({})
     request = RfPulseConfigureRequest(

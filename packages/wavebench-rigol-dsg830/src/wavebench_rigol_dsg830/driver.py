@@ -73,6 +73,10 @@ _FREQUENCY_FRACTION_GROUP_RESPONSE = re.compile(
 _DECIMAL_RESPONSE = re.compile(rf"^{_NUMBER}$")
 _RAD_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})(?:rad)?$", re.IGNORECASE)
 _TIME_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})\s*(?P<unit>s|ms|us|ns)?$", re.IGNORECASE)
+_TIME_FRACTION_GROUP_RESPONSE = re.compile(
+    r"^(?P<leading>[+-]?\d+\.\d+) (?P<trailing>\d+)(?P<unit>s|ms|us|ns)?$",
+    re.IGNORECASE,
+)
 _INTEGER_RESPONSE = re.compile(r"^\d+$")
 _IDN_VENDOR = "RIGOL TECHNOLOGIES"
 _IDN_MODEL = "DSG830"
@@ -487,6 +491,15 @@ def _parse_pulse_seconds(
 ) -> float:
     value = _clean_response(response, label)
     match = _TIME_RESPONSE.fullmatch(value)
+    if match is None:
+        grouped = _TIME_FRACTION_GROUP_RESPONSE.fullmatch(value)
+        if grouped is not None:
+            normalized = (
+                grouped.group("leading")
+                + grouped.group("trailing")
+                + (grouped.group("unit") or "")
+            )
+            match = _TIME_RESPONSE.fullmatch(normalized)
     if match is None:
         raise ValueError(f"DSG830 {label} response has an invalid format")
     seconds = float(
