@@ -65,14 +65,14 @@ def _historical_pre_promotion_descriptor():
         capabilities=tuple(
             capability
             for capability in production.capabilities
-            if capability != "rf_source.sweep_configure"
+            if capability not in {"rf_source.modulation_configure", "rf_source.sweep_configure"}
         ),
         rf_source_extensions=replace(
             extensions,
             features=tuple(
                 feature
                 for feature in extensions.features
-                if feature.feature is not RfFeature.SWEEP
+                if feature.feature not in {RfFeature.MODULATION, RfFeature.SWEEP}
             ),
         ),
     )

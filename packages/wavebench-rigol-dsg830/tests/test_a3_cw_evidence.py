@@ -64,6 +64,7 @@ def _pre_a3_descriptor():
             if capability
             not in {
                 "rf_source.cw_configure",
+                "rf_source.modulation_configure",
                 "rf_source.pulse_configure",
                 "rf_source.sweep_configure",
             }
@@ -73,7 +74,8 @@ def _pre_a3_descriptor():
             features=tuple(
                 feature
                 for feature in extensions.features
-                if feature.feature not in {RfFeature.CW, RfFeature.PULSE, RfFeature.SWEEP}
+                if feature.feature
+                not in {RfFeature.CW, RfFeature.MODULATION, RfFeature.PULSE, RfFeature.SWEEP}
             ),
         ),
     )
