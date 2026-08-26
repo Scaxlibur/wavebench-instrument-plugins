@@ -7,11 +7,11 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 ## 当前状态
 
-版本 `0.2.0` 已完成 RF M0 的离线迁移：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的只读 snapshot parser。
+版本 `0.2.0` 已完成 RF M0 只读迁移和 M1 的离线 CW 映射，并在推进 M2 的离线输出映射：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV` 与 `:OUTP ON|OFF` 的单次 driver 映射。
 
-A1 只读实机证据已经完成并复核。production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`，因此 Core Service、CLI 和 `rf_source.status` run step 可以在已配置的 `read_only` session 中读取快照。该能力只观察当前状态，不授权真实仪器的 RF 输出、频率或功率控制。
+A1 只读实机证据已经完成并复核。production descriptor 现在只声明 `rf_source.idn` 和 `rf_source.snapshot`，因此 Core Service、CLI 和 `rf_source.status` run step 可以在已配置的 `read_only` session 中读取快照。M1／M2 的离线代码需要 fake descriptor 才能进入测试，不能授权真实仪器的 RF 输出、频率或功率控制。
 
-本包不声明错误队列、CW 写入、RF 输出控制、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。后续 capability 必须经过对应的 A1–A5 实机证据门。
+production descriptor 不声明错误队列、CW 写入、RF 输出控制、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。后续 capability 必须经过对应的 A1–A5 实机证据门。
 
 ## 开发文档
 
@@ -64,7 +64,7 @@ access = "read_only"
 - factory 只通过 `DriverContext` 打开当前配置的 transport。
 - 默认测试只使用 fake transport，不连接真实仪器。
 - snapshot 仅发送 `*IDN?`、`:FREQ?`、`:LEV?`、`:OUTP?`、`:MOD:STAT?`、`:PULM:STAT?`、`:SWE:STAT?` 与 `:STAT:QUES:POW:COND?`；A1 已使这条只读路径成为 production capability。
-- 不执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频。
+- production descriptor 与默认测试不执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频；仅 fake descriptor 可覆盖已冻结的离线写映射。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、RF 输出状态、安全限制和恢复方式。
 
 ## 开发验证

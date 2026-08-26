@@ -10,4 +10,4 @@ Current public documentation:
 
 - [DSG830 Coverage Milestones](DSG830_COVERAGE_MILESTONES_EN.md)
 
-Package `0.2.0` has completed the offline `rf_source` M0 parser and descriptor migration. A1 controlled read-only hardware evidence has completed and been reviewed, so the production descriptor declares `rf_source.idn` and `rf_source.snapshot`; A2–A5 still gate every remaining capability independently. The milestone document defines the boundary and promotion gates.
+Package `0.2.0` has completed the `rf_source` M0 read-only migration and M1 offline CW mapping, and is progressing the M2 offline output transaction. A1 controlled read-only hardware evidence has completed and been reviewed, so the production descriptor declares only `rf_source.idn` and `rf_source.snapshot`; M1/M2 remain fake-descriptor-only and A2–A5 still gate every write capability independently. The milestone document defines the boundary and promotion gates.

@@ -18,8 +18,8 @@
 | --- | --- | --- |
 | Seed | 离线完成 | `*IDN?`、无 I/O descriptor、包装测试、唯一 entry point 和 vendor-local 排除。 |
 | M0 | 离线完成；A1 已完成 | `rf_source`、`rf_out` topology、严格 snapshot parser 与生产只读状态查询。 |
-| M1 | 离线进行中 | OFF-only CW 频率／dBm 功率配置与独立 readback；production capability 仍关闭。 |
-| M2 | 未开始 | RF ON/OFF、安全预检和一次性 OFF recovery。 |
+| M1 | 离线完成 | OFF-only CW 频率／dBm 功率配置与独立 readback；production capability 仍关闭。 |
+| M2 | 离线进行中 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production capability 仍关闭。 |
 | M3 | 未开始 | 已声明的内部 Sine AM／FM／PM 子集。 |
 | M4 | 未开始 | 已声明的 Pulse 与 frequency-only Step Sweep 子集。 |
 | A1–A5 | A1 已完成；A2–A5 未开始 | A1 为只读快照证据；其余为独立授权的受控实机证据。 |
@@ -51,15 +51,15 @@ A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` �
 
 ## M1：OFF-only CW
 
-已开始实现已冻结的 `:FREQ`／`:LEV` 映射、一次写入和独立 readback。driver 的离线映射每次只发送一条 setter；Core CLI、run step 和脱敏 artifact 已接入，但 production descriptor 仍缺 `rf_source.cw_configure`，因此不能对真实 DSG830 执行。Core 必须先确认目标 `rf_out` 为 OFF，并拒绝越界、活动调制／Pulse／Sweep、protection 异常或缺失安全关键状态的请求。完整离线验收仍待完成。
+已完成已冻结的 `:FREQ`／`:LEV` 映射、一次写入和独立 readback。driver 的离线映射每次只发送一条 setter；Core CLI、run step 和脱敏 artifact 已接入，但 production descriptor 仍缺 `rf_source.cw_configure`，因此不能对真实 DSG830 执行。Core 必须先确认目标 `rf_out` 为 OFF，并拒绝越界、活动调制／Pulse／Sweep、protection 异常或缺失安全关键状态的请求。离线 fake／guarded transport 验收不提升 production capability。
 
 M1 不开放 production CW capability。A3 的频率与 dBm 功率环回证据通过后，才可声明 `rf_source.cw_configure`。
 
 ## M2：RF 输出
 
-目标是已冻结的 `:OUTP ON|OFF` 映射、独立 readback 和端口级安全预检。RF ON 必须同时满足完整 safety 配置、端接与 dBm 参考阻抗一致、无 blocking protection condition，以及所有必要状态可读。
+已开始实现已冻结的 `:OUTP ON|OFF` 映射、独立 readback 和端口级安全预检。DSG830 driver 的 `set_rf_output()` 每次只发送 `:OUTP ON` 或 `:OUTP OFF`，不查询、不重试、不自行 recovery；Core 负责 transaction、snapshot readback 和 session health。RF ON 必须同时满足完整 safety 配置、端接与 dBm 参考阻抗一致、频率与功率均在范围内、调制／Pulse／Sweep 已关闭、无 blocking protection condition，以及所有必要状态可读。
 
-ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 session health 允许时才最多执行一次 RF OFF recovery。A2 通过前，production descriptor 不声明 `rf_source.output`。
+ON 结果不明、readback 失败或 protection 变化时不重试 ON；只有 session health 允许时，Core 才在受 guard 的预算内最多执行一次同端口 RF OFF recovery 并回读 OFF。RF OFF 不依赖频率、功率、端接或 protection readback；其结果不明时不重试。A2 通过前，production descriptor 不声明 `rf_source.output`。
 
 ## M3：调制
 

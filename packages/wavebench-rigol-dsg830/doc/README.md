@@ -10,4 +10,4 @@
 
 - [DSG830 功能覆盖里程碑](DSG830_COVERAGE_MILESTONES.md)
 
-当前包 `0.2.0` 已完成 `rf_source` M0 的离线 parser 与 descriptor 迁移。A1 受控只读实机证据已经完成并复核，production descriptor 声明 `rf_source.idn` 和 `rf_source.snapshot`；其余 capability 仍由 A2–A5 分别门控。边界与提升条件见里程碑文档。
+当前包 `0.2.0` 已完成 `rf_source` M0 的只读迁移和 M1 离线 CW 映射，并在推进 M2 离线输出事务。A1 受控只读实机证据已经完成并复核，production descriptor 只声明 `rf_source.idn` 和 `rf_source.snapshot`；M1／M2 仍只用于 fake descriptor，所有写 capability 继续由 A2–A5 分别门控。边界与提升条件见里程碑文档。

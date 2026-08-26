@@ -7,16 +7,18 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 
 ## Current status
 
-Version `0.2.0` completes the offline RF M0 migration: its descriptor uses `kind="rf_source"`, declares one
-`rf_out` port with static limits and a 50-ohm dBm reference, and ships a strict read-only snapshot parser.
+Version `0.2.0` completes the RF M0 read-only migration and M1 offline CW mapping, and is progressing
+the M2 offline output mapping: its descriptor uses `kind="rf_source"`, declares one `rf_out` port with
+static limits and a 50-ohm dBm reference, and ships a strict snapshot parser plus one-write
+`:FREQ`/`:LEV`/`:OUTP ON|OFF` driver mappings.
 
-A1 read-only hardware evidence has completed and been reviewed. The production descriptor now declares
+A1 read-only hardware evidence has completed and been reviewed. The production descriptor declares only
 `rf_source.idn` and `rf_source.snapshot`, so Core Service, CLI, and the `rf_source.status` run step may read a
-snapshot through a configured `read_only` session. This capability observes current state only; it does not
-authorize live RF-output, frequency, or power control.
+snapshot through a configured `read_only` session. M1/M2 offline code requires a fake descriptor for tests and
+does not authorize live RF-output, frequency, or power control.
 
-This package declares no error queue, CW write, RF-output control, modulation, Pulse, Sweep, trigger, or
-arbitrary SCPI passthrough. Each later capability remains behind its A1–A5 evidence gate.
+The production descriptor declares no error queue, CW write, RF-output control, modulation, Pulse, Sweep,
+trigger, or arbitrary SCPI passthrough. Each later capability remains behind its A1–A5 evidence gate.
 
 ## Development documentation
 
@@ -77,7 +79,8 @@ termination from a connector label.
 - Default tests use fake transport only and never connect to hardware.
 - The snapshot path issues only `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`,
   `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`; A1 exposes this read-only path as a production capability.
-- The plugin does not reset the device or change RF output, power, frequency, trigger, modulation, or sweep.
+- The production descriptor and default tests do not reset the device or change RF output, power, frequency,
+  trigger, modulation, or sweep; only fake descriptors cover the frozen offline write mappings.
 - Hardware testing requires separate authorization and a reviewed resource, firmware, terminator, RF-output
   state, safety limit, and restoration procedure.
 
