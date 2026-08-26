@@ -535,6 +535,21 @@ def _diagnostic_profile_failure_codes(profile: object) -> list[str]:
     return codes
 
 
+def _diagnostic_pulse_read_failure_code(error: Exception) -> str:
+    """Classify a fixed driver parser error without retaining its raw response."""
+
+    message = str(error)
+    labels = {
+        "pulse source": "diagnostic_pulse_source_read_invalid",
+        "pulse mode": "diagnostic_pulse_mode_read_invalid",
+        "pulse period": "diagnostic_pulse_period_read_invalid",
+        "pulse width": "diagnostic_pulse_width_read_invalid",
+        "pulse polarity": "diagnostic_pulse_polarity_read_invalid",
+        "pulse state": "diagnostic_pulse_state_read_invalid",
+    }
+    return next((code for label, code in labels.items() if label in message), "diagnostic_pulse_read_failed")
+
+
 def _expected_a4_pulse_queries() -> int:
     return 4 * _SNAPSHOT_QUERY_COUNT + _PULSE_PROFILE_QUERY_COUNT
 
@@ -825,8 +840,8 @@ def collect_a4_pulse_diagnostic_evidence(
                     evidence["pulse_profile"] = rf_pulse_snapshot_document(profile)
                     profile_read = True
                     failure_codes.extend(_diagnostic_profile_failure_codes(profile))
-                except Exception:
-                    failure_codes.append("diagnostic_pulse_read_failed")
+                except Exception as exc:
+                    failure_codes.append(_diagnostic_pulse_read_failure_code(exc))
         if profile_read:
             final = rf_service.snapshot()
             evidence["final_snapshot"] = rf_source_snapshot_operation_artifact(final)

@@ -436,3 +436,21 @@ def test_a4_pulse_setup_rejects_extra_fields_and_output_is_private(tmp_path: Pat
     assert stat.S_IMODE(output_path.stat().st_mode) == 0o600
     with pytest.raises(module.A4PulsePreflightError, match="invalid_evidence_output_path"):
         module._open_evidence_output(output_path)
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    (
+        ("DSG830 pulse source response must be INT or EXT", "diagnostic_pulse_source_read_invalid"),
+        ("DSG830 pulse mode response must be SINGLE or TRAIN", "diagnostic_pulse_mode_read_invalid"),
+        ("DSG830 pulse period response has an invalid format", "diagnostic_pulse_period_read_invalid"),
+        ("DSG830 pulse width response has an invalid format", "diagnostic_pulse_width_read_invalid"),
+        ("DSG830 pulse polarity response must be NORMAL or INVERSE", "diagnostic_pulse_polarity_read_invalid"),
+        ("DSG830 pulse state response must be 0 or 1", "diagnostic_pulse_state_read_invalid"),
+        ("unclassified error", "diagnostic_pulse_read_failed"),
+    ),
+)
+def test_a4_pulse_diagnostic_redacts_parser_failure_details(message: str, expected: str) -> None:
+    module = _script_module()
+
+    assert module._diagnostic_pulse_read_failure_code(ValueError(message)) == expected
