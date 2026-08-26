@@ -20,9 +20,9 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | M0 | Offline complete; A1 complete | `rf_source`, `rf_out` topology, a strict snapshot parser, and production read-only status. |
 | M1 | Offline complete; A3 complete | OFF-only CW frequency/dBm configuration, independent readback, and production `rf_source.cw_configure`. |
 | M2 | Offline complete; A2 complete | One-write RF ON/OFF mapping, Core safety preflight, independent readback, and one-shot OFF recovery; production exposes `rf_source.output`. |
-| M3 | Offline complete; A4 controlled validation in progress, not yet accepted | Fixed internal-sine AM/FM/PM write sequences, strict readback, and Core configuration transaction/CLI/run/artifact; mode-specific disable is only for local evidence/private recovery, and production capability remains closed. |
+| M3 | Offline complete; A4 AM and FM passed, PM under investigation | Fixed internal-sine AM/FM/PM write sequences, strict readback, and Core configuration transaction/CLI/run/artifact; mode-specific disable is only for local evidence/private recovery, and production capability remains closed. |
 | M4 | Not started | Declared Pulse and frequency-only Step Sweep subset. |
-| A1–A5 | A1, A2, and A3 complete; A4 has no qualifying evidence; A5 is not started | A1 promotes read-only snapshot, A2 per-port RF output, and A3 OFF-only CW. |
+| A1–A5 | A1, A2, and A3 complete; A4 AM/FM passed but PM has no qualifying evidence; A5 is not started | A1 promotes read-only snapshot, A2 per-port RF output, and A3 OFF-only CW. |
 
 ## Seed: historical package boundary
 
@@ -47,7 +47,7 @@ A1 has completed and been reviewed, so the production descriptor declares `rf_so
 
 Every hardware acceptance needs separate authorization. An unknown final RF-OFF state fails acceptance and cannot promote any capability.
 
-### A4: controlled validation in progress, no qualifying evidence yet
+### A4: AM/FM passed; PM readback under investigation
 
 The source checkout now contains `tools/a4_modulation_evidence.py`, its regression tests, and
 `tools/a4_modulation_evidence.setup.template.toml`. This one-shot local harness is excluded from wheel and sdist;
@@ -72,10 +72,12 @@ already-disabled no-write result. It requires the same RF-OFF safety preconditio
 record; that record is not A4 capability-promotion evidence.
 
 Unknown or mismatched initial/postcondition/final RF-OFF state, mode/value/frequency mismatch, unknown write outcome,
-audit-budget mismatch, unhealthy session, or changed counters after close fails acceptance. Controlled validation has
-not produced a qualifying record for `rf_source.modulation_configure`, so the production descriptor remains closed.
-Even after a future successful A4 run, the evidence would prove only that one internal-Sine profile was configured, read
-back, and disabled while RF stayed OFF; it would not prove modulated RF output, CH2 signal, Pulse, Sweep, or trigger behavior.
+audit-budget mismatch, unhealthy session, or changed counters after close fails acceptance. Controlled validation passed
+the AM and FM RF-OFF configuration/readback/disable sequences; PM still does not match the requested value on strict
+readback, and every failed PM attempt was restored to the disabled baseline by an independent recovery. Because M3
+capability covers AM/FM/PM together, the production descriptor remains closed. Even after a future complete A4 run, the
+evidence would prove only that one internal-Sine profile was configured, read back, and disabled while RF stayed OFF; it
+would not prove modulated RF output, CH2 signal, Pulse, Sweep, or trigger behavior.
 
 ### A1: completed package-specific read-only acceptance
 

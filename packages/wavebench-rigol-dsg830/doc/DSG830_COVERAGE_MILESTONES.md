@@ -20,9 +20,9 @@
 | M0 | 离线完成；A1 已完成 | `rf_source`、`rf_out` topology、严格 snapshot parser 与生产只读状态查询。 |
 | M1 | 离线完成；A3 已完成 | OFF-only CW 频率／dBm 功率配置、独立 readback 与 production `rf_source.cw_configure`。 |
 | M2 | 离线完成；A2 已完成 | RF ON/OFF 单次映射、Core safety preflight、独立 readback 和一次性 OFF recovery；production 已开放 `rf_source.output`。 |
-| M3 | 离线完成；A4 受控验证中，尚未通过 | 内部 Sine AM／FM／PM 的固定写入序列、严格 readback 与 Core 配置事务／CLI／run／artifact；按模式关闭仅供本地证据与私有恢复，production capability 仍关闭。 |
+| M3 | 离线完成；A4 的 AM、FM 已通过，PM 待定位 | 内部 Sine AM／FM／PM 的固定写入序列、严格 readback 与 Core 配置事务／CLI／run／artifact；按模式关闭仅供本地证据与私有恢复，production capability 仍关闭。 |
 | M4 | 未开始 | 已声明的 Pulse 与 frequency-only Step Sweep 子集。 |
-| A1–A5 | A1、A2、A3 已完成；A4 尚无合格证据；A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW。 |
+| A1–A5 | A1、A2、A3 已完成；A4 的 AM、FM 已通过，PM 尚无合格证据；A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW。 |
 
 ## Seed：历史包边界
 
@@ -79,7 +79,7 @@ Core M3 preflight 要求 `rf_out` 明确 OFF、AM／FM／PM 三种模式均 disa
 
 A4 前 production descriptor 不声明 `rf_source.modulation_configure`。当前 M2 的 RF ON 合同要求调制 disabled，因此即使将来 A4 提升 M3 的配置 capability，也不能据此推导已获准在调制开启时输出 RF；这种输出场景需要单独的安全合同和实机证据。
 
-### A4：受控验证中，尚未取得合格证据
+### A4：AM、FM 已通过；PM 读回待定位
 
 源码 checkout 的 `tools/a4_modulation_evidence.py`、回归测试和
 `tools/a4_modulation_evidence.setup.template.toml` 已冻结 A4 的第一段验收范围。它是一次性本地 harness，不进入
@@ -96,7 +96,7 @@ descriptor 不注册、不写回、不提前提升。
 带 `--recover` 时，harness 只恢复 setup 指定的一个已知活动模式，或记录已一致关闭的零写结果。它要求同样的 RF-OFF 安全前置条件，以权限 `0600` 创建私有恢复记录；恢复记录不计入 A4 能力提升证据。
 
 任何初始／postcondition／最终 RF OFF 不明或不符、模式／数值／内部频率 readback 不符、未知 write outcome、审计计数偏差、
-session 异常或关闭后计数变化均为失败。当前受控验证尚未生成可提升 `rf_source.modulation_configure` 的合格记录；production descriptor 继续关闭调制 capability。即使后续 A4 通过，证据也只证明「RF 始终 OFF 时的一个内部 Sine 调制 profile 被配置、读回并关闭」，不证明 RF 调制输出、CH2 信号、Pulse、Sweep 或 trigger。
+session 异常或关闭后计数变化均为失败。当前受控验证已通过 AM、FM 的 RF-OFF 配置、读回和关闭序列；PM 仍在严格读回中不匹配请求值，且每次异常后均通过独立恢复回到关闭基线。M3 capability 同时覆盖 AM／FM／PM，因此 production descriptor 继续关闭调制 capability。即使后续 A4 完整通过，证据也只证明「RF 始终 OFF 时的一个内部 Sine 调制 profile 被配置、读回并关闭」，不证明 RF 调制输出、CH2 信号、Pulse、Sweep 或 trigger。
 
 ## M4：Pulse 与 Step Sweep
 
