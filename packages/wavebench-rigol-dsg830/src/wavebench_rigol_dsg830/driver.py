@@ -37,6 +37,7 @@ _DECIMAL_RESPONSE = re.compile(rf"^{_NUMBER}$")
 _INTEGER_RESPONSE = re.compile(r"^\d+$")
 _IDN_VENDOR = "RIGOL TECHNOLOGIES"
 _IDN_MODEL = "DSG830"
+_A1_FIRMWARE_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 _SNAPSHOT_QUERIES = (
     "*IDN?",
@@ -55,13 +56,14 @@ class DSG830RfSource:
 
     def __init__(self, *, transport) -> None:
         self.transport = transport
+        self._a1_snapshot_firmware: str | None = None
 
     def idn(self) -> str:
         return self.transport.query("*IDN?")
 
     def get_rf_snapshot(self) -> RfSourceSnapshot:
         responses = {command: self.transport.query(command) for command in _SNAPSHOT_QUERIES}
-        _parse_idn(responses["*IDN?"])
+        self._a1_snapshot_firmware = _parse_idn(responses["*IDN?"])
         return RfSourceSnapshot(
             ports=(
                 RfPortSnapshot(
@@ -89,6 +91,15 @@ class DSG830RfSource:
             protection=_parse_protection_status(responses[":STAT:QUES:POW:COND?"]),
         )
 
+    def a1_snapshot_firmware(self) -> str | None:
+        """Return the safe firmware token from the current A1 snapshot query set.
+
+        This accessor performs no I/O. It is intentionally only consumed by the
+        local A1 evidence harness after a successful ``get_rf_snapshot()`` call.
+        """
+
+        return self._a1_snapshot_firmware
+
     def close(self) -> None:
         self.transport.close()
 
@@ -107,7 +118,7 @@ def _clean_response(response: object, label: str) -> str:
     return value
 
 
-def _parse_idn(response: object) -> None:
+def _parse_idn(response: object) -> str | None:
     value = _clean_response(response, "identity")
     fields = tuple(item.strip() for item in value.split(","))
     if (
@@ -118,6 +129,8 @@ def _parse_idn(response: object) -> None:
         or not fields[3]
     ):
         raise ValueError("DSG830 identity response does not match the documented model")
+    firmware = fields[3]
+    return firmware if _A1_FIRMWARE_TOKEN.fullmatch(firmware) is not None else None
 
 
 def _parse_frequency_hz(response: object) -> float:

@@ -62,7 +62,8 @@ def _snapshot_responses(**changes: str) -> dict[str, str]:
 
 def test_driver_queries_documented_snapshot_fields_in_fixed_read_only_order() -> None:
     transport = FakeTransport(_snapshot_responses())
-    snapshot = _driver_type()(transport=transport).get_rf_snapshot()
+    driver = _driver_type()(transport=transport)
+    snapshot = driver.get_rf_snapshot()
 
     assert transport.query_calls == [
         "*IDN?",
@@ -86,6 +87,28 @@ def test_driver_queries_documented_snapshot_fields_in_fixed_read_only_order() ->
         "alc_unlocked",
         "output_power_protection",
     )
+    assert driver.a1_snapshot_firmware() == "00.01.01"
+
+
+def test_driver_a1_firmware_accessor_rejects_unsafe_idn_firmware_without_extra_query() -> None:
+    transport = FakeTransport(
+        _snapshot_responses(**{"*IDN?": "RIGOL TECHNOLOGIES,DSG830,redacted,unsafe firmware"})
+    )
+    driver = _driver_type()(transport=transport)
+
+    driver.get_rf_snapshot()
+
+    assert driver.a1_snapshot_firmware() is None
+    assert transport.query_calls == [
+        "*IDN?",
+        ":FREQ?",
+        ":LEV?",
+        ":OUTP?",
+        ":MOD:STAT?",
+        ":PULM:STAT?",
+        ":SWE:STAT?",
+        ":STAT:QUES:POW:COND?",
+    ]
 
 
 def test_driver_returns_fail_closed_unknown_observations_for_unknown_sweep_or_protection_bits() -> None:

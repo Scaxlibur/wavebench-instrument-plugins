@@ -60,6 +60,14 @@ showing `read_only` with zero write counters. Keep only a redacted typed snapsho
 resource, serial number, full IDN, raw response, or command log. An unknown/ON output, parser failure, or session
 failure does not promote a capability and must not trigger automatic RF OFF in this read-only flow.
 
+The isolated TOML must also contain an `[a1_evidence]` table used only by the harness: `port_id` is fixed to
+`rf_out`; `actual_termination_ohm` must be a human-confirmed finite positive number; and `installed_options` must be
+an already-confirmed, sorted, duplicate-free list of safe option identifiers. An explicitly confirmed absence of
+options is recorded as an empty list. The harness extracts a restricted firmware token from the same `*IDN?`
+response without adding a query. Missing options, termination, or either runtime distribution version metadata fails
+before the transport is opened; unavailable firmware fails the evidence after the query. This table must not infer
+actual termination from a connector label, scope coupling, or model name.
+
 The source checkout provides `tools/a1_snapshot_evidence.py`; it is excluded from both wheel and sdist. Run the
 non-connecting dry run first, then explicitly permit one query only after the configuration and wiring are reviewed:
 

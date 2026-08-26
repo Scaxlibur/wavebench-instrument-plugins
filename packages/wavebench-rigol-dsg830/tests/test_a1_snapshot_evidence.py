@@ -118,16 +118,23 @@ class _FakeDriver:
         snapshot: RfSourceSnapshot | Exception,
         *,
         close_error: Exception | None = None,
+        firmware: str | None | Exception = "00.01.01",
     ) -> None:
         self.transport = transport
         self.snapshot = snapshot
         self.close_error = close_error
+        self.firmware = firmware
         self.close_calls = 0
 
     def get_rf_snapshot(self) -> RfSourceSnapshot:
         if isinstance(self.snapshot, Exception):
             raise self.snapshot
         return self.snapshot
+
+    def a1_snapshot_firmware(self) -> str | None:
+        if isinstance(self.firmware, Exception):
+            raise self.firmware
+        return self.firmware
 
     def close(self) -> None:
         self.close_calls += 1
@@ -157,6 +164,14 @@ def _config(*, access: str = "read_only") -> SimpleNamespace:
     )
 
 
+def _setup(module, *, options: tuple[str, ...] = ("OPT01",)):
+    return module.A1EvidenceSetup(
+        port_id="rf_out",
+        actual_termination_ohm=1_000_000.0,
+        installed_options=options,
+    )
+
+
 def _collector(module, transport: _FakeTransport, driver: _FakeDriver, descriptor: SimpleNamespace):
     calls: dict[str, object] = {}
 
@@ -181,6 +196,7 @@ def test_a1_evidence_passes_only_for_zero_write_off_snapshot() -> None:
         evidence = module.collect_a1_evidence(
             config,
             descriptor,
+            _setup(module),
             opener=opener,
             timestamp_utc="2026-08-26T00:00:00Z",
         )
@@ -190,6 +206,12 @@ def test_a1_evidence_passes_only_for_zero_write_off_snapshot() -> None:
     assert evidence["status"] == "passed"
     assert evidence["failure_codes"] == []
     assert evidence["snapshot"]["operation"] == "rf_source.snapshot"
+    assert evidence["hardware"] == {
+        "model": "DSG830",
+        "firmware": "00.01.01",
+        "installed_options": ["OPT01"],
+    }
+    assert evidence["setup"] == {"port_id": "rf_out", "actual_termination_ohm": 1_000_000.0}
     assert evidence["audit"]["before_close"]["counters"]["query_calls"] == 8
     assert evidence["audit"]["after_close"]["session_health"] == "closed"
     assert driver.close_calls == 1
@@ -221,7 +243,7 @@ def test_a1_evidence_rejects_unsafe_snapshot_state(
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *args, **kwargs: descriptor)
     try:
-        evidence = module.collect_a1_evidence(_config(), descriptor, opener=opener)
+        evidence = module.collect_a1_evidence(_config(), descriptor, _setup(module), opener=opener)
     finally:
         monkeypatch.undo()
 
@@ -240,7 +262,7 @@ def test_a1_evidence_rejects_audit_write_activity_and_snapshot_failure() -> None
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *args, **kwargs: descriptor)
     try:
-        evidence = module.collect_a1_evidence(_config(), descriptor, opener=opener)
+        evidence = module.collect_a1_evidence(_config(), descriptor, _setup(module), opener=opener)
     finally:
         monkeypatch.undo()
 
@@ -271,7 +293,7 @@ def test_a1_evidence_closes_session_when_audit_fails(
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *args, **kwargs: descriptor)
     try:
-        evidence = module.collect_a1_evidence(_config(), descriptor, opener=opener)
+        evidence = module.collect_a1_evidence(_config(), descriptor, _setup(module), opener=opener)
     finally:
         monkeypatch.undo()
 
@@ -290,7 +312,7 @@ def test_a1_evidence_rejects_audit_changes_during_close() -> None:
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *args, **kwargs: descriptor)
     try:
-        evidence = module.collect_a1_evidence(_config(), descriptor, opener=opener)
+        evidence = module.collect_a1_evidence(_config(), descriptor, _setup(module), opener=opener)
     finally:
         monkeypatch.undo()
 
@@ -311,13 +333,33 @@ def test_a1_evidence_reports_driver_close_failure() -> None:
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *args, **kwargs: descriptor)
     try:
-        evidence = module.collect_a1_evidence(_config(), descriptor, opener=opener)
+        evidence = module.collect_a1_evidence(_config(), descriptor, _setup(module), opener=opener)
     finally:
         monkeypatch.undo()
 
     assert evidence["status"] == "failed"
     assert "driver_close_failed" in evidence["failure_codes"]
     assert driver.close_calls == 1
+
+
+def test_a1_evidence_rejects_missing_firmware_without_retaining_identity_text() -> None:
+    module = _script_module()
+    descriptor = _descriptor()
+    transport = _FakeTransport()
+    driver = _FakeDriver(transport, _snapshot(), firmware=None)
+    _, opener = _collector(module, transport, driver, descriptor)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *args, **kwargs: descriptor)
+    try:
+        evidence = module.collect_a1_evidence(_config(), descriptor, _setup(module), opener=opener)
+    finally:
+        monkeypatch.undo()
+
+    assert evidence["status"] == "failed"
+    assert "snapshot_firmware_unavailable" in evidence["failure_codes"]
+    assert evidence["hardware"]["firmware"] is None
+    assert "resource" not in str(evidence)
 
 
 def test_a1_preflight_refuses_nonproduction_descriptor_before_opening() -> None:
@@ -340,6 +382,39 @@ def test_a1_preflight_requires_read_only_config() -> None:
         module.validate_a1_preflight(_config(access="read_write"))
 
 
+def test_a1_preflight_requires_installed_runtime_versions(monkeypatch) -> None:
+    module = _script_module()
+    descriptor = _descriptor()
+    monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *args, **kwargs: descriptor)
+    monkeypatch.setattr(module, "_distribution_version", lambda name: "unavailable")
+
+    with pytest.raises(module.A1PreflightError, match="runtime_version_unavailable"):
+        module.validate_a1_preflight(_config())
+
+
+def test_a1_evidence_setup_requires_explicit_safe_setup_facts(tmp_path: Path) -> None:
+    module = _script_module()
+    config_path = tmp_path / "a1.toml"
+    config_path.write_text(
+        """
+[a1_evidence]
+port_id = "rf_out"
+actual_termination_ohm = 1000000
+installed_options = ["OPT01", "OPT02"]
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    assert module.load_a1_evidence_setup(config_path) == module.A1EvidenceSetup(
+        port_id="rf_out",
+        actual_termination_ohm=1_000_000.0,
+        installed_options=("OPT01", "OPT02"),
+    )
+    config_path.write_text("[a1_evidence]\ninstalled_options = []\n", encoding="utf-8")
+    with pytest.raises(module.A1PreflightError, match="a1_evidence_invalid"):
+        module.load_a1_evidence_setup(config_path)
+
+
 def test_a1_evidence_output_is_new_private_file(tmp_path: Path) -> None:
     module = _script_module()
     output_path = tmp_path / "a1-evidence.json"
@@ -360,6 +435,7 @@ def test_a1_dry_run_does_not_collect_live_evidence(monkeypatch, capsys) -> None:
     config = _config()
     descriptor = _descriptor()
     monkeypatch.setattr(module, "load_config", lambda path: config)
+    monkeypatch.setattr(module, "load_a1_evidence_setup", lambda path: _setup(module))
     monkeypatch.setattr(module, "validate_a1_preflight", lambda value: (config.rf_source, descriptor))
     monkeypatch.setattr(
         module,
@@ -378,6 +454,7 @@ def test_a1_execute_existing_output_does_not_collect_live_evidence(tmp_path: Pat
     config = _config()
     descriptor = _descriptor()
     monkeypatch.setattr(module, "load_config", lambda path: config)
+    monkeypatch.setattr(module, "load_a1_evidence_setup", lambda path: _setup(module))
     monkeypatch.setattr(module, "validate_a1_preflight", lambda value: (config.rf_source, descriptor))
     monkeypatch.setattr(
         module,
@@ -402,6 +479,7 @@ def test_a1_execute_does_not_report_passed_when_evidence_file_cannot_close(
             raise OSError("close failure")
 
     monkeypatch.setattr(module, "load_config", lambda path: config)
+    monkeypatch.setattr(module, "load_a1_evidence_setup", lambda path: _setup(module))
     monkeypatch.setattr(module, "validate_a1_preflight", lambda value: (config.rf_source, descriptor))
     monkeypatch.setattr(module, "_open_evidence_output", lambda path: CloseFailureOutput())
     monkeypatch.setattr(module, "_replace_evidence", lambda output, evidence: None)
@@ -473,9 +551,15 @@ access = "disabled"
 driver = "rigol.dsg830"
 resource = "TCPIP::192.0.2.83::INSTR"
 access = "read_only"
+
+[a1_evidence]
+port_id = "rf_out"
+actual_termination_ohm = 1000000
+installed_options = ["OPT01"]
 """.lstrip(),
         encoding="utf-8",
     )
+    setup = module.load_a1_evidence_setup(config_path)
     monkeypatch.syspath_prepend(str(PACKAGE_ROOT / "src"))
     from wavebench_rigol_dsg830 import descriptor as source_descriptor
 
@@ -512,6 +596,7 @@ access = "read_only"
     evidence = module.collect_a1_evidence(
         config,
         descriptor,
+        setup,
         timestamp_utc="2026-08-26T00:00:00Z",
     )
 
@@ -531,3 +616,4 @@ access = "read_only"
     ]
     assert transports[0].writes == []
     assert transports[0].closed is True
+    assert evidence["hardware"]["firmware"] == "00.01.01"

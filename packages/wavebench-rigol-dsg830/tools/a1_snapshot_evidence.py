@@ -5,14 +5,16 @@ exists only to gather the hardware evidence required before the production
 descriptor may declare ``rf_source.snapshot``.
 """
 
-from __future__ import annotations
-
 import argparse
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 import json
+from math import isfinite
 import os
 from pathlib import Path
+import re
+import tomllib
 from typing import Any, Callable, Mapping, TextIO
 
 from wavebench.config import RfSourceConfig, WaveBenchConfig, load_config
@@ -28,11 +30,13 @@ from wavebench.logging import CommandLogger
 from wavebench.services.resource_lease import ResourceLease
 
 
-A1_EVIDENCE_SCHEMA = "wavebench.rigol_dsg830.a1_evidence.v1"
+A1_EVIDENCE_SCHEMA = "wavebench.rigol_dsg830.a1_evidence.v2"
 _DRIVER_ID = "rigol.dsg830"
 _MODEL = "DSG830"
+_PORT_ID = "rf_out"
 _PRODUCTION_CAPABILITIES = ("rf_source.idn",)
 _EXPECTED_QUERY_COUNT = 8
+_SAFE_METADATA_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _MUTATION_COUNTER_KEYS = (
     "write_requests",
     "write_attempts",
@@ -68,6 +72,15 @@ class A1PreflightError(RuntimeError):
         super().__init__(code)
 
 
+@dataclass(frozen=True, slots=True)
+class A1EvidenceSetup:
+    """Human-confirmed, non-sensitive A1 setup facts from the private TOML."""
+
+    port_id: str
+    actual_termination_ohm: float
+    installed_options: tuple[str, ...]
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -77,6 +90,60 @@ def _distribution_version(name: str) -> str:
         return version(name)
     except PackageNotFoundError:
         return "unavailable"
+
+
+def _runtime_versions() -> dict[str, str]:
+    return {
+        "wavebench_version": _distribution_version("wavebench"),
+        "plugin_version": _distribution_version("wavebench-rigol-dsg830"),
+    }
+
+
+def _runtime_versions_available(runtime: Mapping[str, object]) -> bool:
+    return all(
+        isinstance(value, str) and value != "unavailable"
+        for value in runtime.values()
+    )
+
+
+def load_a1_evidence_setup(path: Path) -> A1EvidenceSetup:
+    """Load only the explicit, non-sensitive setup facts required by A1."""
+
+    try:
+        raw = tomllib.loads(path.read_bytes().decode("utf-8-sig"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise A1PreflightError("a1_evidence_invalid") from exc
+    setup = raw.get("a1_evidence")
+    if not isinstance(setup, Mapping):
+        raise A1PreflightError("a1_evidence_not_configured")
+    if set(setup) != {"port_id", "actual_termination_ohm", "installed_options"}:
+        raise A1PreflightError("a1_evidence_invalid")
+
+    port_id = setup["port_id"]
+    if port_id != _PORT_ID:
+        raise A1PreflightError("a1_evidence_port_must_be_rf_out")
+    actual_termination_ohm = setup["actual_termination_ohm"]
+    if (
+        isinstance(actual_termination_ohm, bool)
+        or not isinstance(actual_termination_ohm, (int, float))
+        or not isfinite(actual_termination_ohm)
+        or actual_termination_ohm <= 0
+    ):
+        raise A1PreflightError("a1_evidence_termination_invalid")
+    installed_options = setup["installed_options"]
+    if not isinstance(installed_options, list) or any(
+        not isinstance(option, str) or _SAFE_METADATA_TOKEN.fullmatch(option) is None
+        for option in installed_options
+    ):
+        raise A1PreflightError("a1_evidence_options_invalid")
+    option_tokens = tuple(installed_options)
+    if len(set(option_tokens)) != len(option_tokens) or option_tokens != tuple(sorted(option_tokens)):
+        raise A1PreflightError("a1_evidence_options_invalid")
+    return A1EvidenceSetup(
+        port_id=port_id,
+        actual_termination_ohm=float(actual_termination_ohm),
+        installed_options=option_tokens,
+    )
 
 
 def validate_a1_preflight(config: WaveBenchConfig) -> tuple[RfSourceConfig, InstrumentDescriptor]:
@@ -99,10 +166,17 @@ def validate_a1_preflight(config: WaveBenchConfig) -> tuple[RfSourceConfig, Inst
         raise A1PreflightError("unexpected_descriptor_model")
     if tuple(descriptor.capabilities) != _PRODUCTION_CAPABILITIES:
         raise A1PreflightError("production_snapshot_gate_changed")
+    if not _runtime_versions_available(_runtime_versions()):
+        raise A1PreflightError("runtime_version_unavailable")
     return rf_source, descriptor
 
 
-def _base_evidence(descriptor: InstrumentDescriptor, *, timestamp_utc: str) -> dict[str, object]:
+def _base_evidence(
+    descriptor: InstrumentDescriptor,
+    setup: A1EvidenceSetup,
+    *,
+    timestamp_utc: str,
+) -> dict[str, object]:
     return {
         "schema": A1_EVIDENCE_SCHEMA,
         "evidence": "A1",
@@ -110,9 +184,15 @@ def _base_evidence(descriptor: InstrumentDescriptor, *, timestamp_utc: str) -> d
         "driver_id": descriptor.driver_id,
         "model": _MODEL,
         "production_capabilities": list(descriptor.capabilities),
-        "runtime": {
-            "wavebench_version": _distribution_version("wavebench"),
-            "plugin_version": _distribution_version("wavebench-rigol-dsg830"),
+        "runtime": _runtime_versions(),
+        "hardware": {
+            "model": _MODEL,
+            "firmware": None,
+            "installed_options": list(setup.installed_options),
+        },
+        "setup": {
+            "port_id": setup.port_id,
+            "actual_termination_ohm": setup.actual_termination_ohm,
         },
         "status": "failed",
         "failure_codes": [],
@@ -181,7 +261,7 @@ def _audit_failure_codes(
 
 
 def _snapshot_failure_codes(snapshot: RfSourceSnapshot) -> list[str]:
-    if tuple(port.port_id for port in snapshot.ports) != ("rf_out",):
+    if tuple(port.port_id for port in snapshot.ports) != (_PORT_ID,):
         return ["unexpected_snapshot_topology"]
 
     port = snapshot.ports[0]
@@ -206,9 +286,23 @@ def _snapshot_failure_codes(snapshot: RfSourceSnapshot) -> list[str]:
     return failure_codes
 
 
+def _a1_firmware(driver: object) -> str | None:
+    read_firmware = getattr(driver, "a1_snapshot_firmware", None)
+    if not callable(read_firmware):
+        return None
+    try:
+        firmware = read_firmware()
+    except Exception:
+        return None
+    if not isinstance(firmware, str) or _SAFE_METADATA_TOKEN.fullmatch(firmware) is None:
+        return None
+    return firmware
+
+
 def collect_a1_evidence(
     config: WaveBenchConfig,
     descriptor: InstrumentDescriptor,
+    setup: A1EvidenceSetup,
     *,
     opener: Callable[..., Any] = open_instrument_driver,
     timestamp_utc: str | None = None,
@@ -234,12 +328,13 @@ def collect_a1_evidence(
     ):
         raise A1PreflightError("descriptor_changed_after_preflight")
 
-    evidence = _base_evidence(descriptor, timestamp_utc=timestamp_utc or _utc_now())
+    evidence = _base_evidence(descriptor, setup, timestamp_utc=timestamp_utc or _utc_now())
     failure_codes: list[str] = []
     opened: Any | None = None
     before_close: dict[str, object] | None = None
     after_close: dict[str, object] | None = None
     snapshot: RfSourceSnapshot | None = None
+    firmware: str | None = None
 
     try:
         opened = opener(
@@ -276,6 +371,9 @@ def collect_a1_evidence(
                     failure_codes.append("invalid_snapshot_type")
                 else:
                     snapshot = candidate
+                    firmware = _a1_firmware(driver)
+                    if firmware is None:
+                        failure_codes.append("snapshot_firmware_unavailable")
         except Exception:
             failure_codes.append("snapshot_failed")
         finally:
@@ -305,7 +403,14 @@ def collect_a1_evidence(
     if snapshot is not None:
         evidence["snapshot"] = rf_source_snapshot_operation_artifact(snapshot)
         failure_codes.extend(_snapshot_failure_codes(snapshot))
+    hardware = evidence["hardware"]
+    assert isinstance(hardware, dict)
+    hardware["firmware"] = firmware
     evidence["audit"] = {"before_close": before_close, "after_close": after_close}
+    runtime = evidence["runtime"]
+    assert isinstance(runtime, Mapping)
+    if not _runtime_versions_available(runtime):
+        failure_codes.append("runtime_version_unavailable")
     failure_codes.extend(_audit_failure_codes(before_close, after_close))
     evidence["failure_codes"] = sorted(set(failure_codes))
     evidence["status"] = "passed" if not evidence["failure_codes"] else "failed"
@@ -356,6 +461,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         config = load_config(args.config)
+        setup = load_a1_evidence_setup(args.config)
         _, descriptor = validate_a1_preflight(config)
     except A1PreflightError as exc:
         print(json.dumps({"status": "preflight_failed", "failure_code": exc.code}))
@@ -372,6 +478,11 @@ def main(argv: list[str] | None = None) -> int:
                     "status": "dry_run_ok",
                     "driver_id": descriptor.driver_id,
                     "production_capabilities": list(descriptor.capabilities),
+                    "a1_setup": {
+                        "port_id": setup.port_id,
+                        "actual_termination_ohm": setup.actual_termination_ohm,
+                        "installed_options": list(setup.installed_options),
+                    },
                     "will_connect": False,
                 },
                 sort_keys=True,
@@ -411,12 +522,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         try:
-            evidence = collect_a1_evidence(config, descriptor)
+            evidence = collect_a1_evidence(config, descriptor, setup)
         except A1PreflightError as exc:
-            evidence = _base_evidence(descriptor, timestamp_utc=_utc_now())
+            evidence = _base_evidence(descriptor, setup, timestamp_utc=_utc_now())
             evidence["failure_codes"] = [exc.code]
         except Exception:
-            evidence = _base_evidence(descriptor, timestamp_utc=_utc_now())
+            evidence = _base_evidence(descriptor, setup, timestamp_utc=_utc_now())
             evidence["failure_codes"] = ["local_harness_failed"]
         _replace_evidence(output, evidence)
     except Exception:

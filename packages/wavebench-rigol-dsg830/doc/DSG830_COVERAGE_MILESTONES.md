@@ -94,6 +94,12 @@ A1 使用一次性、非 production 的本地 evidence harness；不能临时修
 完整 IDN、原始响应或命令日志。任何未知／ON 输出、解析异常或 session 异常都不提升 capability，也不在
 只读流程中尝试自动 RF OFF。
 
+隔离 TOML 还必须包含仅供 harness 使用的 `[a1_evidence]` 表：`port_id` 固定为 `rf_out`，
+`actual_termination_ohm` 必须是人工确认的有限正数，`installed_options` 必须是已确认、排序且无重复的
+安全选件标识列表；确认没有选件时也要显式写入空列表。harness 从同一次 `*IDN?` 响应中提取受限的
+固件 token，不增加查询；选件、端接或两个运行时 distribution 版本元数据缺失时会在建立 transport 前
+失败，固件不可用则使查询后的证据失败。该表不能从连接器标签、scope coupling 或型号名称推导实际端接。
+
 本地源码 checkout 提供 `tools/a1_snapshot_evidence.py`，它不进入 wheel 或 sdist。先执行不连接仪器的
 dry-run，再在人工复核配置和接线后显式执行一次查询：
 
