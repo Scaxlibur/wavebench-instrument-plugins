@@ -49,6 +49,19 @@ def _production_descriptor():
     return descriptor()
 
 
+def _pre_a2_descriptor():
+    """Rebuild the immutable production contract that the historical A2 harness tests."""
+
+    production = _production_descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    return replace(
+        production,
+        capabilities=("rf_source.idn", "rf_source.snapshot"),
+        rf_source_extensions=replace(extensions, features=()),
+    )
+
+
 def _config(
     *,
     rf_resource: str = "TCPIP::198.51.100.83::INSTR",
@@ -242,7 +255,7 @@ def _collector(module, production, driver: _FakeDriver):
 
 def test_preflight_keeps_production_output_gate_and_rejects_shared_scope_resource(monkeypatch) -> None:
     module = _script_module()
-    production = _production_descriptor()
+    production = _pre_a2_descriptor()
     _install_common_patches(monkeypatch, module, production)
     setup = _setup(module)
 
@@ -255,7 +268,7 @@ def test_preflight_keeps_production_output_gate_and_rejects_shared_scope_resourc
     with pytest.raises(module.A2PreflightError, match="scope_resource_must_differ_from_rf_source"):
         module.validate_a2_preflight(shared, setup, scope_config=shared, observe_scope=True)
 
-    changed = replace(production, capabilities=(*production.capabilities, "rf_source.output"))
+    changed = _production_descriptor()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: changed)
     with pytest.raises(module.A2PreflightError, match="production_output_gate_changed"):
         module.validate_a2_preflight(_config(), setup)
@@ -263,7 +276,7 @@ def test_preflight_keeps_production_output_gate_and_rejects_shared_scope_resourc
 
 def test_collects_exact_on_off_evidence_without_promoting_the_descriptor(monkeypatch) -> None:
     module = _script_module()
-    production = _production_descriptor()
+    production = _pre_a2_descriptor()
     _install_common_patches(monkeypatch, module, production)
     transport = _FakeTransport(module)
     driver = _FakeDriver(transport)
@@ -295,7 +308,7 @@ def test_collects_exact_on_off_evidence_without_promoting_the_descriptor(monkeyp
 
 def test_unexpected_initial_on_state_is_failed_but_forces_one_bounded_off(monkeypatch) -> None:
     module = _script_module()
-    production = _production_descriptor()
+    production = _pre_a2_descriptor()
     _install_common_patches(monkeypatch, module, production)
     transport = _FakeTransport(module)
     driver = _FakeDriver(transport, output_enabled=True)
@@ -314,7 +327,7 @@ def test_unexpected_initial_on_state_is_failed_but_forces_one_bounded_off(monkey
 
 def test_enable_failure_accepts_only_core_verified_off_recovery(monkeypatch) -> None:
     module = _script_module()
-    production = _production_descriptor()
+    production = _pre_a2_descriptor()
     _install_common_patches(monkeypatch, module, production)
     transport = _FakeTransport(module)
     driver = _FakeDriver(transport)
@@ -360,7 +373,7 @@ def test_scope_observation_fetches_each_explicit_channel_once() -> None:
 
 def test_collect_with_scope_observation_fetches_each_channel_once(monkeypatch) -> None:
     module = _script_module()
-    production = _production_descriptor()
+    production = _pre_a2_descriptor()
     _install_common_patches(monkeypatch, module, production)
     scope_descriptor = SimpleNamespace(
         capabilities=("scope.idn", "scope.channel_coupling", "scope.fetch_waveform")

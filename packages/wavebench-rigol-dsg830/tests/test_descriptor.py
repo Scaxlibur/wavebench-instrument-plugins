@@ -4,7 +4,12 @@ import importlib
 import importlib.util
 
 from wavebench.instruments.capabilities import validate_declared_capabilities
-from wavebench.instruments.rf_source_extensions import RF_SOURCE_CONTRACT_VERSION
+from wavebench.instruments.rf_source_extensions import (
+    RF_SOURCE_CONTRACT_VERSION,
+    RfFeature,
+    RfFeatureDirection,
+    RfOutputProfile,
+)
 
 
 def _descriptor_module():
@@ -13,7 +18,7 @@ def _descriptor_module():
     return importlib.import_module("wavebench_rigol_dsg830.descriptor")
 
 
-def test_descriptor_declares_production_read_only_contract() -> None:
+def test_descriptor_declares_production_output_contract() -> None:
     descriptor = _descriptor_module().descriptor()
 
     assert descriptor.driver_id == "rigol.dsg830"
@@ -22,7 +27,11 @@ def test_descriptor_declares_production_read_only_contract() -> None:
     assert descriptor.manufacturer == "RIGOL Technologies"
     assert descriptor.models == ("DSG830",)
     assert descriptor.aliases == ()
-    assert descriptor.capabilities == ("rf_source.idn", "rf_source.snapshot")
+    assert descriptor.capabilities == (
+        "rf_source.idn",
+        "rf_source.snapshot",
+        "rf_source.output",
+    )
     assert descriptor.idn_patterns == ("RIGOL TECHNOLOGIES,DSG830",)
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb")
@@ -47,6 +56,17 @@ def test_descriptor_declares_production_read_only_contract() -> None:
         "alc_unlocked",
         "output_power_protection",
     )
+    assert len(descriptor.rf_source_extensions.features) == 1
+    output = descriptor.rf_source_extensions.features[0]
+    assert output.feature is RfFeature.OUTPUT
+    assert output.directions == (
+        RfFeatureDirection.DISABLE,
+        RfFeatureDirection.ENABLE,
+        RfFeatureDirection.READ,
+    )
+    assert output.port_ids == ("rf_out",)
+    assert isinstance(output.profile, RfOutputProfile)
+    assert output.profile.output_readable is True
 
 
 def test_factory_opens_one_configured_transport_without_instrument_io() -> None:
