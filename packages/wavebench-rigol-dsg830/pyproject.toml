@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wavebench-rigol-dsg830"
+version = "0.2.0"
+description = "RIGOL DSG830 RF signal generator plugin for WaveBench"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["wavebench>=0.8.25,<0.9"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[project.entry-points."wavebench.instruments"]
+"rigol.dsg830" = "wavebench_rigol_dsg830:descriptor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wavebench_rigol_dsg830"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/doc/vendor-local"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
