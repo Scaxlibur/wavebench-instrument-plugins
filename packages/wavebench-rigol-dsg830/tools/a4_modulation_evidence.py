@@ -550,12 +550,14 @@ def _modulation_artifact_matches(artifact: object, request: RfModulationRequest)
 
 
 def _expected_a4_io(request: RfModulationRequest) -> tuple[int, int]:
-    modulation_query_count = 9 if request.kind is RfModulationKind.AM else 10
+    postcondition_modulation_query_count = 9 if request.kind is RfModulationKind.AM else 10
     driver_write_count = 6 if request.kind is RfModulationKind.AM else 7
     query_count = (
         _SNAPSHOT_QUERY_COUNT
-        + 2 * _SNAPSHOT_QUERY_COUNT
-        + 2 * modulation_query_count
+        + _SNAPSHOT_QUERY_COUNT
+        + 5
+        + _SNAPSHOT_QUERY_COUNT
+        + postcondition_modulation_query_count
         + _SNAPSHOT_QUERY_COUNT
     )
     return query_count, driver_write_count

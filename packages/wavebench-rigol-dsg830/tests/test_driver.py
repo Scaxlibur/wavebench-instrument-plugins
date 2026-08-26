@@ -214,6 +214,33 @@ def _modulation_responses(
     return responses
 
 
+def test_driver_reads_state_only_before_source_dependent_profile_queries() -> None:
+    transport = FakeTransport(
+        {
+            ":MOD:STAT?": "0\n",
+            ":AM:STAT?": "0\n",
+            ":FM:STAT?": "0\n",
+            ":PM:STAT?": "0\n",
+            ":STAT:QUES:MOD:COND?": "0\n",
+        }
+    )
+
+    snapshot = _driver_type()(transport=transport).get_rf_modulation_state("rf_out")
+
+    assert transport.query_calls == [
+        ":MOD:STAT?",
+        ":AM:STAT?",
+        ":FM:STAT?",
+        ":PM:STAT?",
+        ":STAT:QUES:MOD:COND?",
+    ]
+    assert transport.write_calls == []
+    assert snapshot.port_id == "rf_out"
+    assert snapshot.enabled_modes == ()
+    assert snapshot.global_enabled is False
+    assert snapshot.fault_codes == ()
+
+
 @pytest.mark.parametrize(
     ("kind", "value_field", "expected_value", "expected_queries"),
     (
@@ -317,6 +344,28 @@ def test_driver_reports_a_different_inactive_fm_pm_selection_without_rejecting_p
     assert transport.write_calls == []
 
 
+def test_driver_reports_an_inactive_external_square_profile_without_rejecting_readback() -> None:
+    transport = FakeTransport(
+        _modulation_responses(
+            RfModulationKind.AM,
+            **{
+                ":AM:SOUR?": "EXT\n",
+                ":AM:WAVE?": "SQUA\n",
+            },
+        )
+    )
+
+    snapshot = _driver_type()(transport=transport).get_rf_modulation_snapshot(
+        "rf_out",
+        RfModulationKind.AM,
+    )
+
+    assert snapshot.source is RfModulationSource.EXTERNAL
+    assert snapshot.waveform is RfModulationWaveform.SQUARE
+    assert snapshot.enabled_modes == ()
+    assert transport.write_calls == []
+
+
 @pytest.mark.parametrize(
     ("modulation_request", "expected_writes"),
     (
@@ -408,12 +457,9 @@ def test_driver_rejects_invalid_modulation_target_or_readback_before_unsafe_use(
     assert transport.write_calls == []
 
     malformed = FakeTransport(
-        _modulation_responses(
-            RfModulationKind.AM,
-            **{":AM:SOUR?": "EXT", ":STAT:QUES:MOD:COND?": "2"},
-        )
+        _modulation_responses(RfModulationKind.AM, **{":AM:SOUR?": "unsupported"})
     )
-    with pytest.raises(ValueError, match="source response"):
+    with pytest.raises(ValueError, match="source response must be INT or EXT"):
         _driver_type()(transport=malformed).get_rf_modulation_snapshot(
             "rf_out",
             RfModulationKind.AM,

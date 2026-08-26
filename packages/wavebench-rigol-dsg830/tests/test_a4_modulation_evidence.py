@@ -274,8 +274,8 @@ class _FakeRfSourceService:
 
     def configure_modulation_with_artifact(self, request: RfModulationRequest):
         self.driver.modulation_requests.append(request)
-        modulation_queries = 9 if request.kind is RfModulationKind.AM else 10
-        self.transport.query_calls += 16 + 2 * modulation_queries
+        postcondition_modulation_queries = 9 if request.kind is RfModulationKind.AM else 10
+        self.transport.query_calls += 8 + 5 + 8 + postcondition_modulation_queries
         self.transport.write_calls += 6 if request.kind is RfModulationKind.AM else 7
         if getattr(self.driver, "configure_error", None) is not None:
             raise self.driver.configure_error
@@ -348,9 +348,9 @@ def test_preflight_builds_in_memory_m3_descriptor_without_production_promotion(m
 @pytest.mark.parametrize(
     ("kind", "expected_queries", "expected_writes"),
     (
-        (RfModulationKind.AM, 50, 6),
-        (RfModulationKind.FM, 52, 7),
-        (RfModulationKind.PM, 52, 7),
+        (RfModulationKind.AM, 46, 6),
+        (RfModulationKind.FM, 47, 7),
+        (RfModulationKind.PM, 47, 7),
     ),
 )
 def test_collects_one_rf_off_internal_sine_mode_without_output_control(

@@ -21,6 +21,7 @@ from wavebench.instruments.rf_source_extensions import (
     RfCwRequest,
     RfModulationKind,
     RfModulationRequest,
+    RfModulationStateSnapshot,
     RfModulationSnapshot,
     RfModulationSource,
     RfModulationState,
@@ -143,14 +144,8 @@ class DSG830RfSource:
 
         _require_modulation_target(port_id, kind)
         prefix = _modulation_prefix(kind)
-        state_commands = (
-            ":MOD:STAT?",
-            ":AM:STAT?",
-            ":FM:STAT?",
-            ":PM:STAT?",
-            ":STAT:QUES:MOD:COND?",
-        )
-        responses = {command: self.transport.query(command) for command in state_commands}
+        state = self.get_rf_modulation_state(port_id)
+        responses: dict[str, str] = {}
         if kind in {RfModulationKind.FM, RfModulationKind.PM}:
             responses[":FMPM:TYPE?"] = self.transport.query(":FMPM:TYPE?")
         for suffix in ("SOUR?", "WAVE?", _modulation_value_query(kind), "FREQ?"):
@@ -161,15 +156,6 @@ class DSG830RfSource:
             _parse_fm_pm_type(responses[":FMPM:TYPE?"])
             if kind in {RfModulationKind.FM, RfModulationKind.PM}
             else None
-        )
-        enabled_modes = tuple(
-            mode
-            for mode, command in (
-                (RfModulationKind.AM, ":AM:STAT?"),
-                (RfModulationKind.FM, ":FM:STAT?"),
-                (RfModulationKind.PM, ":PM:STAT?"),
-            )
-            if _parse_binary(responses[command], f"{mode.value} modulation state")
         )
         source = _parse_modulation_source(responses[f":{prefix}:SOUR?"])
         waveform = _parse_modulation_waveform(responses[f":{prefix}:WAVE?"])
@@ -183,14 +169,9 @@ class DSG830RfSource:
                 f"{kind.value} modulation frequency",
             ),
             "selected_fm_pm_kind": selected_fm_pm_kind,
-            "enabled_modes": enabled_modes,
-            "global_enabled": _parse_binary(
-                responses[":MOD:STAT?"],
-                "global modulation state",
-            ),
-            "fault_codes": _parse_modulation_fault_codes(
-                responses[":STAT:QUES:MOD:COND?"]
-            ),
+            "enabled_modes": state.enabled_modes,
+            "global_enabled": state.global_enabled,
+            "fault_codes": state.fault_codes,
         }
         if kind is RfModulationKind.AM:
             return RfModulationSnapshot(
@@ -205,6 +186,37 @@ class DSG830RfSource:
         return RfModulationSnapshot(
             **common,
             phase_deviation_rad=_parse_pm_deviation_rad(responses[":PM:DEV?"]),
+        )
+
+    def get_rf_modulation_state(self, port_id: str) -> RfModulationStateSnapshot:
+        """Read M3 mode/global/fault state without source-dependent profile queries."""
+
+        _require_modulation_port(port_id)
+        state_commands = (
+            ":MOD:STAT?",
+            ":AM:STAT?",
+            ":FM:STAT?",
+            ":PM:STAT?",
+            ":STAT:QUES:MOD:COND?",
+        )
+        responses = {command: self.transport.query(command) for command in state_commands}
+        enabled_modes = tuple(
+            mode
+            for mode, command in (
+                (RfModulationKind.AM, ":AM:STAT?"),
+                (RfModulationKind.FM, ":FM:STAT?"),
+                (RfModulationKind.PM, ":PM:STAT?"),
+            )
+            if _parse_binary(responses[command], f"{mode.value} modulation state")
+        )
+        return RfModulationStateSnapshot(
+            port_id=port_id,
+            enabled_modes=enabled_modes,
+            global_enabled=_parse_binary(
+                responses[":MOD:STAT?"],
+                "global modulation state",
+            ),
+            fault_codes=_parse_modulation_fault_codes(responses[":STAT:QUES:MOD:COND?"]),
         )
 
     def configure_rf_modulation(self, request: RfModulationRequest) -> None:
@@ -389,14 +401,18 @@ def _parse_modulation_source(response: object) -> RfModulationSource:
     value = _clean_response(response, "modulation source").upper()
     if value in {"INT", "INTERNAL"}:
         return RfModulationSource.INTERNAL
-    raise ValueError("DSG830 modulation source response must be INT")
+    if value in {"EXT", "EXTERNAL"}:
+        return RfModulationSource.EXTERNAL
+    raise ValueError("DSG830 modulation source response must be INT or EXT")
 
 
 def _parse_modulation_waveform(response: object) -> RfModulationWaveform:
     value = _clean_response(response, "modulation waveform").upper()
     if value == "SINE":
         return RfModulationWaveform.SINE
-    raise ValueError("DSG830 modulation waveform response must be SINE")
+    if value in {"SQUA", "SQUARE"}:
+        return RfModulationWaveform.SQUARE
+    raise ValueError("DSG830 modulation waveform response must be SINE or SQUA")
 
 
 def _parse_fm_pm_type(response: object) -> RfModulationKind:
@@ -419,10 +435,14 @@ def _parse_modulation_fault_codes(response: object) -> tuple[str, ...]:
 
 
 def _require_modulation_target(port_id: object, kind: object) -> None:
-    if port_id != "rf_out":
-        raise ValueError("DSG830 modulation configuration requires port_id='rf_out'")
+    _require_modulation_port(port_id)
     if not isinstance(kind, RfModulationKind):
         raise ValueError("DSG830 modulation configuration requires a supported modulation kind")
+
+
+def _require_modulation_port(port_id: object) -> None:
+    if port_id != "rf_out":
+        raise ValueError("DSG830 modulation configuration requires port_id='rf_out'")
 
 
 def _modulation_prefix(kind: RfModulationKind) -> str:
