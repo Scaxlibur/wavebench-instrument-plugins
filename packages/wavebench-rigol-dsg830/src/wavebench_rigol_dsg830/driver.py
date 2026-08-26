@@ -72,7 +72,7 @@ _FREQUENCY_FRACTION_GROUP_RESPONSE = re.compile(
 )
 _DECIMAL_RESPONSE = re.compile(rf"^{_NUMBER}$")
 _RAD_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})(?:rad)?$", re.IGNORECASE)
-_TIME_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})(?P<unit>s|ms|us|ns)?$", re.IGNORECASE)
+_TIME_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})\s*(?P<unit>s|ms|us|ns)?$", re.IGNORECASE)
 _INTEGER_RESPONSE = re.compile(r"^\d+$")
 _IDN_VENDOR = "RIGOL TECHNOLOGIES"
 _IDN_MODEL = "DSG830"
