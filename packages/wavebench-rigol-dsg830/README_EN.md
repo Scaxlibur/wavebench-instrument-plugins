@@ -81,6 +81,7 @@ internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers
 - [A4 local-evidence setup template](tools/a4_modulation_evidence.setup.template.toml)
 - [A4 Pulse local-evidence setup template](tools/a4_pulse_evidence.setup.template.toml)
 - [A4 Step Sweep local-evidence setup template](tools/a4_step_sweep_evidence.setup.template.toml)
+- [A5-0 trigger-configuration diagnostic setup template](tools/a5_trigger_snapshot_evidence.setup.template.toml)
 
 The milestone document distinguishes the current seed, offline contracts, and A1–A5 hardware evidence. A
 production descriptor capability is not promoted by seed code or fake-transport tests alone.

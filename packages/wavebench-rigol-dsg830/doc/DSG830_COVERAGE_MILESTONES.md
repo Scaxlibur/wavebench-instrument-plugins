@@ -127,6 +127,8 @@ Pulse trigger、Sweep execute／fire、全部物理外部接口、Level Sweep �
 
 Core 将这条路径建模为 `rf_source.trigger_snapshot`、`wavebench rf-source trigger status --port PORT_ID` 和 `rf_source.trigger_status`。它要求 `TRIGGER / READ` profile，且只在非 production descriptor 中声明。`port_id` 仅表示相关逻辑设置影响的 RF 输出，不是 `TRIGGER IN`、`PULSE IN/OUT` 或 sync connector。DSG830 production descriptor 不声明该 capability 或 feature；因此当前普通配置拒绝该入口，不进行硬件 I/O。
 
+源码 checkout 的 `tools/a5_trigger_snapshot_evidence.py` 与资源无关 setup 模板提供私有零写诊断。默认仅作静态预检；显式 `--diagnose` 才使用原始 `read_only` 配置与禁用的读重试建立一个独占 session。初始 snapshot 未确认 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection 时，不读取 trigger configuration。成功路径固定为初始 snapshot、六条 trigger query、最终 snapshot，共 22 次 query、零 write；证据文件以 `0600` 保存，且不含 resource、序列号、原始响应或命令日志。该 harness 目前只通过 fake 回归，不构成 A5 实机证据或 capability 提升。
+
 ### A5：DSG830 后面板接口进入条件（物理验收未开始）
 
 DSG830 当前 production descriptor 只声明 `rf_out`，其 50 Ω dBm 参考不描述后面板 trigger／Pulse／sync 接口。手册中的 external trigger 命令只构成候选映射，不能替代接口电平、阻抗或接线验证。`TRIGGER IN` 与 `PULSE IN/OUT` 必须视为不同物理接口；不得从 CH2 的 50 Ω 或 A2–A4 的 RF 路径推断它们的电气边界。

@@ -36,6 +36,7 @@ production descriptor 不声明错误队列、`rf_source.modulation_disable`、�
 - [A4 本地证据 setup 模板](tools/a4_modulation_evidence.setup.template.toml)
 - [A4 Pulse 本地证据 setup 模板](tools/a4_pulse_evidence.setup.template.toml)
 - [A4 Step Sweep 本地证据 setup 模板](tools/a4_step_sweep_evidence.setup.template.toml)
+- [A5-0 trigger configuration 本地诊断 setup 模板](tools/a5_trigger_snapshot_evidence.setup.template.toml)
 
 里程碑明确区分当前种子、离线合同和 A1–A5 实机证据。production descriptor 的 capability 不会因种子代码或 fake transport 测试自动提升。
 
