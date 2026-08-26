@@ -59,7 +59,10 @@ from wavebench.instruments.registry import resolve_instrument_descriptor
 from wavebench.instruments.rf_source_capabilities import validate_rf_source_descriptor
 from wavebench.logging import CommandLogger
 from wavebench.services.resource_lease import ResourceLease
-from wavebench.services.rf_source_service import RfSourceService
+from wavebench.services.rf_source_service import (
+    RfModulationPostconditionError,
+    RfSourceService,
+)
 from wavebench.transport.session import SessionHealth
 
 
@@ -72,6 +75,8 @@ _PRODUCTION_CAPABILITIES = (
     "rf_source.snapshot",
     "rf_source.cw_configure",
     "rf_source.output",
+    "rf_source.pulse_configure",
+    "rf_source.sweep_configure",
 )
 _SNAPSHOT_QUERY_COUNT = 8
 _SAFE_METADATA_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
@@ -418,6 +423,8 @@ def _base_evidence(
         "initial_snapshot": None,
         "modulation_profile": None,
         "modulation_configure": None,
+        "modulation_postcondition": None,
+        "modulation_failure_recovery": None,
         "modulation_disable": None,
         "final_snapshot": None,
         "rf_audit": {"before_close": None, "after_close": None},
@@ -527,6 +534,57 @@ def _observed_artifact_value(port: Mapping[str, object], field: str, expected: o
         and observed.get("availability") == "value"
         and observed.get("value") == expected
     )
+
+
+def _modulation_postcondition_document(
+    error: RfModulationPostconditionError,
+) -> dict[str, object]:
+    """Serialize already-read typed mismatch evidence without raw transport data."""
+
+    return {
+        "snapshot": rf_source_snapshot_operation_artifact(error.postcondition_snapshot),
+        "modulation_profile": rf_modulation_snapshot_document(
+            error.postcondition_modulation_snapshot
+        ),
+    }
+
+
+def _modulation_postcondition_failure_codes(
+    error: RfModulationPostconditionError,
+    request: RfModulationRequest,
+) -> list[str]:
+    """Classify a strict mismatch without changing its pass/fail semantics."""
+
+    snapshot = error.postcondition_snapshot
+    profile = error.postcondition_modulation_snapshot
+    codes = _snapshot_failure_codes(
+        snapshot,
+        phase="postcondition",
+        expected_modulation=RfModulationState.ENABLED,
+    )
+    if profile.port_id != request.port_id or profile.kind is not request.kind:
+        codes.append("postcondition_profile_identity_invalid")
+    if (
+        profile.source is not RfModulationSource.INTERNAL
+        or profile.waveform is not RfModulationWaveform.SINE
+    ):
+        codes.append("postcondition_profile_source_or_waveform_invalid")
+    if profile.enabled_modes != (request.kind,) or profile.global_enabled is not True:
+        codes.append("postcondition_profile_modes_invalid")
+    if profile.fault_codes:
+        codes.append("postcondition_profile_fault_condition")
+    if (
+        request.kind in {RfModulationKind.FM, RfModulationKind.PM}
+        and profile.selected_fm_pm_kind is not request.kind
+    ):
+        codes.append("postcondition_fm_pm_selection_invalid")
+    if profile.internal_frequency_hz != request.internal_frequency_hz:
+        codes.append("postcondition_internal_frequency_mismatch")
+    if profile.value != request.value:
+        codes.append(f"postcondition_{_mode_value_field(request.kind)}_mismatch")
+    if profile.value_unit is not request.value_unit:
+        codes.append("postcondition_value_unit_invalid")
+    return codes
 
 
 def _modulation_artifact_matches(artifact: object, request: RfModulationRequest) -> bool:
@@ -916,11 +974,13 @@ def collect_a4_evidence(
     rf_driver: object | None = None
     rf_transport: object | None = None
     rf_service: RfSourceService | None = None
+    configuration_attempted = False
     configure_completed = False
     configure_confirmed = False
     disable_completed = False
     disable_confirmed = False
     final_rf_off_confirmed = False
+    recovery_after_configuration_failure = False
 
     try:
         a4_rf_config = _a4_rf_config(rf_config)
@@ -976,6 +1036,7 @@ def collect_a4_evidence(
         )
         if not failure_codes:
             try:
+                configuration_attempted = True
                 _, artifact = rf_service.configure_modulation_with_artifact(setup.request)
                 evidence["modulation_configure"] = artifact
                 configure_completed = True
@@ -983,8 +1044,14 @@ def collect_a4_evidence(
                     configure_confirmed = True
                 else:
                     failure_codes.append("rf_modulation_readback_invalid")
+            except RfModulationPostconditionError as exc:
+                evidence["modulation_postcondition"] = _modulation_postcondition_document(exc)
+                failure_codes.append("rf_modulation_readback_invalid")
+                failure_codes.extend(_modulation_postcondition_failure_codes(exc, setup.request))
+                recovery_after_configuration_failure = True
             except Exception:
                 failure_codes.append("rf_modulation_configure_failed")
+                recovery_after_configuration_failure = configuration_attempted
         if configure_completed:
             try:
                 _, artifact = rf_service.disable_modulation_with_artifact(
@@ -1034,6 +1101,27 @@ def collect_a4_evidence(
                     ),
                 )
             )
+
+    if recovery_after_configuration_failure:
+        try:
+            recovery = collect_a4_recovery_evidence(
+                rf_config,
+                preflight,
+                setup,
+                opener=opener,
+            )
+            evidence["modulation_failure_recovery"] = recovery
+            if recovery.get("status") == "passed":
+                final_snapshot = recovery.get("final_snapshot")
+                if isinstance(final_snapshot, Mapping):
+                    evidence["final_snapshot"] = final_snapshot
+                    final_rf_off_confirmed = True
+                else:
+                    failure_codes.append("rf_modulation_failure_recovery_failed")
+            else:
+                failure_codes.append("rf_modulation_failure_recovery_failed")
+        except Exception:
+            failure_codes.append("rf_modulation_failure_recovery_failed")
 
     if not final_rf_off_confirmed:
         failure_codes.append("final_rf_off_not_confirmed")

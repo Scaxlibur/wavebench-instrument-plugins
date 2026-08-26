@@ -53,25 +53,7 @@ def _script_module():
 def _production_descriptor():
     from wavebench_rigol_dsg830.descriptor import descriptor
 
-    production = descriptor()
-    extensions = production.rf_source_extensions
-    assert extensions is not None
-    return replace(
-        production,
-        capabilities=tuple(
-            capability
-            for capability in production.capabilities
-            if capability not in {"rf_source.pulse_configure", "rf_source.sweep_configure"}
-        ),
-        rf_source_extensions=replace(
-            extensions,
-            features=tuple(
-                feature
-                for feature in extensions.features
-                if feature.feature not in {RfFeature.PULSE, RfFeature.SWEEP}
-            ),
-        ),
-    )
+    return descriptor()
 
 
 def _config(*, resource: str = "TCPIP::198.51.100.83::INSTR") -> WaveBenchConfig:
@@ -400,6 +382,26 @@ def _collector(production, driver: _FakeDriver):
     return calls, opener
 
 
+def _multi_collector(production, drivers: list[_FakeDriver]):
+    calls: list[dict[str, object]] = []
+
+    def opener(**kwargs):
+        index = len(calls)
+        if index >= len(drivers):
+            raise AssertionError("unexpected A4 session")
+        driver = drivers[index]
+        calls.append(kwargs)
+        driver.transport.access = kwargs["access"]
+        return SimpleNamespace(
+            descriptor=production,
+            driver=driver,
+            transport=driver.transport,
+            session_state=SimpleNamespace(health=SessionHealth.HEALTHY),
+        )
+
+    return calls, opener
+
+
 def test_preflight_builds_in_memory_m3_descriptor_without_production_promotion(monkeypatch) -> None:
     module = _script_module()
     production = _production_descriptor()
@@ -412,6 +414,8 @@ def test_preflight_builds_in_memory_m3_descriptor_without_production_promotion(m
         "rf_source.snapshot",
         "rf_source.cw_configure",
         "rf_source.output",
+        "rf_source.pulse_configure",
+        "rf_source.sweep_configure",
     )
     assert preflight.evidence_descriptor.capabilities[-2:] == (
         "rf_source.modulation_configure",
@@ -420,7 +424,7 @@ def test_preflight_builds_in_memory_m3_descriptor_without_production_promotion(m
     assert preflight.evidence_descriptor.rf_source_extensions is not None
     assert tuple(
         feature.feature for feature in preflight.evidence_descriptor.rf_source_extensions.features
-    ) == (RfFeature.CW, RfFeature.MODULATION, RfFeature.OUTPUT)
+    ) == (RfFeature.CW, RfFeature.MODULATION, RfFeature.OUTPUT, RfFeature.PULSE, RfFeature.SWEEP)
 
     changed = preflight.evidence_descriptor
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: changed)
@@ -595,15 +599,21 @@ def test_initial_output_on_fails_without_modulation_or_output_write(monkeypatch)
     assert transport.write_calls == 0
 
 
-def test_modulation_failure_does_not_attempt_output_or_final_snapshot(monkeypatch) -> None:
+def test_modulation_failure_uses_a_fresh_bounded_recovery_session_without_output_control(monkeypatch) -> None:
     module = _script_module()
     production = _production_descriptor()
     _install_common_patches(monkeypatch, module, production)
-    transport = _FakeTransport(module)
-    driver = _FakeDriver(transport)
-    driver.snapshots = [_rf_snapshot()]
-    driver.configure_error = RuntimeError("redacted")
-    _, opener = _collector(production, driver)
+    failed_transport = _FakeTransport(module)
+    failed_driver = _FakeDriver(failed_transport)
+    failed_driver.snapshots = [_rf_snapshot()]
+    failed_driver.configure_error = RuntimeError("redacted")
+    recovery_transport = _FakeTransport(module)
+    recovery_driver = _FakeDriver(recovery_transport)
+    recovery_driver.snapshots = [
+        _rf_snapshot(modulation=RfModulationState.ENABLED),
+        _rf_snapshot(),
+    ]
+    calls, opener = _multi_collector(production, [failed_driver, recovery_driver])
     setup = _setup(module, RfModulationKind.FM)
     preflight = module.validate_a4_preflight(_config(), setup)
 
@@ -611,10 +621,58 @@ def test_modulation_failure_does_not_attempt_output_or_final_snapshot(monkeypatc
 
     assert evidence["status"] == "failed"
     assert "rf_modulation_configure_failed" in evidence["failure_codes"]
-    assert evidence["final_snapshot"] is None
-    assert driver.modulation_requests == [setup.request]
-    assert driver.modulation_disable_requests == []
-    assert driver.output_requests == []
+    assert "final_rf_off_not_confirmed" not in evidence["failure_codes"]
+    assert evidence["final_snapshot"] is not None
+    assert evidence["modulation_failure_recovery"]["status"] == "passed"
+    assert failed_driver.modulation_requests == [setup.request]
+    assert failed_driver.modulation_disable_requests == []
+    assert recovery_driver.modulation_disable_requests == [
+        RfModulationDisableRequest(port_id="rf_out", kind=RfModulationKind.FM)
+    ]
+    assert failed_driver.output_requests == []
+    assert recovery_driver.output_requests == []
+    assert [call["lease"].operation for call in calls] == [
+        "dsg830.a4_modulation_evidence",
+        "dsg830.a4_modulation_recovery",
+    ]
+
+
+def test_strict_pm_postcondition_failure_records_typed_evidence_then_recovers(monkeypatch) -> None:
+    module = _script_module()
+    production = _production_descriptor()
+    _install_common_patches(monkeypatch, module, production)
+    setup = _setup(module, RfModulationKind.PM)
+    postcondition_snapshot = _rf_snapshot(modulation=RfModulationState.ENABLED)
+    postcondition_profile = replace(
+        _modulation_snapshot(setup.request, enabled=True),
+        phase_deviation_rad=1.25,
+    )
+    failed_transport = _FakeTransport(module)
+    failed_driver = _FakeDriver(failed_transport)
+    failed_driver.snapshots = [_rf_snapshot()]
+    failed_driver.configure_error = module.RfModulationPostconditionError(
+        "rf_source.modulation_configure modulation readback does not match request",
+        postcondition_snapshot=postcondition_snapshot,
+        postcondition_modulation_snapshot=postcondition_profile,
+    )
+    recovery_transport = _FakeTransport(module)
+    recovery_driver = _FakeDriver(recovery_transport)
+    recovery_driver.snapshots = [
+        _rf_snapshot(modulation=RfModulationState.ENABLED),
+        _rf_snapshot(),
+    ]
+    _, opener = _multi_collector(production, [failed_driver, recovery_driver])
+    preflight = module.validate_a4_preflight(_config(), setup)
+
+    evidence = module.collect_a4_evidence(_config(), preflight, setup, opener=opener)
+
+    assert evidence["status"] == "failed"
+    assert "rf_modulation_readback_invalid" in evidence["failure_codes"]
+    assert "postcondition_phase_deviation_rad_mismatch" in evidence["failure_codes"]
+    assert "final_rf_off_not_confirmed" not in evidence["failure_codes"]
+    assert evidence["modulation_postcondition"]["modulation_profile"]["phase_deviation_rad"] == 1.25
+    assert evidence["modulation_failure_recovery"]["status"] == "passed"
+    assert recovery_driver.output_requests == []
 
 
 def test_invalid_postcondition_or_final_output_state_never_invokes_output_control(monkeypatch) -> None:
