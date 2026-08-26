@@ -120,6 +120,18 @@ Pulse trigger、Sweep execute／fire、全部外部接口、Level Sweep 与 list
 
 每项实机验收都需要单独授权。写入前后必须记录可公开的脱敏证据、输出状态和恢复结果；无法确认最终 RF OFF 时，验收失败且不能提升 capability。
 
+### A5：DSG830 后面板接口进入条件（未开始）
+
+DSG830 当前 production descriptor 只声明 `rf_out`，其 50 Ω dBm 参考不描述后面板 trigger／Pulse／sync 接口。手册中的 external trigger 命令只构成候选映射，不能替代接口电平、阻抗或接线验证。`TRIGGER IN` 与 `PULSE IN/OUT` 必须视为不同物理接口；不得从 CH2 的 50 Ω 或 A2–A4 的 RF 路径推断它们的电气边界。
+
+A5 开始前，需要为本次唯一目标行为提供：源端与目的端接口、逐根线缆和转接件、触发或同步方向、信号类型、幅度／阈值、极性、脉宽、频率／时序、源／负载阻抗、终端方式，以及初始和最终状态的恢复办法。未明确这些事实时，不新增 production capability，不写入后面板配置，也不发送 `*TRG`、`:TRIG:PULS`、`:TRIG:SWE`、`:SWE:EXEC` 或 `:PULM:OUT`。
+
+推荐实现顺序为：
+
+1. 对一个明确的外部输入路径建立 Core typed contract、descriptor profile、driver 严格 readback 和 fake transport 回归；production descriptor 保持不变。
+2. 提供保持原始 `read_only` 配置的零写诊断，只读取已声明的状态，不触发 Pulse 或 Sweep。
+3. 在物理接线与电气边界已确认后，设计一次独立 A5 受控验收；任何 fire／trigger、RF 输出或后面板辅助输出都必须有单独的 safety 决定与最终 RF OFF 复核。
+
 ### A1：已完成的本包只读验收
 
 A1 已使用一次性、非 production 的本地 evidence harness 完成并经复核；不能临时修改 descriptor，也不能用

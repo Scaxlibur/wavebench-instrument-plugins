@@ -52,6 +52,18 @@ A1 has completed and been reviewed, so the production descriptor declares `rf_so
 
 Every hardware acceptance needs separate authorization. An unknown final RF-OFF state fails acceptance and cannot promote any capability.
 
+### A5: DSG830 rear-panel entry conditions (not started)
+
+The DSG830 production descriptor currently declares only `rf_out`; its 50-ohm dBm reference does not describe rear-panel trigger, Pulse, or synchronization interfaces. Manual external-trigger commands are candidate mappings only, not proof of interface levels, impedance, or wiring. Treat `TRIGGER IN` and `PULSE IN/OUT` as distinct physical interfaces. Do not infer their electrical boundary from CH2's 50-ohm input or from the A2–A4 RF path.
+
+For one A5 target behavior, record the source and destination interfaces, every cable and adapter, trigger or synchronization direction, signal type, amplitude/threshold, polarity, pulse width, rate/timing, source/load impedance, termination, and the initial/final restoration procedure. Until these facts are confirmed, do not add a production capability, write rear-panel settings, or send `*TRG`, `:TRIG:PULS`, `:TRIG:SWE`, `:SWE:EXEC`, or `:PULM:OUT`.
+
+Recommended implementation order:
+
+1. Build a Core typed contract, descriptor profile, strict driver readback, and fake-transport regression for one named external-input path; leave the production descriptor unchanged.
+2. Provide a zero-write diagnostic that retains the original `read_only` configuration and does not trigger Pulse or Sweep.
+3. After physical wiring and electrical limits are confirmed, design one independent A5 controlled acceptance. Any fire/trigger action, RF output, or rear-panel auxiliary output needs a separate safety decision and final RF-OFF verification.
+
 ### A4: AM/FM/PM passed and promoted
 
 The source checkout retains `tools/a4_modulation_evidence.py`, its regression tests, and
