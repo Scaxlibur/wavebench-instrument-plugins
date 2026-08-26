@@ -166,8 +166,17 @@ def _audit_failure_codes(
     if before_close["session_health"] != "healthy":
         failure_codes.append("session_not_healthy_before_close")
 
-    if after_close is not None and after_close["session_health"] != "closed":
-        failure_codes.append("session_not_closed")
+    if after_close is not None:
+        if after_close["access"] != "read_only":
+            failure_codes.append("audit_after_close_access_not_read_only")
+        after_counters = after_close["counters"]
+        assert isinstance(after_counters, dict)
+        if any(after_counters[key] != 0 for key in _MUTATION_COUNTER_KEYS):
+            failure_codes.append("unexpected_write_activity_after_close")
+        if after_counters != before_counters:
+            failure_codes.append("audit_counters_changed_after_close")
+        if after_close["session_health"] != "closed":
+            failure_codes.append("session_not_closed")
     return failure_codes
 
 
@@ -271,7 +280,10 @@ def collect_a1_evidence(
             failure_codes.append("snapshot_failed")
         finally:
             if callable(audit_snapshot):
-                before_close = _sanitize_audit(audit_snapshot())
+                try:
+                    before_close = _sanitize_audit(audit_snapshot())
+                except Exception:
+                    failure_codes.append("audit_before_close_unavailable")
             else:
                 failure_codes.append("audit_before_close_unavailable")
 
@@ -285,7 +297,10 @@ def collect_a1_evidence(
                     failure_codes.append("driver_close_failed")
 
             if callable(audit_snapshot):
-                after_close = _sanitize_audit(audit_snapshot())
+                try:
+                    after_close = _sanitize_audit(audit_snapshot())
+                except Exception:
+                    failure_codes.append("audit_after_close_unavailable")
 
     if snapshot is not None:
         evidence["snapshot"] = rf_source_snapshot_operation_artifact(snapshot)
@@ -379,12 +394,18 @@ def main(argv: list[str] | None = None) -> int:
         )
     except A1PreflightError as exc:
         if output is not None:
-            output.close()
+            try:
+                output.close()
+            except Exception:
+                pass
         print(json.dumps({"status": "preflight_failed", "failure_code": exc.code}))
         return 2
     except Exception:
         if output is not None:
-            output.close()
+            try:
+                output.close()
+            except Exception:
+                pass
         print(json.dumps({"status": "preflight_failed", "failure_code": "local_output_invalid"}))
         return 2
 
@@ -399,10 +420,17 @@ def main(argv: list[str] | None = None) -> int:
             evidence["failure_codes"] = ["local_harness_failed"]
         _replace_evidence(output, evidence)
     except Exception:
+        try:
+            output.close()
+        except Exception:
+            pass
         print(json.dumps({"status": "evidence_write_failed", "failure_code": "local_output_failed"}))
         return 2
-    finally:
+    try:
         output.close()
+    except Exception:
+        print(json.dumps({"status": "evidence_write_failed", "failure_code": "local_output_failed"}))
+        return 2
 
     print(_summary(evidence))
     return 0 if evidence["status"] == "passed" else 1
