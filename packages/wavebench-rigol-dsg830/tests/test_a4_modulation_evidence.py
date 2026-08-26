@@ -176,6 +176,7 @@ class _FakeTransport:
     def __init__(self, module) -> None:
         self.module = module
         self.closed = False
+        self.access = "read_write"
         self.query_calls = 0
         self.write_calls = 0
 
@@ -192,7 +193,7 @@ class _FakeTransport:
         ):
             counters[key] = self.write_calls
         return {
-            "access": "read_write",
+            "access": self.access,
             "counters": counters,
             "session": {"health": "closed" if self.closed else "healthy"},
         }
@@ -204,10 +205,19 @@ class _FakeDriver:
         self.close_calls = 0
         self.modulation_requests: list[RfModulationRequest] = []
         self.modulation_disable_requests: list[RfModulationDisableRequest] = []
+        self.modulation_profile_requests: list[tuple[str, RfModulationKind]] = []
         self.output_requests: list[object] = []
 
     def a1_snapshot_firmware(self) -> str:
         return "00.01.01"
+
+    def get_rf_modulation_snapshot(self, port_id: str, kind: RfModulationKind) -> RfModulationSnapshot:
+        self.modulation_profile_requests.append((port_id, kind))
+        self.transport.query_calls += 9 if kind is RfModulationKind.AM else 10
+        if getattr(self, "profile_error", None) is not None:
+            raise self.profile_error
+        profile = getattr(self, "diagnostic_profile", None)
+        return profile if profile is not None else _modulation_snapshot(_request(kind), enabled=False)
 
     def close(self) -> None:
         self.close_calls += 1
@@ -360,6 +370,7 @@ def _collector(production, driver: _FakeDriver):
 
     def opener(**kwargs):
         calls.append(kwargs)
+        driver.transport.access = kwargs["access"]
         return SimpleNamespace(
             descriptor=production,
             driver=driver,
@@ -447,6 +458,100 @@ def test_collects_one_rf_off_internal_sine_mode_without_output_control(
     assert calls[0]["access"] == "read_write"
     assert calls[0]["lease"].operation == "dsg830.a4_modulation_evidence"
     assert "198.51.100.83" not in str(evidence)
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected_queries"),
+    (
+        (RfModulationKind.AM, 25),
+        (RfModulationKind.FM, 26),
+        (RfModulationKind.PM, 26),
+    ),
+)
+def test_collects_readonly_a4_profile_diagnostic_without_output_control(
+    monkeypatch,
+    kind: RfModulationKind,
+    expected_queries: int,
+) -> None:
+    module = _script_module()
+    production = _production_descriptor()
+    _install_common_patches(monkeypatch, module, production)
+    setup = _setup(module, kind)
+    transport = _FakeTransport(module)
+    driver = _FakeDriver(transport)
+    driver.snapshots = [_rf_snapshot(), _rf_snapshot()]
+    calls, opener = _collector(production, driver)
+    preflight = module.validate_a4_preflight(_config(), setup)
+
+    evidence = module.collect_a4_diagnostic_evidence(
+        _config(),
+        preflight,
+        setup,
+        opener=opener,
+        timestamp_utc="2026-08-27T00:00:00Z",
+    )
+
+    assert evidence["status"] == "passed"
+    assert evidence["operation_mode"] == "diagnostic"
+    assert evidence["modulation_profile"]["kind"] == kind.value
+    assert driver.modulation_profile_requests == [("rf_out", kind)]
+    assert driver.modulation_requests == []
+    assert driver.modulation_disable_requests == []
+    assert driver.output_requests == []
+    assert transport.write_calls == 0
+    assert evidence["rf_audit"]["before_close"]["access"] == "read_only"
+    assert evidence["rf_audit"]["before_close"]["counters"]["query_calls"] == expected_queries
+    assert evidence["rf_audit"]["after_close"]["session_health"] == "closed"
+    assert calls[0]["access"] == "read_only"
+    assert calls[0]["lease"].operation == "dsg830.a4_modulation_diagnostic"
+    assert "198.51.100.83" not in str(evidence)
+
+
+def test_readonly_diagnostic_refuses_an_unsafe_initial_snapshot_without_profile_or_write(monkeypatch) -> None:
+    module = _script_module()
+    production = _production_descriptor()
+    _install_common_patches(monkeypatch, module, production)
+    transport = _FakeTransport(module)
+    driver = _FakeDriver(transport)
+    driver.snapshots = [_rf_snapshot(output_enabled=True)]
+    _, opener = _collector(production, driver)
+    setup = _setup(module, RfModulationKind.PM)
+    preflight = module.validate_a4_preflight(_config(), setup)
+
+    evidence = module.collect_a4_diagnostic_evidence(_config(), preflight, setup, opener=opener)
+
+    assert evidence["status"] == "failed"
+    assert "initial_rf_output_not_off" in evidence["failure_codes"]
+    assert evidence["modulation_profile"] is None
+    assert driver.modulation_profile_requests == []
+    assert driver.modulation_requests == []
+    assert driver.modulation_disable_requests == []
+    assert driver.output_requests == []
+    assert transport.write_calls == 0
+
+
+def test_readonly_diagnostic_does_not_retry_a_profile_read_failure(monkeypatch) -> None:
+    module = _script_module()
+    production = _production_descriptor()
+    _install_common_patches(monkeypatch, module, production)
+    transport = _FakeTransport(module)
+    driver = _FakeDriver(transport)
+    driver.snapshots = [_rf_snapshot()]
+    driver.profile_error = RuntimeError("redacted")
+    _, opener = _collector(production, driver)
+    setup = _setup(module, RfModulationKind.PM)
+    preflight = module.validate_a4_preflight(_config(), setup)
+
+    evidence = module.collect_a4_diagnostic_evidence(_config(), preflight, setup, opener=opener)
+
+    assert evidence["status"] == "failed"
+    assert "diagnostic_profile_read_failed" in evidence["failure_codes"]
+    assert evidence["final_snapshot"] is None
+    assert driver.modulation_profile_requests == [("rf_out", RfModulationKind.PM)]
+    assert driver.modulation_requests == []
+    assert driver.modulation_disable_requests == []
+    assert driver.output_requests == []
+    assert transport.write_calls == 0
 
 
 def test_initial_output_on_fails_without_modulation_or_output_write(monkeypatch) -> None:
