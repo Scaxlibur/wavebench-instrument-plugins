@@ -241,16 +241,10 @@ class DSG830RfSource:
             self.transport.write(f":FMPM:TYPE {request.kind.value.upper()}")
         self.transport.write(f":{prefix}:SOUR INT")
         self.transport.write(f":{prefix}:WAVE SINE")
-        frequency_write = f":{prefix}:FREQ {_format_scpi_real(request.internal_frequency_hz)}Hz"
-        if request.kind is RfModulationKind.PM:
-            # The PM command reference presents frequency before phase deviation.
-            # Preserve that mode-specific order rather than applying a generic
-            # value-then-frequency sequence to all modulation kinds.
-            self.transport.write(frequency_write)
-            self.transport.write(_modulation_value_write(request))
-        else:
-            self.transport.write(_modulation_value_write(request))
-            self.transport.write(frequency_write)
+        self.transport.write(_modulation_value_write(request))
+        self.transport.write(
+            f":{prefix}:FREQ {_format_scpi_real(request.internal_frequency_hz)}Hz"
+        )
         self.transport.write(f":{prefix}:STAT ON")
         self.transport.write(":MOD:STAT ON")
 
@@ -502,11 +496,7 @@ def _modulation_value_write(request: RfModulationRequest) -> str:
         return f":{prefix}:DEPT {_format_scpi_real(request.value)}"
     if request.kind is RfModulationKind.FM:
         return f":{prefix}:DEV {_format_scpi_real(request.value)}Hz"
-    # The DSG800 guide defines radians as the default unit and uses a bare
-    # numeric PM-deviation write in its canonical example.  Keep the driver on
-    # that representation so the wire value matches the device's documented
-    # readback convention.
-    return f":{prefix}:DEV {_format_scpi_real(request.value)}"
+    return f":{prefix}:DEV {_format_scpi_real(request.value)}rad"
 
 
 def _validate_modulation_request_range(request: RfModulationRequest) -> None:
