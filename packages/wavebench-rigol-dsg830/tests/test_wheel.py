@@ -86,7 +86,7 @@ def test_wheel_metadata_contains_license_and_single_entry_point(tmp_path: Path) 
     ]
 
 
-def test_sdist_excludes_vendor_local_material(tmp_path: Path) -> None:
+def test_sdist_excludes_local_only_material(tmp_path: Path) -> None:
     _run(
         [
             sys.executable,
@@ -106,6 +106,7 @@ def test_sdist_excludes_vendor_local_material(tmp_path: Path) -> None:
         members = archive.getnames()
 
     assert not any("/doc/vendor-local/" in member for member in members)
+    assert not any("/tools/" in member for member in members)
 
 
 def test_wheel_install_discovers_descriptor_without_instrument_io(tmp_path: Path) -> None:

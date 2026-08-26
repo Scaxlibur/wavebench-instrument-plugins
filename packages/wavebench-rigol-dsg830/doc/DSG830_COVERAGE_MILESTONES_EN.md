@@ -59,3 +59,15 @@ Acceptance requires a successful parser, an explicitly OFF `rf_out`, a healthy c
 showing `read_only` with zero write counters. Keep only a redacted typed snapshot and audit summary; never keep a
 resource, serial number, full IDN, raw response, or command log. An unknown/ON output, parser failure, or session
 failure does not promote a capability and must not trigger automatic RF OFF in this read-only flow.
+
+The source checkout provides `tools/a1_snapshot_evidence.py`; it is excluded from both wheel and sdist. Run the
+non-connecting dry run first, then explicitly permit one query only after the configuration and wiring are reviewed:
+
+```bash
+python tools/a1_snapshot_evidence.py --config <private-a1.toml>
+python tools/a1_snapshot_evidence.py --config <private-a1.toml> \
+  --output <local-a1-evidence.json> --execute
+```
+
+The output must be a new local file. The script does not create directories or edit configuration, and it never
+prints a resource, full IDN, raw response, or command log.

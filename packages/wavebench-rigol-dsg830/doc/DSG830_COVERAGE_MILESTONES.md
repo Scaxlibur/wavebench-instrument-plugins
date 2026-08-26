@@ -93,3 +93,15 @@ A1 使用一次性、非 production 的本地 evidence harness；不能临时修
 `read_only` 且所有写计数为零。证据只保存脱敏的类型化 snapshot 和 audit 摘要；不得保存资源、序列号、
 完整 IDN、原始响应或命令日志。任何未知／ON 输出、解析异常或 session 异常都不提升 capability，也不在
 只读流程中尝试自动 RF OFF。
+
+本地源码 checkout 提供 `tools/a1_snapshot_evidence.py`，它不进入 wheel 或 sdist。先执行不连接仪器的
+dry-run，再在人工复核配置和接线后显式执行一次查询：
+
+```bash
+python tools/a1_snapshot_evidence.py --config <private-a1.toml>
+python tools/a1_snapshot_evidence.py --config <private-a1.toml> \
+  --output <local-a1-evidence.json> --execute
+```
+
+输出路径必须是尚不存在的本地文件。脚本不会创建目录、不会写入配置，也不会打印资源、完整 IDN、原始响应或
+命令日志。

@@ -22,5 +22,6 @@ def test_package_metadata_declares_single_dsg830_instrument_entry_point() -> Non
         "rigol.dsg830": "wavebench_rigol_dsg830:descriptor"
     }
     assert pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]["exclude"] == [
-        "/doc/vendor-local"
+        "/doc/vendor-local",
+        "/tools",
     ]
