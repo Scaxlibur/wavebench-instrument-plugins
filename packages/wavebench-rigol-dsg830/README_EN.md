@@ -12,24 +12,25 @@ mapping: its descriptor uses `kind="rf_source"`, declares one `rf_out` port with
 static limits and a 50-ohm dBm reference, and ships a strict snapshot parser plus one-write
 `:FREQ`/`:LEV`/`:OUTP ON|OFF` driver mappings.
 
-A1 read-only evidence and A2 controlled-output evidence have completed and been reviewed. The production descriptor
-declares `rf_source.idn`, `rf_source.snapshot`, and `rf_source.output`. With a `read_write` session and complete
-per-port safety configuration, Core Service, CLI, and the run step may perform one-port RF ON/OFF with a fresh
-snapshot and independent readback. The example configuration remains `read_only` and does not enable output by default.
+A1 read-only evidence, A2 controlled-output evidence, and A3 CW-loopback evidence have completed and been reviewed.
+The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, and
+`rf_source.output`. A `read_write` CW request requires target RF OFF and the complete OFF-only preflight; RF ON/OFF
+also requires complete per-port safety configuration, a fresh snapshot, and independent readback. The example
+configuration remains `read_only` and does not enable writes by default.
 
 The local A2 controlled-output harness, regression tests, and resource-free setup template remain in the source
 checkout as regression protection for this acceptance protocol. The evidence confirms final RF OFF; after the
 production descriptor declares `rf_source.output`, the harness refuses reruns so a temporary descriptor cannot bypass
-the production capability. M1 CW writes still require A3 and are not authorized by this A2 acceptance.
+the production capability. A2 itself does not authorize CW; the separate A3 evidence promotes it.
 
 The local A3 CW-loopback harness, regression tests, and resource-free setup template are also in the source checkout.
 They require initial RF OFF, independent readback for two OFF-only CW writes, one low-power RF ON/OFF, and a current
 CH2-buffer signal observation. CH2 only establishes visible signal; source readback remains the frequency and power
-evidence. This harness has not yet produced hardware evidence and cannot pre-authorize `rf_source.cw_configure`.
+evidence. Its completed, reviewed evidence separately promotes `rf_source.cw_configure`.
 
-The production descriptor declares no error queue, CW write, modulation, Pulse, Sweep, trigger, or arbitrary SCPI
-passthrough. `rf_source.output` covers only audited `rf_out` ON/OFF; every other capability remains behind its A3–A5
-evidence gate.
+The production descriptor declares no error queue, modulation, Pulse, Sweep, trigger, or arbitrary SCPI passthrough.
+`rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
+`rf_source.output` only audited `rf_out` ON/OFF; every other capability remains behind its A4–A5 evidence gate.
 
 ## Development documentation
 
@@ -93,8 +94,9 @@ termination from a connector label.
 - The snapshot path issues only `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`,
   `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`; A1 exposes this read-only path as a production capability.
 - Default tests use fake transport and never connect to hardware. A normal production `read_only` configuration does
-  not reset the device or change RF output, power, frequency, trigger, modulation, or sweep; A2 separately opens
-  safety-gated RF output, while the A3 harness still requires explicit `--execute` for controlled CW evidence.
+  not reset the device or change RF output, power, frequency, trigger, modulation, or sweep; A2/A3 evidence separately
+  opens safety-gated output and OFF-only CW, while ordinary writes still require explicit `read_write`, capability, and
+  complete preflight.
 - Hardware testing requires separate authorization and a reviewed resource, firmware, terminator, RF-output
   state, safety limit, and restoration procedure.
 

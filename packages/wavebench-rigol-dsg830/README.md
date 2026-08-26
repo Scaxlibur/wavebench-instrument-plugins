@@ -9,13 +9,13 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射和 M2 离线输出映射：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV` 与 `:OUTP ON|OFF` 的单次 driver 映射。
 
-A1 只读证据和 A2 受控输出证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot` 和 `rf_source.output`。在 `read_write` session 且目标端口具备完整 safety 配置时，Core Service、CLI 和 run step 可以执行单端口 RF ON/OFF，并要求 fresh snapshot 与独立 readback。示例配置仍保持 `read_only`，不会默认开放输出。
+A1 只读证据、A2 受控输出证据和 A3 CW 环回证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure` 和 `rf_source.output`。在 `read_write` session 中，CW 写入要求目标端口明确 OFF 和完整 OFF-only preflight；RF ON/OFF 还要求完整端口 safety 配置、fresh snapshot 与独立 readback。示例配置仍保持 `read_only`，不会默认开放写入。
 
-A2 的本地受控输出 harness、回归测试和不含资源地址的 setup 模板保留在源码 checkout，作为本次验收协议的回归保护。证据已确认最终 RF OFF；harness 在 production descriptor 已声明 `rf_source.output` 后会拒绝重跑，避免用临时 descriptor 绕过正式 capability。M1 的 CW 写入仍需要 A3，不能通过本次 A2 验收授权。
+A2 的本地受控输出 harness、回归测试和不含资源地址的 setup 模板保留在源码 checkout，作为验收协议的回归保护。证据已确认最终 RF OFF；harness 在 production descriptor 已声明 `rf_source.output` 后会拒绝重跑，避免用临时 descriptor 绕过正式 capability。A2 本身不授权 CW，后者由独立 A3 证据提升。
 
-A3 的本地 CW 环回 harness、回归测试和不含资源地址的 setup 模板也已加入源码 checkout。它要求初始 RF OFF、两次 OFF-only CW 写入的独立回读、一次低功率 RF ON/OFF 与 CH2 的当前缓冲区信号观察；CH2 只用于确认可见信号，频率与功率仍以源端 readback 为准。该 harness 尚未形成实机证据，不能提前开放 `rf_source.cw_configure`。
+A3 的本地 CW 环回 harness、回归测试和不含资源地址的 setup 模板也保留在源码 checkout。它确认初始 RF OFF、两次 OFF-only CW 写入的独立回读、一次低功率 RF ON/OFF、CH2 的当前缓冲区可见信号和最终 RF OFF；CH2 只用于确认可见信号，频率与功率仍以源端 readback 为准。脱敏证据通过后，`rf_source.cw_configure` 已单独进入 production descriptor。
 
-production descriptor 不声明错误队列、CW 写入、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；其余 capability 仍须经过对应的 A3–A5 实机证据门。
+production descriptor 不声明错误队列、调制、Pulse、Sweep、trigger 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF；其余 capability 仍须经过对应的 A4–A5 实机证据门。
 
 ## 开发文档
 
@@ -70,7 +70,7 @@ access = "read_only"
 - factory 只通过 `DriverContext` 打开当前配置的 transport。
 - 默认测试只使用 fake transport，不连接真实仪器。
 - snapshot 仅发送 `*IDN?`、`:FREQ?`、`:LEV?`、`:OUTP?`、`:MOD:STAT?`、`:PULM:STAT?`、`:SWE:STAT?` 与 `:STAT:QUES:POW:COND?`；A1 已使这条只读路径成为 production capability。
-- 默认测试只使用 fake transport，不会连接硬件。production 的普通 `read_only` 配置不会执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频；A2 已单独开放受 safety 限制的 RF 输出，A3 harness 仍须显式 `--execute` 才能进行受控 CW 取证。
+- 默认测试只使用 fake transport，不会连接硬件。production 的普通 `read_only` 配置不会执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频；A2/A3 的受控证据已分别开放 safety-gated 输出与 OFF-only CW，普通写入仍须显式 `read_write`、相应 capability 和完整 preflight。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、RF 输出状态、安全限制和恢复方式。
 
 ## 开发验证

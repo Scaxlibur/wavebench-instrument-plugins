@@ -18,11 +18,11 @@ This document tracks model-specific delivery boundaries for `wavebench-rigol-dsg
 | --- | --- | --- |
 | Seed | Offline complete | `*IDN?`, zero-I/O descriptor, packaging tests, one entry point, and vendor-local exclusion. |
 | M0 | Offline complete; A1 complete | `rf_source`, `rf_out` topology, a strict snapshot parser, and production read-only status. |
-| M1 | Offline complete | OFF-only CW frequency/dBm configuration with independent readback; the production capability remains closed. |
+| M1 | Offline complete; A3 complete | OFF-only CW frequency/dBm configuration, independent readback, and production `rf_source.cw_configure`. |
 | M2 | Offline complete; A2 complete | One-write RF ON/OFF mapping, Core safety preflight, independent readback, and one-shot OFF recovery; production exposes `rf_source.output`. |
 | M3 | Not started | Declared internal-sine AM/FM/PM subset. |
 | M4 | Not started | Declared Pulse and frequency-only Step Sweep subset. |
-| A1–A5 | A1 and A2 complete; the A3 local harness is complete and hardware evidence is pending; A4 and A5 are not started | A1 is read-only snapshot evidence; A2 promotes only per-port RF output; A3 still requires separately authorized controlled hardware evidence. |
+| A1–A5 | A1, A2, and A3 complete; A4 and A5 are not started | A1 promotes read-only snapshot, A2 per-port RF output, and A3 OFF-only CW. |
 
 ## Seed: historical package boundary
 
@@ -36,12 +36,12 @@ The prerequisite is met on the Core `0.8.25` development line: `rf_source` kind,
 
 The plugin has migrated its kind, capabilities, and config fields to `rf_source`; declares one `rf_out` port with `9 kHz–3 GHz`, `-110 dBm–20 dBm`, and a 50-ohm dBm reference; and adds a strict parser for `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`, `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`. Fake-transport tests cover every query, normal values, unknown values, malformed responses, and protection-bit mapping. The connector label is not treated as actual termination. The wheel dependency and descriptor gate are both `>=0.8.25,<0.9`.
 
-A1 has completed and been reviewed, so the production descriptor declares `rf_source.idn` and `rf_source.snapshot`. M2 A2 controlled-output evidence separately completed and promoted `rf_source.output`; M1 CW and M3/M4 capabilities remain in fake descriptors or offline driver tests until their respective hardware evidence is obtained.
+A1 has completed and been reviewed, so the production descriptor declares `rf_source.idn` and `rf_source.snapshot`. M2 A2 controlled-output evidence separately completed and promoted `rf_source.output`; M1 A3 CW-loopback evidence also completed and promoted `rf_source.cw_configure`. M3/M4 capabilities remain in fake descriptors or offline driver tests until their respective hardware evidence is obtained.
 
 ## M1–M4 and A1–A5
 
-- M1 has an offline one-write `:FREQ`/`:LEV` mapping, independent readback contract, Core CLI, run step, and redacted artifact while RF is OFF. The production descriptor still lacks `rf_source.cw_configure`, so the CLI and run step cannot operate a live DSG830. The A3 local harness and regression tests now exist, but they do not constitute hardware evidence; A3 remains required before `rf_source.cw_configure` is production-declared.
-- M2 has an offline `:OUTP ON|OFF` mapping, independent readback, per-port preflight, and at most one guarded same-port OFF recovery when session health permits. The driver sends exactly one output write and leaves preflight, readback, and recovery to Core. A2 completed and `rf_source.output` is production-declared; this does not promote M1 CW or M3/M4 capabilities.
+- M1 has a one-write `:FREQ`/`:LEV` mapping, independent readback contract, Core CLI, run step, and redacted artifact while RF is OFF. A3 completed with independent source readback, a bounded low-power RF ON/OFF observation, visible CH2 signal, and confirmed final RF OFF. The production descriptor now declares `rf_source.cw_configure`; a `read_write` session still requires the complete OFF-only preflight before each single-field CW write.
+- M2 has an offline `:OUTP ON|OFF` mapping, independent readback, per-port preflight, and at most one guarded same-port OFF recovery when session health permits. The driver sends exactly one output write and leaves preflight, readback, and recovery to Core. A2 completed and `rf_source.output` is production-declared; the separate A3 result promotes M1 CW, but not M3/M4 capabilities.
 - M3 is limited to a bounded internal-sine AM/FM/PM subset. A4 is required before production modulation capability.
 - M4 is limited to declared Pulse and frequency-only Step Sweep subsets. External trigger, auxiliary output, reference clock, and synchronization require their own A4/A5 evidence.
 
@@ -83,3 +83,18 @@ The primary sequence is an initial snapshot, one RF ON, independent readback, op
 Scope observation requires `--observe-scope`. It reads the current `DEF` buffer on CH1 and CH2 at most once per channel and does not issue `SINGle`, trigger, or autoscale. CH2 50-ohm input requires the separate `allow_ch2_50ohm = true` setup declaration. Scope fetch may change channel-display and waveform-transfer fields, which the harness records as unrestored. A missing high-frequency CH2 waveform and the low-frequency CH1 auxiliary observation are warnings only. They do not replace typed RF readback or final-OFF verification, and do not prove a control relationship between RF and LF outputs.
 
 The `passed` record, confirmed final RF OFF, and review of redacted evidence have added `rf_source.output` to the production descriptor. The historical harness now rejects reruns with `production_output_gate_changed`; ordinary output control must use the production descriptor, `read_write` access, and complete per-port safety configuration.
+
+### A3: completed CW-loopback acceptance
+
+The checkout retains `tools/a3_cw_evidence.py`, its regression tests, and the resource-free
+`tools/a3_cw_evidence.setup.template.toml`. The controlled sequence has completed and been reviewed: initial RF OFF,
+one OFF-only frequency write with independent source readback, one OFF-only power write with independent source
+readback, a bounded low-power RF ON/OFF observation, visible signal in the current CH2 buffer, and confirmed final
+RF OFF. The redacted audit records four completed writes, 72 queries, and healthy session closure. The selected
+frequency and power remain at the declared test point after the run; RF output is independently confirmed OFF.
+
+CH2's 50-ohm input is an explicit electrical-safety precondition. Its observation only establishes visible signal;
+source readback remains the frequency and dBm-power evidence, with no dBm-to-Vpp conversion or scope-frequency
+substitution. The CH1 LF connection is a separate port and is neither read nor controlled by A3. After promotion, the
+historical harness rejects reruns with `production_cw_gate_changed`; ordinary CW control uses the production
+descriptor, `read_write` access, and the Core OFF-only preflight.
