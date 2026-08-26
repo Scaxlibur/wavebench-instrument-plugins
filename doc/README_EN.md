@@ -6,10 +6,10 @@ This repository is reserved for independently packaged WaveBench instrument plug
 
 ## Current status
 
-The source packages are maintained independently. In addition to DS1000Z, DG4000, DM3000, DP800, RTM2000, and Shengpu SP3000A, `wavebench-rigol-mso8000 0.8.0` targets MSO8104. Its identity and high-impedance CH1/CH2 reads have controlled hardware evidence; it declares identity, input safety, guarded autoscale, Math metadata, and restricted cursor readout. Waveform/capture are paused under the core binary-trailing contract gap documented in RFC-0008. External editions of bundled drivers provide independent upgrades, transports, and extensions without replacing the bundled baseline. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
+The source packages are maintained independently. The five optional external editions of bundled drivers have completed offline, managed-lifecycle, and controlled hardware acceptance. `wavebench-shengpu-sp3000a` is at SP30120 M3.5 with a minimal query-only descriptor and five certified vendor-specific RF-OFF controls. `wavebench-siglent-sdg2000x` has completed Source V2 A0, A1, limited A2, Basic A3, and the C3 candidate-package audit. `wavebench-siglent-sds3000` strictly supports SDS3054 firmware `8.4.1` and adopts WaveBench `0.8.24` transport/session P0. `wavebench-siglent-sds800x-hd` `0.6.0` provides Scope R1.3 PNG screenshot and standalone acquisition-control capabilities accepted on an SDS804X HD. `wavebench-rigol-mso8000` `0.9.0` targets MSO8104 and has controlled acceptance for bounded waveform/capture, Screenshot V2, acquisition control, and cursor readout under its recorded model, firmware, and LAN/PyVISA conditions. WaveBench provides local package inspection and managed install, status, upgrade, downgrade, removal, and conservative transaction recovery. This repository owns plugin source packages and does not duplicate the installer or a remote catalog.
 
 > [!IMPORTANT]
-> The WaveBench `v0.7.0` release does not contain Instrument API V2, the managed plugin lifecycle, or canonical override slots. Packages target WaveBench `0.8.x`, declare the minimum version required by their public API usage, and exclude a future `0.9` core. MSO8000 currently requires `wavebench>=0.8.22,<0.9`.
+> The WaveBench `v0.7.0` release does not contain Instrument API V2, the managed plugin lifecycle, or canonical override slots. Each package declares its own `0.8.x` minimum; SDS800X HD `0.6.0` requires `wavebench>=0.8.23,<0.9`, while SDG2000X `0.8.2`, SDS3000, and MSO8000 require `wavebench>=0.8.24,<0.9`. MSO8000 relies on current Core APIs that do not yet have an independent Core release, so it is not a compatibility-wheel release claim. Packages do not assume compatibility with a future `0.9` core.
 
 ## Planned layout
 
@@ -22,6 +22,9 @@ packages/
 ├── wavebench-rigol-mso8000/
 ├── wavebench-rohde-schwarz-rtm2000/
 ├── wavebench-shengpu-sp3000a/
+├── wavebench-siglent-sdg2000x/
+├── wavebench-siglent-sds3000/
+├── wavebench-siglent-sds800x-hd/
 └── wavebench-<vendor>-<instrument>/
     ├── pyproject.toml
     ├── README.md
@@ -38,15 +41,24 @@ WaveBench permanently bundles the RTM2000, DS1000Z, DG4000, DP800, and DM3000 fa
 ## Current plugin
 
 - [`wavebench-rigol-ds1000z`](../packages/wavebench-rigol-ds1000z/README_EN.md): four-channel RIGOL DS1104Z / DS1000Z series, canonical ID `rigol.ds1000z`.
-- [`wavebench-rigol-mso8000`](../packages/wavebench-rigol-mso8000/README_EN.md): RIGOL MSO8104 mixed-signal oscilloscope, canonical ID `rigol.mso8104`; identity and high-impedance CH1/CH2 reads have controlled hardware evidence, while waveform/capture are paused pending RFC-0008.
+- [`wavebench-rigol-mso8000`](../packages/wavebench-rigol-mso8000/README_EN.md): RIGOL MSO8104 mixed-signal oscilloscope, canonical ID `rigol.mso8104`; bounded waveform/capture, Screenshot V2, acquisition control, status, and cursor-readout paths have controlled acceptance under recorded model, firmware, and LAN/PyVISA conditions. The package documentation defines the complete boundary.
 - [`wavebench-rigol-dg4000`](../packages/wavebench-rigol-dg4000/README_EN.md): dual-channel RIGOL DG4202 / DG4000 series, canonical ID `rigol.dg4202`.
 - [`wavebench-rigol-dm3000`](../packages/wavebench-rigol-dm3000/README_EN.md): LAN-only RIGOL DM3000 / DM3058 multimeter, canonical ID `rigol.dm3000`; short aliases retain the built-in dual-backend fallback.
 - [`wavebench-rigol-dp800`](../packages/wavebench-rigol-dp800/README_EN.md): RIGOL DP800 / DP832 / DP832A programmable DC power supply, canonical ID `rigol.dp800`; its short alias remains on the built-in fallback.
 - [`wavebench-rohde-schwarz-rtm2000`](../packages/wavebench-rohde-schwarz-rtm2000/README_EN.md): R&S RTM2000 / RTM2032 oscilloscope, canonical ID `rohde-schwarz.rtm2032`; controlled dual-channel `DEF`, `MAX`, `DMAX`, autoscale, screenshot, and restoration acceptance is complete.
+- [`wavebench-siglent-sds3000`](../packages/wavebench-siglent-sds3000/README_EN.md): early SIGLENT SDS3000 oscilloscope, canonical ID `siglent.sds3000`; the current plugin strictly supports SDS3054 firmware `8.4.1` with identity, error-register, coupling, waveform-read, and single/dual-channel capture capabilities.
 
 ## Incubating plugin
 
 - [`wavebench-shengpu-sp3000a`](../packages/wavebench-shengpu-sp3000a/README_EN.md): Shengpu SP30120 sweep-analyzer driver, canonical ID `shengpu.sp30120`; its descriptor declares identity only, while five certified typed vendor-specific RF-OFF controls are available and trace plus generic configuration remain disabled.
+- [`wavebench-siglent-sdg2000x`](../packages/wavebench-siglent-sdg2000x/README_EN.md): SIGLENT SDG2042X / SDG2082X / SDG2122X function/arbitrary waveform generator, canonical ID `siglent.sdg2000x`; it retains the V1 basic surface and declares Source V2 snapshot, Basic, Output, and Harmonic Disable for the accepted SDG2122X model/firmware scope.
+- [`wavebench-siglent-sds800x-hd`](../packages/wavebench-siglent-sds800x-hd/README_EN.md): SIGLENT SDS800X HD oscilloscope-family `0.6.0` driver, canonical ID `siglent.sds800x-hd`; it declares identity, coupling, waveform/capture, read-only statistics, PNG screenshot, and standalone acquisition-control capabilities, with SDS804X HD hardware acceptance complete.
+
+## Interface proposals
+
+Cross-instrument gaps that cannot be solved safely inside one driver are tracked in the
+[interface RFC index](rfcs/README.md). Current contract status comes from the core repository; the
+plugin-side copies preserve review and evidence history.
 
 ## Security boundary
 

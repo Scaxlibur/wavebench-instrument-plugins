@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "wavebench-siglent-sds800x-hd"
+version = "0.6.0"
+description = "SIGLENT SDS800X HD oscilloscope driver plugin for WaveBench"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["wavebench>=0.8.23,<0.9"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
+
+[project.entry-points."wavebench.instruments"]
+"siglent.sds800x-hd" = "wavebench_siglent_sds800x_hd:descriptor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wavebench_siglent_sds800x_hd"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/doc/vendor-local"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

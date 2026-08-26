@@ -1,0 +1,637 @@
+{
+  "schema_version": 2,
+  "document_kind": "wavebench-core-rfc",
+  "status": "draft-needs-revision",
+  "revision": "R1",
+  "wavebench_baseline": "0.8.24",
+  "core_changed_by_this_plugin": false,
+  "decision": "assessment-only",
+  "core_contract_reference": {
+    "document": "WaveBench_transport重放与session健康RFC.md",
+    "revision": "R1",
+    "status": "accepted",
+    "implementation": "M1-M7-released",
+    "implementation_baseline": "a8e6b59",
+    "release_version": "0.8.24",
+    "release_commit": "dc7ce5b",
+    "release_required_for_plugin_adoption": true,
+    "release_gate_satisfied": true
+  },
+  "milestones": {
+    "plugin": "M8-functional-complete",
+    "p0_safety_hardening": "adopted",
+    "rfc": "R1-draft-needs-revision",
+    "core_implementation": "M1-M7-released-in-0.8.24",
+    "plugin_adoption": "adopted"
+  },
+  "scope": {
+    "current_plugin_capabilities": [
+      "scope.idn",
+      "scope.errors",
+      "scope.channel_coupling",
+      "scope.fetch_waveform",
+      "scope.capture_waveform",
+      "scope.capture_waveforms"
+    ],
+    "current_plugin_blocked_by_core": false,
+    "p0_safety_hardening_pending": false,
+    "p0_call_site_migration_complete": true,
+    "p0_structured_exception_handling_complete": true,
+    "p0_fault_injection_complete": true,
+    "p0_runtime_adoption_pending": false,
+    "p0_runtime_adopted": true,
+    "migration_branch_release_blocked": false,
+    "transport_session_api_frozen": true,
+    "typed_scope_api_frozen": false
+  },
+  "plugin_migration_evidence": {
+    "status": "adopted-on-wavebench-0.8.24",
+    "core_baseline_commit": "a8e6b59",
+    "plugin_implementation_commit": "480eaec",
+    "replay_policy": "every SDS3000 transport query explicitly uses ReplayPolicy.NO_REPLAY",
+    "structured_errors": "TransportIOError and SessionHealthError retain priority across acquisition, OPC, and temporary-restoration paths; structured failure causes zero unauthorized secondary restoration or validation I/O",
+    "operation_spec_mapping": {
+      "CHDR": [
+        "scope.query_response_header"
+      ],
+      "CFMT": [
+        "scope.waveform_format"
+      ],
+      "CORD": [
+        "scope.waveform_byte_order"
+      ],
+      "WFSU": [
+        "scope.waveform_points",
+        "scope.waveform_transfer_window"
+      ]
+    },
+    "session_authority": {
+      "plugin_can_authorize_recovery": false,
+      "plugin_can_transition_uncertain_to_healthy": false,
+      "owner": "WaveBench core SessionTransactionCoordinator"
+    },
+    "verification": {
+      "plugin_package_tests": "80 passed",
+      "plugin_repository_tests": "627 passed, 2 skipped",
+      "core_focused_contract_tests": "71 passed",
+      "ruff": "passed",
+      "manual_catalog_check": "passed",
+      "hardware_connected": true,
+      "hardware_acceptance": "WaveBench 0.8.24 with an SDG2000X source passed same-acquisition SDS3054 CH1/CH2 capture at 1 kHz, 1 Vpp, and 0 V offset; both scope inputs were DCL and both source outputs were independently read back OFF"
+    }
+  },
+  "specification_freeze_gates": [
+    {
+      "id": "transport-replay-session-rfc",
+      "status": "released-in-core-and-adopted-by-plugin",
+      "must_define": [
+        "default replay policy for existing query()",
+        "legacy call-site migration inventory",
+        "structured transport errors and command transmission count",
+        "partial response and communication desynchronization semantics",
+        "fail-closed behavior when read_continuation_only is unsupported",
+        "observable compatibility changes including on_failure=continue"
+      ],
+      "session_contract_freeze": {
+        "health_owner": "define one authoritative shared owner and its lifetime across transport, driver, Service reconstruction, and run-session reuse",
+        "recovery_authorization": "define the locked transaction coordinator allowed to execute plugin-declared bounded recovery and validation while uncertain; ordinary operations remain denied",
+        "state_validation_scope": "define required communication synchronization, identity continuity, affected-field closure, plugin-declared invariants, and post-reconnect configuration validation"
+      }
+    },
+    {
+      "id": "typed-scope-state-rfc",
+      "status": "required-before-p1-freeze",
+      "must_define": [
+        "exact fields and Protocol signatures",
+        "static and runtime field support",
+        "OperationSpec and Service/CLI/run-plan consumption matrix",
+        "v1 coexistence and precedence",
+        "structured operation-error envelope",
+        "per-value mappings across SDS3000, DS1000Z, and RTM2000"
+      ]
+    }
+  ],
+  "existing_interface_findings": [
+    {
+      "interface": "InstrumentTransport.query_bin_block",
+      "decision": "sufficient-for-current-path",
+      "evidence": "SDS3054 VICP descriptor and waveform payloads passed hardware acceptance",
+      "follow_up": "retain non-replayable binary behavior in the transport contract"
+    },
+    {
+      "interface": "OperationSpec.effect=acquire",
+      "decision": "core-audit-and-plugin-mapping-verification-complete",
+      "evidence": "core baseline a8e6b59 maps query response header, waveform format, byte order, points, and the complete transfer window into capture/fetch changed_fields and verification_fields; these fields cover SDS3000 CHDR, CFMT, CORD, and WFSU temporary state",
+      "follow_up": "after a core release, run final isolated compatibility checks and separately authorize any hardware validation; the plugin never performs uncertain-to-healthy"
+    },
+    {
+      "interface": "PyVisaTransport.query-and-query_opc",
+      "decision": "plugin-migration-complete-core-release-gated",
+      "evidence": "plugin commit 480eaec classifies every transport query as no_replay, preserves structured transport/session exceptions, and adds GuardedAuditedTransport fault injection",
+      "follow_up": "after core release, update version gates atomically, run isolated wheel compatibility tests, and only then mark the plugin adopted"
+    },
+    {
+      "interface": "ScopeStatusSummary",
+      "decision": "existing-partial-path",
+      "evidence": "the current service can return IDN, coupling, and missing capabilities without a complete snapshot",
+      "follow_up": "prefer this path and a narrow run-state capability before designing a large snapshot v2 model"
+    }
+  ],
+  "p0_foundations": [
+    {
+      "id": "transport-replay-contract",
+      "priority": "P0",
+      "status": "released-in-0.8.24",
+      "replay_policies": [
+        "safe_to_replay",
+        "no_replay",
+        "read_continuation_only"
+      ],
+      "public_api": {
+        "methods": [
+          "query",
+          "query_opc",
+          "query_bin_block",
+          "query_float_list"
+        ],
+        "replay_parameter": "keyword-only",
+        "default_replay_policy": "no_replay",
+        "parallel_query_once_method": false
+      },
+      "minimum_behavior": {
+        "no_replay": "one command transmission at most; a timeout or ambiguous result is not retried",
+        "read_continuation_only": "reserved by the public policy type; every first-version backend fails before transmission, while a future capable backend may continue only the current response and never resend the command",
+        "unsupported_continuation": "fail closed before transmission with attempts=0 and a structured non-replayable transport error",
+        "safe_to_replay": "the caller explicitly opts in; the transport never infers safety from command text",
+        "consuming_reads": "read-to-clear registers and acquisition-bound *OPC? use no_replay",
+        "partial_response": "return a structured, non-replayable TransportIOError carrying response_progress and synchronization evidence; telemetry is not the contract source",
+        "legacy_query_default": "unclassified legacy calls remain source-compatible but use no_replay by default",
+        "structured_errors": "record whether the command was transmitted, whether bytes arrived, and whether the channel may be desynchronized",
+        "telemetry": "may record approved non-sensitive operational metrics but does not replace structured replay, response-progress, or synchronization evidence",
+        "backends": "PyVISA, RsInstrument, Serial, GuardedAuditedTransport, and FakeTransport share the same contract"
+      },
+      "acceptance": [
+        "a failed no_replay query sends at most one command",
+        "every first-version backend rejects read_continuation_only before transmission with attempts=0",
+        "a future backend with declared continuation support may continue the current response but never resend the command",
+        "*OPC? can be marked no_replay for acquisition synchronization",
+        "read-to-clear errors cannot be silently replayed",
+        "TransportIOError records replay policy, response progress, and communication synchronization without sensitive payloads"
+      ]
+    },
+    {
+      "id": "shared-session-health-and-poison",
+      "priority": "P0",
+      "status": "released-in-0.8.24",
+      "states": [
+        "healthy",
+        "uncertain",
+        "poisoned",
+        "closed"
+      ],
+      "configuration_trust": {
+        "representation": "epoch-scoped verified_fields set",
+        "initial_verified_fields": [],
+        "global_verified_boolean": false
+      },
+      "transitions": {
+        "new_or_reconnected_session": "healthy communication channel with an empty verified_fields set; no previous configuration trust is inherited",
+        "preflight_rejection": "no I/O and session remains healthy",
+        "write_result_unknown": {
+          "communication_synchronized": {
+            "next_state": "uncertain",
+            "allowed_instrument_io": [
+              "authorized_bounded_recovery",
+              "state_validation"
+            ]
+          },
+          "communication_desynchronized_or_unproven": {
+            "next_state": "poisoned",
+            "allowed_instrument_io": []
+          }
+        },
+        "readback_failure": "uncertain with only bounded restoration and verification I/O allowed",
+        "restore_failure": {
+          "next_state": "poisoned",
+          "error_priority": "preserve TransportIOError or SessionHealthError when the restoration or verification exchange fails; use StateDriftError only for an independently observed semantic or readback mismatch"
+        },
+        "restore_success": "uncertain returns to healthy only when communication is synchronized and the related field closure passes independent readback; only proven fields are added to verified_fields",
+        "health_degradation": "leaving healthy clears verified_fields for the current epoch",
+        "close": "closed; reconnect creates a new healthy communication session with an empty verified_fields set"
+      },
+      "responsibility": {
+        "core": "shared health state, error taxonomy, operation gate, and on_failure=continue stop behavior",
+        "plugin": "affected-field closure, snapshot content, restore order, vendor combinations, and quantization tolerance",
+        "transport": "whether a command was transmitted, whether a response was partial, and whether the channel may be desynchronized"
+      },
+      "acceptance": [
+        "the latch lives on the shared driver/session rather than a temporary Service",
+        "all later instrument operations reject a poisoned session before transport I/O",
+        "rebuilding a Service does not clear the latch",
+        "explicit close and reconnect create a new session with empty verified_fields and do not claim that instrument configuration was restored",
+        "uncertain returns to healthy only after synchronized restoration and independent readback of the complete related field closure",
+        "run plans with on_failure=continue cannot continue any instrument I/O on a poisoned session"
+      ]
+    }
+  ],
+  "proposals": [
+    {
+      "id": "scope-read-only-state",
+      "priority": "P1",
+      "status": "blocked-on-typed-scope-rfc",
+      "implementation_gate": "released R1 core plus completed plugin P0 adoption",
+      "compatibility": "additive",
+      "capabilities": [
+        "scope.analog_channel_state",
+        "scope.timebase_state",
+        "scope.edge_trigger_state"
+      ],
+      "public_contract": {
+        "models": "typed immutable state models plus a closed field metadata model",
+        "field_metadata": [
+          "readable",
+          "writable",
+          "type",
+          "unit",
+          "enum",
+          "minimum",
+          "maximum",
+          "quantization"
+        ],
+        "patch_sentinel": "UNSET means do not modify; None has a field-specific explicit meaning and is never an implicit unknown",
+        "availability": [
+          "unsupported",
+          "supported_but_not_readable",
+          "stale_or_unknown",
+          "valid_value"
+        ],
+        "query_failure": "returned through a structured operation-error envelope and never represented as availability",
+        "termination": "read-only in the first version",
+        "vendor_text": "never exposed as executable SCPI, VBS, or opaque command text"
+      },
+      "operation_contract": {
+        "effect": "stateful_read",
+        "access": [
+          "read_only",
+          "read_write"
+        ],
+        "retry": "uses the P0 replay policy",
+        "service": "ScopeService entry point is required before capability declaration",
+        "cli_json": "initially explicit status output; no implicit method generation"
+      },
+      "vendors": [
+        {
+          "manufacturer": "SIGLENT / Teledyne LeCroy",
+          "drivers": [
+            "siglent.sds3000"
+          ],
+          "evidence": [
+            "CPL",
+            "TRA",
+            "VDIV",
+            "TDIV",
+            "TRMD",
+            "TRSE",
+            "TRSL",
+            "TRCP",
+            "TRLV"
+          ]
+        },
+        {
+          "manufacturer": "RIGOL",
+          "drivers": [
+            "rigol.ds1000z"
+          ],
+          "evidence": [
+            "channel_coupling",
+            "set_vertical_scale",
+            "set_time_range",
+            "capture uses current trigger"
+          ]
+        },
+        {
+          "manufacturer": "Rohde & Schwarz",
+          "drivers": [
+            "rohde-schwarz.rtm2032"
+          ],
+          "evidence": [
+            "analog_channel_snapshot",
+            "timebase_snapshot",
+            "edge_trigger_snapshot"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scope-acquisition-run-state",
+      "priority": "P1",
+      "status": "released-core-contract-plugin-firmware-unverified",
+      "compatibility": "frozen-in-wavebench-0.8.24",
+      "capabilities": [
+        "scope.acquisition_run_state",
+        "scope.acquisition_control"
+      ],
+      "public_contract": {
+        "model": "WaveBench 0.8.24 freezes typed acquisition run-state and control contracts; SDS3000 does not declare them without complete per-value readback evidence",
+        "acquisition_phase": [
+          "unknown",
+          "stopped",
+          "ready",
+          "arming",
+          "waiting",
+          "acquiring",
+          "rolling",
+          "stopping",
+          "complete",
+          "error"
+        ],
+        "trigger_mode": [
+          "auto",
+          "normal",
+          "single",
+          "roll",
+          "unknown"
+        ],
+        "control_methods": [
+          "start_continuous",
+          "stop_acquisition",
+          "acquire_single",
+          "snapshot_acquisition_control",
+          "restore_acquisition_control",
+          "verify_acquisition_control_restored"
+        ],
+        "scope": "run state and trigger mode remain separate typed values; average, segmented, and option inventory stay separate",
+        "failure": "query failure is an operation error, not an unavailable device state",
+        "service": "core Service and operation contracts exist; SDS3000 remains undeclared until its firmware mapping, recovery, and verification evidence is complete"
+      },
+      "vendors": [
+        {
+          "manufacturer": "SIGLENT / Teledyne LeCroy",
+          "drivers": [
+            "siglent.sds3000"
+          ],
+          "evidence": [
+            "TRMD? returns AUTO/NORM/SINGLE/STOP",
+            "STOP proves only execution_state=stopped"
+          ],
+          "gaps": [
+            "running, waiting, and armed cannot be distinguished",
+            "SEQ is firmware-unverified and excluded from mapping evidence"
+          ]
+        },
+        {
+          "manufacturer": "RIGOL",
+          "drivers": [
+            "rigol.ds1000z"
+          ],
+          "evidence": [
+            ":STOP and :SINGle actions",
+            "*OPC? completion synchronization"
+          ],
+          "gaps": [
+            "the current driver exposes no read-only acquisition or trigger-status query",
+            "current state cannot be inferred from the last write"
+          ]
+        },
+        {
+          "manufacturer": "Rohde & Schwarz",
+          "drivers": [
+            "rohde-schwarz.rtm2032"
+          ],
+          "evidence": [
+            "STATUS:OPERation:CONDITION? bit 3 maps waiting_for_trigger",
+            "TRIGger:A:MODE? maps the supported trigger-mode subset"
+          ],
+          "gaps": [
+            "the current driver exposes no common running/stopped readback"
+          ]
+        }
+      ],
+      "freeze_gate": "the core contract is released; SDS3000 adoption requires per-value firmware mappings, verifiable readback, failure recovery, and hardware acceptance"
+    },
+    {
+      "id": "scope-configuration-patch",
+      "priority": "P2",
+      "status": "deferred-until-safety-contract",
+      "compatibility": "additive",
+      "capabilities": [
+        "scope.analog_channel_configure",
+        "scope.timebase_configure"
+      ],
+      "initial_writable_fields": [
+        "enabled",
+        "scale_v_per_div",
+        "offset_v",
+        "scale_s_per_div",
+        "position_s"
+      ],
+      "excluded_from_first_version": [
+        "termination",
+        "coupling_and_termination_composite",
+        "edge_trigger_configure",
+        "arbitrary_vendor_fields"
+      ],
+      "operation_contract": {
+        "effect": "write",
+        "access": "read_write",
+        "validation": "empty, unsupported, read-only, invalid, and conflicting patches fail before I/O",
+        "transaction": "snapshot, write, readback, quantization comparison, reverse restore, and shared-session latch",
+        "audit_fields": [
+          "declared_changed_fields",
+          "observed_changed_fields",
+          "restored_fields",
+          "state_uncertain",
+          "session_poisoned"
+        ]
+      },
+      "gate": "requires P0 foundations, typed read-only state, OperationSpec, ScopeService, contract tests, and opt-in hardware evidence"
+    },
+    {
+      "id": "scope-partial-status-v2",
+      "priority": "P2",
+      "status": "deferred",
+      "compatibility": "additive",
+      "capabilities": [
+        "scope.snapshot_v2"
+      ],
+      "reason": "ScopeStatusSummary already provides a safe partial path; a stable v2 requires closed component types and field-level Availability before API design can be frozen",
+      "constraints": [
+        "do not use arbitrary Mapping[str, typed_component] as the stable public model",
+        "keep v1 models unchanged",
+        "separate unsupported, stale_or_unknown, and valid value within successful availability results",
+        "return query failures through the structured operation-error envelope",
+        "never turn a runtime query failure into a successful partial result silently"
+      ]
+    }
+  ],
+  "deferred_or_rejected": [
+    {
+      "id": "scope-acquisition-status-v2",
+      "decision": "deferred-and-split",
+      "reason": "first resolve separate execution, trigger-phase, and trigger-mode axes in the typed-scope RFC; average and segmented status need separate typed contracts"
+    },
+    {
+      "id": "termination-write",
+      "decision": "deferred",
+      "reason": "read_write access does not prove electrical safety; the project boundary forbids automatic impedance changes"
+    },
+    {
+      "id": "arbitrary-raw-scpi-or-vbs",
+      "decision": "rejected",
+      "reason": "would bypass capability, access, audit, validation, and restoration contracts"
+    },
+    {
+      "id": "sds3000-vicp-core-backend",
+      "decision": "not-needed",
+      "reason": "the existing PyVISA transport works with PyVICP supplied by the plugin"
+    },
+    {
+      "id": "raw-screenshot-transport-for-sds3000",
+      "decision": "not-justified",
+      "reason": "SCDP sends output to the configured hardcopy device and SCDP query returns status, not image bytes"
+    },
+    {
+      "id": "mutate-v1-status-models-in-place",
+      "decision": "rejected",
+      "reason": "making required fields optional in place would silently change existing client assumptions"
+    },
+    {
+      "id": "dynamic-descriptor-instrument-probing",
+      "decision": "rejected",
+      "reason": "descriptor loading must remain zero-I/O; option checks stay inside typed operations"
+    }
+  ],
+  "compatibility_contract": {
+    "source_api": "source-additive: new symbols may be added, while existing scope.channel_coupling, capture arguments, and v1 status models do not change in place",
+    "observable_changes": [
+      "consuming reads migrate from retrying query behavior to no_replay",
+      "structured transport errors replace some implicit retry outcomes",
+      "on_failure=continue stops later instrument I/O when the shared session is poisoned"
+    ],
+    "required_controls": [
+      "legacy call-site migration inventory",
+      "release notes",
+      "behavioral regression tests",
+      "plugin minimum-version increase only after a core release"
+    ]
+  },
+  "release_version_gates": {
+    "current_plugin": {
+      "wheel_requires_dist": "wavebench>=0.8.24,<0.9",
+      "descriptor_wavebench_min_version": "0.8.24",
+      "descriptor_wavebench_max_version": "0.9.0",
+      "descriptor_api_version": "wavebench.instrument.v2"
+    },
+    "p0_adoption": [
+      "P0 behavior exists in a released WaveBench version",
+      "one atomic adoption commit moves the wheel and descriptor lower bounds together to the first P0 release and reviews the upper bound",
+      "core R1 retains wavebench.instrument.v2; the atomic adoption commit verifies that the core constant and descriptor match",
+      "registry rejects core-version or api_version mismatch before driver factory and transport I/O",
+      "the atomic adoption commit runs isolated wheel tests for Requires-Dist, descriptor bounds, api_version, and entry point before marking the plugin adopted"
+    ],
+    "plugin_adoption_checklist": [
+      "complete: WaveBench 0.8.24 containing R1 is released on master at dc7ce5b",
+      "complete on the migration branch: classify every plugin transport query explicitly; CMR?, EXR?, DDR?, and acquisition-bound *OPC? use no_replay",
+      "complete on the migration branch: preserve TransportIOError and SessionHealthError through _acquire_once, OPC waits, and temporary restoration context managers",
+      "complete on the migration branch: prove zero secondary recovery or validation I/O after structured transport/session failure",
+      "complete across plugin and core baseline tests: assert transmission counts, uncertain/poisoned latching, on_failure=continue blocking, and new epoch_id after reconnect",
+      "complete in this atomic adoption commit: update the wheel and descriptor lower bounds to 0.8.24, retain the reviewed 0.9 upper bound and wavebench.instrument.v2, run isolated compatibility tests, and mark the plugin adopted"
+    ],
+    "changed_by_r1": true
+  },
+  "test_matrix": [
+    {
+      "layer": "transport-contract",
+      "location": "WaveBench core",
+      "required_cases": [
+        "no_replay sends at most once",
+        "read_continuation_only never resends",
+        "safe_to_replay requires explicit opt-in",
+        "PyVISA/RsInstrument/Serial/Guarded/Fake behavior is consistent"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "session-transaction",
+      "location": "WaveBench core",
+      "required_cases": [
+        "preflight rejection has zero I/O",
+        "unknown write outcome with proven communication synchronization enters uncertain and permits only authorized bounded recovery and state validation",
+        "unknown write outcome with desynchronized or unproven communication enters poisoned and permits no instrument I/O",
+        "readback and restore failures latch",
+        "reverse restoration records quantized values",
+        "on_failure=continue cannot perform any instrument I/O on a poisoned session"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "typed-read-only-state",
+      "location": "WaveBench core plus three vendor fake drivers",
+      "required_cases": [
+        "unsupported and read-only fields have explicit availability",
+        "query failure uses the structured operation-error envelope",
+        "termination patch is rejected before I/O",
+        "existing v1 behavior remains unchanged"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "service-cli-run-plan",
+      "location": "WaveBench core",
+      "required_cases": [
+        "capability declaration has a ScopeService consumer",
+        "OperationSpec exposes effect risk timeout and changed fields",
+        "existing scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform OperationSpecs match actual side effects and restoration coverage",
+        "status JSON and strict behavior are stable",
+        "run-plan failure and session health are observable"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "plugin-version-gate",
+      "location": "SDS3000 plugin wheel and WaveBench registry",
+      "required_cases": [
+        "wheel Requires-Dist matches the released core floor",
+        "descriptor wavebench_min_version and wavebench_max_version are enforced",
+        "descriptor api_version matches the executable plugin API",
+        "version mismatch rejects before driver factory or transport I/O",
+        "isolated wheel discovery verifies the entry point and all version gates"
+      ],
+      "hardware_required": false
+    },
+    {
+      "layer": "hardware-acceptance",
+      "location": "opt-in vendor test suites",
+      "required_cases": [
+        "released P0/P1 operations on real transports",
+        "read-only state mappings on approved instruments",
+        "instrument configuration is revalidated after reconnect"
+      ],
+      "hardware_required": true
+    }
+  ],
+  "future_rfc_test_scopes": [
+    {
+      "id": "termination-write",
+      "tests": "safety confirmation, electrical preflight, readback, failure latch, and approved-wiring hardware acceptance"
+    },
+    {
+      "id": "scope-partial-status-v2",
+      "tests": "v1/v2 coexistence, precedence, field-level availability, strict behavior, and hardware acceptance"
+    },
+    {
+      "id": "scope-configuration-patch",
+      "tests": "empty and invalid patches, field conflicts, quantized readback, reverse restoration, and session latch"
+    }
+  ],
+  "implementation_order": [
+    "record M8-functional-complete, plugin-P0-adopted, accepted RFC R1, and core-M1-M7-released-in-0.8.24 as distinct facts",
+    "adopt the released core at dc7ce5b while retaining a8e6b59 as the original migration baseline",
+    "complete before release: call-site migration, structured-exception handling, fault-injection tests, and verification that the core M7 OperationSpec audit for scope.capture, scope.capture_waveforms, scope.capture_multiple, and scope.fetch_waveform covers SDS3000 CHDR, CFMT, CORD, and WFSU temporary state",
+    "complete one atomic adoption commit that updates wheel and descriptor version gates together to 0.8.24, confirms wavebench.instrument.v2, runs isolated compatibility tests, and marks the plugin adopted only after every check passes",
+    "freeze a separate typed-scope state RFC with exact fields, consumers, v1 precedence, and three-vendor mappings",
+    "implement only frozen typed read-only state and continue collecting acquisition-state evidence",
+    "consider narrow scale/offset/timebase patches in a separate RFC after the safety gate",
+    "revisit termination, generic trigger writes, and snapshot v2 only in separate future RFCs"
+  ]
+}

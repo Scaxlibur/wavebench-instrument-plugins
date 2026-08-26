@@ -1,0 +1,61 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "sdg2122x-basic-configure-a3",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A3",
+  "capability": "source.basic_configure_v2",
+  "feature": "basic",
+  "direction": "configure",
+  "model": "SDG2122X",
+  "firmware_id": "2.01.01.39R7T2",
+  "option_ids": [],
+  "channels": [1, 2],
+  "core_version": "0.8.24",
+  "plugin_version": "0.8.2",
+  "wheel_sha256": "sha256:767c46ff3978908b681982a964a23558974be1353469b0011d3112b9cec57d6e",
+  "descriptor_digest": "sha256:3ce159e9fecab956062cc776ced3ed4f13be08b6e2ab6b489ae29035488cf4ca",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "resource": "redacted",
+    "scope_model": "RTM2032",
+    "termination": "high_impedance",
+    "wiring": "source_ch1_to_scope_ch1_source_ch2_to_scope_ch2"
+  },
+  "safety_limits": {
+    "maximum_test_vpp": 2.0,
+    "offset_v": 0.0,
+    "source_limit_vpp": 5.0
+  },
+  "budget": {
+    "admitted": true,
+    "blockers": [],
+    "requested_vpp": 2.0
+  },
+  "results": {
+    "captures": 8,
+    "frequency_hz_range": [1999.986, 2001.001],
+    "quality_gates_passed": 8,
+    "square_duty_cycle_percent": 25.0,
+    "vpp_range": [2.0, 2.048],
+    "waveforms": ["pulse", "ramp", "sine", "square"]
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "channels": [1, 2],
+    "output_state": "off"
+  },
+  "coverage": [
+    "dual-channel pulse ramp sine and square at 2 kHz and 2 Vpp",
+    "square duty-cycle configure and external measurement at 25 percent"
+  ],
+  "limitations": [
+    "no fault-injection or recovery hardware evidence",
+    "no other frequency amplitude load firmware or model",
+    "no simultaneous-output evidence",
+    "offset_v remains read-only"
+  ],
+  "evidence_digest": "sha256:9df986541abaab313100e2bf20ccbb836d2d973c3449d4933f237548ca24bf58"
+}

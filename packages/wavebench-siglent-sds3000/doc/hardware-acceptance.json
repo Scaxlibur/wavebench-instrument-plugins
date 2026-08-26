@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "accepted_model": "SDS3054",
+  "accepted_firmware": "8.4.1",
+  "source_model": "DG4202",
+  "transport": "VICP through WaveBench PyVisaTransport",
+  "safety": {
+    "initial_gate_event": "CH1 reported 50 ohm while the source output was active at the 5 Vpp limit",
+    "immediate_action": "source output disabled through WaveBench before further testing",
+    "acceptance_signal": {
+      "function": "SIN",
+      "frequency_hz": 1000.0,
+      "amplitude_vpp": 1.0,
+      "offset_v": 0.0,
+      "source_load": "high_impedance"
+    },
+    "scope_inputs_before_output": {
+      "ch1": "DCL",
+      "ch2": "DCL",
+      "consistent_rounds": 3
+    }
+  },
+  "m4_waveform_transfer": {
+    "channels": [
+      1,
+      2
+    ],
+    "samples_per_channel": 100002,
+    "generator_output": "OFF",
+    "transfer_state_restored": true,
+    "transfer_state": {
+      "header": "SHORT",
+      "data_format": "DEF9,BYTE,BIN",
+      "byte_order": "LO",
+      "setup": "SP,0,NP,0,FP,0,SN,0"
+    }
+  },
+  "m5_dual_channel_capture": {
+    "one_acquisition_per_round": true,
+    "rounds": [
+      {
+        "round": 1,
+        "channels": {
+          "1": {
+            "samples": 100002,
+            "frequency_hz": 999.8999983140714,
+            "vpp_v": 1.0133346319198608
+          },
+          "2": {
+            "samples": 100002,
+            "frequency_hz": 1000.2000283195666,
+            "vpp_v": 1.0066679567098618
+          }
+        },
+        "vpp_difference_ratio": 0.006600660066006601,
+        "correlation": 0.999946360431503,
+        "scope_state_restored": true
+      },
+      {
+        "round": 2,
+        "channels": {
+          "1": {
+            "samples": 100002,
+            "frequency_hz": 999.9999883139027,
+            "vpp_v": 1.0133346319198608
+          },
+          "2": {
+            "samples": 100002,
+            "frequency_hz": 1000.2000283195666,
+            "vpp_v": 1.0066679567098618
+          }
+        },
+        "vpp_difference_ratio": 0.006600660066006601,
+        "correlation": 0.9999461007695024,
+        "scope_state_restored": true
+      },
+      {
+        "round": 3,
+        "channels": {
+          "1": {
+            "samples": 100002,
+            "frequency_hz": 999.9999883139027,
+            "vpp_v": 1.0133346319198608
+          },
+          "2": {
+            "samples": 100002,
+            "frequency_hz": 1000.0999983137341,
+            "vpp_v": 1.0066679567098618
+          }
+        },
+        "vpp_difference_ratio": 0.006600660066006601,
+        "correlation": 0.9999471375304759,
+        "scope_state_restored": true
+      }
+    ],
+    "audit_per_round": {
+      "query_calls": 33,
+      "binary_query_calls": 4,
+      "write_requests": 18,
+      "write_completed": 18,
+      "blocked_requests": 0,
+      "binary_write_requests": 0
+    },
+    "acceptance_limits": {
+      "frequency_relative_tolerance": 0.02,
+      "vpp_relative_tolerance": 0.1,
+      "maximum_channel_vpp_difference_ratio": 0.05,
+      "minimum_correlation": 0.98
+    }
+  },
+  "p0_adoption_validation": {
+    "date": "2026-08-24",
+    "wavebench_version": "0.8.24",
+    "wavebench_release_commit": "dc7ce5b",
+    "source_family": "SDG2000X",
+    "same_acquisition_dual_channel": true,
+    "acceptance_signal_per_channel": {
+      "function": "SINE",
+      "frequency_hz": 1000.0,
+      "amplitude_vpp": 1.0,
+      "offset_v": 0.0,
+      "configured_max_source_vpp": 5.0,
+      "authorized_maximum_vpp": 10.0
+    },
+    "source_preflight": {
+      "ch1_output": "OFF",
+      "ch2_output": "OFF",
+      "ch1_display_load": "high_impedance",
+      "ch2_display_load": "high_impedance"
+    },
+    "scope_input_preflight": {
+      "ch1": "DCL",
+      "ch2": "DCL"
+    },
+    "channels": {
+      "1": {
+        "samples": 100002,
+        "frequency_hz": 1000.0999983137341,
+        "vpp_v": 1.0080000087618828,
+        "mean_v": 0.005733485069689963
+      },
+      "2": {
+        "samples": 100002,
+        "frequency_hz": 999.9999883139027,
+        "vpp_v": 1.0133346319198608,
+        "mean_v": 0.0003876195583058232
+      }
+    },
+    "scope_transaction_completed_without_restoration_error": true,
+    "source_final_output": {
+      "ch1": "OFF",
+      "ch2": "OFF",
+      "independent_readback_verified": true
+    }
+  },
+  "postconditions": {
+    "source_output": "OFF",
+    "source_amplitude_setting_vpp": 5.0,
+    "source_profile_restored": true,
+    "scope_coupling": {
+      "ch1": "DCL",
+      "ch2": "DCL"
+    },
+    "scope_trigger_mode": "AUTO",
+    "scope_time_division": "1E-3 S",
+    "scope_vertical_division": {
+      "ch1": "360E-3 V",
+      "ch2": "200E-3 V"
+    },
+    "scope_trace": {
+      "ch1": "ON",
+      "ch2": "OFF"
+    },
+    "independent_read_only_postcheck_writes": 0
+  },
+  "redaction": {
+    "resource_addresses_included": false,
+    "serial_number_included": false,
+    "raw_waveforms_included": false,
+    "screenshots_included": false,
+    "command_logs_included": false,
+    "restore_journal_included": false
+  }
+}
