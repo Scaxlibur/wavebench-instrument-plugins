@@ -70,6 +70,7 @@ _PRODUCTION_CAPABILITIES = (
     "rf_source.modulation_disable",
     "rf_source.modulated_output_enable",
     "rf_source.pulse_configure",
+    "rf_source.pulse_output",
     "rf_source.sweep_configure",
 )
 _SNAPSHOT_QUERY_COUNT = 8

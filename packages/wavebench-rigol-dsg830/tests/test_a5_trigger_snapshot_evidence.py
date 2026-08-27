@@ -208,6 +208,13 @@ class _FakeDriver:
     def configure_rf_pulse(self, request: object) -> None:
         self.write_requests.append(request)
 
+    def get_rf_pulse_output_snapshot(self, port_id: str, interface_id: str) -> object:
+        assert (port_id, interface_id) == ("rf_out", "pulse_in_out")
+        return object()
+
+    def set_rf_pulse_output(self, request: object) -> None:
+        self.write_requests.append(request)
+
     def get_rf_sweep_snapshot(self, port_id: str) -> object:
         assert port_id == "rf_out"
         return object()
