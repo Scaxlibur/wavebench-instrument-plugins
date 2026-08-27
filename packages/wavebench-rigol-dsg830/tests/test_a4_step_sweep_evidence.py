@@ -70,6 +70,7 @@ def _historical_pre_promotion_descriptor():
                 "rf_source.modulation_configure",
                 "rf_source.modulation_disable",
                 "rf_source.modulated_output_enable",
+                "rf_source.pulse_output",
                 "rf_source.sweep_configure",
             }
         ),
@@ -79,7 +80,12 @@ def _historical_pre_promotion_descriptor():
                 feature
                 for feature in extensions.features
                 if feature.feature
-                not in {RfFeature.MODULATED_OUTPUT, RfFeature.MODULATION, RfFeature.SWEEP}
+                not in {
+                    RfFeature.MODULATED_OUTPUT,
+                    RfFeature.MODULATION,
+                    RfFeature.PULSE_OUTPUT,
+                    RfFeature.SWEEP,
+                }
             ),
         ),
     )

@@ -72,6 +72,7 @@ def _production_descriptor():
                 "rf_source.modulation_configure",
                 "rf_source.modulation_disable",
                 "rf_source.modulated_output_enable",
+                "rf_source.pulse_output",
             }
         ),
         rf_source_extensions=replace(
@@ -79,7 +80,8 @@ def _production_descriptor():
             features=tuple(
                 feature
                 for feature in extensions.features
-                if feature.feature not in {RfFeature.MODULATED_OUTPUT, RfFeature.MODULATION}
+                if feature.feature
+                not in {RfFeature.MODULATED_OUTPUT, RfFeature.MODULATION, RfFeature.PULSE_OUTPUT}
             ),
         ),
     )

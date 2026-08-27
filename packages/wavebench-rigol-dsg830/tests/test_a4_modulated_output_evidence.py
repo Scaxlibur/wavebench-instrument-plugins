@@ -78,7 +78,7 @@ def _historical_production_descriptor():
         if feature.feature is RfFeature.MODULATION
         else feature
         for feature in extensions.features
-        if feature.feature is not RfFeature.MODULATED_OUTPUT
+        if feature.feature not in {RfFeature.MODULATED_OUTPUT, RfFeature.PULSE_OUTPUT}
     )
     return replace(
         production,
@@ -86,7 +86,11 @@ def _historical_production_descriptor():
             capability
             for capability in production.capabilities
             if capability
-            not in {"rf_source.modulation_disable", "rf_source.modulated_output_enable"}
+            not in {
+                "rf_source.modulation_disable",
+                "rf_source.modulated_output_enable",
+                "rf_source.pulse_output",
+            }
         ),
         rf_source_extensions=replace(extensions, features=features),
     )

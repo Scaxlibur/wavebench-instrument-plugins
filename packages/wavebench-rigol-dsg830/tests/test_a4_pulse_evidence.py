@@ -70,6 +70,7 @@ def _historical_pre_promotion_descriptor():
                 "rf_source.modulation_disable",
                 "rf_source.modulated_output_enable",
                 "rf_source.pulse_configure",
+                "rf_source.pulse_output",
                 "rf_source.sweep_configure",
             }
         ),
@@ -83,6 +84,7 @@ def _historical_pre_promotion_descriptor():
                     RfFeature.MODULATED_OUTPUT,
                     RfFeature.MODULATION,
                     RfFeature.PULSE,
+                    RfFeature.PULSE_OUTPUT,
                     RfFeature.SWEEP,
                 }
             ),
