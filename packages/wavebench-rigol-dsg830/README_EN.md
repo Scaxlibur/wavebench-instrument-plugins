@@ -156,6 +156,12 @@ termination from a connector label.
 - Hardware testing requires separate authorization and a reviewed resource, firmware, terminator, RF-output
   state, safety limit, and restoration procedure.
 
+### Electrical boundary for controlled RF observation
+
+- The current controlled wiring connects RF output directly to a confirmed 50-ohm CH2 scope input. LF output connects to high-impedance CH1 only as an independent supplementary observation path. Current DSG830 capabilities neither control LF output nor treat CH1 results as evidence of RF output, modulation, or trigger/sync behavior.
+- CH2 input voltage must remain below `5 V RMS`. On a direct 50-ohm path with no external amplifier, that limit is about `+26.99 dBm`; the descriptor's declared `+20 dBm` maximum is about `2.24 V RMS`. Completed controlled hardware evidence uses no more than `-40 dBm`, and the fixed A4-MO profile uses `-50 dBm`.
+- This conversion only checks electrical margin for a direct 50-ohm connection. It does not turn source dBm readback into a Vpp measurement and does not apply to wiring with an external amplifier, a different termination, or a differently rated instrument input. Such a change requires a new safety-limit and recovery review.
+
 ## Development verification
 
 ```bash

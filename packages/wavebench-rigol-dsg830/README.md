@@ -90,6 +90,12 @@ access = "read_only"
 - 默认测试只使用 fake transport，不会连接硬件。production 的普通 `read_only` 配置不会执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频配置；A2/A3/A4/A4-MO 的受控证据已分别开放 safety-gated 输出、OFF-only CW、RF-OFF 调制及关闭、Pulse、Step Sweep 和固定 profile 调制输出，普通写入仍须显式 `read_write`、相应 capability 和完整 preflight。M3-MO 只接受 AM `50 %`／`1 kHz`、最大 `-50 dBm`，普通 RF ON 仍要求调制关闭。Step Sweep 不包含 execute、arm、fire、trigger、Level Sweep 或 list。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、RF 输出状态、安全限制和恢复方式。
 
+### 受控 RF 观察的电气边界
+
+- 当前受控接线将 RF 输出直连至示波器 CH2 的已确认 50 Ω 输入；LF 输出接入 CH1 高阻，仅作为独立的补充观察路径。当前 DSG830 capability 不控制 LF 输出，也不将 CH1 结果作为 RF 输出、调制或 trigger／sync 的证据。
+- CH2 的输入电压必须低于 `5 V RMS`。对于没有外接放大器的直连 50 Ω 路径，该限制约等于 `+26.99 dBm`；descriptor 声明的最高 `+20 dBm` 对应约 `2.24 V RMS`。已完成的受控实机证据仅使用不高于 `-40 dBm` 的功率，固定 A4-MO profile 为 `-50 dBm`。
+- 此换算只用于核对 50 Ω 直连的电气余量，不可将 source 的 dBm 读回改写为 Vpp 测量，也不适用于带外接放大器、其他终端或不同仪器输入额定值的接线。此类变更须重新确认安全限制和恢复方案。
+
 ## 开发验证
 
 ```bash
