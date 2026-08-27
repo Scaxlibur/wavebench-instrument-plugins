@@ -6,7 +6,7 @@
 
 This matrix covers all 26 `scope` capabilities in WaveBench `0.8.24`. The plugin implements and declares six. Each of the remaining 20 has an explicit disposition. No capability outside WaveBench is invented, and neither raw SCPI nor arbitrary VBS is exposed to bypass the capability boundary.
 
-The machine-readable source of truth is [`wavebench-capability-matrix.json`](wavebench-capability-matrix.json). Tests compare its 26 entries with WaveBench `CAPABILITY_METHODS` and require every manual anchor to exist in [`command-catalog.json`](command-catalog.json).
+The machine-readable source of truth is [`wavebench-capability-matrix.json`](wavebench-capability-matrix.json). Tests verify its 26 entries against the fixed WaveBench `0.8.24` capability snapshot; when run with newer Core releases, they require only that those historical entries remain in `CAPABILITY_METHODS` and do not treat later capabilities as disposed. Every manual anchor must still exist in [`command-catalog.json`](command-catalog.json).
 
 Disposition meanings:
 

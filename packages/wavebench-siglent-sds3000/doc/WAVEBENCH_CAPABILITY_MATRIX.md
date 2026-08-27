@@ -6,7 +6,7 @@
 
 本矩阵覆盖 WaveBench `0.8.24` 的全部 26 项 `scope` capability。当前插件实现并声明 6 项；其余 20 项均有明确处置，没有创建 WaveBench 不存在的接口，也没有通过 raw SCPI 或任意 VBS 绕过 capability 边界。
 
-机器可读事实源见 [`wavebench-capability-matrix.json`](wavebench-capability-matrix.json)。测试会将其中的 26 项与 WaveBench `CAPABILITY_METHODS` 逐项核对，并要求所有手册锚点都存在于 [`command-catalog.json`](command-catalog.json)。
+机器可读事实源见 [`wavebench-capability-matrix.json`](wavebench-capability-matrix.json)。测试会验证其中 26 项与 WaveBench `0.8.24` 的固定 capability 清单一致；在较新的 Core 上运行时，只要求这些历史项仍存在于 `CAPABILITY_METHODS`，不将后续新增 capability 写成已处置。所有手册锚点仍必须存在于 [`command-catalog.json`](command-catalog.json)。
 
 状态含义：
 
