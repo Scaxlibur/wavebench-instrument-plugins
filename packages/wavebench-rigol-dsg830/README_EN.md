@@ -8,7 +8,7 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 ## Current status
 
 Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, M2 offline output
-mapping, M3 internal-sine modulation mapping, and M4 Pulse plus the production frequency-only Step Sweep subset: its descriptor uses
+mapping, M3 internal-sine modulation mapping, the M3-MO bounded modulated-output contract, and M4 Pulse plus the production frequency-only Step Sweep subset: its descriptor uses
 `kind="rf_source"`, declares one `rf_out` port with static limits and a 50-ohm dBm reference, and ships a
 strict snapshot parser plus one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings, internal-sine AM/FM/PM
 configuration/readback mappings, internal/single Pulse timing/polarity mapping, and a disabled Step Sweep profile mapping.
@@ -46,6 +46,17 @@ reads the initial/final RF snapshots and one requested profile, and requires a z
 read CH2 or invoke RF-output control; recovery and diagnostic records are not new capability-promotion evidence. AM, FM,
 and PM RF-OFF sequences passed; PM is limited to `1.25 rad` in the production profile to match the strict readback evidence.
 
+M3-MO makes RF output with active modulation a separate `rf_source.modulated_output_enable` capability rather than
+relaxing ordinary `rf_source.output`. It accepts only an already-active, exactly read-back internal-Sine profile and
+requires RF OFF, Pulse/Sweep disabled, clear protection, complete per-port safety configuration, and a confirmed
+50-ohm actual termination; success performs exactly one RF ON. An uncertain write or readback never retries ON and may
+only use the existing one-shot guarded RF-OFF recovery. The source checkout's
+`tools/a4_modulated_output_evidence.py` and fake regressions are fixed to AM `50 %` at `1 kHz` and RF `1 MHz` at
+`-50 dBm`. They read only signal presence from CH2's current `DEF` buffer with an explicit 50-ohm declaration; they do
+not read or control CH1, and they do not interpret LF OUTPUT as a modulation measurement. The successful path
+explicitly turns RF OFF, disables AM/global modulation, and verifies the final state. This private hardware acceptance
+is still pending, so the production descriptor does not declare the capability.
+
 The M4 Pulse subset is internal/single only. `configure_rf_pulse()` fixes source, mode, period, width, and polarity,
 then ends with `:PULM:STAT OFF`; it never invokes RF output, rear Pulse I/O, or trigger commands. The source checkout
 now includes `tools/a4_pulse_evidence.py`, fake regressions, and a resource-free setup template. Its `--execute` path
@@ -66,11 +77,11 @@ It does not read scope, invoke RF output, or arm/fire Sweep. Both paths passed, 
 
 The A5-0 offline mapping adds `get_rf_trigger_snapshot()`, which strictly reads logical Pulse/Sweep trigger configuration through six fixed query forms. It sends no setter, `*TRG`, `:TRIG:PULS`, `:TRIG:SWE`, `:SWE:EXEC`, `:PULM:OUT`, or RF-output write. It is not a physical trigger/sync connector contract; `rf_out` only identifies the RF output whose behavior the settings govern.
 
-The production descriptor declares no error queue, `rf_source.modulation_disable`, modulated RF output, `rf_source.trigger_snapshot`, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
+The production descriptor declares no error queue, `rf_source.modulation_disable`, `rf_source.modulated_output_enable`, `rf_source.trigger_snapshot`, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
 `rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
 internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
-`rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`. Every other capability remains behind its A4–A5 evidence gate.
+`rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`; ordinary `rf_source.output` ON still requires modulation disabled. Every other capability remains behind its A4–A5 evidence gate.
 
 ## Development documentation
 
@@ -79,6 +90,7 @@ internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers
 - [A2 local-evidence setup template](tools/a2_output_evidence.setup.template.toml)
 - [A3 local-evidence setup template](tools/a3_cw_evidence.setup.template.toml)
 - [A4 local-evidence setup template](tools/a4_modulation_evidence.setup.template.toml)
+- [A4-MO local-evidence setup template](tools/a4_modulated_output_evidence.setup.template.toml)
 - [A4 Pulse local-evidence setup template](tools/a4_pulse_evidence.setup.template.toml)
 - [A4 Step Sweep local-evidence setup template](tools/a4_step_sweep_evidence.setup.template.toml)
 - [A5-0 trigger-configuration diagnostic setup template](tools/a5_trigger_snapshot_evidence.setup.template.toml)

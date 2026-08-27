@@ -27,6 +27,15 @@ the `1.25 rad` production profile so the capability matches strict readback evid
 the `read_only` configuration, reads the selected profile plus initial/final RF snapshots, and records a zero-write
 audit. Neither record is new A4 capability-promotion evidence.
 
+The checkout also provides an [`A4-MO local-evidence setup template`](../tools/a4_modulated_output_evidence.setup.template.toml)
+and harness. Its Core/plugin code and fake regressions are complete, but controlled hardware acceptance is pending. It
+only validates fixed AM `50 %` at `1 kHz` and RF `1 MHz` at `-50 dBm`: configure AM with RF OFF, enable RF once, read
+signal presence from CH2's current `DEF` buffer, then explicitly turn RF OFF, disable AM/global modulation, and verify
+the baseline. CH2 must be explicitly declared 50 ohms; scope data do not calculate dBm, frequency, or modulation depth.
+The harness neither reads nor controls CH1, does not treat LF OUTPUT as modulation evidence, and does not use trigger,
+sync, or rear Pulse I/O. It uses an in-memory fixed non-production descriptor; the current production descriptor does
+not declare `rf_source.modulated_output_enable`, and ordinary `rf_source.output on` still requires modulation disabled.
+
 The checkout also provides an [`A4 Pulse local-evidence setup template`](../tools/a4_pulse_evidence.setup.template.toml)
 and its harness. It only validates an internal/single Pulse configuration on `rf_out`: initial, postcondition, and final
 snapshots must all establish RF output, modulation, Pulse, and Sweep OFF with no active protection. `--execute` fixes
@@ -35,7 +44,7 @@ read scope, invoke RF output, use rear Pulse I/O, or trigger. Both normal and in
 configuration, readback, final-off, and audit review. The evidence promotes `rf_source.pulse_configure`; the historical
 harness now rejects reruns.
 
-Package `0.2.0` has completed the `rf_source` M0 read-only migration, M1 CW mapping, M2 output transaction, M3 internal-sine AM/FM/PM mapping and mode-specific disable, plus M4 internal/single Pulse and frequency-only Step Sweep hardware acceptance. A1, A2, A3, and A4 modulation/Pulse/Step Sweep evidence have completed and been reviewed, so the production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, `rf_source.output`, `rf_source.modulation_configure`, `rf_source.pulse_configure`, and `rf_source.sweep_configure`. A5-0 adds a strict query-only logical trigger-configuration mapping, but the production descriptor does not declare `rf_source.trigger_snapshot` and does not treat `rf_out` as a physical trigger/sync connector. PM is limited to the `1.25 rad` production profile; `rf_source.modulation_disable`, modulated RF output, external-trigger, Sweep-execution/fire, Level-Sweep, and list capabilities remain independently gated. The milestone document defines the boundary and promotion gates.
+Package `0.2.0` has completed the `rf_source` M0 read-only migration, M1 CW mapping, M2 output transaction, M3 internal-sine AM/FM/PM mapping and mode-specific disable, the M3-MO modulated-output safety contract, plus M4 internal/single Pulse and frequency-only Step Sweep hardware acceptance. A1, A2, A3, and A4 modulation/Pulse/Step Sweep evidence have completed and been reviewed, so the production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`, `rf_source.output`, `rf_source.modulation_configure`, `rf_source.pulse_configure`, and `rf_source.sweep_configure`. A4-MO private hardware acceptance is still pending, and the production descriptor does not declare `rf_source.modulated_output_enable`. A5-0 adds a strict query-only logical trigger-configuration mapping, but the production descriptor does not declare `rf_source.trigger_snapshot` and does not treat `rf_out` as a physical trigger/sync connector. PM is limited to the `1.25 rad` production profile; `rf_source.modulation_disable`, external-trigger, Sweep-execution/fire, Level-Sweep, and list capabilities remain independently gated. The milestone document defines the boundary and promotion gates.
 
 The source checkout includes an [A4 Step Sweep local-evidence setup template](../tools/a4_step_sweep_evidence.setup.template.toml) and its harness. It only validates an RF-OFF/Sweep-OFF frequency-only profile; it does not read scope, invoke RF output, arm/fire, or trigger. The diagnostic path has zero writes and execution remains explicitly authorized. Both paths passed controlled hardware acceptance with independent final-off verification, and `rf_source.sweep_configure` is production-declared; the historical harness rejects reruns.
 
