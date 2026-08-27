@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import stat
 import sys
@@ -22,6 +22,7 @@ from wavebench.config import (
 from wavebench.errors import ConfigError
 from wavebench.instruments.rf_source_extensions import (
     RfCwRequest,
+    RfFeature,
     RfModulationState,
     RfObserved,
     RfOutputRequest,
@@ -57,6 +58,28 @@ def _module():
 
 def _production_descriptor():
     return importlib.import_module("wavebench_rigol_dsg830.descriptor").descriptor()
+
+
+def _historical_pre_promotion_descriptor():
+    production = _production_descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    return replace(
+        production,
+        capabilities=tuple(
+            capability
+            for capability in production.capabilities
+            if capability != "rf_source.pulse_output"
+        ),
+        rf_source_extensions=replace(
+            extensions,
+            features=tuple(
+                feature
+                for feature in extensions.features
+                if feature.feature is not RfFeature.PULSE_OUTPUT
+            ),
+        ),
+    )
 
 
 def _scope_descriptor():
@@ -405,7 +428,7 @@ def _patch_preflight(monkeypatch, module, production, scope_descriptor) -> None:
 
 
 def _preflight(module, monkeypatch):
-    production = _production_descriptor()
+    production = _historical_pre_promotion_descriptor()
     scope_descriptor = _scope_descriptor()
     _patch_preflight(monkeypatch, module, production, scope_descriptor)
     rf_config = _config()
@@ -442,6 +465,21 @@ def test_a5_pulse_output_preflight_creates_only_an_in_memory_capability(monkeypa
     )
     assert feature.profile.high_level_v == 3.3
     assert feature.profile.output_impedance_ohm == 600.0
+
+
+def test_a5_historical_harness_rejects_the_promoted_production_descriptor(monkeypatch) -> None:
+    module = _module()
+    production = _production_descriptor()
+    scope_descriptor = _scope_descriptor()
+    _patch_preflight(monkeypatch, module, production, scope_descriptor)
+    setup = module.A5PulseOutputEvidenceSetup(
+        "rf_out",
+        "pulse_in_out",
+        "dsg830_pulse_in_out_to_rtm2032_ext_trigger_input",
+    )
+
+    with pytest.raises(module.A5PulseOutputPreflightError, match="production_capabilities_changed"):
+        module.validate_a5_pulse_output_preflight(_config(), _config(), setup)
 
 
 def test_a5_pulse_output_happy_path_has_exact_audits_and_safe_final_state(monkeypatch) -> None:

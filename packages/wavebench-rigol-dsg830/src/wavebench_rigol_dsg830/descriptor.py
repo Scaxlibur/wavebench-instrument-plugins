@@ -16,6 +16,8 @@ from wavebench.instruments.rf_source_extensions import (
     RfOutputPortProfile,
     RfProtectionConditionPolicy,
     RfPulseMode,
+    RfPulseOutputDirection,
+    RfPulseOutputProfile,
     RfPulseModeProfile,
     RfPulsePolarity,
     RfPulseProfile,
@@ -55,6 +57,7 @@ def descriptor() -> InstrumentDescriptor:
             "rf_source.modulation_disable",
             "rf_source.modulated_output_enable",
             "rf_source.pulse_configure",
+            "rf_source.pulse_output",
             "rf_source.sweep_configure",
         ),
         idn_patterns=("RIGOL TECHNOLOGIES,DSG830",),
@@ -66,8 +69,8 @@ def descriptor() -> InstrumentDescriptor:
             "RIGOL DSG830 RF signal-source driver; production descriptor exposes identity, "
             "a read-only snapshot, OFF-only CW configuration, safety-gated RF output control, "
             "RF-OFF internal-sine modulation configuration and disable, a fixed low-power AM "
-            "modulated-output profile, RF-OFF internal single-pulse configuration, and RF-OFF "
-            "disabled Step Sweep configuration."
+            "modulated-output profile, RF-OFF internal single-pulse configuration, one bounded "
+            "rear-panel Pulse-output interface, and RF-OFF disabled Step Sweep configuration."
         ),
         wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",
@@ -196,6 +199,28 @@ def descriptor() -> InstrumentDescriptor:
                                 minimum_off_time_s=10e-9,
                             ),
                         ),
+                    ),
+                ),
+                RfFeatureCapability(
+                    feature=RfFeature.PULSE_OUTPUT,
+                    directions=(
+                        RfFeatureDirection.DISABLE,
+                        RfFeatureDirection.ENABLE,
+                        RfFeatureDirection.READ,
+                    ),
+                    port_ids=("rf_out",),
+                    profile=RfPulseOutputProfile(
+                        interface_id="pulse_in_out",
+                        direction=RfPulseOutputDirection.OUTPUT,
+                        output_readable=True,
+                        low_level_v=0.0,
+                        high_level_v=3.3,
+                        output_impedance_ohm=600.0,
+                        source=RfPulseSource.INTERNAL,
+                        mode=RfPulseMode.SINGLE,
+                        period_s=1e-3,
+                        width_s=100e-6,
+                        polarity=RfPulsePolarity.NORMAL,
                     ),
                 ),
                 RfFeatureCapability(

@@ -21,6 +21,8 @@ from wavebench.instruments.rf_source_extensions import (
     RfModulationValueUnit,
     RfOutputProfile,
     RfPulseMode,
+    RfPulseOutputDirection,
+    RfPulseOutputProfile,
     RfPulsePolarity,
     RfPulseProfile,
     RfPulseSource,
@@ -60,9 +62,9 @@ def test_descriptor_declares_production_output_contract() -> None:
         "rf_source.modulation_disable",
         "rf_source.modulated_output_enable",
         "rf_source.pulse_configure",
+        "rf_source.pulse_output",
         "rf_source.sweep_configure",
     )
-    assert "rf_source.pulse_output" not in descriptor.capabilities
     assert descriptor.idn_patterns == ("RIGOL TECHNOLOGIES,DSG830",)
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb")
@@ -87,8 +89,10 @@ def test_descriptor_declares_production_output_contract() -> None:
         "alc_unlocked",
         "output_power_protection",
     )
-    assert len(descriptor.rf_source_extensions.features) == 6
-    cw, modulated_output, modulation, output, pulse, sweep = descriptor.rf_source_extensions.features
+    assert len(descriptor.rf_source_extensions.features) == 7
+    cw, modulated_output, modulation, output, pulse, pulse_output, sweep = (
+        descriptor.rf_source_extensions.features
+    )
     assert cw.feature is RfFeature.CW
     assert cw.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
     assert cw.port_ids == ("rf_out",)
@@ -173,6 +177,27 @@ def test_descriptor_declares_production_output_contract() -> None:
     assert mode.width_min_s == 10e-9
     assert mode.width_max_s == 170.0 - 10e-9
     assert mode.minimum_off_time_s == 10e-9
+    assert pulse_output.feature is RfFeature.PULSE_OUTPUT
+    assert pulse_output.directions == (
+        RfFeatureDirection.DISABLE,
+        RfFeatureDirection.ENABLE,
+        RfFeatureDirection.READ,
+    )
+    assert pulse_output.port_ids == ("rf_out",)
+    assert isinstance(pulse_output.profile, RfPulseOutputProfile)
+    assert pulse_output.profile.interface_id == "pulse_in_out"
+    assert pulse_output.profile.direction is RfPulseOutputDirection.OUTPUT
+    assert pulse_output.profile.output_readable is True
+    assert (
+        pulse_output.profile.low_level_v,
+        pulse_output.profile.high_level_v,
+        pulse_output.profile.output_impedance_ohm,
+    ) == (0.0, 3.3, 600.0)
+    assert pulse_output.profile.source is RfPulseSource.INTERNAL
+    assert pulse_output.profile.mode is RfPulseMode.SINGLE
+    assert pulse_output.profile.period_s == 1e-3
+    assert pulse_output.profile.width_s == 100e-6
+    assert pulse_output.profile.polarity is RfPulsePolarity.NORMAL
     assert sweep.feature is RfFeature.SWEEP
     assert sweep.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
     assert sweep.port_ids == ("rf_out",)
@@ -191,12 +216,6 @@ def test_descriptor_declares_production_output_contract() -> None:
     assert sweep_mode.points_max == 65_535
     assert sweep_mode.dwell_min_s == 20e-3
     assert sweep_mode.dwell_max_s == 100.0
-    assert all(
-        feature.feature is not RfFeature.PULSE_OUTPUT
-        for feature in descriptor.rf_source_extensions.features
-    )
-
-
 def test_factory_opens_one_configured_transport_without_instrument_io() -> None:
     descriptor = _descriptor_module().descriptor()
     transport = object()
@@ -278,6 +297,18 @@ def test_modulated_output_mapping_is_production_declared_after_a4_mo() -> None:
     assert "rf_source.modulation_disable" in production.capabilities
     assert "rf_source.modulated_output_enable" in production.capabilities
     assert any(feature.feature is RfFeature.MODULATED_OUTPUT for feature in extensions.features)
+
+    validate_rf_source_descriptor(production)
+    driver_type = importlib.import_module("wavebench_rigol_dsg830.driver").DSG830RfSource
+    validate_declared_capabilities(production, driver_type(transport=object()))
+
+
+def test_physical_pulse_output_mapping_is_production_declared_after_a5() -> None:
+    production = _descriptor_module().descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    assert "rf_source.pulse_output" in production.capabilities
+    assert any(feature.feature is RfFeature.PULSE_OUTPUT for feature in extensions.features)
 
     validate_rf_source_descriptor(production)
     driver_type = importlib.import_module("wavebench_rigol_dsg830.driver").DSG830RfSource
