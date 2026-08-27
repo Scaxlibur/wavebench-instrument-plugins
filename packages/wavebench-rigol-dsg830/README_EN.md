@@ -50,12 +50,15 @@ M3-MO makes RF output with active modulation a separate `rf_source.modulated_out
 relaxing ordinary `rf_source.output`. It accepts only an already-active, exactly read-back internal-Sine profile and
 requires RF OFF, Pulse/Sweep disabled, clear protection, complete per-port safety configuration, and a confirmed
 50-ohm actual termination; success performs exactly one RF ON. An uncertain write or readback never retries ON and may
-only use the existing one-shot guarded RF-OFF recovery. A4-MO completed controlled hardware acceptance at AM `50 %` at
-`1 kHz` and RF `1 MHz` at `-50 dBm`: CH2's current `DEF` buffer showed signal presence with an explicit 50-ohm
-declaration, and RF OFF, AM/global modulation OFF, and healthy closure were independently verified. It neither reads
-nor controls CH1 and does not interpret LF OUTPUT as a modulation measurement or infer dBm, frequency, or modulation
-depth. The production descriptor therefore declares only the same AM `50 %`/`1 kHz`, maximum `-50 dBm` profile; callers
-must explicitly turn RF OFF and then use `rf_source.modulation_disable` for cleanup.
+only use the existing one-shot guarded RF-OFF recovery. A4-MO completed controlled hardware acceptance for AM `50 %` at
+`1 kHz`, FM `20 kHz` deviation at `1 kHz`, and PM `1.25 rad` deviation at `1 kHz`, each with RF `1 MHz` at `-50 dBm`.
+CH2's current `DEF` buffer showed signal presence with an explicit 50-ohm declaration. The FM/PM records additionally
+use WaveBench waveform summary and FFT analysis for amplitude, carrier, and spectral-quality observations; they do not
+infer dBm, FM deviation, PM deviation, modulation accuracy, or spectral compliance. The scope neither reads nor controls
+CH1 or interprets LF OUTPUT as a modulation measurement. Final RF OFF, target/global modulation OFF, and healthy closure
+were independently verified. The production descriptor therefore declares AM `50 %`/`1 kHz`, FM `20 kHz`/`1 kHz`, and PM
+`1.25 rad`/`1 kHz`, all with maximum `-50 dBm`; callers must explicitly turn RF OFF and then use
+`rf_source.modulation_disable` for cleanup.
 
 The M4 Pulse subset is internal/single only. `configure_rf_pulse()` fixes source, mode, period, width, and polarity,
 then ends with `:PULM:STAT OFF`; it never invokes RF output, rear Pulse I/O, or trigger commands. The source checkout
@@ -83,7 +86,7 @@ The production descriptor declares no error queue, `rf_source.trigger_snapshot`,
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
 `rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
 internal/single profile and leaves Pulse OFF. `rf_source.pulse_output` covers only the fixed output profile of `pulse_in_out`. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
-`rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`; `rf_source.modulation_disable` only closes one known active mode while RF is OFF; `rf_source.modulated_output_enable` covers only AM `50 %` at `1 kHz` with maximum `-50 dBm`; ordinary `rf_source.output` ON still requires modulation disabled. Every other capability remains behind its A4–A5 evidence gate.
+`rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`; `rf_source.modulation_disable` only closes one known active mode while RF is OFF; `rf_source.modulated_output_enable` covers AM `50 %` at `1 kHz`, FM `20 kHz` at `1 kHz`, and PM `1.25 rad` at `1 kHz`, all with maximum `-50 dBm`; ordinary `rf_source.output` ON still requires modulation disabled. Every other capability remains behind its A4–A5 evidence gate.
 
 ## Development documentation
 
@@ -93,6 +96,7 @@ internal/single profile and leaves Pulse OFF. `rf_source.pulse_output` covers on
 - [A3 local-evidence setup template](tools/a3_cw_evidence.setup.template.toml)
 - [A4 local-evidence setup template](tools/a4_modulation_evidence.setup.template.toml)
 - [A4-MO local-evidence setup template](tools/a4_modulated_output_evidence.setup.template.toml)
+- [A4-MO FM/PM local-evidence setup template](tools/a4_fm_pm_modulated_output_evidence.setup.template.toml)
 - [A4 Pulse local-evidence setup template](tools/a4_pulse_evidence.setup.template.toml)
 - [A4 Step Sweep local-evidence setup template](tools/a4_step_sweep_evidence.setup.template.toml)
 - [A5-0 trigger-configuration diagnostic setup template](tools/a5_trigger_snapshot_evidence.setup.template.toml)

@@ -19,7 +19,7 @@ M3 driver 已实现状态读取、`get_rf_modulation_snapshot()`、`configure_rf
 
 源码 checkout 已提供 A4 的 RF-OFF 调制 evidence harness、fake 回归与不含资源地址的 setup 模板。每次只能验证一个内部 Sine 模式；成功路径在配置读回后关闭同一模式，并在最终状态确认 `rf_out` 与调制均为关闭。显式 `--recover` 只恢复已明确识别的单一活动模式，并写入私有恢复记录。显式 `--diagnose` 保留原始 `read_only` 配置，只读取初始／最终 RF snapshot 与指定模式 profile，并要求 transport audit 为零写。A4 不读取 CH2、不调用 RF 输出控制，恢复或诊断记录均不构成新的 capability 提升证据。AM／FM／PM 的 RF-OFF 序列均已通过；为使 production profile 与 PM 的严格读回证据一致，PM 仅开放 `1.25 rad`。
 
-M3-MO 把调制开启时的 RF 输出定义为独立的 `rf_source.modulated_output_enable`，不会放宽普通 `rf_source.output`。它只接受已经激活、完整 readback 精确匹配的内部 Sine profile，并要求 RF OFF、Pulse／Sweep disabled、protection 清晰、完整端口 safety 配置和明确的 50 Ω 实际端接；成功时只执行一次 RF ON。写入或 readback 不确定时不重试 ON，只可能调用一次既有的受 guard RF OFF recovery。A4-MO 已以 AM `50 %`／`1 kHz`、RF `1 MHz`／`-50 dBm` 通过受控实机验收：CH2 当前 `DEF` 缓冲区观察到信号，CH2 明确为 50 Ω，最终 RF OFF、AM／全局调制关闭且两个 session 健康关闭。scope 不读取或控制 CH1，也不把 LF OUTPUT 解释为调制测量，不推断 dBm、频率或调制深度。production descriptor 因此只声明同一 AM `50 %`／`1 kHz`、最大 `-50 dBm` 的 profile；结束时必须显式 RF OFF，再用 `rf_source.modulation_disable` 清理调制。
+M3-MO 把调制开启时的 RF 输出定义为独立的 `rf_source.modulated_output_enable`，不会放宽普通 `rf_source.output`。它只接受已经激活、完整 readback 精确匹配的内部 Sine profile，并要求 RF OFF、Pulse／Sweep disabled、protection 清晰、完整端口 safety 配置和明确的 50 Ω 实际端接；成功时只执行一次 RF ON。写入或 readback 不确定时不重试 ON，只可能调用一次既有的受 guard RF OFF recovery。A4-MO 已完成三条受控实机验收：AM `50 %`／`1 kHz`、FM `20 kHz` 频偏／`1 kHz`、PM `1.25 rad` 相偏／`1 kHz`，均使用 RF `1 MHz`／`-50 dBm`。CH2 当前 `DEF` 缓冲区在显式 50 Ω 前提下观察到信号；FM／PM 记录还使用 WaveBench 波形摘要和 FFT 保存信号存在、幅度、载波与频谱质量告警。该分析不推断 dBm、频偏、相偏、调制准确度或频谱合规性。scope 不读取或控制 CH1，也不把 LF OUTPUT 解释为调制测量。三条路径的最终 RF OFF、目标／全局调制关闭和 session 健康关闭均已复核。production descriptor 因此只声明 AM `50 %`／`1 kHz`、FM `20 kHz`／`1 kHz`、PM `1.25 rad`／`1 kHz`、最大 `-50 dBm` 的 profile；结束时必须显式 RF OFF，再用 `rf_source.modulation_disable` 清理调制。
 
 M4 Pulse 只覆盖 internal／single 子集。`configure_rf_pulse()` 固定设置 source、mode、period、width 和 polarity，并以 `:PULM:STAT OFF` 收尾；它不调用 RF 输出、后面板 Pulse I/O 或 trigger。源码 checkout 的 `tools/a4_pulse_evidence.py`、fake 回归与无资源 setup 模板已完成受控实机验证：normal／inverted 两种 polarity 都经过一次 RF-OFF／Pulse-OFF 配置、独立读回和最终关闭复核；每次成功路径均为 38 次 query、6 次配置 write。`--diagnose` 保持 `read_only` 且零写；两种模式均不读取 CH1／CH2。证据复核后，`rf_source.pulse_configure` 已进入 production descriptor，historical harness 会拒绝重跑。
 
@@ -29,7 +29,7 @@ A5-0 已在离线代码中提供 `get_rf_trigger_snapshot()`：它固定读取 P
 
 受限 A5 物理验收已覆盖唯一一条路径：DSG830「PULSE IN/OUT」按 output 方向接入 RTM2032「EXT TRIGGER INPUT」。`rf_source.pulse_output` 只切换该 output 的状态；profile 固定为 `0 V`／`3.3 V`、约 `600 Ω`、internal／single／normal、period `1 ms`、width `100 μs`，并要求 RF 输出、调制、Pulse 与 Sweep 都关闭。验收 harness 在隔离 scope session 中执行 external／normal／single／auto 触发序列，scope 不属于 RTM production API。成功记录确认最终 RF 输出和 Pulse Output 均关闭；source Pulse profile 与 scope acquisition state 不在恢复范围。该 profile 的电气参数以 [DSG800A 数据表](https://www.rigol.com/dam/global/downloads/brochures/en/data-sheet/rf-signal-generators/DSG800A_datasheet_EN.pdf) 为准。historical harness 在 capability 提升后拒绝重跑。
 
-production descriptor 不声明错误队列、`rf_source.trigger_snapshot`、Pulse input、`TRIGGER IN`、trigger、Sweep execute／fire、sync／reference、Level Sweep、list 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，且普通 ON 仍要求调制关闭；`rf_source.modulation_configure` 只覆盖已验收的 RF-OFF 内部 Sine profile（PM 精确 `1.25 rad`），`rf_source.modulation_disable` 只关闭 RF OFF 时唯一已知活动模式，`rf_source.modulated_output_enable` 只覆盖 AM `50 %`／`1 kHz`、最大 `-50 dBm`，`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF，`rf_source.pulse_output` 只覆盖 `pulse_in_out` 的固定 output profile，`rf_source.sweep_configure` 只覆盖已验收的 fixed profile 配置并保持 Sweep disabled；其余 capability 继续经过对应的 A5 实机证据门。
+production descriptor 不声明错误队列、`rf_source.trigger_snapshot`、Pulse input、`TRIGGER IN`、trigger、Sweep execute／fire、sync／reference、Level Sweep、list 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，且普通 ON 仍要求调制关闭；`rf_source.modulation_configure` 只覆盖已验收的 RF-OFF 内部 Sine profile（PM 精确 `1.25 rad`），`rf_source.modulation_disable` 只关闭 RF OFF 时唯一已知活动模式，`rf_source.modulated_output_enable` 只覆盖 AM `50 %`／`1 kHz`、FM `20 kHz`／`1 kHz`、PM `1.25 rad`／`1 kHz`、最大 `-50 dBm`，`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF，`rf_source.pulse_output` 只覆盖 `pulse_in_out` 的固定 output profile，`rf_source.sweep_configure` 只覆盖已验收的 fixed profile 配置并保持 Sweep disabled；其余 capability 继续经过对应的 A5 实机证据门。
 
 ## 开发文档
 
@@ -39,6 +39,7 @@ production descriptor 不声明错误队列、`rf_source.trigger_snapshot`、Pul
 - [A3 本地证据 setup 模板](tools/a3_cw_evidence.setup.template.toml)
 - [A4 本地证据 setup 模板](tools/a4_modulation_evidence.setup.template.toml)
 - [A4-MO 本地证据 setup 模板](tools/a4_modulated_output_evidence.setup.template.toml)
+- [A4-MO FM／PM 本地证据 setup 模板](tools/a4_fm_pm_modulated_output_evidence.setup.template.toml)
 - [A4 Pulse 本地证据 setup 模板](tools/a4_pulse_evidence.setup.template.toml)
 - [A4 Step Sweep 本地证据 setup 模板](tools/a4_step_sweep_evidence.setup.template.toml)
 - [A5-0 trigger configuration 本地诊断 setup 模板](tools/a5_trigger_snapshot_evidence.setup.template.toml)
@@ -90,7 +91,7 @@ access = "read_only"
 - factory 只通过 `DriverContext` 打开当前配置的 transport。
 - 默认测试只使用 fake transport，不连接真实仪器。
 - snapshot 仅发送 `*IDN?`、`:FREQ?`、`:LEV?`、`:OUTP?`、`:MOD:STAT?`、`:PULM:STAT?`、`:SWE:STAT?` 与 `:STAT:QUES:POW:COND?`；A1 已使这条只读路径成为 production capability。
-- 默认测试只使用 fake transport，不会连接硬件。production 的普通 `read_only` 配置不会执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频配置；A2/A3/A4/A4-MO/A5 的受控证据已分别开放 safety-gated 输出、OFF-only CW、RF-OFF 调制及关闭、Pulse、Step Sweep、固定 profile 调制输出和一条 Pulse Output 路径，普通写入仍须显式 `read_write`、相应 capability 和完整 preflight。M3-MO 只接受 AM `50 %`／`1 kHz`、最大 `-50 dBm`，普通 RF ON 仍要求调制关闭。A5 不包含 Pulse input、`TRIGGER IN`、execute、arm、fire、trigger、sync／reference、Level Sweep 或 list。
+- 默认测试只使用 fake transport，不会连接硬件。production 的普通 `read_only` 配置不会执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频配置；A2/A3/A4/A4-MO/A5 的受控证据已分别开放 safety-gated 输出、OFF-only CW、RF-OFF 调制及关闭、Pulse、Step Sweep、固定 profile 调制输出和一条 Pulse Output 路径，普通写入仍须显式 `read_write`、相应 capability 和完整 preflight。M3-MO 只接受 AM `50 %`／`1 kHz`、FM `20 kHz`／`1 kHz`、PM `1.25 rad`／`1 kHz`、最大 `-50 dBm`，普通 RF ON 仍要求调制关闭。A5 不包含 Pulse input、`TRIGGER IN`、execute、arm、fire、trigger、sync／reference、Level Sweep 或 list。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、RF 输出状态、安全限制和恢复方式。
 
 ### 受控 RF 观察的电气边界
