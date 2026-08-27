@@ -1,0 +1,13 @@
+# A5 后面板 Pulse Output 本地证据配置模板。
+#
+# 复制到被忽略的私有路径后使用。此文件不得包含仪器资源、序列号、原始响应或波形。
+# 此次唯一允许的物理路径为：DSG830 PULSE IN/OUT（仅输出方向）经 BNC 同轴线连接到
+# RTM2032 EXT TRIGGER INPUT。不得改接 DSG830 TRIGGER IN、10 MHz 或 RF 输出端。
+#
+# 执行会临时把 RTM external trigger mode 从 AUTO 设为 NORM、触发一次 SINGle，然后恢复
+# AUTO。scope acquisition state 与 DSG830 原始 internal Pulse profile 不恢复，需人工知悉。
+
+[a5_pulse_output_evidence]
+port_id = "rf_out"
+interface_id = "pulse_in_out"
+wiring = "dsg830_pulse_in_out_to_rtm2032_ext_trigger_input"
