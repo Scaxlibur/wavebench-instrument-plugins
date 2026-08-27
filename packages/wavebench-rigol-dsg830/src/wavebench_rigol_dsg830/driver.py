@@ -10,6 +10,8 @@ modulation, Pulse, Sweep, trigger, or arbitrary SCPI.
 their independently evidenced production capabilities.  The A5-0
 ``get_rf_trigger_snapshot()`` mapping is query-only and remains absent from
 the production descriptor until a separate trigger-path evidence decision.
+The bounded ``PULSE IN/OUT`` output mapping likewise remains absent until its
+separate A5 physical-output evidence decision.
 """
 
 from __future__ import annotations
@@ -37,6 +39,9 @@ from wavebench.instruments.rf_source_extensions import (
     RfProtectionStatus,
     RfPulseConfigureRequest,
     RfPulseMode,
+    RfPulseOutputDirection,
+    RfPulseOutputRequest,
+    RfPulseOutputSnapshot,
     RfPulsePolarity,
     RfPulseTriggerMode,
     RfPulseSnapshot,
@@ -74,6 +79,10 @@ _PULSE_PERIOD_MAX_S = 170.0
 _PULSE_WIDTH_MIN_S = 10e-9
 _PULSE_WIDTH_MAX_S = _PULSE_PERIOD_MAX_S - _PULSE_WIDTH_MIN_S
 _PULSE_MINIMUM_OFF_TIME_S = 10e-9
+_PULSE_OUTPUT_INTERFACE_ID = "pulse_in_out"
+_PULSE_OUTPUT_LOW_LEVEL_V = 0.0
+_PULSE_OUTPUT_HIGH_LEVEL_V = 3.3
+_PULSE_OUTPUT_IMPEDANCE_OHM = 600.0
 _SWEEP_POINTS_MIN = 2
 _SWEEP_POINTS_MAX = 65_535
 _SWEEP_DWELL_MIN_S = 20e-3
@@ -391,6 +400,53 @@ class DSG830RfSource:
         self.transport.write(f":PULM:WIDT {_format_scpi_real(request.width_s)}s")
         self.transport.write(f":PULM:POL {polarity}")
         self.transport.write(":PULM:STAT OFF")
+
+    def get_rf_pulse_output_snapshot(
+        self,
+        port_id: str,
+        interface_id: str,
+    ) -> RfPulseOutputSnapshot:
+        """Read the bounded ``PULSE IN/OUT`` output state without writes.
+
+        The connector label does not declare an input mapping.  This method
+        reports only the independently bounded output direction and reads the
+        complete internal Pulse profile required by that output contract.
+        """
+
+        _require_pulse_output_target(port_id, interface_id)
+        pulse = self.get_rf_pulse_snapshot(port_id)
+        enabled = _parse_binary(
+            self.transport.query(":PULM:OUT:STAT?"),
+            "Pulse-output state",
+        )
+        return RfPulseOutputSnapshot(
+            port_id=port_id,
+            interface_id=interface_id,
+            direction=RfPulseOutputDirection.OUTPUT,
+            enabled=enabled,
+            low_level_v=_PULSE_OUTPUT_LOW_LEVEL_V,
+            high_level_v=_PULSE_OUTPUT_HIGH_LEVEL_V,
+            output_impedance_ohm=_PULSE_OUTPUT_IMPEDANCE_OHM,
+            source=pulse.source,
+            mode=pulse.mode,
+            period_s=pulse.period_s,
+            width_s=pulse.width_s,
+            polarity=pulse.polarity,
+            pulse_state=pulse.state,
+        )
+
+    def set_rf_pulse_output(self, request: RfPulseOutputRequest) -> None:
+        """Map one bounded physical Pulse-output request to one SCPI setter.
+
+        Core owns the fixed-profile and RF-OFF preflight, independent readback,
+        and uncertain-session handling.  The driver does not configure Pulse,
+        trigger settings, RF output, receiver settings, or electrical levels.
+        """
+
+        if not isinstance(request, RfPulseOutputRequest):
+            raise ValueError("DSG830 Pulse-output control requires RfPulseOutputRequest")
+        _require_pulse_output_target(request.port_id, request.interface_id)
+        self.transport.write(":PULM:OUT:STAT ON" if request.enabled else ":PULM:OUT:STAT OFF")
 
     def get_rf_sweep_snapshot(self, port_id: str) -> RfSweepSnapshot:
         """Read one Step Sweep profile without arming, firing, or triggering it."""
@@ -833,6 +889,14 @@ def _require_modulation_port(port_id: object) -> None:
 def _require_pulse_port(port_id: object) -> None:
     if port_id != "rf_out":
         raise ValueError("DSG830 pulse configuration requires port_id='rf_out'")
+
+
+def _require_pulse_output_target(port_id: object, interface_id: object) -> None:
+    _require_pulse_port(port_id)
+    if interface_id != _PULSE_OUTPUT_INTERFACE_ID:
+        raise ValueError(
+            "DSG830 Pulse-output control requires interface_id='pulse_in_out'"
+        )
 
 
 def _require_sweep_port(port_id: object) -> None:

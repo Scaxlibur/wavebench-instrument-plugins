@@ -62,6 +62,7 @@ def test_descriptor_declares_production_output_contract() -> None:
         "rf_source.pulse_configure",
         "rf_source.sweep_configure",
     )
+    assert "rf_source.pulse_output" not in descriptor.capabilities
     assert descriptor.idn_patterns == ("RIGOL TECHNOLOGIES,DSG830",)
     assert descriptor.backends == ("pyvisa",)
     assert descriptor.resource_schemes == ("tcpip", "usb")
@@ -190,6 +191,10 @@ def test_descriptor_declares_production_output_contract() -> None:
     assert sweep_mode.points_max == 65_535
     assert sweep_mode.dwell_min_s == 20e-3
     assert sweep_mode.dwell_max_s == 100.0
+    assert all(
+        feature.feature is not RfFeature.PULSE_OUTPUT
+        for feature in descriptor.rf_source_extensions.features
+    )
 
 
 def test_factory_opens_one_configured_transport_without_instrument_io() -> None:
