@@ -14,7 +14,9 @@ from wavebench.instruments.rf_source_extensions import (
     RfFeatureCapability,
     RfFeatureDirection,
     RfCwProfile,
+    RfModulatedOutputProfile,
     RfModulationKind,
+    RfModulationModeProfile,
     RfModulationProfile,
     RfModulationValueUnit,
     RfOutputProfile,
@@ -236,6 +238,50 @@ def test_trigger_snapshot_mapping_requires_an_in_memory_nonproduction_descriptor
         production,
         capabilities=(*production.capabilities, "rf_source.trigger_snapshot"),
         rf_source_extensions=replace(extensions, features=(*extensions.features, trigger_feature)),
+    )
+
+    validate_rf_source_descriptor(evidence_descriptor)
+    driver_type = importlib.import_module("wavebench_rigol_dsg830.driver").DSG830RfSource
+    validate_declared_capabilities(evidence_descriptor, driver_type(transport=object()))
+
+
+def test_modulated_output_mapping_requires_an_in_memory_nonproduction_descriptor() -> None:
+    production = _descriptor_module().descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    assert "rf_source.modulated_output_enable" not in production.capabilities
+    assert all(feature.feature is not RfFeature.MODULATED_OUTPUT for feature in extensions.features)
+
+    modulated_output_feature = RfFeatureCapability(
+        feature=RfFeature.MODULATED_OUTPUT,
+        directions=(RfFeatureDirection.ENABLE,),
+        port_ids=("rf_out",),
+        profile=RfModulatedOutputProfile(
+            maximum_power_dbm=-50.0,
+            mode_profiles=(
+                RfModulationModeProfile(
+                    kind=RfModulationKind.AM,
+                    value_unit=RfModulationValueUnit.PERCENT,
+                    value_min=50.0,
+                    value_max=50.0,
+                    internal_frequency_min_hz=1_000.0,
+                    internal_frequency_max_hz=1_000.0,
+                ),
+            ),
+        ),
+    )
+    evidence_descriptor = replace(
+        production,
+        capabilities=(*production.capabilities, "rf_source.modulated_output_enable"),
+        rf_source_extensions=replace(
+            extensions,
+            features=tuple(
+                sorted(
+                    (*extensions.features, modulated_output_feature),
+                    key=lambda item: item.feature.value,
+                )
+            ),
+        ),
     )
 
     validate_rf_source_descriptor(evidence_descriptor)
