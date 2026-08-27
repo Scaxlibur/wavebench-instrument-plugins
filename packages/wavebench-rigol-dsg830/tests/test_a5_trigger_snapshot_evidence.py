@@ -21,8 +21,6 @@ from wavebench.config import (
 from wavebench.instruments.rf_source_extensions import (
     RfExternalGatePolarity,
     RfExternalTriggerEdge,
-    RfFeature,
-    RfFeatureDirection,
     RfModulationState,
     RfObserved,
     RfPortSnapshot,
@@ -55,38 +53,6 @@ def _production_descriptor():
     from wavebench_rigol_dsg830.descriptor import descriptor
 
     return descriptor()
-
-
-def _historical_production_descriptor():
-    """Rebuild the immutable production contract that the historical A5 harness tests."""
-
-    production = _production_descriptor()
-    extensions = production.rf_source_extensions
-    assert extensions is not None
-    features = tuple(
-        replace(
-            feature,
-            directions=tuple(
-                direction
-                for direction in feature.directions
-                if direction is not RfFeatureDirection.DISABLE
-            ),
-        )
-        if feature.feature is RfFeature.MODULATION
-        else feature
-        for feature in extensions.features
-        if feature.feature is not RfFeature.MODULATED_OUTPUT
-    )
-    return replace(
-        production,
-        capabilities=tuple(
-            capability
-            for capability in production.capabilities
-            if capability
-            not in {"rf_source.modulation_disable", "rf_source.modulated_output_enable"}
-        ),
-        rf_source_extensions=replace(extensions, features=features),
-    )
 
 
 def _config(*, access: str = "read_only", retries: int = 0) -> WaveBenchConfig:
@@ -232,6 +198,9 @@ class _FakeDriver:
     def configure_rf_modulation(self, request: object) -> None:
         self.write_requests.append(request)
 
+    def disable_rf_modulation(self, request: object) -> None:
+        self.write_requests.append(request)
+
     def get_rf_pulse_snapshot(self, port_id: str) -> object:
         assert port_id == "rf_out"
         return object()
@@ -258,7 +227,7 @@ class _FakeDriver:
 
 
 def _preflight(module, monkeypatch, config: WaveBenchConfig, setup):
-    production = _historical_production_descriptor()
+    production = _production_descriptor()
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: production)
     monkeypatch.setattr(
         module,
@@ -325,12 +294,30 @@ def test_a5_preflight_rejects_writable_or_retrying_config(monkeypatch, config, c
 
 def test_a5_preflight_rejects_a_production_trigger_capability(monkeypatch) -> None:
     module = _script_module()
-    production = _historical_production_descriptor()
+    production = _production_descriptor()
     promoted = replace(
         production,
         capabilities=(*production.capabilities, "rf_source.trigger_snapshot"),
     )
     monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: promoted)
+    monkeypatch.setattr(
+        module,
+        "_runtime_versions",
+        lambda: {"wavebench_version": "0.8.25", "plugin_version": "0.2.0"},
+    )
+
+    with pytest.raises(module.A5TriggerSnapshotPreflightError, match="production_capabilities_changed"):
+        module.validate_a5_trigger_snapshot_preflight(_config(), _setup(module))
+
+
+def test_a5_preflight_rejects_an_unreviewed_production_capability(monkeypatch) -> None:
+    module = _script_module()
+    production = _production_descriptor()
+    changed = replace(
+        production,
+        capabilities=(*production.capabilities, "rf_source.future"),
+    )
+    monkeypatch.setattr(module, "resolve_instrument_descriptor", lambda *_args, **_kwargs: changed)
     monkeypatch.setattr(
         module,
         "_runtime_versions",

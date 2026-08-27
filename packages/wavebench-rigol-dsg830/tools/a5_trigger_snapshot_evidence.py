@@ -67,6 +67,8 @@ _PRODUCTION_CAPABILITIES = (
     "rf_source.cw_configure",
     "rf_source.output",
     "rf_source.modulation_configure",
+    "rf_source.modulation_disable",
+    "rf_source.modulated_output_enable",
     "rf_source.pulse_configure",
     "rf_source.sweep_configure",
 )
