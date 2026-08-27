@@ -137,7 +137,7 @@ Pulse trigger、Sweep execute／fire、全部物理外部接口、Level Sweep �
 
 Core 将这条路径建模为 `rf_source.trigger_snapshot`、`wavebench rf-source trigger status --port PORT_ID` 和 `rf_source.trigger_status`。它要求 `TRIGGER / READ` profile，且只在非 production descriptor 中声明。`port_id` 仅表示相关逻辑设置影响的 RF 输出，不是 `TRIGGER IN`、`PULSE IN/OUT` 或 sync connector。DSG830 production descriptor 不声明该 capability 或 feature；因此当前普通配置拒绝该入口，不进行硬件 I/O。
 
-源码 checkout 的 `tools/a5_trigger_snapshot_evidence.py` 与资源无关 setup 模板提供私有零写诊断。默认仅作静态预检；显式 `--diagnose` 才使用原始 `read_only` 配置与禁用的读重试建立一个独占 session。初始 snapshot 未确认 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection 时，不读取 trigger configuration。成功路径固定为初始 snapshot、六条 trigger query、最终 snapshot，共 22 次 query、零 write；证据文件以 `0600` 保存，且不含 resource、序列号、原始响应或命令日志。隔离诊断已完成并复核最终 RF OFF 与健康关闭；它仍不构成物理 A5 实机证据或 capability 提升。
+源码 checkout 的 `tools/a5_trigger_snapshot_evidence.py` 与资源无关 setup 模板提供私有零写诊断。默认仅作静态预检；显式 `--diagnose` 才使用原始 `read_only` 配置与禁用的读重试建立一个独占 session。初始 snapshot 未确认 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection 时，不读取 trigger configuration。成功路径固定为初始 snapshot、六条 trigger query、最终 snapshot，共 22 次 query、零 write；证据文件以 `0600` 保存，且不含 resource、序列号、原始响应或命令日志。静态预检精确绑定当前 production descriptor 的 capability 列表；后续 capability 变更必须先经代码审查、fake 回归和新的零写诊断更新该基线，否则工具在建立 session 前拒绝。隔离诊断已完成并复核最终 RF OFF 与健康关闭；它仍不构成物理 A5 实机证据或 capability 提升。
 
 ### A5：DSG830 后面板接口进入条件（物理验收未开始）
 
