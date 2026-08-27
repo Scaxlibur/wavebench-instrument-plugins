@@ -67,6 +67,8 @@ def _historical_pre_promotion_descriptor():
             if capability
             not in {
                 "rf_source.modulation_configure",
+                "rf_source.modulation_disable",
+                "rf_source.modulated_output_enable",
                 "rf_source.pulse_configure",
                 "rf_source.sweep_configure",
             }
@@ -76,7 +78,13 @@ def _historical_pre_promotion_descriptor():
             features=tuple(
                 feature
                 for feature in extensions.features
-                if feature.feature not in {RfFeature.MODULATION, RfFeature.PULSE, RfFeature.SWEEP}
+                if feature.feature
+                not in {
+                    RfFeature.MODULATED_OUTPUT,
+                    RfFeature.MODULATION,
+                    RfFeature.PULSE,
+                    RfFeature.SWEEP,
+                }
             ),
         ),
     )
