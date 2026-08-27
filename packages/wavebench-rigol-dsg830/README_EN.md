@@ -13,10 +13,10 @@ mapping, M3 internal-sine modulation mapping, the M3-MO bounded modulated-output
 strict snapshot parser plus one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings, internal-sine AM/FM/PM
 configuration/readback mappings, internal/single Pulse timing/polarity mapping, and a disabled Step Sweep profile mapping.
 
-A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, and A4 modulation/Pulse/Step Sweep evidence have completed and been reviewed.
+A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, A4 modulation/Pulse/Step Sweep evidence, and fixed-profile A4-MO evidence have completed and been reviewed.
 The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`,
-`rf_source.output`, `rf_source.modulation_configure`, `rf_source.pulse_configure`, and `rf_source.sweep_configure`. A `read_write` CW, modulation, Pulse, or Step Sweep request requires target RF OFF and the complete OFF-only preflight; RF ON/OFF
-also requires complete per-port safety configuration, a fresh snapshot, and independent readback. RF ON still requires modulation disabled. The example
+`rf_source.output`, `rf_source.modulation_configure`, `rf_source.modulation_disable`, `rf_source.modulated_output_enable`, `rf_source.pulse_configure`, and `rf_source.sweep_configure`. A `read_write` CW, modulation, Pulse, or Step Sweep request requires target RF OFF and the complete OFF-only preflight; ordinary RF ON/OFF
+also requires complete per-port safety configuration, a fresh snapshot, and independent readback. Ordinary RF ON still requires modulation disabled. The example
 configuration remains `read_only` and does not enable writes by default.
 
 The local A2 controlled-output harness, regression tests, and resource-free setup template remain in the source
@@ -50,12 +50,12 @@ M3-MO makes RF output with active modulation a separate `rf_source.modulated_out
 relaxing ordinary `rf_source.output`. It accepts only an already-active, exactly read-back internal-Sine profile and
 requires RF OFF, Pulse/Sweep disabled, clear protection, complete per-port safety configuration, and a confirmed
 50-ohm actual termination; success performs exactly one RF ON. An uncertain write or readback never retries ON and may
-only use the existing one-shot guarded RF-OFF recovery. The source checkout's
-`tools/a4_modulated_output_evidence.py` and fake regressions are fixed to AM `50 %` at `1 kHz` and RF `1 MHz` at
-`-50 dBm`. They read only signal presence from CH2's current `DEF` buffer with an explicit 50-ohm declaration; they do
-not read or control CH1, and they do not interpret LF OUTPUT as a modulation measurement. The successful path
-explicitly turns RF OFF, disables AM/global modulation, and verifies the final state. This private hardware acceptance
-is still pending, so the production descriptor does not declare the capability.
+only use the existing one-shot guarded RF-OFF recovery. A4-MO completed controlled hardware acceptance at AM `50 %` at
+`1 kHz` and RF `1 MHz` at `-50 dBm`: CH2's current `DEF` buffer showed signal presence with an explicit 50-ohm
+declaration, and RF OFF, AM/global modulation OFF, and healthy closure were independently verified. It neither reads
+nor controls CH1 and does not interpret LF OUTPUT as a modulation measurement or infer dBm, frequency, or modulation
+depth. The production descriptor therefore declares only the same AM `50 %`/`1 kHz`, maximum `-50 dBm` profile; callers
+must explicitly turn RF OFF and then use `rf_source.modulation_disable` for cleanup.
 
 The M4 Pulse subset is internal/single only. `configure_rf_pulse()` fixes source, mode, period, width, and polarity,
 then ends with `:PULM:STAT OFF`; it never invokes RF output, rear Pulse I/O, or trigger commands. The source checkout
@@ -77,11 +77,11 @@ It does not read scope, invoke RF output, or arm/fire Sweep. Both paths passed, 
 
 The A5-0 offline mapping adds `get_rf_trigger_snapshot()`, which strictly reads logical Pulse/Sweep trigger configuration through six fixed query forms. It sends no setter, `*TRG`, `:TRIG:PULS`, `:TRIG:SWE`, `:SWE:EXEC`, `:PULM:OUT`, or RF-output write. It is not a physical trigger/sync connector contract; `rf_out` only identifies the RF output whose behavior the settings govern.
 
-The production descriptor declares no error queue, `rf_source.modulation_disable`, `rf_source.modulated_output_enable`, `rf_source.trigger_snapshot`, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
+The production descriptor declares no error queue, `rf_source.trigger_snapshot`, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
 `rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
 internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
-`rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`; ordinary `rf_source.output` ON still requires modulation disabled. Every other capability remains behind its A4–A5 evidence gate.
+`rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`; `rf_source.modulation_disable` only closes one known active mode while RF is OFF; `rf_source.modulated_output_enable` covers only AM `50 %` at `1 kHz` with maximum `-50 dBm`; ordinary `rf_source.output` ON still requires modulation disabled. Every other capability remains behind its A4–A5 evidence gate.
 
 ## Development documentation
 
@@ -150,9 +150,9 @@ termination from a connector label.
 - The snapshot path issues only `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`,
   `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`; A1 exposes this read-only path as a production capability.
 - Default tests use fake transport and never connect to hardware. A normal production `read_only` configuration does
-  not reset the device or change RF output, power, frequency, trigger, modulation, or sweep; A2/A3 evidence separately
-  opens safety-gated output and OFF-only CW, while ordinary writes still require explicit `read_write`, capability, and
-  complete preflight.
+  not reset the device or change RF output, power, frequency, trigger, modulation, or sweep; A2/A3/A4/A4-MO evidence
+  separately opens only their bounded output, CW, modulation-cleanup, Pulse, Step Sweep, and fixed-profile modulated-output
+  operations, while ordinary writes still require explicit `read_write`, capability, and complete preflight.
 - Hardware testing requires separate authorization and a reviewed resource, firmware, terminator, RF-output
   state, safety limit, and restoration procedure.
 
