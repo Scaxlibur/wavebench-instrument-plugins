@@ -8,14 +8,14 @@ DSG800 programming guide covers DSG830 and DSG815; this initial package register
 ## Current status
 
 Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, M2 offline output
-mapping, M3 internal-sine modulation mapping, the M3-MO bounded modulated-output contract, and M4 Pulse plus the production frequency-only Step Sweep subset: its descriptor uses
+mapping, M3 internal-sine modulation mapping, the M3-MO bounded modulated-output contract, M4 Pulse plus the production frequency-only Step Sweep subset, and one bounded A5 Pulse Output route: its descriptor uses
 `kind="rf_source"`, declares one `rf_out` port with static limits and a 50-ohm dBm reference, and ships a
 strict snapshot parser plus one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings, internal-sine AM/FM/PM
-configuration/readback mappings, internal/single Pulse timing/polarity mapping, and a disabled Step Sweep profile mapping.
+configuration/readback mappings, internal/single Pulse timing/polarity mapping, a `:PULM:OUT:STAT` mapping, and a disabled Step Sweep profile mapping.
 
-A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, A4 modulation/Pulse/Step Sweep evidence, and fixed-profile A4-MO evidence have completed and been reviewed.
+A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, A4 modulation/Pulse/Step Sweep evidence, fixed-profile A4-MO evidence, and one A5 Pulse Output route have completed and been reviewed.
 The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`,
-`rf_source.output`, `rf_source.modulation_configure`, `rf_source.modulation_disable`, `rf_source.modulated_output_enable`, `rf_source.pulse_configure`, and `rf_source.sweep_configure`. A `read_write` CW, modulation, Pulse, or Step Sweep request requires target RF OFF and the complete OFF-only preflight; ordinary RF ON/OFF
+`rf_source.output`, `rf_source.modulation_configure`, `rf_source.modulation_disable`, `rf_source.modulated_output_enable`, `rf_source.pulse_configure`, `rf_source.pulse_output`, and `rf_source.sweep_configure`. A `read_write` CW, modulation, Pulse, Pulse Output, or Step Sweep request requires its declared preflight; ordinary RF ON/OFF
 also requires complete per-port safety configuration, a fresh snapshot, and independent readback. Ordinary RF ON still requires modulation disabled. The example
 configuration remains `read_only` and does not enable writes by default.
 
@@ -77,10 +77,12 @@ It does not read scope, invoke RF output, or arm/fire Sweep. Both paths passed, 
 
 The A5-0 offline mapping adds `get_rf_trigger_snapshot()`, which strictly reads logical Pulse/Sweep trigger configuration through six fixed query forms. It sends no setter, `*TRG`, `:TRIG:PULS`, `:TRIG:SWE`, `:SWE:EXEC`, `:PULM:OUT`, or RF-output write. It is not a physical trigger/sync connector contract; `rf_out` only identifies the RF output whose behavior the settings govern.
 
-The production descriptor declares no error queue, `rf_source.trigger_snapshot`, trigger, Sweep execution/fire, Level Sweep, list control, or arbitrary SCPI passthrough.
+The bounded A5 physical acceptance covers exactly one route: DSG830 `PULSE IN/OUT` in the output direction to an RTM2032 `EXT TRIGGER INPUT`. `rf_source.pulse_output` only changes that output state. Its fixed profile is `0 V`/`3.3 V`, about `600 ohms`, internal/single/normal, period `1 ms`, width `100 us`; RF output, modulation, Pulse, and Sweep must remain off. The isolated harness uses the scope only for an external/normal/single/auto trigger sequence, so it creates neither an RTM driver API nor an RTM production capability. The successful record independently confirms final RF output and Pulse Output OFF. The existing Pulse profile and scope acquisition state are deliberately not restored. Electrical values follow the [DSG800A datasheet](https://www.rigol.com/dam/global/downloads/brochures/en/data-sheet/rf-signal-generators/DSG800A_datasheet_EN.pdf); the historical harness rejects reruns after promotion.
+
+The production descriptor declares no error queue, `rf_source.trigger_snapshot`, Pulse input, `TRIGGER IN`, trigger, Sweep execution/fire, sync/reference control, Level Sweep, list control, or arbitrary SCPI passthrough.
 `rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
 `rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
-internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
+internal/single profile and leaves Pulse OFF. `rf_source.pulse_output` covers only the fixed output profile of `pulse_in_out`. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
 `rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`; `rf_source.modulation_disable` only closes one known active mode while RF is OFF; `rf_source.modulated_output_enable` covers only AM `50 %` at `1 kHz` with maximum `-50 dBm`; ordinary `rf_source.output` ON still requires modulation disabled. Every other capability remains behind its A4–A5 evidence gate.
 
 ## Development documentation
@@ -94,6 +96,7 @@ internal/single profile and leaves Pulse OFF. `rf_source.sweep_configure` covers
 - [A4 Pulse local-evidence setup template](tools/a4_pulse_evidence.setup.template.toml)
 - [A4 Step Sweep local-evidence setup template](tools/a4_step_sweep_evidence.setup.template.toml)
 - [A5-0 trigger-configuration diagnostic setup template](tools/a5_trigger_snapshot_evidence.setup.template.toml)
+- [A5 Pulse Output local-evidence setup template](tools/a5_pulse_output_evidence.setup.template.toml)
 
 The milestone document distinguishes the current seed, offline contracts, and A1–A5 hardware evidence. A
 production descriptor capability is not promoted by seed code or fake-transport tests alone.
@@ -150,9 +153,9 @@ termination from a connector label.
 - The snapshot path issues only `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`,
   `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`; A1 exposes this read-only path as a production capability.
 - Default tests use fake transport and never connect to hardware. A normal production `read_only` configuration does
-  not reset the device or change RF output, power, frequency, trigger, modulation, or sweep; A2/A3/A4/A4-MO evidence
-  separately opens only their bounded output, CW, modulation-cleanup, Pulse, Step Sweep, and fixed-profile modulated-output
-  operations, while ordinary writes still require explicit `read_write`, capability, and complete preflight.
+  not reset the device or change RF output, power, frequency, trigger, modulation, or sweep; A2/A3/A4/A4-MO/A5 evidence
+  separately opens only their bounded output, CW, modulation-cleanup, Pulse, Step Sweep, fixed-profile modulated-output,
+  and one Pulse Output operation, while ordinary writes still require explicit `read_write`, capability, and complete preflight.
 - Hardware testing requires separate authorization and a reviewed resource, firmware, terminator, RF-output
   state, safety limit, and restoration procedure.
 
@@ -161,6 +164,11 @@ termination from a connector label.
 - The current controlled wiring connects RF output directly to a confirmed 50-ohm CH2 scope input. LF output connects to high-impedance CH1 only as an independent supplementary observation path. Current DSG830 capabilities neither control LF output nor treat CH1 results as evidence of RF output, modulation, or trigger/sync behavior.
 - CH2 input voltage must remain below `5 V RMS`. On a direct 50-ohm path with no external amplifier, that limit is about `+26.99 dBm`; the descriptor's declared `+20 dBm` maximum is about `2.24 V RMS`. Completed controlled hardware evidence uses no more than `-40 dBm`, and the fixed A4-MO profile uses `-50 dBm`.
 - This conversion only checks electrical margin for a direct 50-ohm connection. It does not turn source dBm readback into a Vpp measurement and does not apply to wiring with an external amplifier, a different termination, or a differently rated instrument input. Such a change requires a new safety-limit and recovery review.
+
+### Electrical boundary for controlled Pulse Output
+
+- The verified wiring is only DSG830 `PULSE IN/OUT` output to RTM2032 `EXT TRIGGER INPUT`. The DSG830 profile is fixed at `0 V`/`3.3 V` and about `600 ohms`; this high-impedance trigger input is not the CH2 50-ohm RF path.
+- `rf_source.pulse_output` neither detects nor configures the receiver and does not infer success from receiver state. Any change to receiver, cabling, adapters, Pulse profile, or interface direction requires separate evidence.
 
 ## Development verification
 

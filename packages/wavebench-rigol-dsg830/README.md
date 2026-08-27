@@ -7,9 +7,9 @@ DSG830 和 DSG815；本包首版仅将 DSG830 作为已登记目标型号。
 
 ## 当前状态
 
-版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射、M2 离线输出映射、M3 内部正弦调制映射、M3-MO 受限调制输出合同，以及 M4 的 Pulse 与 frequency-only Step Sweep 生产子集：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV`／`:OUTP ON|OFF` 的单次 driver 映射、AM／FM／PM 的内部 Sine 配置与 readback、internal／single Pulse 的 period／width／polarity 配置与读回，以及保持 Sweep disabled 的 Step Sweep profile 映射。
+版本 `0.2.0` 已完成 RF M0 只读迁移、M1 离线 CW 映射、M2 离线输出映射、M3 内部正弦调制映射、M3-MO 受限调制输出合同、M4 的 Pulse 与 frequency-only Step Sweep 生产子集，以及一条受限 A5 Pulse Output 路径：descriptor 使用 `kind="rf_source"`，声明单端口 `rf_out` 的静态范围与 50 Ω dBm 参考，并实现严格的 snapshot parser、`:FREQ`／`:LEV`／`:OUTP ON|OFF` 的单次 driver 映射、AM／FM／PM 的内部 Sine 配置与 readback、internal／single Pulse 的 period／width／polarity 配置与读回、保持 Sweep disabled 的 Step Sweep profile 映射，以及 `:PULM:OUT:STAT` 的状态映射。
 
-A1 只读证据、A2 受控输出证据、A3 CW 环回证据、A4 调制／Pulse／Step Sweep 证据和 A4-MO 固定调制输出证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure`、`rf_source.output`、`rf_source.modulation_configure`、`rf_source.modulation_disable`、`rf_source.modulated_output_enable`、`rf_source.pulse_configure` 和 `rf_source.sweep_configure`。在 `read_write` session 中，CW、调制、Pulse 与 Step Sweep 配置要求目标端口明确 OFF 和完整 OFF-only preflight；普通 RF ON/OFF 还要求完整端口 safety 配置、fresh snapshot 与独立 readback，且普通 ON 仍要求调制关闭。示例配置仍保持 `read_only`，不会默认开放写入。
+A1 只读证据、A2 受控输出证据、A3 CW 环回证据、A4 调制／Pulse／Step Sweep 证据、A4-MO 固定调制输出证据和一条 A5 Pulse Output 证据均已完成并复核。production descriptor 现在声明 `rf_source.idn`、`rf_source.snapshot`、`rf_source.cw_configure`、`rf_source.output`、`rf_source.modulation_configure`、`rf_source.modulation_disable`、`rf_source.modulated_output_enable`、`rf_source.pulse_configure`、`rf_source.pulse_output` 和 `rf_source.sweep_configure`。在 `read_write` session 中，CW、调制、Pulse 与 Step Sweep 配置要求目标端口明确 OFF 和完整 OFF-only preflight；Pulse Output 另要求已声明接口与固定 profile 的独立 preflight；普通 RF ON/OFF 还要求完整端口 safety 配置、fresh snapshot 与独立 readback，且普通 ON 仍要求调制关闭。示例配置仍保持 `read_only`，不会默认开放写入。
 
 A2 的本地受控输出 harness、回归测试和不含资源地址的 setup 模板保留在源码 checkout，作为验收协议的回归保护。证据已确认最终 RF OFF；harness 在 production descriptor 已声明 `rf_source.output` 后会拒绝重跑，避免用临时 descriptor 绕过正式 capability。A2 本身不授权 CW，后者由独立 A3 证据提升。
 
@@ -27,7 +27,9 @@ M4 frequency-only Step Sweep 仅覆盖固定的 `STEP`／`FWD`／`RAMP`／`LIN` 
 
 A5-0 已在离线代码中提供 `get_rf_trigger_snapshot()`：它固定读取 Pulse trigger mode、external trigger edge、external gate polarity、Sweep mode、Sweep period trigger 与 Sweep point trigger，并严格拒绝未知响应。六条命令均为 query；driver 不发送 setter、`*TRG`、`:TRIG:PULS`、`:TRIG:SWE`、`:SWE:EXEC`、`:PULM:OUT` 或 RF 输出写入。该映射只观察逻辑 configuration，`rf_out` 不是物理 trigger／sync connector。
 
-production descriptor 不声明错误队列、`rf_source.trigger_snapshot`、trigger、Sweep execute／fire、Level Sweep、list 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，且普通 ON 仍要求调制关闭；`rf_source.modulation_configure` 只覆盖已验收的 RF-OFF 内部 Sine profile（PM 精确 `1.25 rad`），`rf_source.modulation_disable` 只关闭 RF OFF 时唯一已知活动模式，`rf_source.modulated_output_enable` 只覆盖 AM `50 %`／`1 kHz`、最大 `-50 dBm`，`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF，`rf_source.sweep_configure` 只覆盖已验收的 fixed profile 配置并保持 Sweep disabled；其余 capability 继续经过对应的 A4–A5 实机证据门。
+受限 A5 物理验收已覆盖唯一一条路径：DSG830「PULSE IN/OUT」按 output 方向接入 RTM2032「EXT TRIGGER INPUT」。`rf_source.pulse_output` 只切换该 output 的状态；profile 固定为 `0 V`／`3.3 V`、约 `600 Ω`、internal／single／normal、period `1 ms`、width `100 μs`，并要求 RF 输出、调制、Pulse 与 Sweep 都关闭。验收 harness 在隔离 scope session 中执行 external／normal／single／auto 触发序列，scope 不属于 RTM production API。成功记录确认最终 RF 输出和 Pulse Output 均关闭；source Pulse profile 与 scope acquisition state 不在恢复范围。该 profile 的电气参数以 [DSG800A 数据表](https://www.rigol.com/dam/global/downloads/brochures/en/data-sheet/rf-signal-generators/DSG800A_datasheet_EN.pdf) 为准。historical harness 在 capability 提升后拒绝重跑。
+
+production descriptor 不声明错误队列、`rf_source.trigger_snapshot`、Pulse input、`TRIGGER IN`、trigger、Sweep execute／fire、sync／reference、Level Sweep、list 或任意 SCPI passthrough。`rf_source.cw_configure` 只覆盖已审计的 `rf_out` OFF-only 频率／dBm 功率单字段写入，`rf_source.output` 只覆盖已审计的 `rf_out` ON/OFF，且普通 ON 仍要求调制关闭；`rf_source.modulation_configure` 只覆盖已验收的 RF-OFF 内部 Sine profile（PM 精确 `1.25 rad`），`rf_source.modulation_disable` 只关闭 RF OFF 时唯一已知活动模式，`rf_source.modulated_output_enable` 只覆盖 AM `50 %`／`1 kHz`、最大 `-50 dBm`，`rf_source.pulse_configure` 只覆盖已验收的 RF-OFF internal／single 配置并保持 Pulse OFF，`rf_source.pulse_output` 只覆盖 `pulse_in_out` 的固定 output profile，`rf_source.sweep_configure` 只覆盖已验收的 fixed profile 配置并保持 Sweep disabled；其余 capability 继续经过对应的 A5 实机证据门。
 
 ## 开发文档
 
@@ -40,6 +42,7 @@ production descriptor 不声明错误队列、`rf_source.trigger_snapshot`、tri
 - [A4 Pulse 本地证据 setup 模板](tools/a4_pulse_evidence.setup.template.toml)
 - [A4 Step Sweep 本地证据 setup 模板](tools/a4_step_sweep_evidence.setup.template.toml)
 - [A5-0 trigger configuration 本地诊断 setup 模板](tools/a5_trigger_snapshot_evidence.setup.template.toml)
+- [A5 Pulse Output 本地证据 setup 模板](tools/a5_pulse_output_evidence.setup.template.toml)
 
 里程碑明确区分当前种子、离线合同和 A1–A5 实机证据。production descriptor 的 capability 不会因种子代码或 fake transport 测试自动提升。
 
@@ -87,7 +90,7 @@ access = "read_only"
 - factory 只通过 `DriverContext` 打开当前配置的 transport。
 - 默认测试只使用 fake transport，不连接真实仪器。
 - snapshot 仅发送 `*IDN?`、`:FREQ?`、`:LEV?`、`:OUTP?`、`:MOD:STAT?`、`:PULM:STAT?`、`:SWE:STAT?` 与 `:STAT:QUES:POW:COND?`；A1 已使这条只读路径成为 production capability。
-- 默认测试只使用 fake transport，不会连接硬件。production 的普通 `read_only` 配置不会执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频配置；A2/A3/A4/A4-MO 的受控证据已分别开放 safety-gated 输出、OFF-only CW、RF-OFF 调制及关闭、Pulse、Step Sweep 和固定 profile 调制输出，普通写入仍须显式 `read_write`、相应 capability 和完整 preflight。M3-MO 只接受 AM `50 %`／`1 kHz`、最大 `-50 dBm`，普通 RF ON 仍要求调制关闭。Step Sweep 不包含 execute、arm、fire、trigger、Level Sweep 或 list。
+- 默认测试只使用 fake transport，不会连接硬件。production 的普通 `read_only` 配置不会执行 reset、RF 输出切换、功率／频率设置、触发、调制或扫频配置；A2/A3/A4/A4-MO/A5 的受控证据已分别开放 safety-gated 输出、OFF-only CW、RF-OFF 调制及关闭、Pulse、Step Sweep、固定 profile 调制输出和一条 Pulse Output 路径，普通写入仍须显式 `read_write`、相应 capability 和完整 preflight。M3-MO 只接受 AM `50 %`／`1 kHz`、最大 `-50 dBm`，普通 RF ON 仍要求调制关闭。A5 不包含 Pulse input、`TRIGGER IN`、execute、arm、fire、trigger、sync／reference、Level Sweep 或 list。
 - 实机测试必须单独授权，并先确认资源、固件、终止符、RF 输出状态、安全限制和恢复方式。
 
 ### 受控 RF 观察的电气边界
@@ -95,6 +98,11 @@ access = "read_only"
 - 当前受控接线将 RF 输出直连至示波器 CH2 的已确认 50 Ω 输入；LF 输出接入 CH1 高阻，仅作为独立的补充观察路径。当前 DSG830 capability 不控制 LF 输出，也不将 CH1 结果作为 RF 输出、调制或 trigger／sync 的证据。
 - CH2 的输入电压必须低于 `5 V RMS`。对于没有外接放大器的直连 50 Ω 路径，该限制约等于 `+26.99 dBm`；descriptor 声明的最高 `+20 dBm` 对应约 `2.24 V RMS`。已完成的受控实机证据仅使用不高于 `-40 dBm` 的功率，固定 A4-MO profile 为 `-50 dBm`。
 - 此换算只用于核对 50 Ω 直连的电气余量，不可将 source 的 dBm 读回改写为 Vpp 测量，也不适用于带外接放大器、其他终端或不同仪器输入额定值的接线。此类变更须重新确认安全限制和恢复方案。
+
+### 受控 Pulse Output 的电气边界
+
+- 已验证接线仅为 DSG830「PULSE IN/OUT」output → RTM2032「EXT TRIGGER INPUT」。DSG830 profile 固定 `0 V`／`3.3 V`、约 `600 Ω`；scope 的该输入为高阻 trigger 输入，不是 CH2 的 50 Ω RF 路径。
+- `rf_source.pulse_output` 不检测或配置接收端，也不从接收端状态推断写入成功；成功条件以 DSG830 独立 readback 和最终关闭为准。修改接收端、线缆、转接件、Pulse profile 或接口方向时，必须重新建立专门证据。
 
 ## 开发验证
 

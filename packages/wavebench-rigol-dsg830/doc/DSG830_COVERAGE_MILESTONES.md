@@ -25,7 +25,8 @@
 | M4（Pulse） | 离线完成；A4 Pulse 已通过 | internal／single Pulse 的 period／width／polarity 映射、独立 readback、Core 事务／CLI／run／artifact 与本地 evidence harness；production 已开放 `rf_source.pulse_configure`。 |
 | M4（Step Sweep） | A4 已完成并提升 | fixed `STEP`／`FWD`／`RAMP`／`LIN` frequency-only profile、严格 readback、Core 配置事务／CLI／run／artifact 与本地 evidence harness；production 已开放保持 Sweep disabled 的 `rf_source.sweep_configure`。 |
 | A5-0 | 离线完成；不属于物理 A5 证据 | 六条固定 trigger configuration query、严格 enum parser、Core 的只读 Service／CLI／run／artifact；production descriptor 保持不变。 |
-| A1–A5 | A1、A2、A3、A4 调制／Pulse／Step Sweep 与 A4-MO 已完成；物理 A5 未开始 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW；A4 分别提升 RF-OFF 调制、调制关闭、OFF-only Pulse 与保持 Sweep disabled 的 Step Sweep 配置；A4-MO 提升固定调制输出 profile。A5-0 不提升 capability。 |
+| A5（Pulse Output） | 已通过并提升 | `pulse_in_out` output 的 `:PULM:OUT:STAT?`／`:PULM:OUT:STAT ON|OFF`、Core Service／CLI／run／artifact 与本地 evidence harness；production 已开放 `rf_source.pulse_output`。 |
+| A1–A5 | A1、A2、A3、A4 调制／Pulse／Step Sweep、A4-MO 与一条 A5 Pulse Output 路径已完成 | A1 提升只读快照；A2 提升端口级 RF 输出；A3 提升 OFF-only CW；A4 分别提升 RF-OFF 调制、调制关闭、OFF-only Pulse 与保持 Sweep disabled 的 Step Sweep 配置；A4-MO 提升固定调制输出 profile；A5 只提升已验证的 Pulse Output 路径。A5-0 不提升 capability。 |
 
 ## Seed：历史包边界
 
@@ -50,7 +51,7 @@ Seed 不包含错误队列、snapshot、频率、功率、RF 输出、调制、P
 - 已覆盖每条 query、正常值、未知值、格式异常和 protection 位映射的 fake transport 测试；
 - 已将 wheel 的 `Requires-Dist: wavebench` 与 descriptor 版本门同步为 `>=0.8.25,<0.9`。
 
-A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`。M2 的 A2 受控输出证据已另外完成并提升 `rf_source.output`；M1 的 A3 CW 环回证据也已完成并提升 `rf_source.cw_configure`；M3 调制与 M4 Pulse、Step Sweep 的 A4 证据已分别提升 `rf_source.modulation_configure`、`rf_source.modulation_disable`、`rf_source.pulse_configure`、`rf_source.sweep_configure`。M3-MO 的 A4-MO 证据已提升固定 AM `50 %`／`1 kHz`、最大 `-50 dBm` 的 `rf_source.modulated_output_enable`。
+A1 已完成并经复核，production descriptor 现在声明 `rf_source.idn` 和 `rf_source.snapshot`。M2 的 A2 受控输出证据已另外完成并提升 `rf_source.output`；M1 的 A3 CW 环回证据也已完成并提升 `rf_source.cw_configure`；M3 调制与 M4 Pulse、Step Sweep 的 A4 证据已分别提升 `rf_source.modulation_configure`、`rf_source.modulation_disable`、`rf_source.pulse_configure`、`rf_source.sweep_configure`。M3-MO 的 A4-MO 证据已提升固定 AM `50 %`／`1 kHz`、最大 `-50 dBm` 的 `rf_source.modulated_output_enable`。受限 A5 Pulse Output 证据已提升 `rf_source.pulse_output`。
 
 ## M1：OFF-only CW
 
@@ -106,7 +107,7 @@ wheel 或 sdist；A4 通过后，production descriptor 已声明调制 capabilit
 
 ## M4：Pulse 与 Step Sweep
 
-M4 当前先完成 Pulse，再处理 frequency-only Step Sweep。外部 trigger、后面板辅助输出、参考时钟、同步和设备私有模式都不从手册名称推导通用 capability。
+M4 当前先完成 Pulse，再处理 frequency-only Step Sweep。除后续单列的 A5 Pulse Output 外，外部 trigger、其它后面板辅助接口、参考时钟、同步和设备私有模式都不从手册名称推导通用 capability。
 
 Pulse 只覆盖 `rf_out` 的 internal／single 配置。driver 固定写入 `:PULM:SOUR INT`、`:PULM:MODE SING`、period、width 与 polarity，并以 `:PULM:STAT OFF` 收尾；它不写 `:PULM:OUT`、不调用 `:OUTP`，也不发送 trigger。Core 要求初始与写后 RF 输出、调制、Pulse、Sweep 均关闭且无活动 protection，并独立读回 source、mode、period、width、polarity 和 Pulse 状态。失败不重试，也不追加恢复 setter。
 
@@ -116,7 +117,7 @@ frequency-only Step Sweep 的生产子集只接受起止频率、点数和驻留
 
 源码 checkout 的 `tools/a4_step_sweep_evidence.py` 和 `tools/a4_step_sweep_evidence.setup.template.toml` 已完成离线回归和专项实机验收。静态预检要求独立 `read_only` RF 配置、关闭读重试、精确 production descriptor 和人工确认的 50 Ω 端接。`--diagnose` 只读取初始／最终 RF snapshot 与完整 Step Sweep profile，成功路径固定为 25 次 query、零 write；显式 `--execute` 才在内存中创建受限 `read_write` descriptor，成功路径固定为 41 次 query、9 条配置 write。两条路径都不读取 scope、不调用 RF output、不 arm／fire Sweep 或发送 trigger，且证据以 `0600` 保存。诊断与受控配置均通过，最终独立复核 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection；historical harness 在 capability 提升后拒绝重跑。
 
-Pulse trigger、Sweep execute／fire、全部物理外部接口、Level Sweep 与 list 仍未实现。A5-0 只读取逻辑 trigger configuration，不发送 trigger，也不定义物理 connector；fake descriptor 可以用于后续 trigger／fire 事务测试；这些 production capability 仍要等待 A4 或 A5 的对应证据。
+除已验证的「PULSE IN/OUT」output 外，Pulse trigger、Sweep execute／fire、其它物理外部接口、Level Sweep 与 list 仍未实现。A5-0 只读取逻辑 trigger configuration，不发送 trigger，也不定义物理 connector；fake descriptor 可以用于后续 trigger／fire 事务测试；这些 production capability 仍要等待对应 A5 证据。
 
 ## A1–A5 实机证据
 
@@ -127,7 +128,8 @@ Pulse trigger、Sweep execute／fire、全部物理外部接口、Level Sweep �
 | A3 | CW 环回、频率与 dBm 功率 | `rf_source.cw_configure` |
 | A4 | RF-OFF 调制、Pulse、Step Sweep | 对应 M3／M4 capability |
 | A4-MO | 固定调制 profile 的一次 RF ON、CH2 存在性观察与最终清理 | `rf_source.modulated_output_enable` |
-| A5 | 外部 trigger 或同步接线 | trigger／fire／同步相关 capability |
+| A5（已完成子集） | `PULSE IN/OUT` output → `EXT TRIGGER INPUT`，固定 profile 与最终关闭 | `rf_source.pulse_output` |
+| A5（其余路径） | 外部 trigger、fire、同步或其它物理接口 | 对应的 trigger／fire／同步 capability |
 
 每项实机验收都需要单独授权。写入前后必须记录可公开的脱敏证据、输出状态和恢复结果；无法确认最终 RF OFF 时，验收失败且不能提升 capability。
 
@@ -139,17 +141,17 @@ Core 将这条路径建模为 `rf_source.trigger_snapshot`、`wavebench rf-sourc
 
 源码 checkout 的 `tools/a5_trigger_snapshot_evidence.py` 与资源无关 setup 模板提供私有零写诊断。默认仅作静态预检；显式 `--diagnose` 才使用原始 `read_only` 配置与禁用的读重试建立一个独占 session。初始 snapshot 未确认 RF 输出、调制、Pulse、Sweep 关闭且无活动 protection 时，不读取 trigger configuration。成功路径固定为初始 snapshot、六条 trigger query、最终 snapshot，共 22 次 query、零 write；证据文件以 `0600` 保存，且不含 resource、序列号、原始响应或命令日志。静态预检精确绑定当前 production descriptor 的 capability 列表；后续 capability 变更必须先经代码审查、fake 回归和新的零写诊断更新该基线，否则工具在建立 session 前拒绝。隔离诊断已完成并复核最终 RF OFF 与健康关闭；它仍不构成物理 A5 实机证据或 capability 提升。
 
-### A5：DSG830 后面板接口进入条件（物理验收未开始）
+### A5：已完成的 PULSE IN/OUT 输出验收；其余物理接口仍待验证
 
-DSG830 当前 production descriptor 只声明 `rf_out`，其 50 Ω dBm 参考不描述后面板 trigger／Pulse／sync 接口。手册中的 external trigger 命令只构成候选映射，不能替代接口电平、阻抗或接线验证。`TRIGGER IN` 与 `PULSE IN/OUT` 必须视为不同物理接口；不得从 CH2 的 50 Ω 或 A2–A4 的 RF 路径推断它们的电气边界。
+已验证路径严格限定为 DSG830「PULSE IN/OUT」的 output 方向 → RTM2032「EXT TRIGGER INPUT」。`TRIGGER IN`、Pulse input、sync／reference 与 `rf_out` 都是不同接口；不得从 CH2 的 50 Ω RF 路径推断它们的电气边界。
 
-A5 开始前，需要为本次唯一目标行为提供：源端与目的端接口、逐根线缆和转接件、触发或同步方向、信号类型、幅度／阈值、极性、脉宽、频率／时序、源／负载阻抗、终端方式，以及初始和最终状态的恢复办法。未明确这些事实时，不新增 production capability，不写入后面板配置，也不发送 `*TRG`、`:TRIG:PULS`、`:TRIG:SWE`、`:SWE:EXEC` 或 `:PULM:OUT`。
+验收 profile 固定为：DSG830 输出 `0 V`／`3.3 V`、约 `600 Ω`，internal／single／normal、period `1 ms`、width `100 μs`；RTM 接收端为 `1 MΩ`／`12 pF`／`≤ 150 Vp`。RF 输出、调制、Pulse、Sweep 始终关闭且 protection 为空。隔离 harness 先读取 scope trigger source 与 mode，临时执行 external／normal／single／auto 序列；它使用 raw scope transport 仅作一次物理验收，不修改 RTM driver、descriptor 或 production capability。
 
-推荐实现顺序为：
+成功序列为 Pulse Output ON、scope single、Pulse Output OFF。审计结果为 RF 主 session `97` 次 query／`8` 次完成 write、独立最终 RF 复核 session `15` 次 query／零 write、scope `5` 次 query／`3` 次完成 write；最终 RF 输出和 Pulse Output 均独立确认 OFF。source 的原有 Pulse profile 与 scope acquisition state 不恢复，scope 可能停在 `Single`。证据文件为脱敏私有记录；资源、序列号、原始响应、命令和波形不进入公开文档或制品。
 
-1. 已完成 A5-0 的逻辑 configuration readback、Core profile／artifact、严格 driver parser 与 fake transport 零写回归；production descriptor 保持不变。
-2. 提供保持原始 `read_only` 配置的私有零写诊断，只读取已声明的 A5-0 状态，不触发 Pulse 或 Sweep。
-3. 在物理接线与电气边界已确认后，对一个明确的物理路径设计独立 A5 受控验收；任何 fire／trigger、RF 输出或后面板辅助输出都必须有单独的 safety 决定与最终 RF OFF 复核。
+Core 与 driver 已将这条窄路径实现为 `rf_source.pulse_output`、`wavebench rf-source pulse-output --port PORT_ID --interface INTERFACE_ID on|off` 和相应 run steps。启用只接受上述接口、方向和固定 profile；关闭允许已知 profile 漂移，以保留安全关闭路径。该 operation 不启用 RF 输出、不配置接收端、不发送 trigger／fire，也不自动重试不确定的写入。证据复核后，production descriptor 仅提升 `rf_source.pulse_output`；historical harness 在提升后拒绝重跑，避免临时 descriptor 绕过该边界。
+
+A5-0 仍是单独的逻辑 trigger configuration 零写读取，production descriptor 不声明 `rf_source.trigger_snapshot`。其它 A5 工作必须重新定义唯一接线、方向、电气 profile、初始／恢复状态和成功判据，并取得新的实机证据；在此之前不写入后面板配置，不发送 `*TRG`、`:TRIG:PULS`、`:TRIG:SWE` 或 `:SWE:EXEC`。
 
 ### A1：已完成的本包只读验收
 
