@@ -6,12 +6,13 @@ set and does not configure frequency or power, switch RF output, or control
 modulation, Pulse, Sweep, trigger, or arbitrary SCPI.
 
 ``set_rf_output()``, ``configure_cw()``, ``configure_rf_modulation()``,
-``configure_rf_pulse()``, and ``configure_rf_sweep()`` are exposed only by
-their independently evidenced production capabilities.  The A5-0
-``get_rf_trigger_snapshot()`` mapping is query-only and remains absent from
-the production descriptor until a separate trigger-path evidence decision.
-The bounded ``PULSE IN/OUT`` output mapping likewise remains absent until its
-separate A5 physical-output evidence decision.
+``configure_rf_pulse()``, ``set_rf_pulse_output()``, and
+``configure_rf_sweep()`` are exposed only by their independently evidenced
+production capabilities.  The A5-0 ``get_rf_trigger_snapshot()`` mapping is
+query-only and remains absent from the production descriptor until a separate
+trigger-path evidence decision.  The bounded ``PULSE IN/OUT`` output mapping
+is production-declared only for its independently evidenced output direction;
+it does not describe the connector's input direction.
 """
 
 from __future__ import annotations
