@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+from dataclasses import replace
 import json
 from pathlib import Path
 import stat
@@ -23,6 +24,7 @@ from wavebench.config import (
 from wavebench.instruments.models import WaveformData, WaveformHeader
 from wavebench.instruments.rf_source_extensions import (
     RfCwRequest,
+    RfFeature,
     RfModulationDisableRequest,
     RfModulationKind,
     RfModulationRequest,
@@ -57,6 +59,24 @@ def _module():
 
 def _production_descriptor():
     return importlib.import_module("wavebench_rigol_dsg830.descriptor").descriptor()
+
+
+def _historical_production_descriptor():
+    """Return the pre-FM/PM A4-MO descriptor for historical harness regression."""
+
+    production = _production_descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    features = tuple(
+        replace(
+            feature,
+            profile=replace(feature.profile, mode_profiles=(feature.profile.mode_profiles[0],)),
+        )
+        if feature.feature is RfFeature.MODULATED_OUTPUT
+        else feature
+        for feature in extensions.features
+    )
+    return replace(production, rf_source_extensions=replace(extensions, features=features))
 
 
 def _scope_descriptor():
@@ -379,7 +399,7 @@ def test_a4_fm_pm_preflight_adds_exactly_one_private_profile(
     kind: RfModulationKind,
 ) -> None:
     module = _module()
-    production = _production_descriptor()
+    production = _historical_production_descriptor()
     _patch_static_preflight(monkeypatch, module, production)
     setup_path = tmp_path / "setup.toml"
     _setup_file(setup_path, kind=kind)
@@ -406,7 +426,7 @@ def test_a4_fm_pm_diagnostic_is_zero_write_and_closes(
     kind: RfModulationKind,
 ) -> None:
     module = _module()
-    production = _production_descriptor()
+    production = _historical_production_descriptor()
     _patch_static_preflight(monkeypatch, module, production)
     setup_path = tmp_path / "setup.toml"
     _setup_file(setup_path, kind=kind)
@@ -459,7 +479,7 @@ def test_a4_fm_pm_collects_one_fixed_cycle_with_wavebench_quality_analysis(
     value: float,
 ) -> None:
     module = _module()
-    production = _production_descriptor()
+    production = _historical_production_descriptor()
     _patch_static_preflight(monkeypatch, module, production)
     setup_path = tmp_path / "setup.toml"
     _setup_file(setup_path, kind=kind)
@@ -523,7 +543,7 @@ def test_a4_fm_pm_collects_one_fixed_cycle_with_wavebench_quality_analysis(
 
 def test_a4_fm_pm_scope_analysis_failure_still_runs_explicit_cleanup(monkeypatch, tmp_path: Path) -> None:
     module = _module()
-    production = _production_descriptor()
+    production = _historical_production_descriptor()
     _patch_static_preflight(monkeypatch, module, production)
     setup_path = tmp_path / "setup.toml"
     _setup_file(setup_path, kind=RfModulationKind.FM)
@@ -568,6 +588,30 @@ def test_a4_fm_pm_scope_analysis_failure_still_runs_explicit_cleanup(monkeypatch
     assert evidence["modulation_disable"]["operation"] == "rf_source.modulation_disable"
     assert rf_driver.output_enabled is False
     assert rf_driver.modulation_enabled is False
+
+
+@pytest.mark.parametrize("kind", (RfModulationKind.FM, RfModulationKind.PM))
+def test_a4_fm_pm_historical_harness_refuses_promoted_profile(
+    monkeypatch,
+    tmp_path: Path,
+    kind: RfModulationKind,
+) -> None:
+    module = _module()
+    production = _production_descriptor()
+    _patch_static_preflight(monkeypatch, module, production)
+    setup_path = tmp_path / "setup.toml"
+    _setup_file(setup_path, kind=kind)
+    setup = module.load_a4_fm_pm_modulated_output_setup(setup_path)
+
+    with pytest.raises(
+        module.A4FmPmModulatedOutputPreflightError,
+        match="production_modulated_output_profile_gate_changed",
+    ):
+        module.validate_a4_fm_pm_modulated_output_preflight(
+            _config(),
+            setup,
+            scope_config=_config(),
+        )
 
 
 def test_a4_fm_pm_evidence_output_is_private_and_new(tmp_path: Path) -> None:

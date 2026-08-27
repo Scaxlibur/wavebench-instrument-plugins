@@ -115,6 +115,22 @@ def test_descriptor_declares_production_output_contract() -> None:
             internal_frequency_min_hz=1_000.0,
             internal_frequency_max_hz=1_000.0,
         ),
+        RfModulationModeProfile(
+            kind=RfModulationKind.FM,
+            value_unit=RfModulationValueUnit.HZ,
+            value_min=20_000.0,
+            value_max=20_000.0,
+            internal_frequency_min_hz=1_000.0,
+            internal_frequency_max_hz=1_000.0,
+        ),
+        RfModulationModeProfile(
+            kind=RfModulationKind.PM,
+            value_unit=RfModulationValueUnit.RAD,
+            value_min=1.25,
+            value_max=1.25,
+            internal_frequency_min_hz=1_000.0,
+            internal_frequency_max_hz=1_000.0,
+        ),
     )
     assert modulation.feature is RfFeature.MODULATION
     assert modulation.directions == (

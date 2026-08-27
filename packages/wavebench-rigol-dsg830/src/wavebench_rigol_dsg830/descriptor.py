@@ -47,7 +47,7 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="RIGOL Technologies",
         models=("DSG830",),
         aliases=(),
-        # A1/A2/A3, A4, and the fixed-profile A4-MO evidence passed; only scoped capabilities are open.
+        # A1/A2/A3, A4, A4-MO, and the bounded A5 evidence passed; only scoped capabilities are open.
         capabilities=(
             "rf_source.idn",
             "rf_source.snapshot",
@@ -68,8 +68,8 @@ def descriptor() -> InstrumentDescriptor:
         summary=(
             "RIGOL DSG830 RF signal-source driver; production descriptor exposes identity, "
             "a read-only snapshot, OFF-only CW configuration, safety-gated RF output control, "
-            "RF-OFF internal-sine modulation configuration and disable, a fixed low-power AM "
-            "modulated-output profile, RF-OFF internal single-pulse configuration, one bounded "
+            "RF-OFF internal-sine modulation configuration and disable, fixed low-power AM/FM/PM "
+            "modulated-output profiles, RF-OFF internal single-pulse configuration, one bounded "
             "rear-panel Pulse-output interface, and RF-OFF disabled Step Sweep configuration."
         ),
         wavebench_min_version="0.8.25",
@@ -122,6 +122,22 @@ def descriptor() -> InstrumentDescriptor:
                                 value_unit=RfModulationValueUnit.PERCENT,
                                 value_min=50.0,
                                 value_max=50.0,
+                                internal_frequency_min_hz=1_000.0,
+                                internal_frequency_max_hz=1_000.0,
+                            ),
+                            RfModulationModeProfile(
+                                kind=RfModulationKind.FM,
+                                value_unit=RfModulationValueUnit.HZ,
+                                value_min=20_000.0,
+                                value_max=20_000.0,
+                                internal_frequency_min_hz=1_000.0,
+                                internal_frequency_max_hz=1_000.0,
+                            ),
+                            RfModulationModeProfile(
+                                kind=RfModulationKind.PM,
+                                value_unit=RfModulationValueUnit.RAD,
+                                value_min=1.25,
+                                value_max=1.25,
                                 internal_frequency_min_hz=1_000.0,
                                 internal_frequency_max_hz=1_000.0,
                             ),
