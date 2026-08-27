@@ -1,0 +1,28 @@
+# A4-MO 本地证据配置模板。
+#
+# 此文件只记录人工确认的安全事实，不得包含仪器资源、序列号、原始响应或波形。
+# 复制到被忽略的私有路径后，与独立的只读 RF／scope 配置一起使用。
+#
+# A4-MO 只验证一个固定的低功率 AM 输出循环：配置、一次 RF ON、CH2 可见信号、RF OFF，
+# 然后关闭 AM 和全局调制。它不验证 LF OUTPUT 与 AM 的关联，不使用 CH1，也不涉及 trigger／sync。
+
+[a4_modulated_output]
+port_id = "rf_out"
+actual_termination_ohm = 50
+installed_options = []
+
+# 固定 profile，harness 不接受替代参数，避免把一次受控验证扩展为宽泛输出授权。
+frequency_hz = 1000000
+power_dbm = -50
+modulation_kind = "am"
+depth_percent = 50
+internal_frequency_hz = 1000
+
+[scope_observation]
+# 只读取 CH2 当前 DEF 缓冲区；不执行 SINGle、触发或自动量程。
+ch2 = 2
+allow_ch2_50ohm = true
+points = "def"
+
+# 仅判定是否存在可见 RF 信号，不估算 dBm、AM 深度或频率。
+minimum_observable_vpp_v = 0.001
