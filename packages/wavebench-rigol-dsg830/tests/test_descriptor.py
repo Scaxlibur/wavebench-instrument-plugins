@@ -57,6 +57,8 @@ def test_descriptor_declares_production_output_contract() -> None:
         "rf_source.cw_configure",
         "rf_source.output",
         "rf_source.modulation_configure",
+        "rf_source.modulation_disable",
+        "rf_source.modulated_output_enable",
         "rf_source.pulse_configure",
         "rf_source.sweep_configure",
     )
@@ -84,8 +86,8 @@ def test_descriptor_declares_production_output_contract() -> None:
         "alc_unlocked",
         "output_power_protection",
     )
-    assert len(descriptor.rf_source_extensions.features) == 5
-    cw, modulation, output, pulse, sweep = descriptor.rf_source_extensions.features
+    assert len(descriptor.rf_source_extensions.features) == 6
+    cw, modulated_output, modulation, output, pulse, sweep = descriptor.rf_source_extensions.features
     assert cw.feature is RfFeature.CW
     assert cw.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
     assert cw.port_ids == ("rf_out",)
@@ -94,8 +96,27 @@ def test_descriptor_declares_production_output_contract() -> None:
     assert cw.profile.power_readable is True
     assert cw.profile.frequency_configurable is True
     assert cw.profile.power_configurable is True
+    assert modulated_output.feature is RfFeature.MODULATED_OUTPUT
+    assert modulated_output.directions == (RfFeatureDirection.ENABLE,)
+    assert modulated_output.port_ids == ("rf_out",)
+    assert isinstance(modulated_output.profile, RfModulatedOutputProfile)
+    assert modulated_output.profile.maximum_power_dbm == -50.0
+    assert modulated_output.profile.mode_profiles == (
+        RfModulationModeProfile(
+            kind=RfModulationKind.AM,
+            value_unit=RfModulationValueUnit.PERCENT,
+            value_min=50.0,
+            value_max=50.0,
+            internal_frequency_min_hz=1_000.0,
+            internal_frequency_max_hz=1_000.0,
+        ),
+    )
     assert modulation.feature is RfFeature.MODULATION
-    assert modulation.directions == (RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ)
+    assert modulation.directions == (
+        RfFeatureDirection.CONFIGURE,
+        RfFeatureDirection.DISABLE,
+        RfFeatureDirection.READ,
+    )
     assert modulation.port_ids == ("rf_out",)
     assert isinstance(modulation.profile, RfModulationProfile)
     assert modulation.profile.state_readable is True
@@ -245,45 +266,14 @@ def test_trigger_snapshot_mapping_requires_an_in_memory_nonproduction_descriptor
     validate_declared_capabilities(evidence_descriptor, driver_type(transport=object()))
 
 
-def test_modulated_output_mapping_requires_an_in_memory_nonproduction_descriptor() -> None:
+def test_modulated_output_mapping_is_production_declared_after_a4_mo() -> None:
     production = _descriptor_module().descriptor()
     extensions = production.rf_source_extensions
     assert extensions is not None
-    assert "rf_source.modulated_output_enable" not in production.capabilities
-    assert all(feature.feature is not RfFeature.MODULATED_OUTPUT for feature in extensions.features)
+    assert "rf_source.modulation_disable" in production.capabilities
+    assert "rf_source.modulated_output_enable" in production.capabilities
+    assert any(feature.feature is RfFeature.MODULATED_OUTPUT for feature in extensions.features)
 
-    modulated_output_feature = RfFeatureCapability(
-        feature=RfFeature.MODULATED_OUTPUT,
-        directions=(RfFeatureDirection.ENABLE,),
-        port_ids=("rf_out",),
-        profile=RfModulatedOutputProfile(
-            maximum_power_dbm=-50.0,
-            mode_profiles=(
-                RfModulationModeProfile(
-                    kind=RfModulationKind.AM,
-                    value_unit=RfModulationValueUnit.PERCENT,
-                    value_min=50.0,
-                    value_max=50.0,
-                    internal_frequency_min_hz=1_000.0,
-                    internal_frequency_max_hz=1_000.0,
-                ),
-            ),
-        ),
-    )
-    evidence_descriptor = replace(
-        production,
-        capabilities=(*production.capabilities, "rf_source.modulated_output_enable"),
-        rf_source_extensions=replace(
-            extensions,
-            features=tuple(
-                sorted(
-                    (*extensions.features, modulated_output_feature),
-                    key=lambda item: item.feature.value,
-                )
-            ),
-        ),
-    )
-
-    validate_rf_source_descriptor(evidence_descriptor)
+    validate_rf_source_descriptor(production)
     driver_type = importlib.import_module("wavebench_rigol_dsg830.driver").DSG830RfSource
-    validate_declared_capabilities(evidence_descriptor, driver_type(transport=object()))
+    validate_declared_capabilities(production, driver_type(transport=object()))

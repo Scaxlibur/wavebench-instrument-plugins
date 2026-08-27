@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+from dataclasses import replace
 from pathlib import Path
 import stat
 import sys
@@ -21,6 +22,8 @@ from wavebench.config import (
 )
 from wavebench.instruments.rf_source_extensions import (
     RfCwRequest,
+    RfFeature,
+    RfFeatureDirection,
     RfModulationDisableRequest,
     RfModulationKind,
     RfModulationRequest,
@@ -55,6 +58,38 @@ def _module():
 
 def _production_descriptor():
     return importlib.import_module("wavebench_rigol_dsg830.descriptor").descriptor()
+
+
+def _historical_production_descriptor():
+    """Return the A4-MO pre-promotion descriptor for harness regression only."""
+
+    production = _production_descriptor()
+    extensions = production.rf_source_extensions
+    assert extensions is not None
+    features = tuple(
+        replace(
+            feature,
+            directions=tuple(
+                direction
+                for direction in feature.directions
+                if direction is not RfFeatureDirection.DISABLE
+            ),
+        )
+        if feature.feature is RfFeature.MODULATION
+        else feature
+        for feature in extensions.features
+        if feature.feature is not RfFeature.MODULATED_OUTPUT
+    )
+    return replace(
+        production,
+        capabilities=tuple(
+            capability
+            for capability in production.capabilities
+            if capability
+            not in {"rf_source.modulation_disable", "rf_source.modulated_output_enable"}
+        ),
+        rf_source_extensions=replace(extensions, features=features),
+    )
 
 
 def _scope_descriptor():
@@ -316,9 +351,30 @@ def test_a4_mo_setup_is_fixed_and_resource_free(tmp_path: Path) -> None:
         module.load_a4_modulated_output_setup(setup_path)
 
 
+def test_a4_mo_historical_harness_refuses_the_promoted_production_descriptor(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    module = _module()
+    _patch_static_preflight(monkeypatch, module, _production_descriptor())
+    setup_path = tmp_path / "setup.toml"
+    _setup_file(setup_path)
+    setup = module.load_a4_modulated_output_setup(setup_path)
+
+    with pytest.raises(
+        module.A4ModulatedOutputPreflightError,
+        match="production_modulated_output_gate_changed",
+    ):
+        module.validate_a4_modulated_output_preflight(
+            _config(),
+            setup,
+            scope_config=_config(),
+        )
+
+
 def test_a4_mo_preflight_only_adds_private_capabilities(monkeypatch, tmp_path: Path) -> None:
     module = _module()
-    production = _production_descriptor()
+    production = _historical_production_descriptor()
     _patch_static_preflight(monkeypatch, module, production)
     setup_path = tmp_path / "setup.toml"
     _setup_file(setup_path)
@@ -342,7 +398,7 @@ def test_a4_mo_preflight_only_adds_private_capabilities(monkeypatch, tmp_path: P
 
 def test_a4_mo_diagnostic_is_zero_write_and_closes(monkeypatch, tmp_path: Path) -> None:
     module = _module()
-    production = _production_descriptor()
+    production = _historical_production_descriptor()
     _patch_static_preflight(monkeypatch, module, production)
     setup_path = tmp_path / "setup.toml"
     _setup_file(setup_path)
@@ -382,7 +438,7 @@ def test_a4_mo_diagnostic_is_zero_write_and_closes(monkeypatch, tmp_path: Path) 
 
 def test_a4_mo_collects_one_fixed_cycle_then_restores_rf_and_modulation(monkeypatch, tmp_path: Path) -> None:
     module = _module()
-    production = _production_descriptor()
+    production = _historical_production_descriptor()
     _patch_static_preflight(monkeypatch, module, production)
     setup_path = tmp_path / "setup.toml"
     _setup_file(setup_path)
@@ -443,7 +499,7 @@ def test_a4_mo_scope_nonobservation_still_runs_the_explicit_rf_and_modulation_cl
     tmp_path: Path,
 ) -> None:
     module = _module()
-    production = _production_descriptor()
+    production = _historical_production_descriptor()
     _patch_static_preflight(monkeypatch, module, production)
     setup_path = tmp_path / "setup.toml"
     _setup_file(setup_path)

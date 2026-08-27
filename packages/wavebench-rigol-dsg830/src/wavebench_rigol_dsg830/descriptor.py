@@ -7,6 +7,7 @@ from wavebench.instruments.rf_source_extensions import (
     RfFeature,
     RfFeatureCapability,
     RfFeatureDirection,
+    RfModulatedOutputProfile,
     RfModulationKind,
     RfModulationModeProfile,
     RfModulationProfile,
@@ -44,13 +45,15 @@ def descriptor() -> InstrumentDescriptor:
         manufacturer="RIGOL Technologies",
         models=("DSG830",),
         aliases=(),
-        # A1/A2/A3 and A4 modulation/Pulse/Step Sweep evidence passed; only scoped capabilities are open.
+        # A1/A2/A3, A4, and the fixed-profile A4-MO evidence passed; only scoped capabilities are open.
         capabilities=(
             "rf_source.idn",
             "rf_source.snapshot",
             "rf_source.cw_configure",
             "rf_source.output",
             "rf_source.modulation_configure",
+            "rf_source.modulation_disable",
+            "rf_source.modulated_output_enable",
             "rf_source.pulse_configure",
             "rf_source.sweep_configure",
         ),
@@ -62,8 +65,9 @@ def descriptor() -> InstrumentDescriptor:
         summary=(
             "RIGOL DSG830 RF signal-source driver; production descriptor exposes identity, "
             "a read-only snapshot, OFF-only CW configuration, safety-gated RF output control, "
-            "RF-OFF internal-sine modulation configuration, RF-OFF internal single-pulse configuration, "
-            "and RF-OFF disabled Step Sweep configuration."
+            "RF-OFF internal-sine modulation configuration and disable, a fixed low-power AM "
+            "modulated-output profile, RF-OFF internal single-pulse configuration, and RF-OFF "
+            "disabled Step Sweep configuration."
         ),
         wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",
@@ -104,8 +108,30 @@ def descriptor() -> InstrumentDescriptor:
                     ),
                 ),
                 RfFeatureCapability(
+                    feature=RfFeature.MODULATED_OUTPUT,
+                    directions=(RfFeatureDirection.ENABLE,),
+                    port_ids=("rf_out",),
+                    profile=RfModulatedOutputProfile(
+                        maximum_power_dbm=-50.0,
+                        mode_profiles=(
+                            RfModulationModeProfile(
+                                kind=RfModulationKind.AM,
+                                value_unit=RfModulationValueUnit.PERCENT,
+                                value_min=50.0,
+                                value_max=50.0,
+                                internal_frequency_min_hz=1_000.0,
+                                internal_frequency_max_hz=1_000.0,
+                            ),
+                        ),
+                    ),
+                ),
+                RfFeatureCapability(
                     feature=RfFeature.MODULATION,
-                    directions=(RfFeatureDirection.CONFIGURE, RfFeatureDirection.READ),
+                    directions=(
+                        RfFeatureDirection.CONFIGURE,
+                        RfFeatureDirection.DISABLE,
+                        RfFeatureDirection.READ,
+                    ),
                     port_ids=("rf_out",),
                     profile=RfModulationProfile(
                         state_readable=True,
