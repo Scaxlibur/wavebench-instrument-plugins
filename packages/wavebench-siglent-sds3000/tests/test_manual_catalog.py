@@ -5,7 +5,9 @@ from pathlib import Path
 import sys
 from collections import Counter
 
+from packaging.version import Version
 import pytest
+from wavebench import __version__ as wavebench_version
 from wavebench.instruments.capabilities import CAPABILITY_METHODS
 from wavebench_siglent_sds3000 import descriptor as plugin_descriptor
 
@@ -25,6 +27,36 @@ from tools.manual_catalog import (  # noqa: E402
 CATALOG_PATH = PACKAGE_ROOT / "doc" / "command-catalog.json"
 BASELINE_PATH = PACKAGE_ROOT / "doc" / "manual-baseline.json"
 CAPABILITY_MATRIX_PATH = PACKAGE_ROOT / "doc" / "wavebench-capability-matrix.json"
+
+
+_WAVEBENCH_0_8_24_SCOPE_CAPABILITIES = (
+    "scope.idn",
+    "scope.errors",
+    "scope.autoscale",
+    "scope.fetch_waveform",
+    "scope.capture_waveform",
+    "scope.capture_waveforms",
+    "scope.screenshot",
+    "scope.channel_coupling",
+    "scope.snapshot",
+    "scope.acquisition_status",
+    "scope.capture_average",
+    "scope.digital_status",
+    "scope.digital_waveform",
+    "scope.history_timestamps",
+    "scope.measurement_statistics",
+    "scope.math_metadata",
+    "scope.fft_status",
+    "scope.reference_metadata",
+    "scope.cursor_readout",
+    "scope.screenshot_profile",
+    "scope.screenshot_v2",
+    "scope.acquisition_run_state",
+    "scope.acquisition_control",
+    "scope.trace_metadata",
+    "scope.fetch_trace",
+    "scope.error_drain_v1",
+)
 
 
 def test_parses_converter_html_tables_without_vendor_dependencies() -> None:
@@ -198,18 +230,24 @@ def test_m5_opc_query_is_not_misreported_as_opc_command_support() -> None:
     ]
 
 
-def test_m6_matrix_disposes_every_wavebench_scope_capability() -> None:
+def test_m6_matrix_disposes_every_wavebench_0_8_24_scope_capability() -> None:
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     matrix = json.loads(CAPABILITY_MATRIX_PATH.read_text(encoding="utf-8"))
     entries = matrix["capabilities"]
     scope_capabilities = [
         capability for capability in CAPABILITY_METHODS if capability.startswith("scope.")
     ]
+    matrix_capabilities = [entry["capability"] for entry in entries]
+    matrix_version = Version(matrix["wavebench_version"])
+    runtime_version = Version(wavebench_version)
 
     assert matrix["schema_version"] == 1
     assert matrix["wavebench_version"] == "0.8.24"
-    assert matrix["scope_capability_count"] == len(scope_capabilities) == 26
-    assert [entry["capability"] for entry in entries] == scope_capabilities
+    assert runtime_version >= matrix_version
+    assert len(_WAVEBENCH_0_8_24_SCOPE_CAPABILITIES) == 26
+    assert matrix["scope_capability_count"] == len(matrix_capabilities) == 26
+    assert matrix_capabilities == list(_WAVEBENCH_0_8_24_SCOPE_CAPABILITIES)
+    assert set(matrix_capabilities) <= set(scope_capabilities)
     assert len({entry["capability"] for entry in entries}) == len(entries)
 
     dispositions = Counter(entry["disposition"] for entry in entries)
