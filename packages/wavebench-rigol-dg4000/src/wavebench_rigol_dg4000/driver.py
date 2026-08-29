@@ -24,12 +24,18 @@ from wavebench.instruments import (
     SourceAmplitudeUnit,
     SourceBurstMode,
     SourceChannelProfile,
+    SourceCouplingDimension,
+    SourceCouplingDimensionState,
+    SourceCouplingParameter,
+    SourceCouplingParameterKind,
+    SourceCouplingState,
     SourceCounterInputState,
     SourceCounterMeasurement,
     SourceCounterMeasurementKind,
     SourceCounterMeasurementV2,
     SourceCounterProfile,
     SourceFieldId,
+    SourceFeature,
     SourceFrequencyMode,
     SourceGatePolarity,
     SourceHarmonicPreset,
@@ -232,6 +238,40 @@ def _parse_counter_impedance(response: str) -> float:
     if parsed not in {50.0, 1_000_000.0}:
         raise DataError("counter impedance response must be 50 or 1000000 ohms")
     return parsed
+
+
+def _parse_coupling_states(response: str) -> dict[SourceCouplingDimension, bool]:
+    parts = tuple(item.strip() for item in str(response).strip().strip('"').split(","))
+    if len(parts) != 3 or any(not item for item in parts):
+        raise DataError("coupling state must contain frequency, phase, and amplitude")
+    dimensions = {
+        "AMPL": SourceCouplingDimension.AMPLITUDE,
+        "AMPLITUDE": SourceCouplingDimension.AMPLITUDE,
+        "FREQ": SourceCouplingDimension.FREQUENCY,
+        "FREQUENCY": SourceCouplingDimension.FREQUENCY,
+        "PHAS": SourceCouplingDimension.PHASE,
+        "PHASE": SourceCouplingDimension.PHASE,
+    }
+    states: dict[SourceCouplingDimension, bool] = {}
+    for part in parts:
+        key, separator, raw_state = part.partition(":")
+        if not separator or ":" in raw_state:
+            raise DataError(f"unexpected coupling state response: {response!r}")
+        try:
+            dimension = dimensions[key.strip().upper()]
+        except KeyError as exc:
+            raise DataError(f"unexpected coupling dimension response: {key!r}") from exc
+        if dimension in states:
+            raise DataError("coupling state dimensions must be unique")
+        state = _normalize_enum(
+            raw_state,
+            field_name=f"{dimension.value} coupling state",
+            aliases=_STATE_ALIASES,
+        )
+        states[dimension] = state == "ON"
+    if set(states) != set(SourceCouplingDimension):
+        raise DataError("coupling state must contain frequency, phase, and amplitude")
+    return states
 
 
 def _validate_dac14_block(block: DG4000DacBlock) -> None:
@@ -887,6 +927,63 @@ class DG4202Source:
             internal_waveform_kind=not_queried,
         )
 
+    def _v2_coupling_facet(
+        self,
+        plan: SourceSemanticQueryPlan,
+    ) -> SourceCouplingState:
+        states = _parse_coupling_states(self._v2_query(plan, ":COUP?"))
+        reference_channel = int(
+            _normalize_enum(
+                self._v2_query(plan, ":COUP:CHAN:BASE?"),
+                field_name="coupling base channel",
+                aliases={"CH1": "1", "CH2": "2"},
+            )
+        )
+        parameter_specs = (
+            (
+                SourceCouplingDimension.AMPLITUDE,
+                SourceCouplingParameterKind.AMPLITUDE_DEVIATION_VPP,
+                ":COUP:AMPL:DEV?",
+                20.0,
+            ),
+            (
+                SourceCouplingDimension.FREQUENCY,
+                SourceCouplingParameterKind.FREQUENCY_DEVIATION_HZ,
+                ":COUP:FREQ:DEV?",
+                160e6,
+            ),
+            (
+                SourceCouplingDimension.PHASE,
+                SourceCouplingParameterKind.PHASE_DEVIATION_DEG,
+                ":COUP:PHAS:DEV?",
+                360.0,
+            ),
+        )
+        dimensions = []
+        for dimension, kind, command, maximum in parameter_specs:
+            value = _finite_float(
+                self._v2_query(plan, command),
+                field_name=f"{dimension.value} coupling deviation",
+            )
+            if not 0 <= value <= maximum:
+                raise DataError(
+                    f"{dimension.value} coupling deviation response must be from 0 to {maximum:g}"
+                )
+            dimensions.append(
+                SourceCouplingDimensionState(
+                    dimension=dimension,
+                    enabled=Observed.value_of(states[dimension]),
+                    parameter=Observed.value_of(SourceCouplingParameter(kind, value)),
+                )
+            )
+        return SourceCouplingState(
+            feature=SourceFeature.COUPLING,
+            channels=(1, 2),
+            enabled=Observed.value_of(any(states.values())),
+            reference_channel=Observed.value_of(reference_channel),
+            dimensions=tuple(dimensions),
+        )
+
     @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
@@ -904,7 +1001,7 @@ class DG4202Source:
 
         phase_fields: dict[
             SourceQueryPhase,
-            dict[SourceFieldId, set[int | str | None]],
+            dict[SourceFieldId, set[int | str | tuple[int, ...] | None]],
         ] = {}
         for item in plan.items:
             if item.effect is not SourceQueryEffect.PURE_READ:
@@ -924,6 +1021,14 @@ class DG4202Source:
                     raise DataError("DG4000 Source V2 counter input is unsupported")
                 if item.phase is not SourceQueryPhase.FACET:
                     raise DataError("DG4000 Source V2 counter must be a facet query")
+            elif field_ref.field is SourceFieldId.COUPLING:
+                if field_ref.target.scope.value != "channel_set":
+                    raise DataError("DG4000 Source V2 coupling must be channel-set scoped")
+                target = field_ref.target.channels
+                if target != (1, 2):
+                    raise DataError("DG4000 Source V2 coupling channel set is unsupported")
+                if item.phase is not SourceQueryPhase.FACET:
+                    raise DataError("DG4000 Source V2 coupling must be a facet query")
             elif field_ref.field in {
                 SourceFieldId.ARBITRARY_SELECTION,
                 SourceFieldId.BASIC,
@@ -1026,7 +1131,7 @@ class DG4202Source:
         self,
         plan: SourceSemanticQueryPlan,
     ) -> SourceQueryExecutionRecord:
-        """Execute a Core-owned Basic/Output plan without selector writes."""
+        """Execute a Core-owned Source V2 snapshot plan without writes."""
 
         self._validate_v2_query_plan(plan)
         with self._io_lock:
@@ -1085,6 +1190,9 @@ class DG4202Source:
                         self.get_counter_profile(),
                     )
                     query_count = 11 if value.enabled.value else 10
+                elif field_ref.field is SourceFieldId.COUPLING:
+                    value = self._v2_coupling_facet(plan)
+                    query_count = 5
                 elif field_ref.field is SourceFieldId.HARMONICS:
                     assert channel is not None
                     basic = before_basic.get(channel)

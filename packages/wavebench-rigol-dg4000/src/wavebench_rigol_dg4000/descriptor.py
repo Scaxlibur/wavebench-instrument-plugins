@@ -17,6 +17,9 @@ from wavebench.instruments import (
     SourceConstraintApplicability,
     SourceCounterCapabilityProfile,
     SourceCounterMeasurementKind,
+    SourceCouplingCapabilityProfile,
+    SourceCouplingDimension,
+    SourceCouplingParameterKind,
     SourceDescriptorExtensions,
     SourceFacetQueryContract,
     SourceFacetScope,
@@ -168,6 +171,22 @@ def _source_extensions() -> SourceDescriptorExtensions:
         inactive_readable=True,
         configuration_readable=False,
     )
+    coupling_profile = SourceCouplingCapabilityProfile(
+        dimensions=(
+            SourceCouplingDimension.AMPLITUDE,
+            SourceCouplingDimension.FREQUENCY,
+            SourceCouplingDimension.PHASE,
+        ),
+        parameter_kinds=(
+            SourceCouplingParameterKind.AMPLITUDE_DEVIATION_VPP,
+            SourceCouplingParameterKind.FREQUENCY_DEVIATION_HZ,
+            SourceCouplingParameterKind.PHASE_DEVIATION_DEG,
+        ),
+        supported_channel_sets=(_V2_CHANNELS,),
+        global_state_readable=True,
+        reference_channel_readable=True,
+        relation_graph_readable=False,
+    )
     channel_features = tuple(
         SourceFeatureCapability(
             feature=feature,
@@ -202,6 +221,15 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     channels=(),
                     applicability=applicability,
                     profile=counter_profile,
+                ),
+                SourceFeatureCapability(
+                    feature=SourceFeature.COUPLING,
+                    support=SupportState.SUPPORTED,
+                    directions=(SourceFeatureDirection.READ,),
+                    scope=SourceFacetScope.CHANNEL_SET,
+                    channels=_V2_CHANNELS,
+                    applicability=applicability,
+                    profile=coupling_profile,
                 ),
             ),
             key=lambda item: (item.feature.value, item.scope.value, item.channels),
@@ -275,6 +303,15 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     required=True,
                 ),
                 SourceFacetQueryContract(
+                    feature=SourceFeature.COUPLING,
+                    scope=SourceFacetScope.CHANNEL_SET,
+                    fields=(SourceFieldId.COUPLING,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=5,
+                    required=True,
+                ),
+                SourceFacetQueryContract(
                     feature=SourceFeature.HARMONICS,
                     scope=SourceFacetScope.CHANNEL,
                     fields=(SourceFieldId.HARMONICS,),
@@ -344,7 +381,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=16,
                 ),
             ),
-            max_queries=125,
+            max_queries=130,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),

@@ -13,6 +13,8 @@ from wavebench.instruments import (
     SourceArbitraryPlaybackMode,
     SourceAmplitudeUnit,
     SourceCounterMeasurementKind,
+    SourceCouplingDimension,
+    SourceCouplingParameterKind,
     SourceFieldId,
     SourceFrequencyMode,
     SourceInputCoupling,
@@ -112,6 +114,11 @@ class FakeTransport:
             "counter_sensitivity": 50.0,
             "counter_statistics": "OFF",
             "counter_statistics_display": "DIGITAL",
+            "coupling": "FREQ:OFF,PHASE:OFF,AMPL:OFF",
+            "coupling_base": "CH1",
+            "coupling_amplitude_deviation": 0.5,
+            "coupling_frequency_deviation": 100.0,
+            "coupling_phase_deviation": 10.0,
         }
 
     def write(self, command: str) -> None:
@@ -232,6 +239,11 @@ class FakeTransport:
             ":COUN:SENS?": str(self.state["counter_sensitivity"]),
             ":COUN:STATI:STAT?": self.state["counter_statistics"],
             ":COUN:STATI:DISP?": self.state["counter_statistics_display"],
+            ":COUP?": self.state["coupling"],
+            ":COUP:CHAN:BASE?": self.state["coupling_base"],
+            ":COUP:AMPL:DEV?": str(self.state["coupling_amplitude_deviation"]),
+            ":COUP:FREQ:DEV?": str(self.state["coupling_frequency_deviation"]),
+            ":COUP:PHAS:DEV?": str(self.state["coupling_phase_deviation"]),
             f":SOUR{channel}:FUNC:USER?": '"USER1"',
             f":SOUR{channel}:ARB:SRAT?": "1000000",
         }
@@ -285,9 +297,9 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 86
-    assert len(execution.items) == 23
-    assert len(transport.queries) == 86
+    assert execution.query_count == 91
+    assert len(execution.items) == 24
+    assert len(transport.queries) == 91
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
     assert ":SOUR2:FREQ:MODE?" not in transport.queries
@@ -339,8 +351,8 @@ def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 54
-    assert len(transport.queries) == 54
+    assert execution.query_count == 59
+    assert len(transport.queries) == 59
     assert all(
         channel.sweep.availability is Availability.NOT_APPLICABLE
         for channel in snapshot.channels
@@ -362,8 +374,8 @@ def test_source_v2_reads_documented_pulse_facet_only_for_pulse_waveforms() -> No
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 66
-    assert len(transport.queries) == 66
+    assert execution.query_count == 71
+    assert len(transport.queries) == 71
     assert all(channel.pulse.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].pulse.value.width_s.value == 0.0005
     assert snapshot.channels[0].sweep.availability is Availability.NOT_APPLICABLE
@@ -384,8 +396,8 @@ def test_source_v2_reads_full_burst_facet_only_when_burst_is_enabled() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 72
-    assert len(transport.queries) == 72
+    assert execution.query_count == 77
+    assert len(transport.queries) == 77
     assert all(channel.burst.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].burst.value.enabled.value is True
     assert snapshot.channels[0].burst.value.cycles.value == 4
@@ -406,8 +418,8 @@ def test_source_v2_reads_partial_harmonic_facet_for_harmonic_waveforms() -> None
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 60
-    assert len(transport.queries) == 60
+    assert execution.query_count == 65
+    assert len(transport.queries) == 65
     assert all(
         channel.harmonics.availability is Availability.VALUE
         for channel in snapshot.channels
@@ -434,7 +446,7 @@ def test_source_v2_reads_counter_off_without_fabricating_gate_time() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 54
+    assert execution.query_count == 59
     counter = snapshot.system.value.counters[0]
     assert counter.input_id == "counter"
     assert counter.enabled.value is False
@@ -464,7 +476,7 @@ def test_source_v2_reads_counter_on_measurement_tuple() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 55
+    assert execution.query_count == 60
     counter = snapshot.system.value.counters[0]
     assert counter.enabled.value is True
     assert tuple(item.kind for item in counter.measurements.value) == (
@@ -482,6 +494,94 @@ def test_source_v2_reads_counter_on_measurement_tuple() -> None:
         0.0004,
     )
     assert transport.queries.count(":COUN:MEAS?") == 1
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_parameterized_coupling_as_one_channel_set() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "coupling": "FREQ:ON,PHASE:OFF,AMPL:ON",
+            "coupling_base": "CH2",
+            "coupling_amplitude_deviation": 0.75,
+            "coupling_frequency_deviation": 250.0,
+            "coupling_phase_deviation": 15.0,
+        }
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 59
+    coupling = snapshot.cross_channel.value.relations[0]
+    assert coupling.channels == (1, 2)
+    assert coupling.enabled.value is True
+    assert coupling.reference_channel.value == 2
+    assert tuple(item.dimension for item in coupling.dimensions) == (
+        SourceCouplingDimension.AMPLITUDE,
+        SourceCouplingDimension.FREQUENCY,
+        SourceCouplingDimension.PHASE,
+    )
+    assert tuple(item.enabled.value for item in coupling.dimensions) == (True, True, False)
+    assert tuple(item.parameter.value.kind for item in coupling.dimensions) == (
+        SourceCouplingParameterKind.AMPLITUDE_DEVIATION_VPP,
+        SourceCouplingParameterKind.FREQUENCY_DEVIATION_HZ,
+        SourceCouplingParameterKind.PHASE_DEVIATION_DEG,
+    )
+    assert tuple(item.parameter.value.value for item in coupling.dimensions) == (
+        0.75,
+        250.0,
+        15.0,
+    )
+    assert tuple(
+        command
+        for command in transport.queries
+        if command.startswith(":COUP")
+    ) == (
+        ":COUP?",
+        ":COUP:CHAN:BASE?",
+        ":COUP:AMPL:DEV?",
+        ":COUP:FREQ:DEV?",
+        ":COUP:PHAS:DEV?",
+    )
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    (
+        (":COUP?", "FREQ:OFF,PHASE:OFF", "must contain"),
+        (":COUP?", "FREQ:OFF,PHASE:OFF,FREQ:ON", "unique"),
+        (":COUP?", "FREQ:MAYBE,PHASE:OFF,AMPL:OFF", "frequency coupling state"),
+        (":COUP:CHAN:BASE?", "CH3", "coupling base channel"),
+        (":COUP:AMPL:DEV?", "nan", "amplitude coupling deviation"),
+        (":COUP:AMPL:DEV?", "21", "amplitude coupling deviation response"),
+        (":COUP:FREQ:DEV?", "-1", "frequency coupling deviation response"),
+        (":COUP:PHAS:DEV?", "361", "phase coupling deviation response"),
+    ),
+)
+def test_source_v2_rejects_invalid_coupling_readback_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    transport.query_overrides[command] = response
+    _context, plan = _source_v2_plan()
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
     assert transport.writes == []
     assert transport.byte_writes == []
 
@@ -521,7 +621,7 @@ def test_source_v2_reads_modulation_state_and_type_only(
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 54
+    assert execution.query_count == 59
     assert all(channel.modulation.value.enabled.value is True for channel in snapshot.channels)
     assert all(channel.modulation.value.kind.value is expected for channel in snapshot.channels)
     modulation = snapshot.channels[0].modulation.value
@@ -551,7 +651,7 @@ def test_source_v2_reuses_basic_anchor_for_partial_arbitrary_read(
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 54
+    assert execution.query_count == 59
     assert all(channel.arbitrary.availability is Availability.VALUE for channel in snapshot.channels)
     arbitrary = snapshot.channels[0].arbitrary.value
     assert arbitrary.selected_waveform_id.value == waveform.lower()
@@ -587,7 +687,7 @@ def test_source_v2_accepts_documented_long_waveform_tokens_without_changing_v1()
 @pytest.mark.parametrize(
     ("plan", "message"),
     (
-        (_source_v2_plan(max_queries=37)[1], "total query budget"),
+        (_source_v2_plan(max_queries=129)[1], "total query budget"),
         (_source_v2_plan(deadline_monotonic=0.0)[1], "deadline has expired"),
     ),
 )
@@ -617,7 +717,7 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert "source.snapshot_v2" in item.capabilities
     assert item.source_extensions is not None
     assert item.source_extensions.topology.input_ids == ("counter",)
-    assert item.source_extensions.query_contract.max_queries == 125
+    assert item.source_extensions.query_contract.max_queries == 130
     arbitrary = next(
         feature
         for feature in item.source_extensions.features
@@ -628,6 +728,29 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert arbitrary.profile.selection_readable is True
     assert arbitrary.profile.storage_metadata_readable is False
     assert arbitrary.profile.sample_rate_readable is False
+    coupling = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "coupling"
+    )
+    assert coupling.channels == (1, 2)
+    assert coupling.profile.dimensions == tuple(SourceCouplingDimension)
+    assert coupling.profile.parameter_kinds == (
+        SourceCouplingParameterKind.AMPLITUDE_DEVIATION_VPP,
+        SourceCouplingParameterKind.FREQUENCY_DEVIATION_HZ,
+        SourceCouplingParameterKind.PHASE_DEVIATION_DEG,
+    )
+    assert coupling.profile.supported_channel_sets == ((1, 2),)
+    assert coupling.profile.global_state_readable is True
+    assert coupling.profile.reference_channel_readable is True
+    assert coupling.profile.relation_graph_readable is False
+    coupling_query = next(
+        facet
+        for facet in item.source_extensions.query_contract.facets
+        if facet.feature.value == "coupling"
+    )
+    assert coupling_query.fields == (SourceFieldId.COUPLING,)
+    assert coupling_query.max_queries == 5
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
     assert "source.counter_profile" in item.capabilities
