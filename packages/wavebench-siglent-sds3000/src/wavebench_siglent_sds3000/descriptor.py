@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from wavebench.instruments.api import DriverContext, InstrumentDescriptor
+from wavebench.instruments import DriverContext, InstrumentDescriptor
 
 
 def _open_driver(context: DriverContext):

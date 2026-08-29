@@ -15,9 +15,8 @@ from wavebench.errors import (
     StateDriftError,
     TransportIOError,
 )
-from wavebench.instruments.models import WaveformData
-from wavebench.transport.base import InstrumentTransport
-from wavebench.transport.contracts import ReplayPolicy
+from wavebench.instruments import WaveformData
+from wavebench.transport import InstrumentTransport, ReplayPolicy
 
 from .waveform import decode_waveform_data, parse_waveform_descriptor
 
