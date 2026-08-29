@@ -14,6 +14,7 @@ from wavebench.instruments import (
     DG4000DacBlock,
     Observed,
     OutputFacet,
+    PulseFacet,
     SourceAmplitude,
     SourceAmplitudeUnit,
     SourceChannelProfile,
@@ -22,6 +23,7 @@ from wavebench.instruments import (
     SourceFieldId,
     SourceFrequencyMode,
     SourceProtocolQueryRecord,
+    SourcePulseHoldBasis,
     SourceQueryEffect,
     SourceQueryExecutionRecord,
     SourceQueryItemOutcome,
@@ -525,6 +527,52 @@ class DG4202Source:
             ),
         )
 
+    def _v2_pulse_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> PulseFacet:
+        hold = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:PULS:HOLD?"),
+            field_name="pulse hold mode",
+            aliases={"DUTY": "DUTY", "WIDT": "WIDTH", "WIDTH": "WIDTH"},
+        )
+        width_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:WIDT?"),
+            field_name="pulse width",
+        )
+        duty = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:DCYC?"),
+            field_name="pulse duty cycle",
+        )
+        delay_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:DEL?"),
+            field_name="pulse delay",
+        )
+        leading_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:TRAN?"),
+            field_name="pulse leading transition",
+        )
+        trailing_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:TRAN:TRA?"),
+            field_name="pulse trailing transition",
+        )
+        try:
+            return PulseFacet(
+                hold_basis=Observed.value_of(
+                    SourcePulseHoldBasis.DUTY
+                    if hold == "DUTY"
+                    else SourcePulseHoldBasis.WIDTH
+                ),
+                width_s=Observed.value_of(width_s),
+                duty_cycle_percent=Observed.value_of(duty),
+                delay_s=Observed.value_of(delay_s),
+                leading_transition_s=Observed.value_of(leading_s),
+                trailing_transition_s=Observed.value_of(trailing_s),
+            )
+        except ValueError as exc:
+            raise DataError(f"inconsistent DG4000 pulse profile: {exc}") from exc
+
     @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
@@ -554,6 +602,7 @@ class DG4202Source:
             elif field_ref.field in {
                 SourceFieldId.BASIC,
                 SourceFieldId.OUTPUT,
+                SourceFieldId.PULSE,
                 SourceFieldId.SWEEP,
             }:
                 if field_ref.target.scope.value != "channel":
@@ -561,10 +610,10 @@ class DG4202Source:
                 target = field_ref.target.channel
                 _validate_channel(target)
                 if (
-                    field_ref.field is SourceFieldId.SWEEP
+                    field_ref.field in {SourceFieldId.PULSE, SourceFieldId.SWEEP}
                     and item.phase is not SourceQueryPhase.FACET
                 ):
-                    raise DataError("DG4000 Source V2 sweep must be a facet query")
+                    raise DataError("DG4000 Source V2 optional field must be a facet query")
             else:
                 raise DataError("DG4000 Source V2 query plan requests an unsupported field")
             targets = phase_fields.setdefault(item.phase, {}).setdefault(
@@ -601,6 +650,12 @@ class DG4202Source:
         )
         if not sweep_channels <= channels:
             raise DataError("DG4000 Source V2 sweep requires matching basic anchors")
+        pulse_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.PULSE,
+            set(),
+        )
+        if not pulse_channels <= channels:
+            raise DataError("DG4000 Source V2 pulse requires matching basic anchors")
 
     def execute_source_query_plan_v2(
         self,
@@ -635,8 +690,7 @@ class DG4202Source:
                     assert channel is not None
                     value = self._v2_output_facet(channel, plan)
                     query_count = 1
-                else:
-                    assert field_ref.field is SourceFieldId.SWEEP
+                elif field_ref.field is SourceFieldId.SWEEP:
                     assert channel is not None
                     basic = before_basic.get(channel)
                     if (
@@ -659,6 +713,26 @@ class DG4202Source:
                     if time.monotonic() > plan.deadline_monotonic:
                         raise DataError("DG4000 Source V2 query plan deadline has expired")
                     query_count = 16
+                else:
+                    assert field_ref.field is SourceFieldId.PULSE
+                    assert channel is not None
+                    basic = before_basic.get(channel)
+                    if (
+                        basic is None
+                        or basic.waveform_kind.value is not SourceWaveformKind.PULSE
+                    ):
+                        records.append(
+                            SourceProtocolQueryRecord(
+                                item_id=item.item_id,
+                                effect=item.effect,
+                                outcome=SourceQueryItemOutcome.SKIPPED,
+                                query_count=0,
+                                reason_code=SourceReasonCode.INACTIVE_BY_ANCHOR,
+                            )
+                        )
+                        continue
+                    value = self._v2_pulse_facet(channel, plan)
+                    query_count = 6
                 if query_count > item.max_queries:
                     raise DataError(
                         "DG4000 Source V2 query plan under-declares a snapshot query"

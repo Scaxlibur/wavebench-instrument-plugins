@@ -18,6 +18,8 @@ from wavebench.instruments import (
     SourceFieldId,
     SourceFrequencyMode,
     SourceOutputCapabilityProfile,
+    SourcePulseCapabilityProfile,
+    SourcePulseHoldBasis,
     SourceQueryContract,
     SourceQueryEffect,
     SourceSafetyProfile,
@@ -75,6 +77,11 @@ def _source_extensions() -> SourceDescriptorExtensions:
         timing_readable=True,
         marker_readable=True,
     )
+    pulse_profile = SourcePulseCapabilityProfile(
+        hold_modes=(SourcePulseHoldBasis.DUTY, SourcePulseHoldBasis.WIDTH),
+        delay_readable=True,
+        transitions_readable=True,
+    )
     features = tuple(
         SourceFeatureCapability(
             feature=feature,
@@ -88,6 +95,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
         for feature, profile in (
             (SourceFeature.BASIC, basic_profile),
             (SourceFeature.OUTPUT, output_profile),
+            (SourceFeature.PULSE, pulse_profile),
             (SourceFeature.SWEEP, sweep_profile),
         )
         for channel in _V2_CHANNELS
@@ -131,6 +139,23 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     required=True,
                 ),
                 SourceFacetQueryContract(
+                    feature=SourceFeature.PULSE,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.PULSE,),
+                    activation_any=(
+                        SourceActivationRule(
+                            predicates=(
+                                SourceActivationPredicate(
+                                    field=SourceAnchorField.WAVEFORM_KIND,
+                                    equals=SourceWaveformKind.PULSE,
+                                ),
+                            ),
+                        ),
+                    ),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=6,
+                ),
+                SourceFacetQueryContract(
                     feature=SourceFeature.SWEEP,
                     scope=SourceFacetScope.CHANNEL,
                     fields=(SourceFieldId.SWEEP,),
@@ -148,7 +173,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=16,
                 ),
             ),
-            max_queries=70,
+            max_queries=82,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),

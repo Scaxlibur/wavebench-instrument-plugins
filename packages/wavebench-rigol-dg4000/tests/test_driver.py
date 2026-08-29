@@ -67,6 +67,11 @@ class FakeTransport:
             "marker": "OFF",
             "marker_frequency": 550.0,
             "pulse_hold": "DUTY",
+            "pulse_width": 0.0005,
+            "pulse_duty": 50.0,
+            "pulse_delay": 0.0,
+            "pulse_leading": 1.0e-6,
+            "pulse_trailing": 2.0e-6,
             "sweep_start": 100.0,
             "sweep_stop": 1000.0,
             "sweep_center": 550.0,
@@ -166,6 +171,11 @@ class FakeTransport:
             f":SOUR{channel}:MARK:STAT?": self.state["marker"],
             f":SOUR{channel}:MARK:FREQ?": str(self.state["marker_frequency"]),
             f":SOUR{channel}:PULS:HOLD?": self.state["pulse_hold"],
+            f":SOUR{channel}:PULS:WIDT?": str(self.state["pulse_width"]),
+            f":SOUR{channel}:PULS:DCYC?": str(self.state["pulse_duty"]),
+            f":SOUR{channel}:PULS:DEL?": str(self.state["pulse_delay"]),
+            f":SOUR{channel}:PULS:TRAN?": str(self.state["pulse_leading"]),
+            f":SOUR{channel}:PULS:TRAN:TRA?": str(self.state["pulse_trailing"]),
             f":SOUR{channel}:FREQ:STAR?": str(self.state["sweep_start"]),
             f":SOUR{channel}:FREQ:STOP?": str(self.state["sweep_stop"]),
             f":SOUR{channel}:FREQ:CENT?": str(self.state["sweep_center"]),
@@ -244,7 +254,7 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
     )
 
     assert execution.query_count == 70
-    assert len(execution.items) == 12
+    assert len(execution.items) == 14
     assert len(transport.queries) == 70
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
@@ -300,6 +310,28 @@ def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
         channel.sweep.availability is Availability.NOT_APPLICABLE
         for channel in snapshot.channels
     )
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_documented_pulse_facet_only_for_pulse_waveforms() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "PULSE", "swe": "OFF"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 50
+    assert len(transport.queries) == 50
+    assert all(channel.pulse.availability is Availability.VALUE for channel in snapshot.channels)
+    assert snapshot.channels[0].pulse.value.width_s.value == 0.0005
+    assert snapshot.channels[0].sweep.availability is Availability.NOT_APPLICABLE
     assert transport.writes == []
     assert transport.byte_writes == []
 
