@@ -13,7 +13,7 @@ import time
 import numpy as np
 
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
-from wavebench.instruments.models import (
+from wavebench.instruments import (
     ScopeAcquisitionStatus,
     ScopeAverageCaptureRequest,
     ScopeAverageCaptureResult,
