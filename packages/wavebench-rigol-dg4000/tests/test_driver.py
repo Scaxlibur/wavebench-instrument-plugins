@@ -19,6 +19,7 @@ from wavebench.instruments import (
     SourceFrequencyMode,
     SourceInputCoupling,
     SourceModulationKind,
+    SourceNoiseOverlayScaleKind,
     SourceSemanticQueryPlan,
     SourceSyncPolarity,
     SourceWaveformKind,
@@ -298,9 +299,9 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 95
-    assert len(execution.items) == 26
-    assert len(transport.queries) == 95
+    assert execution.query_count == 99
+    assert len(execution.items) == 28
+    assert len(transport.queries) == 99
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
     assert ":SOUR2:FREQ:MODE?" not in transport.queries
@@ -352,8 +353,8 @@ def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 63
-    assert len(transport.queries) == 63
+    assert execution.query_count == 67
+    assert len(transport.queries) == 67
     assert all(
         channel.sweep.availability is Availability.NOT_APPLICABLE
         for channel in snapshot.channels
@@ -375,8 +376,8 @@ def test_source_v2_reads_documented_pulse_facet_only_for_pulse_waveforms() -> No
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 75
-    assert len(transport.queries) == 75
+    assert execution.query_count == 79
+    assert len(transport.queries) == 79
     assert all(channel.pulse.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].pulse.value.width_s.value == 0.0005
     assert snapshot.channels[0].sweep.availability is Availability.NOT_APPLICABLE
@@ -397,8 +398,8 @@ def test_source_v2_reads_full_burst_facet_only_when_burst_is_enabled() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 81
-    assert len(transport.queries) == 81
+    assert execution.query_count == 85
+    assert len(transport.queries) == 85
     assert all(channel.burst.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].burst.value.enabled.value is True
     assert snapshot.channels[0].burst.value.cycles.value == 4
@@ -419,8 +420,8 @@ def test_source_v2_reads_partial_harmonic_facet_for_harmonic_waveforms() -> None
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 69
-    assert len(transport.queries) == 69
+    assert execution.query_count == 73
+    assert len(transport.queries) == 73
     assert all(
         channel.harmonics.availability is Availability.VALUE
         for channel in snapshot.channels
@@ -447,7 +448,7 @@ def test_source_v2_reads_counter_off_without_fabricating_gate_time() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 63
+    assert execution.query_count == 67
     counter = snapshot.system.value.counters[0]
     assert counter.input_id == "counter"
     assert counter.enabled.value is False
@@ -477,7 +478,7 @@ def test_source_v2_reads_counter_on_measurement_tuple() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 64
+    assert execution.query_count == 68
     counter = snapshot.system.value.counters[0]
     assert counter.enabled.value is True
     assert tuple(item.kind for item in counter.measurements.value) == (
@@ -521,7 +522,7 @@ def test_source_v2_reads_parameterized_coupling_as_one_channel_set() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 63
+    assert execution.query_count == 67
     coupling = snapshot.cross_channel.value.relations[0]
     assert coupling.channels == (1, 2)
     assert coupling.enabled.value is True
@@ -606,7 +607,7 @@ def test_source_v2_reads_channel_sync_state_and_polarity_only() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 63
+    assert execution.query_count == 67
     assert all(channel.sync.value.enabled.value is False for channel in snapshot.channels)
     assert all(
         channel.sync.value.polarity.value is SourceSyncPolarity.NEGATIVE
@@ -632,6 +633,71 @@ def test_source_v2_reads_channel_sync_state_and_polarity_only() -> None:
     ),
 )
 def test_source_v2_rejects_invalid_sync_readback_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    transport.query_overrides[command] = response
+    _context, plan = _source_v2_plan()
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_noise_overlay_without_changing_basic_waveform() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "noise": "ON",
+            "noise_scale": 25.0,
+        }
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 67
+    assert all(
+        channel.basic.value.waveform_kind.value is SourceWaveformKind.SINE
+        for channel in snapshot.channels
+    )
+    assert all(
+        channel.noise_overlay.value.enabled.value is True
+        for channel in snapshot.channels
+    )
+    scales = snapshot.channels[0].noise_overlay.value.scales.value
+    assert len(scales) == 1
+    assert scales[0].kind is SourceNoiseOverlayScaleKind.PERCENT
+    assert scales[0].value == 25.0
+    assert transport.queries.count(":OUTP1:NOIS?") == 1
+    assert transport.queries.count(":OUTP1:NOIS:SCAL?") == 1
+    assert transport.queries.count(":OUTP2:NOIS?") == 1
+    assert transport.queries.count(":OUTP2:NOIS:SCAL?") == 1
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    (
+        (":OUTP1:NOIS?", "MAYBE", "noise overlay state"),
+        (":OUTP1:NOIS:SCAL?", "nan", "noise overlay scale"),
+        (":OUTP1:NOIS:SCAL?", "51", "noise overlay scale response"),
+    ),
+)
+def test_source_v2_rejects_invalid_noise_overlay_readback_without_writes(
     command: str,
     response: str,
     message: str,
@@ -683,7 +749,7 @@ def test_source_v2_reads_modulation_state_and_type_only(
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 63
+    assert execution.query_count == 67
     assert all(channel.modulation.value.enabled.value is True for channel in snapshot.channels)
     assert all(channel.modulation.value.kind.value is expected for channel in snapshot.channels)
     modulation = snapshot.channels[0].modulation.value
@@ -713,7 +779,7 @@ def test_source_v2_reuses_basic_anchor_for_partial_arbitrary_read(
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 63
+    assert execution.query_count == 67
     assert all(channel.arbitrary.availability is Availability.VALUE for channel in snapshot.channels)
     arbitrary = snapshot.channels[0].arbitrary.value
     assert arbitrary.selected_waveform_id.value == waveform.lower()
@@ -749,7 +815,7 @@ def test_source_v2_accepts_documented_long_waveform_tokens_without_changing_v1()
 @pytest.mark.parametrize(
     ("plan", "message"),
     (
-        (_source_v2_plan(max_queries=133)[1], "total query budget"),
+        (_source_v2_plan(max_queries=137)[1], "total query budget"),
         (_source_v2_plan(deadline_monotonic=0.0)[1], "deadline has expired"),
     ),
 )
@@ -779,7 +845,7 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert "source.snapshot_v2" in item.capabilities
     assert item.source_extensions is not None
     assert item.source_extensions.topology.input_ids == ("counter",)
-    assert item.source_extensions.query_contract.max_queries == 134
+    assert item.source_extensions.query_contract.max_queries == 138
     arbitrary = next(
         feature
         for feature in item.source_extensions.features
@@ -829,6 +895,24 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     )
     assert sync_query.fields == (SourceFieldId.SYNC,)
     assert sync_query.max_queries == 2
+    noise_overlay = tuple(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "noise_overlay"
+    )
+    assert tuple(feature.channels for feature in noise_overlay) == ((1,), (2,))
+    assert all(feature.profile.enabled_readable is True for feature in noise_overlay)
+    assert all(
+        feature.profile.scale_kinds == (SourceNoiseOverlayScaleKind.PERCENT,)
+        for feature in noise_overlay
+    )
+    noise_overlay_query = next(
+        facet
+        for facet in item.source_extensions.query_contract.facets
+        if facet.feature.value == "noise_overlay"
+    )
+    assert noise_overlay_query.fields == (SourceFieldId.NOISE_OVERLAY,)
+    assert noise_overlay_query.max_queries == 2
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
     assert "source.counter_profile" in item.capabilities

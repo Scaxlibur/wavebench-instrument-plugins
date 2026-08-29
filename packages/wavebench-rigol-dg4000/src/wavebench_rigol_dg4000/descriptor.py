@@ -34,6 +34,8 @@ from wavebench.instruments import (
     SourceModulationKind,
     SourceModulationParameterKind,
     SourceModulationSource,
+    SourceNoiseOverlayCapabilityProfile,
+    SourceNoiseOverlayScaleKind,
     SourceOutputCapabilityProfile,
     SourcePulseCapabilityProfile,
     SourcePulseHoldBasis,
@@ -193,6 +195,10 @@ def _source_extensions() -> SourceDescriptorExtensions:
         polarity_readable=True,
         source_channel_readable=False,
     )
+    noise_overlay_profile = SourceNoiseOverlayCapabilityProfile(
+        enabled_readable=True,
+        scale_kinds=(SourceNoiseOverlayScaleKind.PERCENT,),
+    )
     channel_features = tuple(
         SourceFeatureCapability(
             feature=feature,
@@ -209,6 +215,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
             (SourceFeature.BURST, burst_profile),
             (SourceFeature.HARMONICS, harmonic_profile),
             (SourceFeature.MODULATION, modulation_profile),
+            (SourceFeature.NOISE_OVERLAY, noise_overlay_profile),
             (SourceFeature.OUTPUT, output_profile),
             (SourceFeature.PULSE, pulse_profile),
             (SourceFeature.SWEEP, sweep_profile),
@@ -345,6 +352,15 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     required=True,
                 ),
                 SourceFacetQueryContract(
+                    feature=SourceFeature.NOISE_OVERLAY,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.NOISE_OVERLAY,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=2,
+                    required=True,
+                ),
+                SourceFacetQueryContract(
                     feature=SourceFeature.OUTPUT,
                     scope=SourceFacetScope.CHANNEL,
                     fields=(SourceFieldId.OUTPUT,),
@@ -397,7 +413,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     required=True,
                 ),
             ),
-            max_queries=134,
+            max_queries=138,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),

@@ -17,6 +17,7 @@ from wavebench.instruments import (
     HarmonicCompleteness,
     HarmonicFacet,
     ModulationFacet,
+    NoiseOverlayFacet,
     Observed,
     OutputFacet,
     PulseFacet,
@@ -41,6 +42,8 @@ from wavebench.instruments import (
     SourceHarmonicPreset,
     SourceInputCoupling,
     SourceModulationKind,
+    SourceNoiseOverlayScale,
+    SourceNoiseOverlayScaleKind,
     SourceProtocolQueryRecord,
     SourcePulseHoldBasis,
     SourceQueryEffect,
@@ -1017,6 +1020,37 @@ class DG4202Source:
             ),
         )
 
+    def _v2_noise_overlay_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> NoiseOverlayFacet:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":OUTP{channel}:NOIS?"),
+                field_name="noise overlay state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        scale_percent = _finite_float(
+            self._v2_query(plan, f":OUTP{channel}:NOIS:SCAL?"),
+            field_name="noise overlay scale",
+        )
+        if not 0 <= scale_percent <= 50:
+            raise DataError("noise overlay scale response must be from 0 to 50 percent")
+        return NoiseOverlayFacet(
+            enabled=Observed.value_of(enabled),
+            scales=Observed.value_of(
+                (
+                    SourceNoiseOverlayScale(
+                        SourceNoiseOverlayScaleKind.PERCENT,
+                        scale_percent,
+                    ),
+                )
+            ),
+        )
+
     @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
@@ -1068,6 +1102,7 @@ class DG4202Source:
                 SourceFieldId.BURST,
                 SourceFieldId.HARMONICS,
                 SourceFieldId.MODULATION,
+                SourceFieldId.NOISE_OVERLAY,
                 SourceFieldId.OUTPUT,
                 SourceFieldId.PULSE,
                 SourceFieldId.SWEEP,
@@ -1094,6 +1129,11 @@ class DG4202Source:
                     and item.phase is not SourceQueryPhase.FACET
                 ):
                     raise DataError("DG4000 Source V2 modulation must be a facet query")
+                if (
+                    field_ref.field is SourceFieldId.NOISE_OVERLAY
+                    and item.phase is not SourceQueryPhase.FACET
+                ):
+                    raise DataError("DG4000 Source V2 noise overlay must be a facet query")
                 if (
                     field_ref.field is SourceFieldId.SYNC
                     and item.phase is not SourceQueryPhase.FACET
@@ -1165,6 +1205,12 @@ class DG4202Source:
         )
         if not modulation_channels <= channels:
             raise DataError("DG4000 Source V2 modulation requires matching basic anchors")
+        noise_overlay_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.NOISE_OVERLAY,
+            set(),
+        )
+        if not noise_overlay_channels <= channels:
+            raise DataError("DG4000 Source V2 noise overlay requires matching basic anchors")
         sync_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
             SourceFieldId.SYNC,
             set(),
@@ -1260,6 +1306,10 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.MODULATION:
                     assert channel is not None
                     value = self._v2_modulation_facet(channel, plan)
+                    query_count = 2
+                elif field_ref.field is SourceFieldId.NOISE_OVERLAY:
+                    assert channel is not None
+                    value = self._v2_noise_overlay_facet(channel, plan)
                     query_count = 2
                 elif field_ref.field is SourceFieldId.SYNC:
                     assert channel is not None
