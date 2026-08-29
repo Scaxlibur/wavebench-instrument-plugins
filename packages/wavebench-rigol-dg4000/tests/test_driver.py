@@ -71,6 +71,9 @@ class FakeTransport:
             "burst_trigger_source": "INT",
             "burst_trigger_slope": "POS",
             "burst_trigger_out": "OFF",
+            "harmonic_order": 8,
+            "harmonic_maximum_order": 16,
+            "harmonic_type": "ODD",
             "modulation": "OFF",
             "modulation_type": "AM",
             "marker": "OFF",
@@ -186,6 +189,11 @@ class FakeTransport:
             f":SOUR{channel}:BURS:TRIG:SOUR?": self.state["burst_trigger_source"],
             f":SOUR{channel}:BURS:TRIG:SLOP?": self.state["burst_trigger_slope"],
             f":SOUR{channel}:BURS:TRIG:TRIGOUT?": self.state["burst_trigger_out"],
+            f":SOUR{channel}:HARM:ORDER?": str(self.state["harmonic_order"]),
+            f":SOUR{channel}:HARM:ORDER? MAX": str(
+                self.state["harmonic_maximum_order"]
+            ),
+            f":SOUR{channel}:HARM:TYPE?": self.state["harmonic_type"],
             f":SOUR{channel}:MOD:STAT?": self.state["modulation"],
             f":SOUR{channel}:MOD:TYPE?": self.state["modulation_type"],
             f":SOUR{channel}:MARK:STAT?": self.state["marker"],
@@ -274,7 +282,7 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
     )
 
     assert execution.query_count == 72
-    assert len(execution.items) == 16
+    assert len(execution.items) == 18
     assert len(transport.queries) == 72
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
@@ -374,6 +382,34 @@ def test_source_v2_reads_full_burst_facet_only_when_burst_is_enabled() -> None:
     assert all(channel.burst.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].burst.value.enabled.value is True
     assert snapshot.channels[0].burst.value.cycles.value == 4
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_partial_harmonic_facet_for_harmonic_waveforms() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "HARMONIC", "swe": "OFF"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 46
+    assert len(transport.queries) == 46
+    assert all(
+        channel.harmonics.availability is Availability.VALUE
+        for channel in snapshot.channels
+    )
+    harmonics = snapshot.channels[0].harmonics.value
+    assert harmonics.enabled.value is True
+    assert harmonics.configured_order.value == 8
+    assert harmonics.maximum_supported_order.value == 16
+    assert harmonics.components.availability is Availability.NOT_QUERIED
     assert transport.writes == []
     assert transport.byte_writes == []
 

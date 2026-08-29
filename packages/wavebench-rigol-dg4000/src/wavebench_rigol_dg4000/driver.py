@@ -13,6 +13,8 @@ from wavebench.instruments import (
     BasicWaveFacet,
     BurstFacet,
     DG4000DacBlock,
+    HarmonicCompleteness,
+    HarmonicFacet,
     Observed,
     OutputFacet,
     PulseFacet,
@@ -25,6 +27,7 @@ from wavebench.instruments import (
     SourceFieldId,
     SourceFrequencyMode,
     SourceGatePolarity,
+    SourceHarmonicPreset,
     SourceProtocolQueryRecord,
     SourcePulseHoldBasis,
     SourceQueryEffect,
@@ -713,6 +716,53 @@ class DG4202Source:
         except ValueError as exc:
             raise DataError(f"inconsistent DG4000 burst profile: {exc}") from exc
 
+    def _v2_harmonic_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> HarmonicFacet:
+        configured_order = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:HARM:ORDER?"),
+            field_name="harmonic configured order",
+        )
+        maximum_order = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:HARM:ORDER? MAX"),
+            field_name="harmonic maximum order",
+        )
+        if not configured_order.is_integer() or not maximum_order.is_integer():
+            raise DataError("harmonic order responses must be integers")
+        harmonic_type = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:HARM:TYPE?"),
+            field_name="harmonic type",
+            aliases={name: name for name in ("ALL", "EVEN", "ODD", "USER")},
+        )
+        not_queried = Observed.missing(
+            Availability.NOT_QUERIED,
+            SourceReasonCode.NOT_REQUESTED,
+        )
+        preset = (
+            Observed.value_of(
+                {
+                    "ALL": SourceHarmonicPreset.ALL,
+                    "EVEN": SourceHarmonicPreset.EVEN,
+                    "ODD": SourceHarmonicPreset.ODD,
+                }[harmonic_type]
+            )
+            if harmonic_type != "USER"
+            else not_queried
+        )
+        try:
+            return HarmonicFacet(
+                enabled=Observed.value_of(True),
+                completeness=Observed.value_of(HarmonicCompleteness.PARTIAL),
+                maximum_supported_order=Observed.value_of(int(maximum_order)),
+                components=not_queried,
+                configured_order=Observed.value_of(int(configured_order)),
+                preset=preset,
+            )
+        except ValueError as exc:
+            raise DataError(f"inconsistent DG4000 harmonic profile: {exc}") from exc
+
     @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
@@ -742,6 +792,7 @@ class DG4202Source:
             elif field_ref.field in {
                 SourceFieldId.BASIC,
                 SourceFieldId.BURST,
+                SourceFieldId.HARMONICS,
                 SourceFieldId.OUTPUT,
                 SourceFieldId.PULSE,
                 SourceFieldId.SWEEP,
@@ -752,7 +803,12 @@ class DG4202Source:
                 _validate_channel(target)
                 if (
                     field_ref.field
-                    in {SourceFieldId.BURST, SourceFieldId.PULSE, SourceFieldId.SWEEP}
+                    in {
+                        SourceFieldId.BURST,
+                        SourceFieldId.HARMONICS,
+                        SourceFieldId.PULSE,
+                        SourceFieldId.SWEEP,
+                    }
                     and item.phase is not SourceQueryPhase.FACET
                 ):
                     raise DataError("DG4000 Source V2 optional field must be a facet query")
@@ -804,6 +860,12 @@ class DG4202Source:
         )
         if not burst_channels <= channels:
             raise DataError("DG4000 Source V2 burst requires matching basic anchors")
+        harmonic_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.HARMONICS,
+            set(),
+        )
+        if not harmonic_channels <= channels:
+            raise DataError("DG4000 Source V2 harmonics require matching basic anchors")
 
     def execute_source_query_plan_v2(
         self,
@@ -841,6 +903,25 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.BURST:
                     assert channel is not None
                     value, query_count = self._v2_burst_facet(channel, plan)
+                elif field_ref.field is SourceFieldId.HARMONICS:
+                    assert channel is not None
+                    basic = before_basic.get(channel)
+                    if (
+                        basic is None
+                        or basic.waveform_kind.value is not SourceWaveformKind.OTHER
+                    ):
+                        records.append(
+                            SourceProtocolQueryRecord(
+                                item_id=item.item_id,
+                                effect=item.effect,
+                                outcome=SourceQueryItemOutcome.SKIPPED,
+                                query_count=0,
+                                reason_code=SourceReasonCode.INACTIVE_BY_ANCHOR,
+                            )
+                        )
+                        continue
+                    value = self._v2_harmonic_facet(channel, plan)
+                    query_count = 3
                 elif field_ref.field is SourceFieldId.SWEEP:
                     assert channel is not None
                     basic = before_basic.get(channel)

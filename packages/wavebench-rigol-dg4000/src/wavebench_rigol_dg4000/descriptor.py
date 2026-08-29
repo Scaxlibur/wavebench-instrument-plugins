@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from wavebench.instruments import (
     SOURCE_CONTRACT_VERSION,
+    ComponentAmplitudeKind,
+    HarmonicCompleteness,
     InstrumentDescriptor,
     SourceActivationPredicate,
     SourceActivationRule,
@@ -19,6 +21,8 @@ from wavebench.instruments import (
     SourceFeatureDirection,
     SourceFieldId,
     SourceFrequencyMode,
+    SourceHarmonicCapabilityProfile,
+    SourceHarmonicPreset,
     SourceOutputCapabilityProfile,
     SourcePulseCapabilityProfile,
     SourcePulseHoldBasis,
@@ -98,6 +102,19 @@ def _source_extensions() -> SourceDescriptorExtensions:
         delay_readable=True,
         transitions_readable=True,
     )
+    harmonic_profile = SourceHarmonicCapabilityProfile(
+        minimum_order=2,
+        maximum_order=16,
+        amplitude_kinds=(ComponentAmplitudeKind.ABSOLUTE_VPP,),
+        completeness_modes=(HarmonicCompleteness.PARTIAL,),
+        presets=(
+            SourceHarmonicPreset.ALL,
+            SourceHarmonicPreset.EVEN,
+            SourceHarmonicPreset.ODD,
+        ),
+        configured_order_readable=True,
+        preset_readable=True,
+    )
     features = tuple(
         SourceFeatureCapability(
             feature=feature,
@@ -111,6 +128,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
         for feature, profile in (
             (SourceFeature.BASIC, basic_profile),
             (SourceFeature.BURST, burst_profile),
+            (SourceFeature.HARMONICS, harmonic_profile),
             (SourceFeature.OUTPUT, output_profile),
             (SourceFeature.PULSE, pulse_profile),
             (SourceFeature.SWEEP, sweep_profile),
@@ -156,6 +174,23 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     required=True,
                 ),
                 SourceFacetQueryContract(
+                    feature=SourceFeature.HARMONICS,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.HARMONICS,),
+                    activation_any=(
+                        SourceActivationRule(
+                            predicates=(
+                                SourceActivationPredicate(
+                                    field=SourceAnchorField.WAVEFORM_KIND,
+                                    equals=SourceWaveformKind.OTHER,
+                                ),
+                            ),
+                        ),
+                    ),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=3,
+                ),
+                SourceFacetQueryContract(
                     feature=SourceFeature.OUTPUT,
                     scope=SourceFacetScope.CHANNEL,
                     fields=(SourceFieldId.OUTPUT,),
@@ -199,7 +234,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=16,
                 ),
             ),
-            max_queries=102,
+            max_queries=108,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),
