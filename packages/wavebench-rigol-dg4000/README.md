@@ -25,8 +25,9 @@
 - CH1/CH2 负载、极性、noise、sync、burst、modulation、marker 和 pulse-hold 的严格只读 profile；
 - CH1/CH2 sweep 状态、频率窗口、spacing/steps/time、hold/return、trigger 和 marker 的严格只读 profile；
 - 全局 counter 状态、输入配置、统计显示和条件式五元组测量结果的严格只读 profile；
-- `source.snapshot_v2` 类型化只读快照：CH1/CH2 Basic、输出开关、Sweep、Pulse、Burst，
-  以及不含逐阶分量的部分 Harmonic 状态；
+- `source.snapshot_v2` 类型化只读快照：CH1/CH2 Basic、输出开关、Sweep、Pulse、Burst、
+  不含逐阶分量的部分 Harmonic、Modulation state/type、部分 ARB、Noise Overlay、Sync，
+  全局 Counter，以及 CH1/CH2 参数化 Coupling；
 - 固定频率、函数、VPP 幅度、方波占空比和显式输出控制；
 - 只读任意波形 SCPI 能力探测；
 - 使用 WaveBench 公共 `DG4000DacBlock` 契约上传已校验的 DAC14 binary block。
@@ -50,6 +51,10 @@ FIX 且 sweep OFF，并明确把被覆盖的 volatile USER 波表视为不可恢
 M3/M5/M6 profile 都是只读上下文，不扩大 core 的 basic restore，也不承诺恢复 load、
 polarity、noise、sync、burst、modulation、marker、pulse hold、完整 sweep/counter profile
 或 volatile USER 内容。结论不外推到其它型号、固件、通道接线或 counter-ON 测量路径。
+
+Coupling、Noise Overlay 与 Sync 的后续写入只完成合同和恢复顺序设计，当前 descriptor
+仍只声明 READ。Coupling 需要双通道完整目标和恢复；Noise Overlay 配置成功不能绕过独立的
+硬峰值预算；Sync 配置与物理 Sync 端口 enable 必须拆分，enable 还需要端口模型和 A5 接线证据。
 
 示例使用文档保留地址：
 
@@ -123,6 +128,15 @@ PULSE、1 Vpp；第二次 V2 快照完成 52 次查询，并在两路返回 DUTY
 1 kHz、5 Vpp、0 V offset、FIX。全程未输出波形或采集 RTM2032；Sweep、Burst ON 和
 Harmonic 活跃态仍无本轮实机证据。
 
+同日的后续只读验收把 Counter、Modulation、部分 ARB、Coupling、Sync 与 Noise Overlay
+一并纳入同一个 Source V2 快照。第一次运行在旧的 `:COUP:CHAN:BASE?` 写法处超时；该会话
+立即停止并关闭，两路复读仍为 OFF、SIN、1 kHz、5 Vpp、0 V offset、FIX。驱动随后改用手册
+完整关键字 `:COUP:CHANNEL:BASE?`，DG 包全量测试保持 `213 passed`。最终验收快照完成
+67 次纯查询，锚点一致且 session health 前后均为 healthy；完整 harness 共 112 次查询，
+text/binary write request、transmitted、completed 与 instrument mutation 均为 0。Coupling
+三维均为 OFF、基准 CH1；两路 Sync 均为 ON/POSITIVE，Noise Overlay 均为 OFF/10%。
+最终两路状态未改变，会话健康关闭；RTM2032 未被访问、触发或采集。
+
 ## 开发验证
 
 ```bash
@@ -149,6 +163,7 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
   `00.01.14` 在 counter OFF 下完成三轮严格零写 M6 实机门，不自动启用 counter，
   不发送 `AUTO`/statistics clear，也不把离线验证的 counter-ON 测量解析写成实机结论。
 - `0.7.0`：要求 WaveBench `>=0.8.25`，新增纯查询 `source.snapshot_v2`；Basic、输出
-  开关、Sweep、Pulse、Burst 和部分 Harmonic facet 进入类型化快照。当前 OFF/SIN/FIX
-  实机状态完成 40 次纯查询验收，Pulse/1 Vpp/output-OFF 活跃态完成 52 次查询验收；
-  Sweep、Burst ON 和 Harmonic 活跃态仍只有既有 V1 或离线证据，不增加对应写 capability。
+  开关、Sweep、Pulse、Burst、部分 Harmonic、Modulation、部分 ARB、Noise Overlay、Sync、
+  Counter 与参数化 Coupling 进入类型化快照。当前 OFF/SIN/FIX 实机状态完成最终 67 次
+  纯查询验收，Pulse/1 Vpp/output-OFF 活跃态完成 52 次查询验收；Sweep、Burst ON 和
+  Harmonic 活跃态仍只有既有 V1 或离线证据，不增加对应写 capability。

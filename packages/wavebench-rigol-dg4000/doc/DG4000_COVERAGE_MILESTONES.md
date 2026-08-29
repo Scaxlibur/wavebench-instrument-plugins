@@ -19,14 +19,15 @@
 | M6 | **完成** | Counter 非破坏性只读 profile |
 | M7 | **部分完成** | Sweep Source V2 只读 facet 已实现；受控事务与触发未开始 |
 | M8 | **部分完成** | Pulse/Burst Source V2 只读 facet 已实现；Marker 与受控写未开始 |
-| M9 | 未开始 | 双通道 Coupling 原子事务 |
+| M9 | **部分完成** | Coupling 只读 facet 与写事务候选设计完成；生产写入未开始 |
 | M10 | 未开始 | 基础调制 AM/FM/PM/PWM |
 | M11 | **部分完成** | 部分 Harmonic 只读 facet 已实现；逐阶分量、高级调制和任意波格式未开始 |
 | M12 | 未开始 | 型号/通道验收矩阵与发布收口 |
 
 M0 完成不表示仪器功能增加。`0.7.0` 保留 M1–M5 的 DG4202 CH1/CH2 实机退出门和
 M6 的全局 counter-OFF 实机退出门，并增加 Source V2 纯查询适配。只有当前
-OFF/SIN/FIX 状态和 output-OFF Pulse/1 Vpp 状态完成新鲜 V2 实机读取；其余活跃 facet
+OFF/SIN/FIX 状态、output-OFF Pulse/1 Vpp 状态，以及包含 Coupling、Sync、Noise Overlay、
+Counter、Modulation 和部分 ARB 的最终 67-query 快照完成新鲜 V2 实机读取；其余活跃 facet
 仍按各节证据边界处理。
 
 ## 2. 所有阶段共同规则
@@ -256,8 +257,14 @@ frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无�
 - Burst：始终读取 state，OFF 时其余字段不适用，ON 时读取完整模式、时序和 trigger；
 - Harmonic：只读取 enabled、configured/max order 与 preset，completeness 固定为 `PARTIAL`，
   不读取或伪造逐阶 amplitude/phase。
+- Modulation 与 ARB：每通道读取 modulation state/type；ARB 只复用 Basic 锚点中的当前选择与频率，
+  不伪造 playback mode、sample rate、point count 或 digest。
+- Coupling：以 CH1/CH2 `CHANNEL_SET` 读取全局状态、基准通道及 amplitude/frequency/phase
+  三维 enabled 与 typed deviation。
+- Sync 与 Noise Overlay：每通道分别读取 enabled/polarity 和 enabled/percent scale。
+- Counter：复用 M6 严格 profile；OFF 时不发送 measurement query。
 
-最坏查询预算为 108。每个查询项均为 `PURE_READ`，identity、Basic 与 Output 在前后阶段
+最坏查询预算为 138。每个查询项均为 `PURE_READ`，identity、Basic 与 Output 在前后阶段
 复读；任何锚点漂移由 Core 标记，驱动不为快照发送 selector 或 write。
 
 2026-08-30 证据：DG4202 `00.01.14` 的 CH1/CH2 均为 OFF、SIN、1 kHz、5 Vpp、
@@ -267,6 +274,39 @@ session health 前后均为 healthy。随后使用既有 V1 事务将两路临�
 50% duty、0 s delay 和 1.9531 µs 双边沿。最终新会话确认两路恢复为 OFF、SIN、1 kHz、
 5 Vpp、0 V offset、FIX。该证据接受 Pulse 活跃 facet；Sweep、Burst ON 和 Harmonic
 活跃态仍未验收，不使用 raw SCPI 临时激活。
+
+同日后续验收在旧的 `:COUP:CHAN:BASE?` 写法处得到一次 timeout。验收没有重试该查询，
+会话立即关闭；新会话复读确认两路状态未变。驱动改用手册完整关键字
+`:COUP:CHANNEL:BASE?` 后，DG 包全量 `213 passed`。最终只读快照完成 67 queries，
+前后锚点一致、session health 为 healthy；完整 harness 共 112 queries，所有 text/binary
+write request、transmitted、completed 和 instrument mutation 均为 0。Coupling 三维均为
+OFF、基准 CH1；两路 Sync 均为 ON/POSITIVE，Noise Overlay 均为 OFF/10%。最终两路保持
+OFF、SIN、1 kHz、5 Vpp、0 V offset、FIX，session 健康关闭；RTM2032 未被访问或采集。
+
+## 10.2. Coupling、Noise Overlay 与 Sync 写能力候选
+
+**状态：设计完成；未实现、未注册 capability。** 通用合同由 Core Source RFC 的 R8 候选章节
+定义；本节只记录 DG4202 的协议顺序和退出门，不把设计文档当作写授权。
+
+- Coupling 沿用 `source.coupling_configure_v2` 名称，但首次稳定版前把尚未发布的
+  `channels + enabled` 请求替换为完整 target：全局 enabled、基准通道和三维 enabled + typed
+  deviation。CH1/CH2 与 relation closure 内的主输出必须先为 OFF。DG 适配器的安全顺序为
+  Coupling 全关、写 base、写三个 deviation、逐维恢复状态；postcondition 和失败恢复都读取完整
+  Coupling，且不自动恢复主输出 ON。
+- Noise Overlay 候选为 `source.noise_overlay_configure_v2`，request 包含 channel、enabled 和
+  percent scale。目标主输出必须为 OFF；DG 正常顺序为先 scale、后 enabled。失败恢复保持主输出
+  OFF，先禁用 Noise，再恢复 scale，最后按 baseline 恢复 enabled。手册的 `0–50 %` 不提供确定性
+  峰值，因此 Noise Overlay 启用后不能绕过 Core 的 `noise_overlay_bound_missing` 输出门。
+- Sync 必须拆成 `source.sync_configure_v2` 与 `source.sync_output_v2`。前者只在 Sync 端口 OFF 时
+  配置 polarity；后者的 disable 是 decrease-only，enable 会在独立物理 Sync 连接器发出信号。
+  当前 Core 还没有 Sync port ID、逻辑通道到物理端口的绑定或电气上界，因此 DG descriptor 不得
+  声明任何 Sync 写 capability。port ID／binding／closure 完成后才能先评审配置与 disable；enable
+  还需要电气上界和 A5。失败恢复只保证 Sync 端口 OFF 和 polarity 回读，不自动恢复 Sync ON。
+
+三项写入都要求 fresh consistent snapshot、单次字段写入、独立 postcondition、完整 baseline 和
+有界恢复。任一结果未知不重试；session poisoned 时只关闭连接。Coupling 与 Noise 的后续实机门
+至少要求 A4，Sync enable 需要真实 Sync→scope 接线的 A5。当前 CH1→CH1、CH2→CH2 主输出接线
+不能替代 Sync 物理端口证据。
 
 ## 11. M7 — Sweep 受控事务
 
@@ -291,9 +331,12 @@ immediate trigger 不允许重试。退出门包括输出 OFF 失败处理、边
 
 ## 13. M9 — 双通道 Coupling 原子事务
 
-**状态：未开始；P3。**
+**状态：只读 facet 与候选事务设计完成；生产写入未开始，P3。**
 
-覆盖 `COUPling:STATe`、base channel，以及 amplitude/frequency/phase coupling state 和 deviation。一次操作影响两路，因此必须使用双通道快照、单一设备锁和双通道恢复；任一通道状态不可读则零写入。
+覆盖 `COUPling:STATe`、base channel，以及 amplitude/frequency/phase coupling state 和 deviation。
+只读实现与 DG4202 当前三维 OFF／基准 CH1 实机回读已经通过。后续一次写操作影响两路，因此
+必须使用完整 target、双通道 snapshot、单一设备锁、relation closure 和双通道恢复；任一通道、
+dimension 或 graph 状态不可读则零写入。
 
 退出门：CH1/CH2 均 OFF 配置并回读，随后低风险闭环；故障注入覆盖每条写和恢复；恢复失败时两路都保持 OFF 并锁存。
 
@@ -333,10 +376,11 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 ## 17. 当前证据边界
 
 - 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门，以及 M6
-  全局 counter-OFF 零写入门；`0.7.0` 的 40-query 基线 Source V2 快照和 52-query
-  output-OFF Pulse 活跃快照也已通过。
+  全局 counter-OFF 零写入门；`0.7.0` 的 52-query output-OFF Pulse 活跃快照和最终
+  67-query 全 facet 基线快照也已通过。最终 harness 为 112 queries、0 text/binary writes。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
-- 尚未通过：M7–M12 的全部受控写退出门；Sweep、Burst ON、Harmonic 活跃 V2 facet 和
-  M6 counter-ON 五元组仍没有新鲜实机证据。
+- 尚未通过：M7–M12 的全部受控写退出门；Coupling、Noise Overlay 与 Sync 只有写候选设计，
+  未声明生产 capability。Sweep、Burst ON、Harmonic 活跃 V2 facet 和 M6 counter-ON 五元组
+  仍没有新鲜实机证据。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

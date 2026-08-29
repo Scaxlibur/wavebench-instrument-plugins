@@ -29,8 +29,9 @@ counter profile for input configuration, statistics display, and conditional fiv
 measurements, fixed frequency, function, VPP amplitude, square duty cycle, explicit output control,
 query-only arbitrary-wave capability probes, and upload of validated DAC14 blocks through
 WaveBench's public `DG4000DacBlock` contract. `source.snapshot_v2` adds typed read-only Basic,
-output-enabled, Sweep, Pulse, Burst, and partial Harmonic facets for CH1/CH2; the Harmonic facet
-does not claim per-order component readback.
+output-enabled, Sweep, Pulse, Burst, partial Harmonic, Modulation state/type, partial ARB,
+Noise Overlay, and Sync facets for CH1/CH2, plus the global Counter and parameterized CH1/CH2
+Coupling state. The Harmonic facet does not claim per-order component readback.
 
 WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
 
@@ -45,6 +46,12 @@ counter-OFF gate. The M3, M5, and M6 profiles are read-only contexts: they do no
 restoration or promise restoration of load, polarity, noise, sync, burst, modulation, marker,
 pulse hold, a complete sweep/counter profile, or volatile USER contents. No result is extrapolated
 to another model, firmware, channel wiring, or the counter-ON measurement path.
+
+Future Coupling, Noise Overlay, and Sync writes currently have contract and recovery-order designs
+only; the descriptor still declares READ only. Coupling requires a complete dual-channel target and
+restore, Noise Overlay configuration cannot bypass an independent hard-peak budget, and Sync
+configuration must remain separate from enabling a physical Sync connector. Sync enable also
+requires a physical-port model and A5 wiring evidence.
 
 The [DG4000 coverage matrix](doc/DG4000_COVERAGE_MATRIX_EN.md) maps vendor command domains to
 current public APIs, offline/hardware evidence, and high-risk commands denied by default. The
@@ -121,6 +128,17 @@ final session confirmed both channels restored to OFF, SIN, 1 kHz, 5 Vpp, 0 V of
 No waveform was emitted and RTM2032 was not captured. Active Sweep, Burst ON, and Harmonic remain
 outside this hardware evidence.
 
+A follow-up read-only gate on the same date added Counter, Modulation, partial ARB, Coupling, Sync,
+and Noise Overlay to one Source V2 snapshot. The first run timed out at the previous
+`:COUP:CHAN:BASE?` spelling; that session stopped immediately and closed, and both channels still
+read OFF, SIN, 1 kHz, 5 Vpp, 0 V offset, and FIX. The driver then used the manual's complete
+`:COUP:CHANNEL:BASE?` keyword and retained `213 passed` package tests. The accepted snapshot issued
+67 pure queries with matching anchors and healthy session state before and after. The complete
+harness issued 112 queries and recorded zero text/binary write requests, transmissions,
+completions, or instrument mutations. All three Coupling dimensions were OFF with CH1 as reference;
+both Sync outputs were ON/POSITIVE and both Noise Overlay states were OFF/10%. Final channel state
+was unchanged and the session closed healthy. RTM2032 was not accessed, triggered, or captured.
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an
@@ -144,7 +162,8 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
   the counter, sending `AUTO`/statistics clear, or presenting offline-only counter-ON parsing as a
   hardware result.
 - `0.7.0` requires WaveBench `>=0.8.25` and adds pure-query `source.snapshot_v2` with typed Basic,
-  output-enabled, Sweep, Pulse, Burst, and partial Harmonic facets. The current OFF/SIN/FIX state
-  passed a 40-query hardware read, and the output-OFF PULSE/1 Vpp state passed a 52-query read.
-  Active Sweep, Burst ON, and Harmonic retain only prior V1 or offline evidence, and no matching
-  write capability is declared.
+  output-enabled, Sweep, Pulse, Burst, partial Harmonic, Modulation, partial ARB, Noise Overlay,
+  Sync, Counter, and parameterized Coupling state. The current OFF/SIN/FIX state passed the final
+  67-query hardware read, and the output-OFF PULSE/1 Vpp state passed a 52-query read. Active Sweep,
+  Burst ON, and Harmonic retain only prior V1 or offline evidence, and no matching write capability
+  is declared.

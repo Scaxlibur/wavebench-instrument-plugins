@@ -48,16 +48,16 @@ SCPI shell，也不承诺覆盖手册中所有 DG4000 型号、固件或外部�
 |---|---|---|---|---|---|
 | 身份与错误队列 | `*IDN?`、`:SYSTem:ERRor?`、`:SYSTem:VERSion?` | `source.idn`、`source.errors`；写操作后可检查错误队列 | **外置实机通过**：DG4202 `00.01.14` 的 M1/M2/M4 前后错误队列与脱敏身份读取通过；精确 SCPI 有离线测试 | `errors()` 会读取并消费队列；未公开 SCPI version、状态寄存器或非消费型健康 API | 保持错误队列显式；若要扩展只读 health，先定义消费语义 |
 | IEEE 488.2 状态保存、复位与触发 | `*RCL`、`*RST`、`*SAV`、`*TRG` | 未公开 | **默认拒绝** | 恢复/保存会覆盖非易失状态；复位改变整机；`*TRG` 会启动 sweep/burst 输出 | 只在单独的受控事务设计、快照和人工确认后考虑 |
-| CH1/CH2 基础状态读取 | `OUTPut?`、`SOURce:FUNCtion?`、`FREQuency?`、`VOLTage?` / `UNIT?` / `OFFSet?`、`PHASe?`、`SWEep:STATe?`、`APPLy?`、方波 duty | `source.status` 保留 V1 结果；`source.snapshot_v2` 以类型化 Basic、输出开关和前后锚点返回双通道状态，频率模式由手册明确的 `SWEep:STATe?` 推导 | **外置实机通过**：V1 严格 profile 为 24 queries、0 writes；`0.7.0` 当前 OFF/SIN/FIX 状态完成 40 次纯查询，锚点一致且会话 healthy | Source V2 Output 暂不重复查询已由 `source.channel_profile` 覆盖的 load/polarity；快照不扩大自动恢复范围 | 保持 V1 写路由不变；新增字段先满足纯查询、预算和一致性合同 |
+| CH1/CH2 基础状态读取 | `OUTPut?`、`SOURce:FUNCtion?`、`FREQuency?`、`VOLTage?` / `UNIT?` / `OFFSet?`、`PHASe?`、`SWEep:STATe?`、`APPLy?`、方波 duty | `source.status` 保留 V1 结果；`source.snapshot_v2` 以类型化 Basic、输出开关和前后锚点返回双通道状态，频率模式由手册明确的 `SWEep:STATe?` 推导 | **外置实机通过**：V1 严格 profile 为 24 queries、0 writes；`0.7.0` 初始快照为 40 次纯查询，纳入全部新增 facet 后的最终快照为 67 次，均锚点一致且会话 healthy | Source V2 Output 暂不重复查询已由 `source.channel_profile` 覆盖的 load/polarity；快照不扩大自动恢复范围 | 保持 V1 写路由不变；新增字段先满足纯查询、预算和一致性合同 |
 | 固定频率 | `[:SOURce<n>]:FREQuency[:FIXed]`；扫频的 center/span/start/stop 同属 frequency 域 | `source.set_frequency`，以快照、`FIX` 切换、逐步回读、off-first 恢复和歧义锁存组成事务 | **外置实机通过**：DG4202 `00.01.14` CH1/CH2 的 FIX 写入、回读和新会话恢复通过 | `FREQ:MODE` 是当前 DG4202 兼容路径，未在这份手册的 frequency 列表中出现；M5 sweep profile 只读，不设置这些字段 | 保留「先切 FIX」的显式安全语义；任何 sweep 写入必须使用独立事务 |
 | 基础函数与方波占空比 | `FUNCtion[:SHAPe]`、`FUNCtion:SQUare:DCYCle`，以及 `APPLy:SINusoid/SQUare/RAMP/PULSe/NOISe` | `source.set_function`：SIN/SQU/RAMP/PULS/NOIS/DC；`source.set_square_duty_cycle` | **外置实机通过**：CH1/CH2 临时 SQU/37% duty、ON→OFF 和原 SIN 新会话恢复通过；其它函数仅离线 | 不公开 ramp symmetry、pulse 宽度/边沿、noise 参数、apply 组合写入或 function-specific 完整状态恢复 | 先为每种函数定义完整、可回读且可恢复的 profile，再增加 setter |
 | 幅度、单位、偏移与相位 | `VOLTage`、`UNIT`、`OFFSet`、`HIGH`、`LOW`、`PHASe` | `source.set_amplitude_vpp` 写 `UNIT VPP` + amplitude；状态读取 offset/phase；任意波上传内部写 offset | **外置实机通过**：M2 CH1/CH2 的 0.8 Vpp 事务与恢复、M4 CH1 2 Vpp 与 CH2 1 Vpp 模拟闭环；offset 公开 setter 仍无 | 没有公开 offset/phase/high/low setter；VPP 限制由核心 safety limit 约束，仪器实际范围仍依赖型号、频率与负载；DBM/VRMS 未公开 | 保持 VPP-first API；实现其它单位或电平前必须联动 load、范围和恢复策略 |
 | 输出开关 | `OUTPut[<n>][:STATe] ON|OFF` | `source.output`，只在用户明确请求时切换；任意波上传默认不打开输出 | **外置实机通过**：CH1/CH2 M2 的显式 ON→OFF 与恢复通过；M4 CH1/CH2 均有三角波闭环 | 输出会直接影响被测电路；不提供隐式 enable 或重试 | 保持独立 capability；所有更高层流程必须显式记录 output 目标态 |
-| 输出负载、极性、噪声和同步 | `OUTPut:IMPedance/LOAD`、`POLarity`、`NOISe:*`、`SYNC:*` | `source.channel_profile` 只读返回 load、polarity、noise state/scale、sync state/polarity | **外置实机通过**：M3 在 DG4202 `00.01.14` 的 CH1/CH2 完成 45 queries、0 text/binary writes；全量 profile 严格返回 | 这些字段只用于上下文和安全判断；不会由 basic restore 自动恢复，也没有公开 setter | 保持只读；未来写入必须联动 VPP safety、完整快照与恢复策略 |
-| 双通道耦合 | `COUPling:AMPL/FREQuency/PHASe`、base channel 与状态 | 未公开 | **未覆盖** | 设置一侧会影响另一通道，无法用当前单通道 snapshot 安全恢复 | **P2**：先设计双通道原子快照、恢复与 lockout |
+| 输出负载、极性、噪声和同步 | `OUTPut:IMPedance/LOAD`、`POLarity`、`NOISe:*`、`SYNC:*` | `source.channel_profile` 只读返回 load/polarity/noise/sync；`source.snapshot_v2` 另以类型化 Noise Overlay 与 Sync facet 返回 enabled、scale 和 polarity | **外置实机通过**：M3 为 45 queries、0 text/binary writes；最终 V2 快照为 67 次纯查询，两路 Noise Overlay OFF/10%、Sync ON/POSITIVE | basic restore 仍不恢复这些字段；没有公开 setter；Noise Overlay 启用后缺少确定性硬峰值边界，Sync enable 还缺物理端口模型与 A5 接线证据 | 写入候选已拆为 Noise OFF-only 配置、Sync 配置和独立物理端口 enable/disable；当前保持 READ only |
+| 双通道耦合 | `COUPling:AMPL/FREQuency/PHASe`、base channel 与状态 | `source.snapshot_v2` 以 `CHANNEL_SET` 返回全局状态、基准通道及 amplitude/frequency/phase 的 enabled + typed deviation | **外置实机通过（只读）**：最终 67-query 快照返回三维 OFF、基准 CH1；FakeTransport 覆盖混合三维、严格范围与零写 | 当前 relation graph 不可读，descriptor 不声明 CONFIGURE；尚未实现完整 target、双通道恢复或写故障矩阵 | Core 候选设计在首次稳定版前替换未发布的布尔 Coupling request；DG 写入仍等待双通道 OFF、完整恢复和 A4/A5 证据 |
 | 扫频与手动/外部触发 | `SWEep:*`、frequency start/stop/center/span、`*TRG` | `source.sweep_profile` 保留完整 V1 只读结果；`source.snapshot_v2` 在 frequency mode 为 Sweep 时复用同一严格 profile 并返回类型化 Sweep facet；无 setter/trigger | **M5 外置实机通过**：sweep OFF/ON 预置状态均有零写证据；V2 活跃分支有离线精确命令测试，当前 FIX 实机快照正确返回 `inactive_by_anchor` | restore 不恢复完整 Sweep；V2 活跃分支尚无新鲜实机证据；`*TRG`/immediate trigger 仍默认拒绝 | **P2**：受控写事务仍需完整快照、逐字段回读、外部测量、off-first 恢复与 trigger 不重试语义 |
 | Burst、Pulse、Marker、Harmonic | `BURSt:*`、`PULSe:*`、`MARKer:*`、`HARMonic:*` | `source.snapshot_v2` 可返回完整 Pulse facet、Burst OFF 或完整启用态 facet，以及 Harmonic enabled/configured order/maximum order/preset 的 `PARTIAL` facet；逐阶 amplitude/phase、Marker 写入和所有配置 API 未公开 | **Pulse 外置实机通过；其余部分离线验证**：CH1/CH2 在 output OFF、PULSE、1 Vpp 下完成 52-query V2 快照和完整 Pulse facet；Burst OFF 实机返回，Burst ON/Harmonic 活跃分支只有精确 FakeTransport 测试 | Harmonic 不声称分量列表；Burst ON/Harmonic 活跃态尚无外置 V2 实机证据；任何配置或 trigger 都缺少完整恢复事务 | 保持只读；活跃态由独立受控预置会话验收，不以 raw SCPI 绕过写 capability |
-| 调制 | `MOD:AM/FM/PM/ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK/PWM:*` | `source.channel_profile` 仅只读返回 modulation state/type；无模式专属 profile 或 setter | **部分只读上下文实机通过**：M3 在 CH1/CH2 返回 OFF/AM；具体调制参数和写入未覆盖 | state/type 查询不等于调制能力；外部源、码率、极性与 phase 有交叉依赖 | **P3**：按模式拆分 capability，不通过 raw-SCPI 绕过恢复策略 |
+| 调制 | `MOD:AM/FM/PM/ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK/PWM:*` | `source.channel_profile` 与 `source.snapshot_v2` 均只读返回 modulation state/type；无模式专属参数或 setter | **部分只读上下文实机通过**：最终 V2 快照在 CH1/CH2 返回 OFF/AM；具体调制参数和写入未覆盖 | state/type 查询不等于调制能力；外部源、码率、极性与 phase 有交叉依赖 | **P3**：按模式拆分 capability，不通过 raw-SCPI 绕过恢复策略 |
 | 任意波上传：DAC14 | `TRACe:DATA:DAC VOLATILE,<binary-block>` 或十进制 DAC 数据 | `source.arbitrary_upload` 只接收结构与样本均校验的 little-endian `DG4000DacBlock`；目标必须已 OFF、FIX、sweep OFF；binary 后逐项回读，失败锁存且明确 volatile USER 波表不可恢复 | **M4 外置实机通过**：CH1/CH2 均完成 output-off 上传、回读、错误队列、模拟频率/Vpp/形状闭环和恢复 | 没有公开十进制/浮点上传、DAC16、任意波编辑/读回；上传会覆盖 volatile 波形且切换到 USER | 保持当前窄协议面；新增格式前分别建立生命周期、回读与恢复证据 |
 | 任意波诊断查询 | 当前插件候选含 `FUNC?`、`FUNC:USER?` 与若干 `SOURce:*ARB*` / `SOURce:*DATA*` 查询 | `source.arbitrary_probe`：仅允许问号结尾的候选并记录每条命令后的错误队列 | **诊断探针**；FakeTransport 覆盖 | 手册把 waveform data 放在 `TRACe:DATA`，不是 `SOURce:DATA`；某些候选本来就可能得到 `-113`。`errors()` 消费队列，因此它不是非侵入健康读取 | 保留为显式排障工具；不要将候选接受/拒绝升级为功能能力或实机验收 |
 | 任意波编辑、浮点与 DAC16 传输 | `TRACe:DATA`、`DAC16`、`POINts`、`VALue`、`LOAD?`、interpolate | 未公开 | **未覆盖** | 不同数据格式、内存长度、自动选择 USER 与本机编辑规则不同；手册对 DAC16 给出固定分包条件 | **P2**：在明确 RAM/DDR 生命周期、字节序和回读语义后再实现 |
@@ -86,6 +86,9 @@ SOURce<n>:FUNCtion:SQUare:DCYCle?
 OUTPut<n>:LOAD?  OUTPut<n>:POLarity?
 OUTPut<n>:NOISe:STATe?  OUTPut<n>:NOISe:SCALe?
 OUTPut<n>:SYNC:STATe?  OUTPut<n>:SYNC:POLarity?
+COUPling[:STATe]?  COUPling:CHannel:BASE?
+COUPling:AMPLitude:DEViation?  COUPling:FREQuency:DEViation?
+COUPling:PHASe:DEViation?
 SOURce<n>:BURSt:STATe?  SOURce<n>:MOD:STATe?  SOURce<n>:MOD:TYPe?
 SOURce<n>:MARKer:STATe?  SOURce<n>:PULSe:HOLD?
 SOURce<n>:FREQuency:STARt?  SOURce<n>:FREQuency:STOP?
@@ -130,7 +133,7 @@ SOURce<n>:VOLTage:OFFSet <voltage>  SOURce<n>:FUNCtion[:SHAPe] USER
 
 ## 推荐路线
 
-1. **P2/P3：M7–M10 受控写事务。** 已完成的 Sweep/Pulse/Burst 只读 facet 不等于配置能力；写入仍按独立模型、快照、恢复与锁存实现。
+1. **P2/P3：M7–M10 受控写事务。** 已完成的 Sweep/Pulse/Burst/Coupling/Noise Overlay/Sync 只读 facet 不等于配置能力；Coupling、Noise Overlay 与 Sync 已有候选合同和恢复顺序，但尚未注册或实现写 capability。
 2. **P3：M11 高级功能。** Harmonic 当前仅为 `PARTIAL` 只读 facet；逐阶分量、高级调制与 DAC16 继续分开建模。
 3. **默认不做：文件系统、网络、内部状态槽、PA、restart/shutdown。** 它们需要与普通实验流程不同的权限模型和人工确认。
 
@@ -138,7 +141,7 @@ SOURce<n>:VOLTage:OFFSet <voltage>  SOURce<n>:FUNCtion[:SHAPe] USER
 
 - **手册侧**：本地 `vendor-local` 中文 DG4000 手册，仅用于内部审计；本文不复制手册正文或将它打进发行包。
 - **实现侧**：外置插件的 `driver.py`、`descriptor.py` 和 FakeTransport 测试；内建 fallback 的历史文档仅用于区分来源，不自动成为外置插件验收。
-- **外置实机侧**：DG4202 固件 `00.01.14` 已通过 M1–M5 双通道门和 M6 全局 counter-OFF 门；M4 CH1/CH2 的 DAC14 与 RTM2032 证据、M5 的 sweep OFF/ON 预置证据和 M6 的 counter-OFF 证据保持不变。`0.7.0` 在 CH1/CH2 OFF/SIN/FIX 状态完成 40-query Source V2 快照；随后在 output OFF、PULSE、1 Vpp 状态完成 52-query 快照和完整双通道 Pulse facet。两次快照均锚点一致、会话 healthy，最终两路恢复为 OFF/SIN/1 kHz/5 Vpp/0 V/FIX。Sweep、Burst ON、Harmonic 活跃 V2 分支和 counter-ON 五元组仍无新鲜实机证据。
+- **外置实机侧**：DG4202 固件 `00.01.14` 已通过 M1–M5 双通道门和 M6 全局 counter-OFF 门；M4 CH1/CH2 的 DAC14 与 RTM2032 证据、M5 的 sweep OFF/ON 预置证据和 M6 的 counter-OFF 证据保持不变。`0.7.0` 先在 output OFF、PULSE、1 Vpp 状态完成 52-query 快照和完整双通道 Pulse facet；最终 OFF/SIN/FIX 快照纳入 Counter、Modulation、部分 ARB、Coupling、Sync 与 Noise Overlay，共 67 次纯查询。完整 harness 为 112 queries、0 text/binary writes，锚点一致、会话 healthy；最终两路保持 OFF/SIN/1 kHz/5 Vpp/0 V/FIX。Sweep、Burst ON、Harmonic 活跃 V2 分支和 counter-ON 五元组仍无新鲜实机证据。
 - **历史任意波侧**：旧内建 DG4202 证据仅用于来源区分；当前外置插件已有独立 CH1/CH2 协议证据，不再用历史结果替代验收。
 
 只有明确控制过的命令、实际回读/外部测量和所需恢复检查，才能提升为「外置实机通过」。

@@ -19,14 +19,15 @@ Current version: `wavebench-rigol-dg4000 0.7.0`.
 | M6 | **Complete** | Non-destructive counter profile |
 | M7 | **Partial** | Source V2 Sweep read facet implemented; controlled transaction/trigger pending |
 | M8 | **Partial** | Source V2 Pulse/Burst read facets implemented; Marker and controlled writes pending |
-| M9 | Not started | Atomic dual-channel coupling |
+| M9 | **Partial** | Coupling read facet and candidate write transaction designed; production writes pending |
 | M10 | Not started | Basic AM/FM/PM/PWM modulation |
 | M11 | **Partial** | Partial Harmonic read facet implemented; components, advanced modulation, and formats pending |
 | M12 | Not started | Model/channel acceptance matrix and release convergence |
 
 M0 completion adds no instrument function. Version `0.7.0` preserves the M1-M5 DG4202 CH1/CH2
 hardware gates and global counter-OFF M6 gate while adding a pure-query Source V2 adapter. Only
-the current OFF/SIN/FIX state and output-OFF Pulse/1 Vpp state have fresh V2 hardware evidence;
+the current OFF/SIN/FIX state, output-OFF Pulse/1 Vpp state, and final 67-query snapshot containing
+Coupling, Sync, Noise Overlay, Counter, Modulation, and partial ARB have fresh V2 hardware evidence;
 the remaining active facets retain the boundaries defined below.
 
 ## 2. Rules shared by all milestones
@@ -271,8 +272,15 @@ capability.
   timing, and trigger fields while ON.
 - Harmonic reads enabled, configured/maximum order, and preset only. Completeness is explicitly
   `PARTIAL`; per-order amplitude/phase is neither read nor fabricated.
+- Modulation and ARB read per-channel modulation state/type and reuse only the Basic anchor's
+  current ARB selection/frequency; playback mode, sample rate, point count, and digest are not
+  fabricated.
+- Coupling reads one CH1/CH2 `CHANNEL_SET` with global state, reference channel, and typed enabled +
+  deviation for amplitude/frequency/phase.
+- Sync and Noise Overlay read enabled/polarity and enabled/percent scale per channel.
+- Counter reuses the strict M6 profile and sends no measurement query while OFF.
 
-The worst-case query budget is 108. Every item is `PURE_READ`; identity, Basic, and Output are read
+The worst-case query budget is 138. Every item is `PURE_READ`; identity, Basic, and Output are read
 before and after optional facets. Core reports anchor drift, and the driver sends no selector or
 write for this snapshot.
 
@@ -284,6 +292,47 @@ PULSE, 1 Vpp, and output OFF. A second V2 snapshot completed 52 queries and retu
 fresh final session verified both channels restored to OFF, SIN, 1 kHz, 5 Vpp, 0 V offset, and FIX.
 This accepts the active Pulse facet. Active Sweep, Burst ON, and Harmonic remain unaccepted and are
 not staged with raw SCPI.
+
+A follow-up gate on the same date received one timeout at the previous `:COUP:CHAN:BASE?` spelling.
+It did not retry that query, closed the session immediately, and verified unchanged channel state
+in a new session. After the driver switched to the manual's complete
+`:COUP:CHANNEL:BASE?` keyword, the DG package retained `213 passed`. The final read-only snapshot
+completed 67 queries with matching anchors and healthy session state. The complete harness issued
+112 queries and recorded zero text/binary write requests, transmissions, completions, or instrument
+mutations. All Coupling dimensions were OFF with CH1 as reference; both Sync states were
+ON/POSITIVE and both Noise Overlay states were OFF/10%. Both channels remained OFF, SIN, 1 kHz,
+5 Vpp, 0 V offset, and FIX, and the session closed healthy. RTM2032 was not accessed or captured.
+
+## 10.2. Candidate Coupling, Noise Overlay, and Sync writes
+
+**Status: designed; not implemented and no capability is registered.** The Core Source RFC R8
+candidate owns the generic contract. This section records only DG4202 protocol order and exit gates;
+it does not authorize writes.
+
+- Coupling retains the `source.coupling_configure_v2` name, but the unreleased
+  `channels + enabled` request is replaced before the first stable release with a complete target:
+  global enabled, reference channel, and enabled + typed deviation for all three dimensions. CH1,
+  CH2, and every main output in the relation closure must be OFF. The DG adapter's safe order is
+  Coupling all-off, base, three deviations, then per-dimension state. Postcondition and failure
+  restore read the complete Coupling state and never restore a main output ON.
+- Noise Overlay uses candidate `source.noise_overlay_configure_v2` with channel, enabled, and
+  percent scale. The target main output must be OFF; DG writes scale before enabled. Failure restore
+  keeps the main output OFF, disables Noise, restores scale, then restores baseline enabled. The
+  manual's `0-50%` scale is not a deterministic peak bound, so enabling Noise Overlay cannot bypass
+  Core's `noise_overlay_bound_missing` output gate.
+- Sync splits into `source.sync_configure_v2` and `source.sync_output_v2`. Configuration changes
+  polarity only while the Sync connector is OFF. Disable is decrease-only; enable emits on a
+  separate physical Sync connector. Core currently lacks a Sync port ID, logical-to-physical
+  binding, and electrical bounds, so the DG descriptor cannot declare any Sync write capability.
+  Configuration and disable can be reviewed only after port ID/binding/closure exists; enable also
+  requires electrical bounds and A5. Recovery verifies Sync OFF and polarity and never restores
+  Sync ON automatically.
+
+All three require a fresh consistent snapshot, one write per target field, independent
+postcondition, complete baseline, and bounded recovery. Unknown results are never retried, and a
+poisoned session is closed without further I/O. Coupling and Noise hardware promotion requires at
+least A4; Sync enable requires an A5 Sync-to-scope physical connection. Existing CH1-to-CH1 and
+CH2-to-CH2 main-output wiring is not Sync-port evidence.
 
 ## 11. M7 — Controlled sweep transaction
 
@@ -310,9 +359,13 @@ time-domain evidence.
 
 ## 13. M9 — Atomic dual-channel coupling
 
-**Status: not started; P3.**
+**Status: read facet and candidate transaction design complete; production writes not started, P3.**
 
-Cover `COUPling:STATe`, base channel, and amplitude/frequency/phase coupling states and deviations. One operation affects both channels, so it requires a two-channel snapshot, one device lock, and two-channel recovery. If either channel cannot be read, perform zero writes.
+Cover `COUPling:STATe`, base channel, and amplitude/frequency/phase coupling states and deviations.
+The read implementation and DG4202 hardware readback of all dimensions OFF with CH1 as reference
+have passed. A future write affects both channels, so it requires a complete target, two-channel
+snapshot, one device lock, relation closure, and two-channel recovery. If any channel, dimension,
+or graph state cannot be read, perform zero writes.
 
 Exit gate: configure/read back with CH1/CH2 OFF, then perform a low-risk closed loop. Inject faults into every write and recovery. A failed recovery leaves both outputs OFF and latches the device.
 
@@ -353,10 +406,12 @@ Final exit requires every public write capability to have normal-path, failure-m
 ## 17. Current evidence boundary
 
 - External-plugin hardware accepted: M1-M5 CH1/CH2 gates and the global M6 counter-OFF zero-write
-  gate on DG4202 firmware `00.01.14`; the `0.7.0` 40-query baseline Source V2 snapshot and 52-query
-  output-OFF active Pulse snapshot also pass.
+  gate on DG4202 firmware `00.01.14`; the `0.7.0` 52-query output-OFF active Pulse snapshot and final
+  67-query all-facet baseline snapshot also pass. The final harness issued 112 queries and zero
+  text/binary writes.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: all M7-M12 controlled-write exit gates. Active Sweep, Burst ON, Harmonic V2 facets,
-  and the M6 counter-ON tuple still lack fresh hardware evidence.
+- Not passed: all M7-M12 controlled-write exit gates. Coupling, Noise Overlay, and Sync have
+  candidate write designs only and declare no production capability. Active Sweep, Burst ON,
+  Harmonic V2 facets, and the M6 counter-ON tuple still lack fresh hardware evidence.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.
