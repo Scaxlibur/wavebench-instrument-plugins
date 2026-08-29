@@ -833,6 +833,37 @@ def test_source_v2_rejects_invalid_plan_before_io(
     assert transport.byte_writes == []
 
 
+@pytest.mark.parametrize(
+    ("sweep_state", "last_query", "blocked_query"),
+    (
+        ("OFF", ":COUN:COUP?", ":COUN:IMP?"),
+        ("ON", ":SOUR1:FREQ:STAR?", ":SOUR1:FREQ:STOP?"),
+    ),
+)
+def test_source_v2_deadline_stops_aggregate_reads_between_queries(
+    monkeypatch: pytest.MonkeyPatch,
+    sweep_state: str,
+    last_query: str,
+    blocked_query: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = sweep_state
+    _context, plan = _source_v2_plan(deadline_monotonic=100.0)
+
+    def monotonic() -> float:
+        return 101.0 if last_query in transport.queries else 99.0
+
+    monkeypatch.setattr("wavebench_rigol_dg4000.driver.time.monotonic", monotonic)
+
+    with pytest.raises(DataError, match="deadline has expired"):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert last_query in transport.queries
+    assert blocked_query not in transport.queries
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
 def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     item = descriptor()
 
@@ -846,6 +877,15 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert item.source_extensions is not None
     assert item.source_extensions.topology.input_ids == ("counter",)
     assert item.source_extensions.query_contract.max_queries == 138
+    _context, plan = _source_v2_plan()
+    assert len(plan.items) == 28
+    assert sum(query.max_queries for query in plan.items) == 138
+    assert next(
+        query for query in plan.items if query.fields[0].field is SourceFieldId.COUNTER
+    ).target.input_id == "counter"
+    assert next(
+        query for query in plan.items if query.fields[0].field is SourceFieldId.COUPLING
+    ).target.channels == (1, 2)
     arbitrary = next(
         feature
         for feature in item.source_extensions.features

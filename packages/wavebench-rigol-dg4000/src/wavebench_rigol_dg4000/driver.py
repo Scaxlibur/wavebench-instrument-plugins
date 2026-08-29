@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import time
 from dataclasses import dataclass, field
 from math import isclose, isfinite
@@ -139,6 +140,7 @@ _MODULATION_TYPE_ALIASES = {
     name: name
     for name in ("AM", "FM", "PM", "ASK", "FSK", "PSK", "PWM", "BPSK", "QPSK", "3FSK", "4FSK", "OSK")
 }
+_Query = Callable[[str], str]
 
 
 def _validate_channel(channel: int) -> None:
@@ -323,12 +325,23 @@ class DG4202Source:
     _identity: tuple[str, str, str, str] | None = field(default=None, init=False, repr=False)
     _configuration_writes_blocked: bool = field(default=False, init=False, repr=False)
 
-    def _query_finite_float(self, command: str, *, field_name: str) -> float:
-        return _finite_float(self.transport.query(command), field_name=field_name)
+    def _query_finite_float(
+        self,
+        command: str,
+        *,
+        field_name: str,
+        query: _Query | None = None,
+    ) -> float:
+        return _finite_float((query or self.transport.query)(command), field_name=field_name)
 
-    def _ensure_identity(self, *, write: bool = False) -> tuple[str, str, str, str]:
+    def _ensure_identity(
+        self,
+        *,
+        write: bool = False,
+        query: _Query | None = None,
+    ) -> tuple[str, str, str, str]:
         if self._identity is None:
-            self._identity = _parse_identity(self.transport.query("*IDN?"))
+            self._identity = _parse_identity((query or self.transport.query)("*IDN?"))
         if write and self._identity[1] not in _WRITE_ACCEPTED_MODELS:
             raise DataError(
                 f"DG4000 configuration writes are not accepted on model {self._identity[1]}"
@@ -374,10 +387,16 @@ class DG4202Source:
             aliases=_STATE_ALIASES,
         )
 
-    def _query_state(self, command: str, *, field_name: str) -> bool:
+    def _query_state(
+        self,
+        command: str,
+        *,
+        field_name: str,
+        query: _Query | None = None,
+    ) -> bool:
         return (
             _normalize_enum(
-                self.transport.query(command),
+                (query or self.transport.query)(command),
                 field_name=field_name,
                 aliases=_STATE_ALIASES,
             )
@@ -1226,6 +1245,9 @@ class DG4202Source:
 
         self._validate_v2_query_plan(plan)
         with self._io_lock:
+            def plan_query(command: str) -> str:
+                return self._v2_query(plan, command)
+
             records: list[SourceProtocolQueryRecord] = []
             total_queries = 0
             before_basic: dict[int, BasicWaveFacet] = {}
@@ -1278,7 +1300,7 @@ class DG4202Source:
                     assert input_id is not None
                     value = self._v2_counter_facet(
                         input_id,
-                        self.get_counter_profile(),
+                        self._get_counter_profile(query=plan_query),
                     )
                     query_count = 11 if value.enabled.value else 10
                 elif field_ref.field is SourceFieldId.COUPLING:
@@ -1332,11 +1354,9 @@ class DG4202Source:
                             )
                         )
                         continue
-                    if time.monotonic() > plan.deadline_monotonic:
-                        raise DataError("DG4000 Source V2 query plan deadline has expired")
-                    value = self._v2_sweep_facet(self.get_sweep_profile(channel))
-                    if time.monotonic() > plan.deadline_monotonic:
-                        raise DataError("DG4000 Source V2 query plan deadline has expired")
+                    value = self._v2_sweep_facet(
+                        self._get_sweep_profile(channel, query=plan_query)
+                    )
                     query_count = 16
                 else:
                     assert field_ref.field is SourceFieldId.PULSE
@@ -1686,67 +1706,99 @@ class DG4202Source:
             )
 
     def get_sweep_profile(self, channel: int) -> SourceSweepProfile:
+        return self._get_sweep_profile(channel, query=self.transport.query)
+
+    def _get_sweep_profile(
+        self,
+        channel: int,
+        *,
+        query: _Query,
+    ) -> SourceSweepProfile:
         _validate_channel(channel)
         with self._io_lock:
-            self._ensure_identity()
+            self._ensure_identity(query=query)
             enabled = self._query_state(
-                f":SOUR{channel}:SWE:STAT?", field_name="sweep state"
+                f":SOUR{channel}:SWE:STAT?",
+                field_name="sweep state",
+                query=query,
             )
             start_hz = self._query_finite_float(
-                f":SOUR{channel}:FREQ:STAR?", field_name="sweep start frequency"
+                f":SOUR{channel}:FREQ:STAR?",
+                field_name="sweep start frequency",
+                query=query,
             )
             stop_hz = self._query_finite_float(
-                f":SOUR{channel}:FREQ:STOP?", field_name="sweep stop frequency"
+                f":SOUR{channel}:FREQ:STOP?",
+                field_name="sweep stop frequency",
+                query=query,
             )
             center_hz = self._query_finite_float(
-                f":SOUR{channel}:FREQ:CENT?", field_name="sweep center frequency"
+                f":SOUR{channel}:FREQ:CENT?",
+                field_name="sweep center frequency",
+                query=query,
             )
             span_hz = self._query_finite_float(
-                f":SOUR{channel}:FREQ:SPAN?", field_name="sweep span"
+                f":SOUR{channel}:FREQ:SPAN?",
+                field_name="sweep span",
+                query=query,
             )
             spacing = _normalize_enum(
-                self.transport.query(f":SOUR{channel}:SWE:SPAC?"),
+                query(f":SOUR{channel}:SWE:SPAC?"),
                 field_name="sweep spacing",
                 aliases=_SWEEP_SPACING_ALIASES,
             )
             steps_raw = self._query_finite_float(
-                f":SOUR{channel}:SWE:STEP?", field_name="sweep steps"
+                f":SOUR{channel}:SWE:STEP?",
+                field_name="sweep steps",
+                query=query,
             )
             if not steps_raw.is_integer():
                 raise DataError("sweep steps response must be an integer")
             steps = int(steps_raw)
             sweep_time_s = self._query_finite_float(
-                f":SOUR{channel}:SWE:TIME?", field_name="sweep time"
+                f":SOUR{channel}:SWE:TIME?",
+                field_name="sweep time",
+                query=query,
             )
             start_hold_s = self._query_finite_float(
-                f":SOUR{channel}:SWE:HTIM:STAR?", field_name="sweep start hold"
+                f":SOUR{channel}:SWE:HTIM:STAR?",
+                field_name="sweep start hold",
+                query=query,
             )
             stop_hold_s = self._query_finite_float(
-                f":SOUR{channel}:SWE:HTIM:STOP?", field_name="sweep stop hold"
+                f":SOUR{channel}:SWE:HTIM:STOP?",
+                field_name="sweep stop hold",
+                query=query,
             )
             return_time_s = self._query_finite_float(
-                f":SOUR{channel}:SWE:RTIM?", field_name="sweep return time"
+                f":SOUR{channel}:SWE:RTIM?",
+                field_name="sweep return time",
+                query=query,
             )
             trigger_source = _normalize_enum(
-                self.transport.query(f":SOUR{channel}:SWE:TRIG:SOUR?"),
+                query(f":SOUR{channel}:SWE:TRIG:SOUR?"),
                 field_name="sweep trigger source",
                 aliases=_SWEEP_TRIGGER_SOURCE_ALIASES,
             )
             trigger_slope = _normalize_enum(
-                self.transport.query(f":SOUR{channel}:SWE:TRIG:SLOP?"),
+                query(f":SOUR{channel}:SWE:TRIG:SLOP?"),
                 field_name="sweep trigger slope",
                 aliases=_EDGE_ALIASES,
             )
             trigger_out = _normalize_enum(
-                self.transport.query(f":SOUR{channel}:SWE:TRIG:TRIGOUT?"),
+                query(f":SOUR{channel}:SWE:TRIG:TRIGOUT?"),
                 field_name="sweep trigger output",
                 aliases=_TRIGGER_OUT_ALIASES,
             )
             marker_enabled = self._query_state(
-                f":SOUR{channel}:MARK:STAT?", field_name="marker state"
+                f":SOUR{channel}:MARK:STAT?",
+                field_name="marker state",
+                query=query,
             )
             marker_frequency_hz = self._query_finite_float(
-                f":SOUR{channel}:MARK:FREQ?", field_name="marker frequency"
+                f":SOUR{channel}:MARK:FREQ?",
+                field_name="marker frequency",
+                query=query,
             )
             try:
                 return SourceSweepProfile(
@@ -1772,46 +1824,61 @@ class DG4202Source:
                 raise DataError(f"inconsistent DG4000 sweep profile: {exc}") from exc
 
     def get_counter_profile(self) -> SourceCounterProfile:
+        return self._get_counter_profile(query=self.transport.query)
+
+    def _get_counter_profile(self, *, query: _Query) -> SourceCounterProfile:
         with self._io_lock:
-            self._ensure_identity()
-            enabled = self._query_state(":COUN?", field_name="counter state")
+            self._ensure_identity(query=query)
+            enabled = self._query_state(
+                ":COUN?",
+                field_name="counter state",
+                query=query,
+            )
             measurement = (
-                _parse_counter_measurement(self.transport.query(":COUN:MEAS?"))
+                _parse_counter_measurement(query(":COUN:MEAS?"))
                 if enabled
                 else None
             )
             coupling = _normalize_enum(
-                self.transport.query(":COUN:COUP?"),
+                query(":COUN:COUP?"),
                 field_name="counter coupling",
                 aliases={"AC": "AC", "DC": "DC"},
             )
             impedance_ohm = _parse_counter_impedance(
-                self.transport.query(":COUN:IMP?")
+                query(":COUN:IMP?")
             )
             attenuation_text = _normalize_enum(
-                self.transport.query(":COUN:ATT?"),
+                query(":COUN:ATT?"),
                 field_name="counter attenuation",
                 aliases={"1": "1", "1X": "1", "10": "10", "10X": "10"},
             )
             gate_time = _normalize_enum(
-                self.transport.query(":COUN:GATE?"),
+                query(":COUN:GATE?"),
                 field_name="counter gate time",
                 aliases=_COUNTER_GATE_TIME_ALIASES,
             )
             high_frequency_rejection_enabled = self._query_state(
-                ":COUN:HF?", field_name="counter high-frequency rejection state"
+                ":COUN:HF?",
+                field_name="counter high-frequency rejection state",
+                query=query,
             )
             trigger_level_v = self._query_finite_float(
-                ":COUN:LEVE?", field_name="counter trigger level"
+                ":COUN:LEVE?",
+                field_name="counter trigger level",
+                query=query,
             )
             sensitivity_percent = self._query_finite_float(
-                ":COUN:SENS?", field_name="counter sensitivity"
+                ":COUN:SENS?",
+                field_name="counter sensitivity",
+                query=query,
             )
             statistics_enabled = self._query_state(
-                ":COUN:STATI:STAT?", field_name="counter statistics state"
+                ":COUN:STATI:STAT?",
+                field_name="counter statistics state",
+                query=query,
             )
             statistics_display = _normalize_enum(
-                self.transport.query(":COUN:STATI:DISP?"),
+                query(":COUN:STATI:DISP?"),
                 field_name="counter statistics display",
                 aliases=_COUNTER_STATISTICS_DISPLAY_ALIASES,
             )
