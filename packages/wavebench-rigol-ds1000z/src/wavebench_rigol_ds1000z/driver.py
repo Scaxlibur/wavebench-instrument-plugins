@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 from wavebench.errors import DataError, InstrumentError, OperationTimeout
-from wavebench.instruments.models import WaveformData, WaveformHeader
+from wavebench.instruments import WaveformData, WaveformHeader
 from wavebench.transport.base import InstrumentTransport
 
 _RAW_POINTS_ALIASES = {"MAX", "DMAX"}
