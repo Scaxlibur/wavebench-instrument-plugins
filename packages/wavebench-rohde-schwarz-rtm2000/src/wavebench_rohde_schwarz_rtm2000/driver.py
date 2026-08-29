@@ -12,7 +12,7 @@ import time
 
 import numpy as np
 
-from wavebench.errors import DataError, InstrumentError, OperationTimeout
+from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench.instruments import (
     ScopeAcquisitionStatus,
     ScopeAverageCaptureRequest,
@@ -22,23 +22,38 @@ from wavebench.instruments import (
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
     ScopeDigitalChannelStatus,
+    ScopeDigitalChannelStatusV2,
+    ScopeDigitalPodStatusV2,
+    ScopeDigitalSharedStatusV2,
     ScopeDigitalWaveform,
     ScopeDigitalWaveformRequest,
     ScopeEdgeTriggerSnapshot,
     ScopeFftStatus,
+    ScopeFftStatusV2,
     ScopeHealthSnapshot,
     ScopeHistoryTimestamp,
     ScopeHistoryTimestamps,
     ScopeMeasurementStatistics,
+    ScopeMeasurementStatisticsRequestV2,
+    ScopeMeasurementStatisticsV2,
     ScopeIdentitySnapshot,
     ScopeProbeSnapshot,
     ScopeSnapshot,
+    ScopeSnapshotFieldV2,
+    ScopeSnapshotV2,
+    ScopeChannelInputStateV2,
     ScopeTimebaseSnapshot,
     ScopeWaveformMetadataSnapshot,
     WaveformData,
     WaveformHeader,
 )
-from wavebench.transport.base import InstrumentTransport
+from wavebench.transport import InstrumentTransport
+
+from .profiles import (
+    RTM2000_FFT_STATUS_V2_UNAVAILABLE_FIELDS,
+    RTM2000_SNAPSHOT_V2_READABLE_FIELDS,
+    RTM2000_SNAPSHOT_V2_UNAVAILABLE_FIELDS,
+)
 
 
 _DECIMAL_INTEGER = re.compile(r"[+-]?[0-9]+")
@@ -514,6 +529,30 @@ class RTM2032Scope:
             )
 
     @_serialized_io
+    def get_channel_input_state_v2(self, channel: int) -> ScopeChannelInputStateV2:
+        _validate_rtm2032_channel(channel)
+        command = f"CHANnel{channel}:COUPling?"
+        coupling = _parse_token(
+            self.transport.query(command),
+            command=command,
+            allowed=frozenset({"AC", "ACL", "DC", "DCL", "GND"}),
+        )
+        portable_coupling, termination = {
+            "AC": ("ac", "50_ohm"),
+            "ACL": ("ac", "high_z"),
+            "DC": ("dc", "50_ohm"),
+            "DCL": ("dc", "high_z"),
+            "GND": ("gnd", "unknown"),
+        }[coupling]
+        return ScopeChannelInputStateV2(
+            channel=channel,
+            coupling=portable_coupling,
+            termination=termination,
+            impedance_ohm=None,
+            unavailable_fields=("impedance_ohm",),
+        )
+
+    @_serialized_io
     def get_digital_status(self, channel: int) -> ScopeDigitalChannelStatus:
         _validate_rtm2000_digital_channel(channel)
         with self._io_lock:
@@ -593,6 +632,34 @@ class RTM2032Scope:
                     command=f"{prefix}:LABel:STATe?",
                 ),
             )
+
+    @_serialized_io
+    def get_digital_status_v2(self, channel: int) -> ScopeDigitalChannelStatusV2:
+        status = self.get_digital_status(channel)
+        return ScopeDigitalChannelStatusV2(
+            channel=status.channel,
+            displayed=status.displayed,
+            position_div=status.position_div,
+            label=status.label,
+            label_enabled=status.label_enabled,
+            activity=status.activity,
+            technology=status.technology,
+            hysteresis=status.hysteresis,
+            pod=ScopeDigitalPodStatusV2(
+                start_channel=status.group_start_channel,
+                stop_channel=status.group_stop_channel,
+                threshold_v=status.threshold_v,
+                threshold_scope=None,
+            ),
+            shared=ScopeDigitalSharedStatusV2(
+                module_present=True,
+                size=status.size,
+            ),
+            unavailable_fields=(
+                "pod.threshold_scope",
+                "shared.timing_calibration_s",
+            ),
+        )
 
     @_serialized_io
     def get_digital_waveform(
@@ -1070,6 +1137,47 @@ class RTM2032Scope:
             )
 
     @_serialized_io
+    def get_measurement_statistics_v2(
+        self,
+        request: ScopeMeasurementStatisticsRequestV2,
+    ) -> ScopeMeasurementStatisticsV2:
+        if not isinstance(request, ScopeMeasurementStatisticsRequestV2):
+            raise TypeError("RTM2000 measurement statistics V2 request has an invalid type")
+        if request.selector.mode != "slot" or request.selector.slot not in {1, 2, 3, 4}:
+            raise ValueError("RTM2000 measurement statistics V2 supports slots 1 through 4")
+        if request.include_buffer:
+            raise ValueError("RTM2000 measurement statistics V2 does not support buffers")
+        status = self.get_measurement_statistics(
+            request.selector.slot,
+            configured_slot=True,
+        )
+        values = (
+            status.actual,
+            status.average,
+            status.standard_deviation,
+            status.minimum,
+            status.maximum,
+        )
+        if any(value is None for value in values):
+            raise DataError("RTM2000 measurement statistics V2 requires finite aggregate values")
+        actual, average, standard_deviation, minimum, maximum = values
+        assert actual is not None
+        assert average is not None
+        assert standard_deviation is not None
+        assert minimum is not None
+        assert maximum is not None
+        return ScopeMeasurementStatisticsV2(
+            selector=request.selector,
+            category=status.category,
+            actual=actual,
+            average=average,
+            standard_deviation=standard_deviation,
+            minimum=minimum,
+            maximum=maximum,
+            waveform_count=status.waveform_count,
+        )
+
+    @_serialized_io
     def get_math_waveform_metadata(self, math_index: int) -> ScopeDerivedWaveformMetadata:
         if math_index not in {1, 2, 3, 4}:
             raise ValueError("RTM2000 math waveform index must be 1, 2, 3, or 4")
@@ -1113,6 +1221,22 @@ class RTM2032Scope:
                     command=f"{prefix}:SRATe?",
                 ),
             )
+
+    @_serialized_io
+    def get_fft_status_v2(
+        self,
+        math_index: int,
+        *,
+        configured_fft: bool,
+    ) -> ScopeFftStatusV2:
+        status = self.get_fft_status(math_index, configured_fft=configured_fft)
+        return ScopeFftStatusV2(
+            math_index=status.math_index,
+            average_complete=status.average_complete,
+            resolution_bandwidth_hz=status.resolution_bandwidth_hz,
+            sample_rate_hz=status.sample_rate_hz,
+            unavailable_fields=RTM2000_FFT_STATUS_V2_UNAVAILABLE_FIELDS,
+        )
 
     @_serialized_io
     def get_reference_waveform_metadata(
@@ -1232,6 +1356,24 @@ class RTM2032Scope:
                 waveform=self.waveform_metadata_snapshot(channel),
                 trigger=self.edge_trigger_snapshot(),
             )
+
+    @_serialized_io
+    def get_snapshot_v2(
+        self,
+        channel: int,
+        *,
+        fields: tuple[ScopeSnapshotFieldV2, ...],
+    ) -> ScopeSnapshotV2:
+        _validate_rtm2032_channel(channel)
+        if fields != RTM2000_SNAPSHOT_V2_READABLE_FIELDS:
+            raise ConfigError(
+                "RTM2000 snapshot V2 supports only its descriptor's exact readable field profile"
+            )
+        identity = self.identity_snapshot()
+        return ScopeSnapshotV2(
+            identity=identity,
+            unavailable_fields=RTM2000_SNAPSHOT_V2_UNAVAILABLE_FIELDS,
+        )
 
     @_serialized_io
     def health_snapshot(self) -> RTM2000HealthSnapshot:

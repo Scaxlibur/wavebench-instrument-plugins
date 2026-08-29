@@ -5,25 +5,33 @@ from threading import Event, Thread
 import numpy as np
 import pytest
 
-from wavebench.errors import DataError, InstrumentError, OperationTimeout
+from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import (
     ScopeAcquisitionStatus,
+    ScopeAnalogChannelSnapshot,
     ScopeAverageCaptureRequest,
     ScopeAverageConfiguration,
-    ScopeAnalogChannelSnapshot,
-    ScopeEdgeTriggerSnapshot,
-    ScopeHealthSnapshot,
-    ScopeHistoryTimestamp,
-    ScopeHistoryTimestamps,
-    ScopeMeasurementStatistics,
+    ScopeChannelInputStateV2,
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
     ScopeDigitalChannelStatus,
+    ScopeDigitalChannelStatusV2,
+    ScopeDigitalPodStatusV2,
+    ScopeDigitalSharedStatusV2,
     ScopeDigitalWaveformRequest,
+    ScopeEdgeTriggerSnapshot,
     ScopeFftStatus,
+    ScopeFftStatusV2,
+    ScopeHealthSnapshot,
+    ScopeHistoryTimestamp,
+    ScopeHistoryTimestamps,
     ScopeIdentitySnapshot,
+    ScopeMeasurementSelector,
+    ScopeMeasurementStatistics,
+    ScopeMeasurementStatisticsRequestV2,
+    ScopeMeasurementStatisticsV2,
     ScopeProbeSnapshot,
     ScopeSnapshot,
     ScopeTimebaseSnapshot,
@@ -43,6 +51,11 @@ from wavebench_rohde_schwarz_rtm2000.driver import (
     RTM2000WaveformMetadataSnapshot,
     RTM2032Scope,
     parse_waveform_header,
+)
+from wavebench_rohde_schwarz_rtm2000.profiles import (
+    RTM2000_FFT_STATUS_V2_READABLE_FIELDS,
+    RTM2000_SCOPE_EXTENSIONS,
+    RTM2000_SNAPSHOT_V2_READABLE_FIELDS,
 )
 
 
@@ -271,6 +284,28 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
     assert descriptor.validate_options({}) == {"long_waveform_timeout_ms": 300_000}
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.distribution == "wavebench-rohde-schwarz-rtm2000"
+    assert descriptor.version == "0.13.0"
+    assert descriptor.wavebench_min_version == "0.8.25"
+    assert len(descriptor.capabilities) == 24
+    assert {
+        "scope.channel_input_state_v2",
+        "scope.digital_status_v2",
+        "scope.snapshot_v2",
+        "scope.measurement_statistics_v2",
+        "scope.fft_status_v2",
+    } <= set(descriptor.capabilities)
+    assert descriptor.scope_extensions is RTM2000_SCOPE_EXTENSIONS
+    assert descriptor.scope_extensions.snapshot_profile_v2.readable_fields == (
+        RTM2000_SNAPSHOT_V2_READABLE_FIELDS
+    )
+    assert descriptor.scope_extensions.snapshot_profile_v2.max_queries == 2
+    statistics_profile = descriptor.scope_extensions.measurement_statistics_profile_v2
+    assert statistics_profile.slot_range == (1, 4)
+    assert statistics_profile.max_queries == 7
+    assert descriptor.scope_extensions.fft_status_profile_v2.readable_fields == (
+        RTM2000_FFT_STATUS_V2_READABLE_FIELDS
+    )
+    assert descriptor.scope_extensions.fft_status_profile_v2.max_queries == 3
     assert driver.transport is transport
     assert driver.check_errors_after_ops is False
     assert transport_opens == 1
@@ -1891,3 +1926,276 @@ def test_screenshot_and_error_queue_fail_closed():
     with pytest.raises(InstrumentError, match="error queue is not empty"):
         RTM2032Scope(transport).assert_no_errors()
     assert len(transport.queries) == 16
+
+
+@pytest.mark.parametrize(
+    ("response", "coupling", "termination"),
+    [
+        ("AC", "ac", "50_ohm"),
+        ("ACL", "ac", "high_z"),
+        ("DC", "dc", "50_ohm"),
+        ("DCL", "dc", "high_z"),
+        ("GND", "gnd", "unknown"),
+    ],
+)
+def test_channel_input_state_v2_maps_portable_coupling_without_writes(
+    response,
+    coupling,
+    termination,
+):
+    command = "CHANnel2:COUPling?"
+    transport = FakeTransport(responses={command: response})
+
+    assert RTM2032Scope(transport).get_channel_input_state_v2(2) == (
+        ScopeChannelInputStateV2(
+            channel=2,
+            coupling=coupling,
+            termination=termination,
+            impedance_ohm=None,
+            unavailable_fields=("impedance_ohm",),
+        )
+    )
+    assert transport.queries == [command]
+    assert transport.writes == []
+
+
+def test_digital_status_v2_reuses_verified_b1_status_without_inventing_fields():
+    responses = {
+        "*OPT?": "K15,B1",
+        "DIGital5:CURRENT:STATE:MINimum?": "0",
+        "DIGital5:CURRENT:STATE:MAXimum?": "1",
+        "DIGital5:DISPLAY?": "ON",
+        "DIGital5:TECHnology?": "TTL",
+        "DIGital5:THReshold?": "1.4",
+        "DIGital5:THCoupling?": "OFF",
+        "DIGital5:Hysteresis?": "NORM",
+        "DIGital5:DESKew?": "2e-9",
+        "DIGital5:SIZE?": "SMAL",
+        "DIGital5:POSITION?": "2.5",
+        "DIGital5:LABel?": '"DATA"',
+        "DIGital5:LABel:STATe?": "1",
+    }
+    transport = FakeTransport(responses=responses)
+
+    assert RTM2032Scope(transport).get_digital_status_v2(5) == (
+        ScopeDigitalChannelStatusV2(
+            channel=5,
+            displayed=True,
+            position_div=2.5,
+            label="DATA",
+            label_enabled=True,
+            activity="TOGGLE",
+            technology="TTL",
+            hysteresis="NORMAL",
+            pod=ScopeDigitalPodStatusV2(
+                start_channel=4,
+                stop_channel=7,
+                threshold_v=1.4,
+            ),
+            shared=ScopeDigitalSharedStatusV2(
+                module_present=True,
+                size="SMALL",
+            ),
+            unavailable_fields=(
+                "pod.threshold_scope",
+                "shared.timing_calibration_s",
+            ),
+        )
+    )
+    assert transport.queries == list(responses)
+    assert transport.writes == []
+
+
+def test_snapshot_v2_is_identity_only_and_matches_descriptor_query_budget():
+    transport = FakeTransport(
+        responses={
+            "*IDN?": "Rohde&Schwarz,RTM2032,123,3.5",
+            "*OPT?": "B1,K15",
+        }
+    )
+    result = RTM2032Scope(transport).get_snapshot_v2(
+        1,
+        fields=RTM2000_SNAPSHOT_V2_READABLE_FIELDS,
+    )
+
+    assert result.identity == ScopeIdentitySnapshot(
+        "Rohde&Schwarz",
+        "RTM2032",
+        "123",
+        "3.5",
+        ("B1", "K15"),
+    )
+    RTM2000_SCOPE_EXTENSIONS.snapshot_profile_v2.validate_result(result, channel=1)
+    assert transport.queries == ["*IDN?", "*OPT?"]
+    assert transport.writes == []
+
+
+def test_snapshot_v2_rejects_non_profile_fields_without_io():
+    transport = FakeTransport()
+
+    with pytest.raises(ConfigError, match="exact readable field profile"):
+        RTM2032Scope(transport).get_snapshot_v2(
+            1,
+            fields=(*RTM2000_SNAPSHOT_V2_READABLE_FIELDS, "health.status_byte"),
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+def test_measurement_statistics_v2_maps_complete_slot_aggregates():
+    responses = {
+        "MEASurement2:CATegory?": "AMPTime",
+        "MEASurement2:RESult:ACTual?": "1.0",
+        "MEASurement2:RESult:AVG?": "0.9",
+        "MEASurement2:RESult:STDDev?": "0.1",
+        "MEASurement2:RESult:NPEak?": "0.7",
+        "MEASurement2:RESult:PPEak?": "1.1",
+        "MEASurement2:RESult:WFMCount?": "42",
+    }
+    transport = FakeTransport(responses=responses)
+    request = ScopeMeasurementStatisticsRequestV2(
+        selector=ScopeMeasurementSelector(slot=2),
+        configured=True,
+    )
+
+    result = RTM2032Scope(transport).get_measurement_statistics_v2(request)
+
+    assert result == ScopeMeasurementStatisticsV2(
+        selector=request.selector,
+        category="AMPTIME",
+        actual=1.0,
+        average=0.9,
+        standard_deviation=0.1,
+        minimum=0.7,
+        maximum=1.1,
+        waveform_count=42,
+    )
+    RTM2000_SCOPE_EXTENSIONS.measurement_statistics_profile_v2.validate_result(
+        result,
+        request=request,
+    )
+    assert transport.queries == list(responses)
+    assert transport.writes == []
+
+
+def test_measurement_statistics_v2_rejects_incomplete_aggregate():
+    responses = {
+        "MEASurement2:CATegory?": "AMPTime",
+        "MEASurement2:RESult:ACTual?": "NAN",
+        "MEASurement2:RESult:AVG?": "0.9",
+        "MEASurement2:RESult:STDDev?": "0.1",
+        "MEASurement2:RESult:NPEak?": "0.7",
+        "MEASurement2:RESult:PPEak?": "1.1",
+        "MEASurement2:RESult:WFMCount?": "42",
+    }
+    request = ScopeMeasurementStatisticsRequestV2(
+        selector=ScopeMeasurementSelector(slot=2),
+        configured=True,
+    )
+
+    with pytest.raises(DataError, match="finite aggregate values"):
+        RTM2032Scope(FakeTransport(responses=responses)).get_measurement_statistics_v2(
+            request
+        )
+
+
+def test_fft_status_v2_maps_only_profiled_fields():
+    responses = {
+        "CALCulate:MATH1:FFT:AVERAGE:COMPLETE?": "1",
+        "CALCulate:MATH1:FFT:BANDwidth:RESolution:ADJusted?": "10",
+        "CALCulate:MATH1:FFT:SRATe?": "1000000",
+    }
+    transport = FakeTransport(responses=responses)
+
+    result = RTM2032Scope(transport).get_fft_status_v2(1, configured_fft=True)
+
+    assert result == ScopeFftStatusV2(
+        math_index=1,
+        average_complete=True,
+        resolution_bandwidth_hz=10.0,
+        sample_rate_hz=1_000_000.0,
+        unavailable_fields=(
+            "source",
+            "window",
+            "vertical_unit",
+            "frequency_start_hz",
+            "frequency_stop_hz",
+        ),
+    )
+    RTM2000_SCOPE_EXTENSIONS.fft_status_profile_v2.validate_result(
+        result,
+        math_index=1,
+    )
+    assert transport.queries == list(responses)
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("invoke", "error", "message"),
+    [
+        (
+            lambda driver: driver.get_channel_input_state_v2(3),
+            DataError,
+            "RTM2032 channel must be 1 or 2",
+        ),
+        (
+            lambda driver: driver.get_digital_status_v2(16),
+            DataError,
+            "RTM2000 digital channel must be an integer from 0 through 15",
+        ),
+        (
+            lambda driver: driver.get_snapshot_v2(
+                3,
+                fields=RTM2000_SNAPSHOT_V2_READABLE_FIELDS,
+            ),
+            DataError,
+            "RTM2032 channel must be 1 or 2",
+        ),
+        (
+            lambda driver: driver.get_measurement_statistics_v2(
+                ScopeMeasurementStatisticsRequestV2(
+                    selector=ScopeMeasurementSelector(slot=5),
+                    configured=True,
+                )
+            ),
+            ValueError,
+            "supports slots 1 through 4",
+        ),
+        (
+            lambda driver: driver.get_measurement_statistics_v2(
+                ScopeMeasurementStatisticsRequestV2(
+                    selector=ScopeMeasurementSelector(slot=1),
+                    configured=True,
+                    include_buffer=True,
+                    acquisition_stopped=True,
+                )
+            ),
+            ValueError,
+            "does not support buffers",
+        ),
+        (
+            lambda driver: driver.get_fft_status_v2(1, configured_fft=False),
+            ValueError,
+            "explicit confirmation",
+        ),
+    ],
+)
+def test_scope_v2_invalid_requests_fail_before_io(invoke, error, message):
+    transport = FakeTransport()
+
+    with pytest.raises(error, match=message):
+        invoke(RTM2032Scope(transport))
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+def test_digital_status_v2_preserves_b1_gate_without_writes():
+    transport = FakeTransport(responses={"*OPT?": "K15"})
+
+    with pytest.raises(InstrumentError, match="requires installed option B1"):
+        RTM2032Scope(transport).get_digital_status_v2(0)
+
+    assert transport.queries == ["*OPT?"]
+    assert transport.writes == []
