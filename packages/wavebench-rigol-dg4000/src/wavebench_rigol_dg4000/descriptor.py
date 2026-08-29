@@ -8,6 +8,8 @@ from wavebench.instruments import (
     SourceAmplitudeUnit,
     SourceAnchorField,
     SourceBasicCapabilityProfile,
+    SourceBurstCapabilityProfile,
+    SourceBurstMode,
     SourceConstraintApplicability,
     SourceDescriptorExtensions,
     SourceFacetQueryContract,
@@ -63,6 +65,20 @@ def _source_extensions() -> SourceDescriptorExtensions:
         display_load_readable=False,
         polarity_readable=False,
     )
+    burst_profile = SourceBurstCapabilityProfile(
+        modes=(
+            SourceBurstMode.GATED,
+            SourceBurstMode.INFINITY,
+            SourceBurstMode.TRIGGERED,
+        ),
+        trigger_sources=(
+            SourceTriggerSource.EXTERNAL,
+            SourceTriggerSource.INTERNAL,
+            SourceTriggerSource.MANUAL,
+        ),
+        timing_readable=True,
+        gate_readable=True,
+    )
     sweep_profile = SourceSweepCapabilityProfile(
         spacing_modes=(
             SourceSweepSpacing.LINEAR,
@@ -94,6 +110,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
         )
         for feature, profile in (
             (SourceFeature.BASIC, basic_profile),
+            (SourceFeature.BURST, burst_profile),
             (SourceFeature.OUTPUT, output_profile),
             (SourceFeature.PULSE, pulse_profile),
             (SourceFeature.SWEEP, sweep_profile),
@@ -127,6 +144,15 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     activation_any=(),
                     effect=SourceQueryEffect.PURE_READ,
                     max_queries=1,
+                    required=True,
+                ),
+                SourceFacetQueryContract(
+                    feature=SourceFeature.BURST,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.BURST,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=10,
                     required=True,
                 ),
                 SourceFacetQueryContract(
@@ -173,7 +199,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=16,
                 ),
             ),
-            max_queries=82,
+            max_queries=102,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),

@@ -11,17 +11,20 @@ from wavebench.instruments import (
     Availability,
     ArbitraryQueryProbeResult,
     BasicWaveFacet,
+    BurstFacet,
     DG4000DacBlock,
     Observed,
     OutputFacet,
     PulseFacet,
     SourceAmplitude,
     SourceAmplitudeUnit,
+    SourceBurstMode,
     SourceChannelProfile,
     SourceCounterMeasurement,
     SourceCounterProfile,
     SourceFieldId,
     SourceFrequencyMode,
+    SourceGatePolarity,
     SourceProtocolQueryRecord,
     SourcePulseHoldBasis,
     SourceQueryEffect,
@@ -573,6 +576,143 @@ class DG4202Source:
         except ValueError as exc:
             raise DataError(f"inconsistent DG4000 pulse profile: {exc}") from exc
 
+    def _v2_burst_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> tuple[BurstFacet, int]:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":SOUR{channel}:BURS:STAT?"),
+                field_name="burst state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        if not enabled:
+            missing = Observed.missing(
+                Availability.NOT_APPLICABLE,
+                SourceReasonCode.INACTIVE_BY_ANCHOR,
+            )
+            return (
+                BurstFacet(
+                    enabled=Observed.value_of(False),
+                    mode=missing,
+                    cycles=missing,
+                    phase_deg=missing,
+                    internal_period_s=missing,
+                    delay_s=missing,
+                    gate_polarity=missing,
+                    trigger=missing,
+                ),
+                1,
+            )
+
+        mode = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:MODE?"),
+            field_name="burst mode",
+            aliases={
+                "TRIG": "TRIGGERED",
+                "TRIGGERED": "TRIGGERED",
+                "GAT": "GATED",
+                "GATED": "GATED",
+                "INF": "INFINITY",
+                "INFINITY": "INFINITY",
+            },
+        )
+        cycles = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:BURS:NCYC?"),
+            field_name="burst cycles",
+        )
+        if not cycles.is_integer():
+            raise DataError("burst cycles response must be an integer")
+        phase_deg = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:BURS:PHAS?"),
+            field_name="burst phase",
+        )
+        internal_period_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:BURS:INT:PER?"),
+            field_name="burst internal period",
+        )
+        delay_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:BURS:TDEL?"),
+            field_name="burst delay",
+        )
+        gate_polarity = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:GATE:POL?"),
+            field_name="burst gate polarity",
+            aliases={
+                "NORM": "NORMAL",
+                "NORMAL": "NORMAL",
+                "INV": "INVERTED",
+                "INVERTED": "INVERTED",
+            },
+        )
+        trigger_source = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:TRIG:SOUR?"),
+            field_name="burst trigger source",
+            aliases=_SWEEP_TRIGGER_SOURCE_ALIASES,
+        )
+        trigger_slope = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:TRIG:SLOP?"),
+            field_name="burst trigger slope",
+            aliases=_EDGE_ALIASES,
+        )
+        trigger_output = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:TRIG:TRIGOUT?"),
+            field_name="burst trigger output",
+            aliases=_TRIGGER_OUT_ALIASES,
+        )
+        try:
+            return (
+                BurstFacet(
+                    enabled=Observed.value_of(True),
+                    mode=Observed.value_of(
+                        {
+                            "TRIGGERED": SourceBurstMode.TRIGGERED,
+                            "GATED": SourceBurstMode.GATED,
+                            "INFINITY": SourceBurstMode.INFINITY,
+                        }[mode]
+                    ),
+                    cycles=Observed.value_of(int(cycles)),
+                    phase_deg=Observed.value_of(phase_deg),
+                    internal_period_s=Observed.value_of(internal_period_s),
+                    delay_s=Observed.value_of(delay_s),
+                    gate_polarity=Observed.value_of(
+                        SourceGatePolarity.NORMAL
+                        if gate_polarity == "NORMAL"
+                        else SourceGatePolarity.INVERTED
+                    ),
+                    trigger=Observed.value_of(
+                        SourceTriggerState(
+                            source=Observed.value_of(
+                                {
+                                    "INTERNAL": SourceTriggerSource.INTERNAL,
+                                    "EXTERNAL": SourceTriggerSource.EXTERNAL,
+                                    "MANUAL": SourceTriggerSource.MANUAL,
+                                }[trigger_source]
+                            ),
+                            slope=Observed.value_of(
+                                {
+                                    "POSITIVE": SourceTriggerSlope.POSITIVE,
+                                    "NEGATIVE": SourceTriggerSlope.NEGATIVE,
+                                }[trigger_slope]
+                            ),
+                            output=Observed.value_of(
+                                {
+                                    "OFF": SourceTriggerOutput.OFF,
+                                    "POSITIVE": SourceTriggerOutput.POSITIVE,
+                                    "NEGATIVE": SourceTriggerOutput.NEGATIVE,
+                                }[trigger_output]
+                            ),
+                        )
+                    ),
+                ),
+                10,
+            )
+        except ValueError as exc:
+            raise DataError(f"inconsistent DG4000 burst profile: {exc}") from exc
+
     @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
@@ -601,6 +741,7 @@ class DG4202Source:
                 target = None
             elif field_ref.field in {
                 SourceFieldId.BASIC,
+                SourceFieldId.BURST,
                 SourceFieldId.OUTPUT,
                 SourceFieldId.PULSE,
                 SourceFieldId.SWEEP,
@@ -610,7 +751,8 @@ class DG4202Source:
                 target = field_ref.target.channel
                 _validate_channel(target)
                 if (
-                    field_ref.field in {SourceFieldId.PULSE, SourceFieldId.SWEEP}
+                    field_ref.field
+                    in {SourceFieldId.BURST, SourceFieldId.PULSE, SourceFieldId.SWEEP}
                     and item.phase is not SourceQueryPhase.FACET
                 ):
                     raise DataError("DG4000 Source V2 optional field must be a facet query")
@@ -656,6 +798,12 @@ class DG4202Source:
         )
         if not pulse_channels <= channels:
             raise DataError("DG4000 Source V2 pulse requires matching basic anchors")
+        burst_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.BURST,
+            set(),
+        )
+        if not burst_channels <= channels:
+            raise DataError("DG4000 Source V2 burst requires matching basic anchors")
 
     def execute_source_query_plan_v2(
         self,
@@ -690,6 +838,9 @@ class DG4202Source:
                     assert channel is not None
                     value = self._v2_output_facet(channel, plan)
                     query_count = 1
+                elif field_ref.field is SourceFieldId.BURST:
+                    assert channel is not None
+                    value, query_count = self._v2_burst_facet(channel, plan)
                 elif field_ref.field is SourceFieldId.SWEEP:
                     assert channel is not None
                     basic = before_basic.get(channel)

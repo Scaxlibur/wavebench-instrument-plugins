@@ -62,6 +62,15 @@ class FakeTransport:
             "sync": "ON",
             "sync_polarity": "POS",
             "burst": "OFF",
+            "burst_mode": "TRIG",
+            "burst_cycles": 4,
+            "burst_phase": 10.0,
+            "burst_internal_period": 0.01,
+            "burst_delay": 0.0,
+            "burst_gate_polarity": "NORM",
+            "burst_trigger_source": "INT",
+            "burst_trigger_slope": "POS",
+            "burst_trigger_out": "OFF",
             "modulation": "OFF",
             "modulation_type": "AM",
             "marker": "OFF",
@@ -166,6 +175,17 @@ class FakeTransport:
             f":OUTP{channel}:SYNC?": self.state["sync"],
             f":OUTP{channel}:SYNC:POL?": self.state["sync_polarity"],
             f":SOUR{channel}:BURS:STAT?": self.state["burst"],
+            f":SOUR{channel}:BURS:MODE?": self.state["burst_mode"],
+            f":SOUR{channel}:BURS:NCYC?": str(self.state["burst_cycles"]),
+            f":SOUR{channel}:BURS:PHAS?": str(self.state["burst_phase"]),
+            f":SOUR{channel}:BURS:INT:PER?": str(
+                self.state["burst_internal_period"]
+            ),
+            f":SOUR{channel}:BURS:TDEL?": str(self.state["burst_delay"]),
+            f":SOUR{channel}:BURS:GATE:POL?": self.state["burst_gate_polarity"],
+            f":SOUR{channel}:BURS:TRIG:SOUR?": self.state["burst_trigger_source"],
+            f":SOUR{channel}:BURS:TRIG:SLOP?": self.state["burst_trigger_slope"],
+            f":SOUR{channel}:BURS:TRIG:TRIGOUT?": self.state["burst_trigger_out"],
             f":SOUR{channel}:MOD:STAT?": self.state["modulation"],
             f":SOUR{channel}:MOD:TYPE?": self.state["modulation_type"],
             f":SOUR{channel}:MARK:STAT?": self.state["marker"],
@@ -253,9 +273,9 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 70
-    assert len(execution.items) == 14
-    assert len(transport.queries) == 70
+    assert execution.query_count == 72
+    assert len(execution.items) == 16
+    assert len(transport.queries) == 72
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
     assert ":SOUR2:FREQ:MODE?" not in transport.queries
@@ -304,8 +324,8 @@ def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 38
-    assert len(transport.queries) == 38
+    assert execution.query_count == 40
+    assert len(transport.queries) == 40
     assert all(
         channel.sweep.availability is Availability.NOT_APPLICABLE
         for channel in snapshot.channels
@@ -327,11 +347,33 @@ def test_source_v2_reads_documented_pulse_facet_only_for_pulse_waveforms() -> No
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 50
-    assert len(transport.queries) == 50
+    assert execution.query_count == 52
+    assert len(transport.queries) == 52
     assert all(channel.pulse.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].pulse.value.width_s.value == 0.0005
     assert snapshot.channels[0].sweep.availability is Availability.NOT_APPLICABLE
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_full_burst_facet_only_when_burst_is_enabled() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"burst": "ON", "swe": "OFF"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 58
+    assert len(transport.queries) == 58
+    assert all(channel.burst.availability is Availability.VALUE for channel in snapshot.channels)
+    assert snapshot.channels[0].burst.value.enabled.value is True
+    assert snapshot.channels[0].burst.value.cycles.value == 4
     assert transport.writes == []
     assert transport.byte_writes == []
 
