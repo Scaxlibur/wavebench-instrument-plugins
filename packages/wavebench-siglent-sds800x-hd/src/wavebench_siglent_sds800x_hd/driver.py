@@ -23,8 +23,7 @@ from wavebench.instruments import (
     ScopeScreenshotStateSnapshot,
     WaveformData,
 )
-from wavebench.transport import BinaryResponseFraming
-from wavebench.transport.base import InstrumentTransport
+from wavebench.transport import BinaryResponseFraming, InstrumentTransport
 
 from .profiles import SDS800X_HD_SCREENSHOT_PROFILE
 

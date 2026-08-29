@@ -7,7 +7,7 @@ from typing import Literal
 import numpy as np
 
 from wavebench.errors import DataError
-from wavebench.instruments.models import WaveformData, WaveformHeader
+from wavebench.instruments import WaveformData, WaveformHeader
 
 
 _DESCRIPTOR_LENGTH = 346
