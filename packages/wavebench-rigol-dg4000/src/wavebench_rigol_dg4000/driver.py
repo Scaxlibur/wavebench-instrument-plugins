@@ -5,9 +5,9 @@ from math import isclose, isfinite
 from threading import RLock
 
 from wavebench.errors import DataError, InstrumentError
-from wavebench.instruments import DG4000DacBlock
-from wavebench.instruments.models import (
+from wavebench.instruments import (
     ArbitraryQueryProbeResult,
+    DG4000DacBlock,
     SourceChannelProfile,
     SourceCounterMeasurement,
     SourceCounterProfile,
