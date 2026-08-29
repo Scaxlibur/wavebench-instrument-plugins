@@ -10,6 +10,7 @@ from wavebench.instruments import (
     Availability,
     DG4000ByteOrder,
     DG4000DacBlock,
+    SourceArbitraryPlaybackMode,
     SourceAmplitudeUnit,
     SourceCounterMeasurementKind,
     SourceFieldId,
@@ -285,7 +286,7 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
     )
 
     assert execution.query_count == 86
-    assert len(execution.items) == 21
+    assert len(execution.items) == 23
     assert len(transport.queries) == 86
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
@@ -298,6 +299,7 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
     assert snapshot.channels[0].sweep.value.start_hz.value == 100.0
     assert snapshot.channels[0].modulation.value.enabled.value is False
     assert snapshot.channels[0].modulation.value.kind.value is SourceModulationKind.AM
+    assert snapshot.channels[0].arbitrary.availability is Availability.NOT_APPLICABLE
 
     observations = tuple(
         observation
@@ -533,6 +535,37 @@ def test_source_v2_reads_modulation_state_and_type_only(
     assert transport.byte_writes == []
 
 
+@pytest.mark.parametrize("waveform", ("USER", "ABSSINE"))
+def test_source_v2_reuses_basic_anchor_for_partial_arbitrary_read(
+    waveform: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": waveform, "swe": "OFF"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 54
+    assert all(channel.arbitrary.availability is Availability.VALUE for channel in snapshot.channels)
+    arbitrary = snapshot.channels[0].arbitrary.value
+    assert arbitrary.selected_waveform_id.value == waveform.lower()
+    assert arbitrary.playback_frequency_hz.value == 5000.0
+    assert arbitrary.playback_mode.availability is Availability.NOT_QUERIED
+    assert arbitrary.sample_rate_hz.availability is Availability.NOT_QUERIED
+    assert arbitrary.point_count.availability is Availability.NOT_QUERIED
+    assert arbitrary.storage_digest.availability is Availability.NOT_QUERIED
+    assert ":SOUR1:FUNC:USER?" not in transport.queries
+    assert ":SOUR1:ARB:SRAT?" not in transport.queries
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
 def test_source_v2_accepts_documented_long_waveform_tokens_without_changing_v1() -> None:
     transport = DualChannelFakeTransport()
     transport.query_overrides[":SOUR1:FUNC?"] = "PULSE"
@@ -584,7 +617,17 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert "source.snapshot_v2" in item.capabilities
     assert item.source_extensions is not None
     assert item.source_extensions.topology.input_ids == ("counter",)
-    assert item.source_extensions.query_contract.max_queries == 123
+    assert item.source_extensions.query_contract.max_queries == 125
+    arbitrary = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "arbitrary"
+        and feature.channels == (1,)
+    )
+    assert arbitrary.profile.playback_modes == (SourceArbitraryPlaybackMode.UNKNOWN,)
+    assert arbitrary.profile.selection_readable is True
+    assert arbitrary.profile.storage_metadata_readable is False
+    assert arbitrary.profile.sample_rate_readable is False
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
     assert "source.counter_profile" in item.capabilities

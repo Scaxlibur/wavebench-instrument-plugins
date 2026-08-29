@@ -9,6 +9,7 @@ from wavebench.errors import DataError, InstrumentError
 from wavebench.instruments import (
     SOURCE_CONTRACT_VERSION,
     Availability,
+    ArbitraryFacet,
     ArbitraryQueryProbeResult,
     BasicWaveFacet,
     BurstFacet,
@@ -830,6 +831,21 @@ class DG4202Source:
             statistics_enabled=Observed.value_of(profile.statistics_enabled),
         )
 
+    @staticmethod
+    def _v2_arbitrary_facet(basic: BasicWaveFacet) -> ArbitraryFacet:
+        not_queried = Observed.missing(
+            Availability.NOT_QUERIED,
+            SourceReasonCode.NOT_REQUESTED,
+        )
+        return ArbitraryFacet(
+            selected_waveform_id=basic.waveform_id,
+            playback_mode=not_queried,
+            playback_frequency_hz=basic.frequency_hz,
+            sample_rate_hz=not_queried,
+            point_count=not_queried,
+            storage_digest=not_queried,
+        )
+
     def _v2_modulation_facet(
         self,
         channel: int,
@@ -909,6 +925,7 @@ class DG4202Source:
                 if item.phase is not SourceQueryPhase.FACET:
                     raise DataError("DG4000 Source V2 counter must be a facet query")
             elif field_ref.field in {
+                SourceFieldId.ARBITRARY_SELECTION,
                 SourceFieldId.BASIC,
                 SourceFieldId.BURST,
                 SourceFieldId.HARMONICS,
@@ -926,6 +943,7 @@ class DG4202Source:
                     in {
                         SourceFieldId.BURST,
                         SourceFieldId.HARMONICS,
+                        SourceFieldId.ARBITRARY_SELECTION,
                         SourceFieldId.PULSE,
                         SourceFieldId.SWEEP,
                     }
@@ -973,6 +991,12 @@ class DG4202Source:
         )
         if not sweep_channels <= channels:
             raise DataError("DG4000 Source V2 sweep requires matching basic anchors")
+        arbitrary_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.ARBITRARY_SELECTION,
+            set(),
+        )
+        if not arbitrary_channels <= channels:
+            raise DataError("DG4000 Source V2 arbitrary requires matching basic anchors")
         pulse_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
             SourceFieldId.PULSE,
             set(),
@@ -1027,6 +1051,25 @@ class DG4202Source:
                     if item.phase is SourceQueryPhase.ANCHOR_BEFORE:
                         before_basic[channel] = value
                     query_count = 8
+                elif field_ref.field is SourceFieldId.ARBITRARY_SELECTION:
+                    assert channel is not None
+                    basic = before_basic.get(channel)
+                    if (
+                        basic is None
+                        or basic.waveform_kind.value is not SourceWaveformKind.ARBITRARY
+                    ):
+                        records.append(
+                            SourceProtocolQueryRecord(
+                                item_id=item.item_id,
+                                effect=item.effect,
+                                outcome=SourceQueryItemOutcome.SKIPPED,
+                                query_count=0,
+                                reason_code=SourceReasonCode.INACTIVE_BY_ANCHOR,
+                            )
+                        )
+                        continue
+                    value = self._v2_arbitrary_facet(basic)
+                    query_count = 0
                 elif field_ref.field is SourceFieldId.OUTPUT:
                     assert channel is not None
                     value = self._v2_output_facet(channel, plan)

@@ -9,6 +9,8 @@ from wavebench.instruments import (
     SourceActivationRule,
     SourceAmplitudeUnit,
     SourceAnchorField,
+    SourceArbitraryCapabilityProfile,
+    SourceArbitraryPlaybackMode,
     SourceBasicCapabilityProfile,
     SourceBurstCapabilityProfile,
     SourceBurstMode,
@@ -121,6 +123,12 @@ def _source_extensions() -> SourceDescriptorExtensions:
         configured_order_readable=True,
         preset_readable=True,
     )
+    arbitrary_profile = SourceArbitraryCapabilityProfile(
+        playback_modes=(SourceArbitraryPlaybackMode.UNKNOWN,),
+        selection_readable=True,
+        storage_metadata_readable=False,
+        sample_rate_readable=False,
+    )
     counter_profile = SourceCounterCapabilityProfile(
         input_ids=("counter",),
         measurement_kinds=(
@@ -171,6 +179,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
             profile=profile,
         )
         for feature, profile in (
+            (SourceFeature.ARBITRARY, arbitrary_profile),
             (SourceFeature.BASIC, basic_profile),
             (SourceFeature.BURST, burst_profile),
             (SourceFeature.HARMONICS, harmonic_profile),
@@ -212,6 +221,23 @@ def _source_extensions() -> SourceDescriptorExtensions:
                 SourceFieldId.IDENTITY,
             ),
             facets=(
+                SourceFacetQueryContract(
+                    feature=SourceFeature.ARBITRARY,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.ARBITRARY_SELECTION,),
+                    activation_any=(
+                        SourceActivationRule(
+                            predicates=(
+                                SourceActivationPredicate(
+                                    field=SourceAnchorField.WAVEFORM_KIND,
+                                    equals=SourceWaveformKind.ARBITRARY,
+                                ),
+                            ),
+                        ),
+                    ),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=1,
+                ),
                 SourceFacetQueryContract(
                     feature=SourceFeature.BASIC,
                     scope=SourceFacetScope.CHANNEL,
@@ -318,7 +344,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=16,
                 ),
             ),
-            max_queries=123,
+            max_queries=125,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),
