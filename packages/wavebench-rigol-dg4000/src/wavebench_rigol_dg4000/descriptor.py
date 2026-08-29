@@ -3,7 +3,10 @@ from __future__ import annotations
 from wavebench.instruments import (
     SOURCE_CONTRACT_VERSION,
     InstrumentDescriptor,
+    SourceActivationPredicate,
+    SourceActivationRule,
     SourceAmplitudeUnit,
+    SourceAnchorField,
     SourceBasicCapabilityProfile,
     SourceConstraintApplicability,
     SourceDescriptorExtensions,
@@ -18,7 +21,10 @@ from wavebench.instruments import (
     SourceQueryContract,
     SourceQueryEffect,
     SourceSafetyProfile,
+    SourceSweepCapabilityProfile,
+    SourceSweepSpacing,
     SourceTopologyContract,
+    SourceTriggerSource,
     SourceWaveformKind,
     SupportState,
 )
@@ -55,6 +61,20 @@ def _source_extensions() -> SourceDescriptorExtensions:
         display_load_readable=False,
         polarity_readable=False,
     )
+    sweep_profile = SourceSweepCapabilityProfile(
+        spacing_modes=(
+            SourceSweepSpacing.LINEAR,
+            SourceSweepSpacing.LOGARITHMIC,
+            SourceSweepSpacing.STEP,
+        ),
+        trigger_sources=(
+            SourceTriggerSource.EXTERNAL,
+            SourceTriggerSource.INTERNAL,
+            SourceTriggerSource.MANUAL,
+        ),
+        timing_readable=True,
+        marker_readable=True,
+    )
     features = tuple(
         SourceFeatureCapability(
             feature=feature,
@@ -68,6 +88,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
         for feature, profile in (
             (SourceFeature.BASIC, basic_profile),
             (SourceFeature.OUTPUT, output_profile),
+            (SourceFeature.SWEEP, sweep_profile),
         )
         for channel in _V2_CHANNELS
     )
@@ -109,8 +130,25 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=1,
                     required=True,
                 ),
+                SourceFacetQueryContract(
+                    feature=SourceFeature.SWEEP,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.SWEEP,),
+                    activation_any=(
+                        SourceActivationRule(
+                            predicates=(
+                                SourceActivationPredicate(
+                                    field=SourceAnchorField.FREQUENCY_MODE,
+                                    equals=SourceFrequencyMode.SWEEP,
+                                ),
+                            ),
+                        ),
+                    ),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=16,
+                ),
             ),
-            max_queries=38,
+            max_queries=70,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),

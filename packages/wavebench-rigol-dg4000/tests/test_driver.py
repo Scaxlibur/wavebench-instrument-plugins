@@ -231,7 +231,7 @@ def _source_v2_plan(
     return context, plan
 
 
-def test_source_v2_basic_output_snapshot_is_38_queries_and_zero_writes() -> None:
+def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
     transport = DualChannelFakeTransport()
     context, plan = _source_v2_plan()
 
@@ -243,9 +243,9 @@ def test_source_v2_basic_output_snapshot_is_38_queries_and_zero_writes() -> None
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 38
-    assert len(execution.items) == 10
-    assert len(transport.queries) == 38
+    assert execution.query_count == 70
+    assert len(execution.items) == 12
+    assert len(transport.queries) == 70
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
     assert ":SOUR2:FREQ:MODE?" not in transport.queries
@@ -253,6 +253,8 @@ def test_source_v2_basic_output_snapshot_is_38_queries_and_zero_writes() -> None
     assert transport.writes == []
     assert transport.byte_writes == []
     assert tuple(channel.channel for channel in snapshot.channels) == (1, 2)
+    assert snapshot.channels[0].sweep.availability is Availability.VALUE
+    assert snapshot.channels[0].sweep.value.start_hz.value == 100.0
 
     observations = tuple(
         observation
@@ -277,6 +279,29 @@ def test_source_v2_basic_output_snapshot_is_38_queries_and_zero_writes() -> None
     assert output.enabled.value is False
     assert output.display_load.availability is Availability.NOT_QUERIED
     assert output.polarity.availability is Availability.NOT_QUERIED
+
+
+def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 38
+    assert len(transport.queries) == 38
+    assert all(
+        channel.sweep.availability is Availability.NOT_APPLICABLE
+        for channel in snapshot.channels
+    )
+    assert transport.writes == []
+    assert transport.byte_writes == []
 
 
 def test_source_v2_accepts_documented_long_waveform_tokens_without_changing_v1() -> None:

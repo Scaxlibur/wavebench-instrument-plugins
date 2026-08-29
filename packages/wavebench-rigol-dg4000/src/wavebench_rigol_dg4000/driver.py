@@ -29,10 +29,17 @@ from wavebench.instruments import (
     SourceReasonCode,
     SourceRuntimeIdentity,
     SourceSemanticQueryPlan,
+    SourceSweepMarker,
+    SourceSweepSpacing,
     SourceSweepProfile,
     SourceStatus,
+    SourceTriggerOutput,
+    SourceTriggerSlope,
+    SourceTriggerSource,
+    SourceTriggerState,
     SourceTypedObservation,
     SourceWaveformKind,
+    SweepFacet,
 )
 from wavebench.transport.base import InstrumentTransport
 
@@ -469,6 +476,56 @@ class DG4202Source:
         )
 
     @staticmethod
+    def _v2_sweep_facet(profile: SourceSweepProfile) -> SweepFacet:
+        return SweepFacet(
+            enabled=Observed.value_of(profile.enabled),
+            start_hz=Observed.value_of(profile.start_hz),
+            stop_hz=Observed.value_of(profile.stop_hz),
+            spacing=Observed.value_of(
+                {
+                    "LINEAR": SourceSweepSpacing.LINEAR,
+                    "LOGARITHMIC": SourceSweepSpacing.LOGARITHMIC,
+                    "STEP": SourceSweepSpacing.STEP,
+                }[profile.spacing]
+            ),
+            steps=Observed.value_of(profile.steps),
+            sweep_time_s=Observed.value_of(profile.sweep_time_s),
+            start_hold_s=Observed.value_of(profile.start_hold_s),
+            stop_hold_s=Observed.value_of(profile.stop_hold_s),
+            return_time_s=Observed.value_of(profile.return_time_s),
+            trigger=Observed.value_of(
+                SourceTriggerState(
+                    source=Observed.value_of(
+                        {
+                            "INTERNAL": SourceTriggerSource.INTERNAL,
+                            "EXTERNAL": SourceTriggerSource.EXTERNAL,
+                            "MANUAL": SourceTriggerSource.MANUAL,
+                        }[profile.trigger_source]
+                    ),
+                    slope=Observed.value_of(
+                        {
+                            "POSITIVE": SourceTriggerSlope.POSITIVE,
+                            "NEGATIVE": SourceTriggerSlope.NEGATIVE,
+                        }[profile.trigger_slope]
+                    ),
+                    output=Observed.value_of(
+                        {
+                            "OFF": SourceTriggerOutput.OFF,
+                            "POSITIVE": SourceTriggerOutput.POSITIVE,
+                            "NEGATIVE": SourceTriggerOutput.NEGATIVE,
+                        }[profile.trigger_out]
+                    ),
+                )
+            ),
+            marker=Observed.value_of(
+                SourceSweepMarker(
+                    enabled=Observed.value_of(profile.marker_enabled),
+                    frequency_hz=Observed.value_of(profile.marker_frequency_hz),
+                )
+            ),
+        )
+
+    @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
             raise DataError("DG4000 Source V2 query plan has an invalid type")
@@ -494,11 +551,20 @@ class DG4202Source:
                 if field_ref.target.scope.value != "instrument":
                     raise DataError("DG4000 Source V2 identity must be instrument scoped")
                 target = None
-            elif field_ref.field in {SourceFieldId.BASIC, SourceFieldId.OUTPUT}:
+            elif field_ref.field in {
+                SourceFieldId.BASIC,
+                SourceFieldId.OUTPUT,
+                SourceFieldId.SWEEP,
+            }:
                 if field_ref.target.scope.value != "channel":
                     raise DataError("DG4000 Source V2 channel facets must be channel scoped")
                 target = field_ref.target.channel
                 _validate_channel(target)
+                if (
+                    field_ref.field is SourceFieldId.SWEEP
+                    and item.phase is not SourceQueryPhase.FACET
+                ):
+                    raise DataError("DG4000 Source V2 sweep must be a facet query")
             else:
                 raise DataError("DG4000 Source V2 query plan requests an unsupported field")
             targets = phase_fields.setdefault(item.phase, {}).setdefault(
@@ -509,10 +575,14 @@ class DG4202Source:
                 raise DataError("DG4000 Source V2 query plan repeats a field target")
             targets.add(target)
 
-        if set(phase_fields) != {
+        if not set(phase_fields) <= {
+            SourceQueryPhase.ANCHOR_BEFORE,
+            SourceQueryPhase.FACET,
+            SourceQueryPhase.ANCHOR_AFTER,
+        } or not {
             SourceQueryPhase.ANCHOR_BEFORE,
             SourceQueryPhase.ANCHOR_AFTER,
-        }:
+        } <= set(phase_fields):
             raise DataError("DG4000 Source V2 query plan contains an unsupported phase")
         before = phase_fields[SourceQueryPhase.ANCHOR_BEFORE]
         after = phase_fields[SourceQueryPhase.ANCHOR_AFTER]
@@ -525,6 +595,12 @@ class DG4202Source:
             raise DataError(
                 "DG4000 Source V2 output snapshots require matching basic anchors"
             )
+        sweep_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.SWEEP,
+            set(),
+        )
+        if not sweep_channels <= channels:
+            raise DataError("DG4000 Source V2 sweep requires matching basic anchors")
 
     def execute_source_query_plan_v2(
         self,
@@ -536,6 +612,7 @@ class DG4202Source:
         with self._io_lock:
             records: list[SourceProtocolQueryRecord] = []
             total_queries = 0
+            before_basic: dict[int, BasicWaveFacet] = {}
             for item in plan.items:
                 field_ref = item.fields[0]
                 channel = field_ref.target.channel
@@ -551,12 +628,37 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.BASIC:
                     assert channel is not None
                     value = self._v2_basic_facet(channel, plan)
+                    if item.phase is SourceQueryPhase.ANCHOR_BEFORE:
+                        before_basic[channel] = value
                     query_count = 8
-                else:
-                    assert field_ref.field is SourceFieldId.OUTPUT
+                elif field_ref.field is SourceFieldId.OUTPUT:
                     assert channel is not None
                     value = self._v2_output_facet(channel, plan)
                     query_count = 1
+                else:
+                    assert field_ref.field is SourceFieldId.SWEEP
+                    assert channel is not None
+                    basic = before_basic.get(channel)
+                    if (
+                        basic is None
+                        or basic.frequency_mode.value is not SourceFrequencyMode.SWEEP
+                    ):
+                        records.append(
+                            SourceProtocolQueryRecord(
+                                item_id=item.item_id,
+                                effect=item.effect,
+                                outcome=SourceQueryItemOutcome.SKIPPED,
+                                query_count=0,
+                                reason_code=SourceReasonCode.INACTIVE_BY_ANCHOR,
+                            )
+                        )
+                        continue
+                    if time.monotonic() > plan.deadline_monotonic:
+                        raise DataError("DG4000 Source V2 query plan deadline has expired")
+                    value = self._v2_sweep_facet(self.get_sweep_profile(channel))
+                    if time.monotonic() > plan.deadline_monotonic:
+                        raise DataError("DG4000 Source V2 query plan deadline has expired")
+                    query_count = 16
                 if query_count > item.max_queries:
                     raise DataError(
                         "DG4000 Source V2 query plan under-declares a snapshot query"
