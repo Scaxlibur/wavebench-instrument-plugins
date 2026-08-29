@@ -1,18 +1,38 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from math import isclose, isfinite
 from threading import RLock
 
 from wavebench.errors import DataError, InstrumentError
 from wavebench.instruments import (
+    SOURCE_CONTRACT_VERSION,
+    Availability,
     ArbitraryQueryProbeResult,
+    BasicWaveFacet,
     DG4000DacBlock,
+    Observed,
+    OutputFacet,
+    SourceAmplitude,
+    SourceAmplitudeUnit,
     SourceChannelProfile,
     SourceCounterMeasurement,
     SourceCounterProfile,
+    SourceFieldId,
+    SourceFrequencyMode,
+    SourceProtocolQueryRecord,
+    SourceQueryEffect,
+    SourceQueryExecutionRecord,
+    SourceQueryItemOutcome,
+    SourceQueryPhase,
+    SourceReasonCode,
+    SourceRuntimeIdentity,
+    SourceSemanticQueryPlan,
     SourceSweepProfile,
     SourceStatus,
+    SourceTypedObservation,
+    SourceWaveformKind,
 )
 from wavebench.transport.base import InstrumentTransport
 
@@ -326,6 +346,239 @@ class DG4202Source:
             field_name="frequency mode",
             aliases={"FIX": "FIX", "SWE": "SWE"},
         )
+
+    def _v2_query(self, plan: SourceSemanticQueryPlan, command: str) -> str:
+        if time.monotonic() > plan.deadline_monotonic:
+            raise DataError("DG4000 Source V2 query plan deadline has expired")
+        return self.transport.query(command)
+
+    @staticmethod
+    def _v2_waveform(response: str) -> tuple[SourceWaveformKind, str]:
+        token = str(response).strip().strip('"').upper()
+        if not token or not token.replace("_", "").isalnum():
+            raise DataError(f"unexpected DG4000 function response: {response!r}")
+        kinds = {
+            "SIN": SourceWaveformKind.SINE,
+            "SINUSOID": SourceWaveformKind.SINE,
+            "SQU": SourceWaveformKind.SQUARE,
+            "SQUARE": SourceWaveformKind.SQUARE,
+            "RAMP": SourceWaveformKind.RAMP,
+            "TRI": SourceWaveformKind.RAMP,
+            "TRIANGLE": SourceWaveformKind.RAMP,
+            "PULS": SourceWaveformKind.PULSE,
+            "PULSE": SourceWaveformKind.PULSE,
+            "NOIS": SourceWaveformKind.NOISE,
+            "NOISE": SourceWaveformKind.NOISE,
+            "DC": SourceWaveformKind.DC,
+            "HARM": SourceWaveformKind.OTHER,
+            "HARMONIC": SourceWaveformKind.OTHER,
+            "ARB": SourceWaveformKind.ARBITRARY,
+            "CUSTOM": SourceWaveformKind.ARBITRARY,
+            "USER": SourceWaveformKind.ARBITRARY,
+        }
+        return kinds.get(token, SourceWaveformKind.ARBITRARY), token.lower()
+
+    def _v2_basic_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> BasicWaveFacet:
+        waveform_kind, waveform_id = self._v2_waveform(
+            self._v2_query(plan, f":SOUR{channel}:FUNC?")
+        )
+        frequency_hz = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:FREQ?"),
+            field_name="frequency",
+        )
+        amplitude = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:VOLT?"),
+            field_name="amplitude",
+        )
+        amplitude_unit = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:VOLT:UNIT?"),
+            field_name="amplitude unit",
+            aliases={"VPP": "VPP", "VRMS": "VRMS", "DBM": "DBM"},
+        )
+        offset_v = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:VOLT:OFFS?"),
+            field_name="offset",
+        )
+        phase_deg = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PHAS?"),
+            field_name="phase",
+        )
+        if not 0 <= phase_deg <= 360:
+            raise DataError("phase response must be from 0 to 360 degrees")
+        sweep_enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":SOUR{channel}:SWE:STAT?"),
+                field_name="sweep state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        duty_cycle = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:FUNC:SQU:DCYC?"),
+            field_name="square duty cycle",
+        )
+        if duty_cycle <= 0 or duty_cycle >= 100:
+            raise DataError("square duty cycle response must be > 0 and < 100")
+        units = {
+            "VPP": SourceAmplitudeUnit.VPP,
+            "VRMS": SourceAmplitudeUnit.VRMS,
+            "DBM": SourceAmplitudeUnit.DBM,
+        }
+        return BasicWaveFacet(
+            waveform_kind=Observed.value_of(waveform_kind),
+            waveform_id=Observed.value_of(waveform_id),
+            frequency_mode=Observed.value_of(
+                SourceFrequencyMode.SWEEP
+                if sweep_enabled
+                else SourceFrequencyMode.FIXED
+            ),
+            frequency_hz=Observed.value_of(frequency_hz),
+            amplitude=Observed.value_of(
+                SourceAmplitude(amplitude, units[amplitude_unit])
+            ),
+            offset_v=Observed.value_of(offset_v),
+            phase_deg=Observed.value_of(phase_deg),
+            square_duty_cycle_percent=Observed.value_of(duty_cycle),
+        )
+
+    def _v2_output_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> OutputFacet:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":OUTP{channel}?"),
+                field_name="output state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        not_queried = Observed.missing(
+            Availability.NOT_QUERIED,
+            SourceReasonCode.NOT_REQUESTED,
+        )
+        return OutputFacet(
+            enabled=Observed.value_of(enabled),
+            display_load=not_queried,
+            polarity=not_queried,
+        )
+
+    @staticmethod
+    def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
+        if not isinstance(plan, SourceSemanticQueryPlan):
+            raise DataError("DG4000 Source V2 query plan has an invalid type")
+        if plan.contract_version != SOURCE_CONTRACT_VERSION:
+            raise DataError("DG4000 Source V2 query plan has an unsupported version")
+        if SourceQueryEffect.PURE_READ not in plan.allowed_effects:
+            raise DataError("DG4000 Source V2 query plan does not permit pure reads")
+        if time.monotonic() > plan.deadline_monotonic:
+            raise DataError("DG4000 Source V2 query plan deadline has expired")
+        if sum(item.max_queries for item in plan.items) > plan.max_queries:
+            raise DataError(
+                "DG4000 Source V2 query plan exceeds its declared total query budget"
+            )
+
+        phase_fields: dict[SourceQueryPhase, dict[SourceFieldId, set[int | None]]] = {}
+        for item in plan.items:
+            if item.effect is not SourceQueryEffect.PURE_READ:
+                raise DataError("DG4000 Source V2 snapshots only support pure reads")
+            if len(item.fields) != 1:
+                raise DataError("DG4000 Source V2 query items must contain one field")
+            field_ref = item.fields[0]
+            if field_ref.field is SourceFieldId.IDENTITY:
+                if field_ref.target.scope.value != "instrument":
+                    raise DataError("DG4000 Source V2 identity must be instrument scoped")
+                target = None
+            elif field_ref.field in {SourceFieldId.BASIC, SourceFieldId.OUTPUT}:
+                if field_ref.target.scope.value != "channel":
+                    raise DataError("DG4000 Source V2 channel facets must be channel scoped")
+                target = field_ref.target.channel
+                _validate_channel(target)
+            else:
+                raise DataError("DG4000 Source V2 query plan requests an unsupported field")
+            targets = phase_fields.setdefault(item.phase, {}).setdefault(
+                field_ref.field,
+                set(),
+            )
+            if target in targets:
+                raise DataError("DG4000 Source V2 query plan repeats a field target")
+            targets.add(target)
+
+        if set(phase_fields) != {
+            SourceQueryPhase.ANCHOR_BEFORE,
+            SourceQueryPhase.ANCHOR_AFTER,
+        }:
+            raise DataError("DG4000 Source V2 query plan contains an unsupported phase")
+        before = phase_fields[SourceQueryPhase.ANCHOR_BEFORE]
+        after = phase_fields[SourceQueryPhase.ANCHOR_AFTER]
+        if before != after:
+            raise DataError("DG4000 Source V2 query plan requires matching anchors")
+        if before.get(SourceFieldId.IDENTITY) != {None}:
+            raise DataError("DG4000 Source V2 query plan requires one identity anchor")
+        channels = before.get(SourceFieldId.BASIC, set())
+        if not channels or before.get(SourceFieldId.OUTPUT, set()) != channels:
+            raise DataError(
+                "DG4000 Source V2 output snapshots require matching basic anchors"
+            )
+
+    def execute_source_query_plan_v2(
+        self,
+        plan: SourceSemanticQueryPlan,
+    ) -> SourceQueryExecutionRecord:
+        """Execute a Core-owned Basic/Output plan without selector writes."""
+
+        self._validate_v2_query_plan(plan)
+        with self._io_lock:
+            records: list[SourceProtocolQueryRecord] = []
+            total_queries = 0
+            for item in plan.items:
+                field_ref = item.fields[0]
+                channel = field_ref.target.channel
+                if field_ref.field is SourceFieldId.IDENTITY:
+                    identity = _parse_identity(self._v2_query(plan, "*IDN?"))
+                    self._identity = identity
+                    value = SourceRuntimeIdentity(
+                        manufacturer=identity[0],
+                        model=identity[1],
+                        firmware_id=identity[3],
+                    )
+                    query_count = 1
+                elif field_ref.field is SourceFieldId.BASIC:
+                    assert channel is not None
+                    value = self._v2_basic_facet(channel, plan)
+                    query_count = 8
+                else:
+                    assert field_ref.field is SourceFieldId.OUTPUT
+                    assert channel is not None
+                    value = self._v2_output_facet(channel, plan)
+                    query_count = 1
+                if query_count > item.max_queries:
+                    raise DataError(
+                        "DG4000 Source V2 query plan under-declares a snapshot query"
+                    )
+                records.append(
+                    SourceProtocolQueryRecord(
+                        item_id=item.item_id,
+                        effect=item.effect,
+                        outcome=SourceQueryItemOutcome.OBSERVED,
+                        query_count=query_count,
+                        observations=(SourceTypedObservation(field_ref, value),),
+                    )
+                )
+                total_queries += query_count
+            if total_queries > plan.max_queries:
+                raise DataError("DG4000 Source V2 query plan exceeded its total query budget")
+            return SourceQueryExecutionRecord(
+                contract_version=SOURCE_CONTRACT_VERSION,
+                plan_id=plan.plan_id,
+                items=tuple(records),
+                query_count=total_queries,
+            )
 
     @staticmethod
     def _numeric_matches(actual: float | None, expected: float) -> bool:

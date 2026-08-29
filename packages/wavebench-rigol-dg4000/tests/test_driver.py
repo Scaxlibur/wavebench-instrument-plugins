@@ -1,14 +1,29 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 
 import pytest
 
 from wavebench.errors import DataError, InstrumentError
-from wavebench.instruments import DG4000ByteOrder, DG4000DacBlock
+from wavebench.instruments import (
+    Availability,
+    DG4000ByteOrder,
+    DG4000DacBlock,
+    SourceAmplitudeUnit,
+    SourceFieldId,
+    SourceFrequencyMode,
+    SourceSemanticQueryPlan,
+    SourceWaveformKind,
+)
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.logging import CommandLogger
+from wavebench.services.source_snapshot_v2 import (
+    build_source_snapshot,
+    build_source_snapshot_plan,
+    new_source_snapshot_context,
+)
 
 from wavebench_rigol_dg4000 import descriptor
 from wavebench_rigol_dg4000.driver import DG4202Source
@@ -187,6 +202,122 @@ class FakeTransport:
         self.closed = True
 
 
+class DualChannelFakeTransport(FakeTransport):
+    def query(self, command: str) -> str:
+        translated = command.replace(":SOUR2", ":SOUR1").replace(":OUTP2", ":OUTP1")
+        response = super().query(translated)
+        self.queries[-1] = command
+        return response
+
+
+def _source_v2_plan(
+    *,
+    max_queries: int | None = None,
+    deadline_monotonic: float | None = None,
+) -> tuple[object, SourceSemanticQueryPlan]:
+    extensions = descriptor().source_extensions
+    assert extensions is not None
+    context = new_source_snapshot_context(
+        session_epoch="dg4000-source-v2-a0",
+        session_health_before="healthy",
+        descriptor_extensions=extensions,
+        timeout_ms=5_000,
+    )
+    plan = build_source_snapshot_plan(context)
+    if max_queries is not None:
+        plan = replace(plan, max_queries=max_queries)
+    if deadline_monotonic is not None:
+        plan = replace(plan, deadline_monotonic=deadline_monotonic)
+    return context, plan
+
+
+def test_source_v2_basic_output_snapshot_is_38_queries_and_zero_writes() -> None:
+    transport = DualChannelFakeTransport()
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 38
+    assert len(execution.items) == 10
+    assert len(transport.queries) == 38
+    assert transport.queries.count("*IDN?") == 2
+    assert ":SOUR1:FREQ:MODE?" not in transport.queries
+    assert ":SOUR2:FREQ:MODE?" not in transport.queries
+    assert all(command.endswith("?") for command in transport.queries)
+    assert transport.writes == []
+    assert transport.byte_writes == []
+    assert tuple(channel.channel for channel in snapshot.channels) == (1, 2)
+
+    observations = tuple(
+        observation
+        for record in execution.items
+        for observation in record.observations
+    )
+    basic = next(
+        item.value
+        for item in observations
+        if item.field.field is SourceFieldId.BASIC
+        and item.field.target.channel == 1
+    )
+    assert basic.waveform_kind.value is SourceWaveformKind.SINE
+    assert basic.frequency_mode.value is SourceFrequencyMode.SWEEP
+    assert basic.amplitude.value.unit is SourceAmplitudeUnit.VPP
+    output = next(
+        item.value
+        for item in observations
+        if item.field.field is SourceFieldId.OUTPUT
+        and item.field.target.channel == 2
+    )
+    assert output.enabled.value is False
+    assert output.display_load.availability is Availability.NOT_QUERIED
+    assert output.polarity.availability is Availability.NOT_QUERIED
+
+
+def test_source_v2_accepts_documented_long_waveform_tokens_without_changing_v1() -> None:
+    transport = DualChannelFakeTransport()
+    transport.query_overrides[":SOUR1:FUNC?"] = "PULSE"
+    _context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    basics = tuple(
+        observation.value
+        for record in execution.items
+        for observation in record.observations
+        if observation.field.field is SourceFieldId.BASIC
+    )
+    assert all(item.waveform_kind.value is SourceWaveformKind.PULSE for item in basics)
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("plan", "message"),
+    (
+        (_source_v2_plan(max_queries=37)[1], "total query budget"),
+        (_source_v2_plan(deadline_monotonic=0.0)[1], "deadline has expired"),
+    ),
+)
+def test_source_v2_rejects_invalid_plan_before_io(
+    plan: SourceSemanticQueryPlan,
+    message: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert transport.queries == []
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
 def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     item = descriptor()
 
@@ -194,8 +325,10 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert item.distribution == "wavebench-rigol-dg4000"
     assert item.aliases == ()
     assert item.kind == "source"
-    assert item.version == "0.6.0"
-    assert item.wavebench_min_version == "0.8.17"
+    assert item.version == "0.7.0"
+    assert item.wavebench_min_version == "0.8.25"
+    assert "source.snapshot_v2" in item.capabilities
+    assert item.source_extensions is not None
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
     assert "source.counter_profile" in item.capabilities

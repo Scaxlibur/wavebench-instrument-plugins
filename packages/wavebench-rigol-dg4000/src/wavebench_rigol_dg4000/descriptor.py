@@ -1,6 +1,120 @@
 from __future__ import annotations
 
-from wavebench.instruments import InstrumentDescriptor
+from wavebench.instruments import (
+    SOURCE_CONTRACT_VERSION,
+    InstrumentDescriptor,
+    SourceAmplitudeUnit,
+    SourceBasicCapabilityProfile,
+    SourceConstraintApplicability,
+    SourceDescriptorExtensions,
+    SourceFacetQueryContract,
+    SourceFacetScope,
+    SourceFeature,
+    SourceFeatureCapability,
+    SourceFeatureDirection,
+    SourceFieldId,
+    SourceFrequencyMode,
+    SourceOutputCapabilityProfile,
+    SourceQueryContract,
+    SourceQueryEffect,
+    SourceSafetyProfile,
+    SourceTopologyContract,
+    SourceWaveformKind,
+    SupportState,
+)
+
+
+_V2_CHANNELS = (1, 2)
+
+
+def _source_extensions() -> SourceDescriptorExtensions:
+    applicability = SourceConstraintApplicability()
+    basic_profile = SourceBasicCapabilityProfile(
+        waveform_kinds=(
+            SourceWaveformKind.ARBITRARY,
+            SourceWaveformKind.DC,
+            SourceWaveformKind.NOISE,
+            SourceWaveformKind.OTHER,
+            SourceWaveformKind.PULSE,
+            SourceWaveformKind.RAMP,
+            SourceWaveformKind.SINE,
+            SourceWaveformKind.SQUARE,
+        ),
+        frequency_modes=(SourceFrequencyMode.FIXED, SourceFrequencyMode.SWEEP),
+        amplitude_units=(
+            SourceAmplitudeUnit.DBM,
+            SourceAmplitudeUnit.VPP,
+            SourceAmplitudeUnit.VRMS,
+        ),
+        offset_readable=True,
+        phase_readable=True,
+        square_duty_readable=True,
+    )
+    output_profile = SourceOutputCapabilityProfile(
+        output_readable=True,
+        display_load_readable=False,
+        polarity_readable=False,
+    )
+    features = tuple(
+        SourceFeatureCapability(
+            feature=feature,
+            support=SupportState.SUPPORTED,
+            directions=(SourceFeatureDirection.READ,),
+            scope=SourceFacetScope.CHANNEL,
+            channels=(channel,),
+            applicability=applicability,
+            profile=profile,
+        )
+        for feature, profile in (
+            (SourceFeature.BASIC, basic_profile),
+            (SourceFeature.OUTPUT, output_profile),
+        )
+        for channel in _V2_CHANNELS
+    )
+    return SourceDescriptorExtensions(
+        contract_version=SOURCE_CONTRACT_VERSION,
+        topology=SourceTopologyContract(channels=_V2_CHANNELS),
+        features=features,
+        query_contract=SourceQueryContract(
+            anchor_fields=(
+                SourceFieldId.BASIC,
+                SourceFieldId.OUTPUT,
+                SourceFieldId.IDENTITY,
+            ),
+            facets=(
+                SourceFacetQueryContract(
+                    feature=SourceFeature.BASIC,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.BASIC,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=8,
+                    required=True,
+                ),
+                SourceFacetQueryContract(
+                    feature=SourceFeature.BASIC,
+                    scope=SourceFacetScope.INSTRUMENT,
+                    fields=(SourceFieldId.IDENTITY,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=1,
+                    required=True,
+                ),
+                SourceFacetQueryContract(
+                    feature=SourceFeature.OUTPUT,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.OUTPUT,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=1,
+                    required=True,
+                ),
+            ),
+            max_queries=38,
+            timeout_ms=5_000,
+        ),
+        safety_profile=SourceSafetyProfile(),
+    )
 
 
 def _open_driver(context):
@@ -21,6 +135,7 @@ def descriptor() -> InstrumentDescriptor:
         models=("DG4202", "DG4000"),
         aliases=(),
         capabilities=(
+            "source.snapshot_v2",
             "source.idn",
             "source.errors",
             "source.status",
@@ -44,14 +159,15 @@ def descriptor() -> InstrumentDescriptor:
             "Installable RIGOL DG4000-series source driver for read-only channel, sweep, "
             "and counter profiles, fixed waveforms, output control, and validated DAC14 uploads."
         ),
-        wavebench_min_version="0.8.17",
+        wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rigol-dg4000",
-        version="0.6.0",
+        version="0.7.0",
         source="entry_point:rigol.dg4202",
         config_fields=(
             "source.resource",
             "source.driver",
             "safety_limits.max_source_vpp",
         ),
+        source_extensions=_source_extensions(),
     )
