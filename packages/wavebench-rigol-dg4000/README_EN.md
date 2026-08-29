@@ -8,14 +8,15 @@ An executable WaveBench instrument plugin for the dual-channel RIGOL DG4202 and 
 
 - Distribution: `wavebench-rigol-dg4000`
 - Canonical driver ID: `rigol.dg4202`
-- WaveBench: `>=0.8.17,<0.9`
+- WaveBench: `>=0.8.25,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa`
 
 This package uses the public `SourceChannelProfile` contract first available in WaveBench
-`v0.8.15`, the `SourceSweepProfile` contract added in `v0.8.16`, and the `SourceCounterProfile`
-contract added in `v0.8.17`. It does not run with a core older than `v0.8.17` and does not
-automatically claim compatibility with a future `0.9` core.
+`v0.8.15`, the `SourceSweepProfile` contract added in `v0.8.16`, the `SourceCounterProfile`
+contract added in `v0.8.17`, and the Source V2 snapshot contract available in `v0.8.25`. It does
+not run with a core older than `v0.8.25` and does not automatically claim compatibility with a
+future `0.9` core.
 
 The plugin defines no aliases. After installation, the explicit canonical ID `rigol.dg4202` selects the external implementation, while the short `dg4202` alias always selects WaveBench's built-in fallback. Removing the plugin also restores the built-in canonical implementation.
 
@@ -27,12 +28,15 @@ profiles for the frequency window, spacing, timing, trigger, and marker, a stric
 counter profile for input configuration, statistics display, and conditional five-field
 measurements, fixed frequency, function, VPP amplitude, square duty cycle, explicit output control,
 query-only arbitrary-wave capability probes, and upload of validated DAC14 blocks through
-WaveBench's public `DG4000DacBlock` contract.
+WaveBench's public `DG4000DacBlock` contract. `source.snapshot_v2` adds typed read-only Basic,
+output-enabled, Sweep, Pulse, Burst, and partial Harmonic facets for CH1/CH2; the Harmonic facet
+does not claim per-order component readback.
 
 WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
 
-Version `0.6.0` adds the non-destructive M6 counter profile on top of the M3 channel and M5 sweep
-profiles while preserving the M1/M2/M4 transaction boundaries from `0.3.0`: all I/O shares one reentrant lock;
+Version `0.7.0` adds a pure-query Source V2 adapter to the existing M1-M6 surface without declaring
+any Source V2 write capability. It preserves the M1/M2/M4 transaction boundaries from `0.3.0`:
+all I/O shares one reentrant lock;
 fixed-wave writes use a pre-write snapshot, per-step readback, off-first recovery, and ambiguous-
 write latching; DAC14 upload is accepted only while the target channel is already OFF, in FIX
 mode, with sweep OFF. Overwriting the volatile USER waveform is reported as an irreversible side
@@ -106,10 +110,17 @@ neither `AUTO` nor `STATIstics:CLEAr`. Parsing and relationship validation for t
 frequency/period/duty/positive-width/negative-width tuple has offline evidence only and is not part
 of this hardware conclusion.
 
+On 2026-08-30, external plugin `0.7.0` completed read-only Source V2 acceptance for the current
+instrument state. DG4202 firmware `00.01.14` reported CH1/CH2 OFF, SIN, 1 kHz, 5 Vpp, 0 V offset,
+FIX, and sweep OFF. `source.snapshot_v2` completed 40 pure queries with matching before/after
+anchors and healthy session state. Burst OFF was returned as a typed facet; Sweep, Pulse, and
+Harmonic were `inactive_by_anchor`. The run did not read the error queue, mutate instrument state,
+or capture RTM2032 waveforms, so it is not active-state hardware evidence for those facets.
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an
-environment containing WaveBench `v0.8.17` or newer within the declared `<0.9` range.
+environment containing WaveBench `v0.8.25` or newer within the declared `<0.9` range.
 
 Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for daily source work. Formal acceptance still uses a real wheel and a disposable virtual environment.
 
@@ -128,3 +139,7 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
   passes three strict zero-write M6 rounds with the counter OFF, without automatically enabling
   the counter, sending `AUTO`/statistics clear, or presenting offline-only counter-ON parsing as a
   hardware result.
+- `0.7.0` requires WaveBench `>=0.8.25` and adds pure-query `source.snapshot_v2` with typed Basic,
+  output-enabled, Sweep, Pulse, Burst, and partial Harmonic facets. The current OFF/SIN/FIX state
+  passed a 40-query hardware read; active Sweep/Pulse/Burst/Harmonic states retain only prior V1 or
+  offline evidence, and no matching write capability is declared.

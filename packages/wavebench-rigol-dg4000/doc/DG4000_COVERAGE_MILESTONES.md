@@ -6,7 +6,7 @@
 
 本文把 DG4000 编程手册的广阔命令面拆成 M0–M12。里程碑编号是风险顺序，不是命令数量或完成率；每一级只有在代码、失败路径、发行包和相应实机证据同时满足退出门后才算完成。
 
-当前版本：`wavebench-rigol-dg4000 0.6.0`。
+当前版本：`wavebench-rigol-dg4000 0.7.0`。
 
 | 里程碑 | 状态 | 范围 |
 |---|---|---|
@@ -17,15 +17,16 @@
 | M4 | **完成** | DAC14 任意波事务与外置插件实机复验 |
 | M5 | **完成** | Sweep 只读 profile |
 | M6 | **完成** | Counter 非破坏性只读 profile |
-| M7 | 未开始 | Sweep 受控事务与触发 |
-| M8 | 未开始 | Pulse/Burst/Marker 受控 profile |
+| M7 | **部分完成** | Sweep Source V2 只读 facet 已实现；受控事务与触发未开始 |
+| M8 | **部分完成** | Pulse/Burst Source V2 只读 facet 已实现；Marker 与受控写未开始 |
 | M9 | 未开始 | 双通道 Coupling 原子事务 |
 | M10 | 未开始 | 基础调制 AM/FM/PM/PWM |
-| M11 | 未开始 | 高级调制、谐波和高级任意波格式 |
+| M11 | **部分完成** | 部分 Harmonic 只读 facet 已实现；逐阶分量、高级调制和任意波格式未开始 |
 | M12 | 未开始 | 型号/通道验收矩阵与发布收口 |
 
-M0 完成不表示仪器功能增加。0.6.0 已完成 M1–M5 的 DG4202 CH1/CH2 实机退出门，
-并完成 M6 的全局 counter-OFF 实机退出门。
+M0 完成不表示仪器功能增加。`0.7.0` 保留 M1–M5 的 DG4202 CH1/CH2 实机退出门和
+M6 的全局 counter-OFF 实机退出门，并增加 Source V2 纯查询适配。只有当前
+OFF/SIN/FIX 状态完成新鲜 V2 实机读取；活跃 facet 仍按各节证据边界处理。
 
 ## 2. 所有阶段共同规则
 
@@ -34,7 +35,7 @@ M0 完成不表示仪器功能增加。0.6.0 已完成 M1–M5 的 DG4202 CH1/CH
 - 枚举值必须显式白名单；不把未知值猜成 OFF、FIX、SIN 或默认单位。
 - 每个面向指定通道的 API 显式携带通道；CH1/CH2 不依赖前面板当前选择。
 - 所有 transport I/O 由同一个可重入锁串行化。快照、写入、回读、错误检查和恢复不可交织。
-- 写前快照必须完整成功；否则零写入。写后逐字段回读，不以“命令未抛异常”代表成功。
+- 写前快照必须完整成功；否则零写入。写后逐字段回读，不以「命令未抛异常」代表成功。
 - 首次写入超时、连接中断或其它无法判断命令是否到达仪器的情况属于歧义写入：不盲目重试，并锁存该 driver 的后续配置写。
 - 确定性失败可尝试保守恢复；恢复本身歧义、失败或无法回读时同样锁存。
 - 输出相关恢复先强制目标通道 OFF，恢复其余字段，全部成功后才按快照恢复原 output。恢复失败保持 OFF。
@@ -84,7 +85,7 @@ M0 完成不表示仪器功能增加。0.6.0 已完成 M1–M5 的 DG4202 CH1/CH
 
 - 写入口拒绝所有非有限频率、Vpp、offset、duty；只读状态也拒绝非有限回包，不返回含不可信字段的部分 `SourceStatus`；
 - output、function、unit、frequency mode、sweep state 使用严格枚举；
-- `*IDN?` 解析 manufacturer/model，区分“可只读识别”与“允许写入且已验收”的型号；
+- `*IDN?` 解析 manufacturer/model，区分「可只读识别」与「允许写入且已验收」的型号；
 - 聚合状态查询全有或全无；任一查询失败不得产生写入；
 - 统一 `check_errors_after_ops` 的实例默认语义，直接 driver 调用与 Service 调用一致；
 - 保留 `source.arbitrary_probe` 的 query-only 限制，并明确它会消费错误队列、候选 `-113` 不代表 capability。
@@ -162,7 +163,7 @@ profile 必须区分：
 - **只读上下文**：用于拒绝不安全操作，但当前不会自动恢复；
 - **不可恢复副作用**：例如 volatile USER 波形内容被覆盖。
 
-退出门：CH1/CH2 profile 全有或全无、有限数/枚举严格校验、无写入；README、artifact 和 run restore 不再使用“完整状态恢复”描述当前 basic restore。
+退出门：CH1/CH2 profile 全有或全无、有限数/枚举严格校验、无写入；README、artifact 和 run restore 不再使用「完整状态恢复」描述当前 basic restore。
 
 2026-07-27 证据：外置插件 `0.4.0` 在 DG4202 固件 `00.01.14` 的同一受控会话中读取
 CH1/CH2。transport 守卫禁止任何 text/binary write，最终完成 45 次 query、0 次 text
@@ -231,7 +232,7 @@ steps 和跨字段关系错误。恢复后，CH1/CH2 完整 channel profile 与 
 正式驱动固定使用 DG4202 固件 `00.01.14` 验证过的短路径，包括 `:COUN?`、
 `:COUN:LEVE?` 和 `:COUN:STATI:*`，不把其它缩写或长写形式的存在当作实机证据。
 
-默认拒绝 `COUNter:AUTO`、`STATIstics:CLEAr` 以及自动启用 counter。若 counter 当前为 OFF，返回状态并明确“无测量”，不偷偷打开输入。50 Ω 只作为回读值；未来写入必须有独立接线确认。
+默认拒绝 `COUNter:AUTO`、`STATIstics:CLEAr` 以及自动启用 counter。若 counter 当前为 OFF，返回状态并明确「无测量」，不偷偷打开输入。50 Ω 只作为回读值；未来写入必须有独立接线确认。
 
 退出门：未知/非有限回包 fail closed，重复查询不改变 counter/统计状态，真实 DG4202 记录零写入证据。
 
@@ -243,9 +244,30 @@ OFF 分支未查询 `MEASure?`，也未发送 enable、`AUTO` 或 statistics cle
 覆盖每个查询位置、未知枚举、非有限/越界配置，以及 counter-ON 五元组的字段数、有限性、
 frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无实机测量结论。
 
+## 10.1. Source V2 只读迁移
+
+**状态：部分完成。** `0.7.0` 新增 `source.snapshot_v2`，不声明任何 Source V2 写能力。
+
+- Basic：CH1/CH2 function、frequency mode/value、带单位 amplitude、offset、phase 和 square duty；
+- Output：只读取 enabled，load/polarity 继续由 V1 `source.channel_profile` 提供；
+- Sweep：激活时复用 M5 严格 profile，未激活时返回 `inactive_by_anchor`；
+- Pulse：Pulse 波形激活时读取 hold、width/duty、delay 和双边沿；
+- Burst：始终读取 state，OFF 时其余字段不适用，ON 时读取完整模式、时序和 trigger；
+- Harmonic：只读取 enabled、configured/max order 与 preset，completeness 固定为 `PARTIAL`，
+  不读取或伪造逐阶 amplitude/phase。
+
+最坏查询预算为 108。每个查询项均为 `PURE_READ`，identity、Basic 与 Output 在前后阶段
+复读；任何锚点漂移由 Core 标记，驱动不为快照发送 selector 或 write。
+
+2026-08-30 证据：DG4202 `00.01.14` 的 CH1/CH2 均为 OFF、SIN、1 kHz、5 Vpp、
+0 V offset、FIX、sweep OFF。公开 CLI 完成 40-query Source V2 快照，前后锚点一致，
+session health 前后均为 healthy。该状态只验证 Burst OFF 与其它条件 facet 的未激活结果，
+不构成 Pulse/Sweep/Burst/Harmonic 活跃态实机验收。当前公开 API 缺少这些模式的完整
+配置与恢复事务，因此不使用 raw SCPI 临时激活。
+
 ## 11. M7 — Sweep 受控事务
 
-**状态：未开始；P2。** 必须在 M2、M3、M5 后实施。
+**状态：只读 facet 已实现；受控写与触发未开始，P2。** 必须在 M2、M3、M5 后实施。
 
 事务覆盖 start/stop 或 center/span、spacing/steps/time、marker、trigger source/slope/trigger-out 和 sweep state。手动 immediate trigger 或 `*TRG` 只作为已建立且回读确认的 sweep session 内的一次显式动作。
 
@@ -253,13 +275,15 @@ frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无�
 
 ## 12. M8 — Pulse、Burst 与 Marker
 
-**状态：未开始；P2/P3。**
+**状态：Pulse/Burst 只读 facet 已实现；Marker 与受控写未开始，P2/P3。**
 
 - Pulse profile：hold mode、width/duty、delay、leading/trailing transition；
 - Burst profile：mode、cycles、phase、internal period、delay、gate polarity、trigger source/slope/trigger-out；
 - Marker 只在相关 sweep/burst profile 中开放，不做全局裸 setter。
 
-先只读，后事务写。输出与 trigger 必须显式分离；immediate trigger 不允许重试。退出门包括输出 OFF 失败收敛、边沿/占空比约束和示波器时域证据。
+只读阶段已完成离线精确命令与失败测试；活跃态实机证据尚未取得。后续事务写要求输出与
+trigger 显式分离；immediate trigger 不允许重试。退出门包括输出 OFF 失败处理、边沿/占空比
+约束和示波器时域证据。
 
 ## 13. M9 — 双通道 Coupling 原子事务
 
@@ -279,11 +303,14 @@ frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无�
 
 ## 15. M11 — 高级调制、谐波与高级任意波
 
-**状态：未开始；P3。**
+**状态：Harmonic 部分只读 facet 已实现；其余未开始，P3。**
 
 候选范围：ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK、harmonic order/type/user/amplitude/phase，以及与 DAC14 明确分离的 `TRACe:DATA:DAC16`、points/value/interpolate/load 查询。
 
-每个候选先经过手册/固件探针、独立数据契约和资源上限审计。DAC16 不能复用 `DG4000DacBlock` 冒充 DAC14；分包、字节序、最大点数、RAM/DDR 生命周期与回读语义必须先冻结。没有具体实验需求时可永久留在 backlog。
+当前 Harmonic 只读结果明确为 `PARTIAL`，不包含 USER mask 或逐阶 amplitude/phase。
+其余候选仍需先经过手册/固件探针、独立数据契约和资源上限审计。DAC16 不能复用
+`DG4000DacBlock` 冒充 DAC14；分包、字节序、最大点数、RAM/DDR 生命周期与回读语义
+必须先冻结。没有具体实验需求时可永久留在 backlog。
 
 ## 16. M12 — 型号矩阵与发布收口
 
@@ -295,15 +322,17 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 - 外置插件与内建 fallback 的差异测试；
 - lifecycle、wheel/sdist、editable、升级/降级/卸载回退与公开安装文档；
 - 慢传输、query/write timeout、binary partial failure、并发、锁存后行为和 artifact 脱敏；
-- 版本兼容范围与变更日志，不把“某型号可识别”写成“该型号已验收”。
+- 版本兼容范围与变更日志，不把「某型号可识别」写成「该型号已验收」。
 
 最终退出门要求所有公开写 capability 都有正常路径、失败矩阵、恢复/锁存证据和至少一个明确型号/通道的实机验收；其余命令保持未覆盖或默认拒绝。
 
 ## 17. 当前证据边界
 
 - 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门，以及 M6
-  全局 counter-OFF 零写入门。
+  全局 counter-OFF 零写入门；`0.7.0` 当前 OFF/SIN/FIX 状态的 40-query Source V2
+  快照也已通过。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
-- 尚未通过：M7–M12；M6 的 counter-ON 五元组仍只有离线解析证据。
+- 尚未通过：M7–M12 的全部受控写退出门；Pulse/Sweep/Burst/Harmonic 活跃 V2 facet 和
+  M6 counter-ON 五元组仍没有新鲜实机证据。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

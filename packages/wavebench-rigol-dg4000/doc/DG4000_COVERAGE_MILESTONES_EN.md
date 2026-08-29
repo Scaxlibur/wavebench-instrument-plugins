@@ -6,7 +6,7 @@
 
 This document divides the broad DG4000 programming surface into M0-M12. Milestone numbers express risk order, not command counts or completion percentages. A milestone is complete only when code, failure paths, release artifacts, and the required hardware evidence all pass its exit gate.
 
-Current version: `wavebench-rigol-dg4000 0.6.0`.
+Current version: `wavebench-rigol-dg4000 0.7.0`.
 
 | Milestone | Status | Scope |
 |---|---|---|
@@ -17,15 +17,17 @@ Current version: `wavebench-rigol-dg4000 0.6.0`.
 | M4 | **Complete** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
 | M5 | **Complete** | Query-only sweep profile |
 | M6 | **Complete** | Non-destructive counter profile |
-| M7 | Not started | Controlled sweep transaction and trigger |
-| M8 | Not started | Controlled pulse/burst/marker profiles |
+| M7 | **Partial** | Source V2 Sweep read facet implemented; controlled transaction/trigger pending |
+| M8 | **Partial** | Source V2 Pulse/Burst read facets implemented; Marker and controlled writes pending |
 | M9 | Not started | Atomic dual-channel coupling |
 | M10 | Not started | Basic AM/FM/PM/PWM modulation |
-| M11 | Not started | Advanced modulation, harmonics, and arbitrary-wave formats |
+| M11 | **Partial** | Partial Harmonic read facet implemented; components, advanced modulation, and formats pending |
 | M12 | Not started | Model/channel acceptance matrix and release convergence |
 
-M0 completion adds no instrument function. Version 0.6.0 completes the M1-M5 hardware exit gates
-on DG4202 CH1 and CH2 and the global counter-OFF M6 hardware gate.
+M0 completion adds no instrument function. Version `0.7.0` preserves the M1-M5 DG4202 CH1/CH2
+hardware gates and global counter-OFF M6 gate while adding a pure-query Source V2 adapter. Only
+the current OFF/SIN/FIX state has fresh V2 hardware evidence; active facets retain the boundaries
+defined below.
 
 ## 2. Rules shared by all milestones
 
@@ -255,9 +257,36 @@ command. The offline fault matrix covers every query position, unknown enums, no
 range configuration, and the counter-ON tuple's field count, finiteness, frequency/period,
 pulse-width/period, and duty/width relationships. Counter-ON has no hardware measurement conclusion.
 
+## 10.1. Read-only Source V2 migration
+
+**Status: partial.** Version `0.7.0` adds `source.snapshot_v2` and declares no Source V2 write
+capability.
+
+- Basic reads CH1/CH2 function, frequency mode/value, unit-bearing amplitude, offset, phase, and
+  square duty.
+- Output reads enabled only; load/polarity remain available through V1 `source.channel_profile`.
+- Sweep reuses the strict M5 profile while active and returns `inactive_by_anchor` otherwise.
+- Pulse reads hold, width/duty, delay, and both transitions while the Pulse waveform is active.
+- Burst always reads state, marks the remaining fields inapplicable while OFF, and reads full mode,
+  timing, and trigger fields while ON.
+- Harmonic reads enabled, configured/maximum order, and preset only. Completeness is explicitly
+  `PARTIAL`; per-order amplitude/phase is neither read nor fabricated.
+
+The worst-case query budget is 108. Every item is `PURE_READ`; identity, Basic, and Output are read
+before and after optional facets. Core reports anchor drift, and the driver sends no selector or
+write for this snapshot.
+
+2026-08-30 evidence: DG4202 `00.01.14` reported CH1/CH2 OFF, SIN, 1 kHz, 5 Vpp, 0 V offset,
+FIX, and sweep OFF. The public CLI completed a 40-query Source V2 snapshot with matching anchors
+and healthy session state before and after. This accepts Burst OFF and the inactive result for the
+conditional facets only; it is not active Pulse/Sweep/Burst/Harmonic hardware evidence. Current
+public APIs lack complete configure/restore transactions for those modes, so raw SCPI is not used
+to stage them.
+
 ## 11. M7 — Controlled sweep transaction
 
-**Status: not started; P2.** Requires M2, M3, and M5.
+**Status: read facet implemented; controlled writes and trigger not started, P2.** Requires M2,
+M3, and M5.
 
 The transaction covers start/stop or center/span, spacing/steps/time, marker, trigger source/slope/trigger-out, and sweep state. A manual immediate trigger or `*TRG` exists only as one explicit action inside an established, readback-confirmed sweep session.
 
@@ -265,13 +294,16 @@ Exit gate: complete snapshot→write→readback→external measurement→OFF→r
 
 ## 12. M8 — Pulse, burst, and marker
 
-**Status: not started; P2/P3.**
+**Status: Pulse/Burst read facets implemented; Marker and controlled writes not started, P2/P3.**
 
 - Pulse profile: hold mode, width/duty, delay, and leading/trailing transitions.
 - Burst profile: mode, cycles, phase, internal period, delay, gate polarity, trigger source/slope/trigger-out.
 - Marker is exposed only inside the relevant sweep/burst profile, not as a global bare setter.
 
-Implement query-only first, then transactional writes. Separate output enable from trigger. Never retry an immediate trigger. The exit gate includes output-off failure convergence, edge/duty constraints, and oscilloscope time-domain evidence.
+Exact offline query and failure tests now cover the read-only stage; active-state hardware evidence
+is still missing. Future transactional writes must separate output enable from trigger and never
+retry an immediate trigger. The exit gate includes output-off failure handling, edge/duty
+constraints, and oscilloscope time-domain evidence.
 
 ## 13. M9 — Atomic dual-channel coupling
 
@@ -291,11 +323,15 @@ Exit gate: reuse M2/M3 transaction foundations; configure while modulation is OF
 
 ## 15. M11 — Advanced modulation, harmonics, and arbitrary-wave formats
 
-**Status: not started; P3.**
+**Status: partial Harmonic read facet implemented; remaining work not started, P3.**
 
 Candidates include ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK, harmonic order/type/user/amplitude/phase, and `TRACe:DATA:DAC16`, points/value/interpolate/load queries under a contract distinct from DAC14.
 
-Every candidate first needs a manual/firmware probe, independent data contract, and resource-limit audit. DAC16 cannot reuse `DG4000DacBlock` while pretending to be DAC14. Freeze chunking, byte order, maximum points, RAM/DDR lifetime, and readback semantics first. These may remain in backlog permanently without a concrete experiment need.
+The current Harmonic read result is explicitly `PARTIAL` and excludes USER mask and per-order
+amplitude/phase. Every remaining candidate first needs a manual/firmware probe, independent data
+contract, and resource-limit audit. DAC16 cannot reuse `DG4000DacBlock` while pretending to be
+DAC14. Freeze chunking, byte order, maximum points, RAM/DDR lifetime, and readback semantics first.
+These may remain in backlog permanently without a concrete experiment need.
 
 ## 16. M12 — Model matrix and release convergence
 
@@ -314,8 +350,10 @@ Final exit requires every public write capability to have normal-path, failure-m
 ## 17. Current evidence boundary
 
 - External-plugin hardware accepted: M1-M5 CH1/CH2 gates and the global M6 counter-OFF zero-write
-  gate on DG4202 firmware `00.01.14`.
+  gate on DG4202 firmware `00.01.14`; the current OFF/SIN/FIX 40-query Source V2 snapshot for
+  `0.7.0` also passes.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: M7-M12. The M6 counter-ON tuple still has offline parsing evidence only.
+- Not passed: all M7-M12 controlled-write exit gates. Active Pulse/Sweep/Burst/Harmonic V2 facets
+  and the M6 counter-ON tuple still lack fresh hardware evidence.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

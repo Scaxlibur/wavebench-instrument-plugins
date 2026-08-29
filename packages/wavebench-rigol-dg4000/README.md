@@ -8,13 +8,14 @@
 
 - distribution：`wavebench-rigol-dg4000`
 - canonical driver ID：`rigol.dg4202`
-- WaveBench：`>=0.8.17,<0.9`
+- WaveBench：`>=0.8.25,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
 
 当前包同时使用 WaveBench `v0.8.15` 首次提供的 `SourceChannelProfile`、`v0.8.16`
-新增的 `SourceSweepProfile` 和 `v0.8.17` 新增的 `SourceCounterProfile` 公共契约，因此
-不能与早于 `v0.8.17` 的 core 配套运行，也不自动声明兼容未来 `0.9`。
+新增的 `SourceSweepProfile`、`v0.8.17` 新增的 `SourceCounterProfile`，以及 `v0.8.25`
+的 Source V2 快照契约。因此不能与早于 `v0.8.25` 的 Core 配套运行，也不自动声明
+兼容未来 `0.9`。
 
 该插件不声明 alias。安装后，显式 canonical ID `rigol.dg4202` 选择外置实现；短 alias `dg4202` 始终选择 WaveBench 内建 fallback。卸载插件后，canonical ID 也回退到内建实现。
 
@@ -24,6 +25,8 @@
 - CH1/CH2 负载、极性、noise、sync、burst、modulation、marker 和 pulse-hold 的严格只读 profile；
 - CH1/CH2 sweep 状态、频率窗口、spacing/steps/time、hold/return、trigger 和 marker 的严格只读 profile；
 - 全局 counter 状态、输入配置、统计显示和条件式五元组测量结果的严格只读 profile；
+- `source.snapshot_v2` 类型化只读快照：CH1/CH2 Basic、输出开关、Sweep、Pulse、Burst，
+  以及不含逐阶分量的部分 Harmonic 状态；
 - 固定频率、函数、VPP 幅度、方波占空比和显式输出控制；
 - 只读任意波形 SCPI 能力探测；
 - 使用 WaveBench 公共 `DG4000DacBlock` 契约上传已校验的 DAC14 binary block。
@@ -39,7 +42,7 @@ WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅�
 
 descriptor 导入不连接仪器。factory 只通过 `DriverContext` 打开当前配置的 transport。默认离线测试不扫描资源、不连接仪器，也不发送真实 SCPI。输出控制、任意波形上传和其他写操作不会盲目重试。
 
-`0.6.0` 在 M3 通道 profile 和 M5 sweep profile 上新增 M6 非破坏性 counter profile，
+`0.7.0` 在原有 M1–M6 能力上增加纯查询 Source V2 适配，不声明任何 Source V2 写能力，
 并保留 `0.3.0` 的 M1/M2/M4 事务边界：所有 I/O 使用同一可重入锁，固定波写入采用
 写前快照、逐步回读、off-first 恢复和歧义写锁存；DAC14 上传仅允许目标通道已 OFF、
 FIX 且 sweep OFF，并明确把被覆盖的 volatile USER 波表视为不可恢复副作用。DG4202
@@ -110,6 +113,13 @@ AC coupling、1 MΩ、1X attenuation、USER1 gate、HF rejection OFF、0 V trigg
 启用 counter，也未发送 `AUTO` 或 `STATIstics:CLEAr`。counter-ON 的频率、周期、占空比、
 正脉宽和负脉宽五元组解析及关系校验只有离线证据，不属于本次实机验收。
 
+2026-08-30 使用外置插件 `0.7.0` 完成 Source V2 当前状态只读验收。DG4202 固件
+`00.01.14` 的 CH1/CH2 均为 OFF、SIN、1 kHz、5 Vpp、0 V offset、FIX、sweep OFF；
+`source.snapshot_v2` 完成 40 次纯查询，前后锚点一致，会话保持 healthy。Burst OFF
+以类型化状态返回；Sweep、Pulse 与 Harmonic 因激活条件不成立而返回
+`inactive_by_anchor`。本次没有读取错误队列、改变仪器状态或采集 RTM2032 波形，
+因此不构成这些 facet 活跃状态的实机证据。
+
 ## 开发验证
 
 ```bash
@@ -135,3 +145,7 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
 - `0.6.0`：要求 WaveBench `>=0.8.17`，新增 `source.counter_profile`；DG4202
   `00.01.14` 在 counter OFF 下完成三轮严格零写 M6 实机门，不自动启用 counter，
   不发送 `AUTO`/statistics clear，也不把离线验证的 counter-ON 测量解析写成实机结论。
+- `0.7.0`：要求 WaveBench `>=0.8.25`，新增纯查询 `source.snapshot_v2`；Basic、输出
+  开关、Sweep、Pulse、Burst 和部分 Harmonic facet 进入类型化快照。当前 OFF/SIN/FIX
+  实机状态完成 40 次纯查询验收；活跃 Sweep/Pulse/Burst/Harmonic 仍只有既有 V1 或
+  离线证据，不增加对应写 capability。
