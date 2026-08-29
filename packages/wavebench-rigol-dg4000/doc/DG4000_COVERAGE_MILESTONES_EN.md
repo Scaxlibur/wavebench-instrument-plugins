@@ -26,8 +26,8 @@ Current version: `wavebench-rigol-dg4000 0.7.0`.
 
 M0 completion adds no instrument function. Version `0.7.0` preserves the M1-M5 DG4202 CH1/CH2
 hardware gates and global counter-OFF M6 gate while adding a pure-query Source V2 adapter. Only
-the current OFF/SIN/FIX state has fresh V2 hardware evidence; active facets retain the boundaries
-defined below.
+the current OFF/SIN/FIX state and output-OFF Pulse/1 Vpp state have fresh V2 hardware evidence;
+the remaining active facets retain the boundaries defined below.
 
 ## 2. Rules shared by all milestones
 
@@ -278,10 +278,12 @@ write for this snapshot.
 
 2026-08-30 evidence: DG4202 `00.01.14` reported CH1/CH2 OFF, SIN, 1 kHz, 5 Vpp, 0 V offset,
 FIX, and sweep OFF. The public CLI completed a 40-query Source V2 snapshot with matching anchors
-and healthy session state before and after. This accepts Burst OFF and the inactive result for the
-conditional facets only; it is not active Pulse/Sweep/Burst/Harmonic hardware evidence. Current
-public APIs lack complete configure/restore transactions for those modes, so raw SCPI is not used
-to stage them.
+and healthy session state before and after. Existing V1 transactions then staged both channels at
+PULSE, 1 Vpp, and output OFF. A second V2 snapshot completed 52 queries and returned DUTY hold,
+500 us width, 50% duty, 0 s delay, and 1.9531 us leading/trailing transitions on both channels. A
+fresh final session verified both channels restored to OFF, SIN, 1 kHz, 5 Vpp, 0 V offset, and FIX.
+This accepts the active Pulse facet. Active Sweep, Burst ON, and Harmonic remain unaccepted and are
+not staged with raw SCPI.
 
 ## 11. M7 — Controlled sweep transaction
 
@@ -300,10 +302,11 @@ Exit gate: complete snapshot→write→readback→external measurement→OFF→r
 - Burst profile: mode, cycles, phase, internal period, delay, gate polarity, trigger source/slope/trigger-out.
 - Marker is exposed only inside the relevant sweep/burst profile, not as a global bare setter.
 
-Exact offline query and failure tests now cover the read-only stage; active-state hardware evidence
-is still missing. Future transactional writes must separate output enable from trigger and never
-retry an immediate trigger. The exit gate includes output-off failure handling, edge/duty
-constraints, and oscilloscope time-domain evidence.
+Exact offline query and failure tests cover the read-only stage. The active Pulse facet now passes
+hardware readback on both channels at output OFF and 1 Vpp; Burst ON remains unaccepted. Future
+transactional writes must separate output enable from trigger and never retry an immediate trigger.
+The exit gate includes output-off failure handling, edge/duty constraints, and oscilloscope
+time-domain evidence.
 
 ## 13. M9 — Atomic dual-channel coupling
 
@@ -350,10 +353,10 @@ Final exit requires every public write capability to have normal-path, failure-m
 ## 17. Current evidence boundary
 
 - External-plugin hardware accepted: M1-M5 CH1/CH2 gates and the global M6 counter-OFF zero-write
-  gate on DG4202 firmware `00.01.14`; the current OFF/SIN/FIX 40-query Source V2 snapshot for
-  `0.7.0` also passes.
+  gate on DG4202 firmware `00.01.14`; the `0.7.0` 40-query baseline Source V2 snapshot and 52-query
+  output-OFF active Pulse snapshot also pass.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: all M7-M12 controlled-write exit gates. Active Pulse/Sweep/Burst/Harmonic V2 facets
+- Not passed: all M7-M12 controlled-write exit gates. Active Sweep, Burst ON, Harmonic V2 facets,
   and the M6 counter-ON tuple still lack fresh hardware evidence.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

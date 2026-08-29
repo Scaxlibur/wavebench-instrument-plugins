@@ -114,8 +114,12 @@ On 2026-08-30, external plugin `0.7.0` completed read-only Source V2 acceptance 
 instrument state. DG4202 firmware `00.01.14` reported CH1/CH2 OFF, SIN, 1 kHz, 5 Vpp, 0 V offset,
 FIX, and sweep OFF. `source.snapshot_v2` completed 40 pure queries with matching before/after
 anchors and healthy session state. Burst OFF was returned as a typed facet; Sweep, Pulse, and
-Harmonic were `inactive_by_anchor`. The run did not read the error queue, mutate instrument state,
-or capture RTM2032 waveforms, so it is not active-state hardware evidence for those facets.
+Harmonic were `inactive_by_anchor`. Existing V1 transactions then staged both channels at PULSE,
+1 Vpp, and output OFF. A second V2 snapshot completed 52 queries and returned DUTY hold, 500 us
+width, 50% duty, 0 s delay, and 1.9531 us leading/trailing transitions on both channels. A fresh
+final session confirmed both channels restored to OFF, SIN, 1 kHz, 5 Vpp, 0 V offset, and FIX.
+No waveform was emitted and RTM2032 was not captured. Active Sweep, Burst ON, and Harmonic remain
+outside this hardware evidence.
 
 ## Development checks
 
@@ -141,5 +145,6 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
   hardware result.
 - `0.7.0` requires WaveBench `>=0.8.25` and adds pure-query `source.snapshot_v2` with typed Basic,
   output-enabled, Sweep, Pulse, Burst, and partial Harmonic facets. The current OFF/SIN/FIX state
-  passed a 40-query hardware read; active Sweep/Pulse/Burst/Harmonic states retain only prior V1 or
-  offline evidence, and no matching write capability is declared.
+  passed a 40-query hardware read, and the output-OFF PULSE/1 Vpp state passed a 52-query read.
+  Active Sweep, Burst ON, and Harmonic retain only prior V1 or offline evidence, and no matching
+  write capability is declared.

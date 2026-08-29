@@ -26,7 +26,8 @@
 
 M0 完成不表示仪器功能增加。`0.7.0` 保留 M1–M5 的 DG4202 CH1/CH2 实机退出门和
 M6 的全局 counter-OFF 实机退出门，并增加 Source V2 纯查询适配。只有当前
-OFF/SIN/FIX 状态完成新鲜 V2 实机读取；活跃 facet 仍按各节证据边界处理。
+OFF/SIN/FIX 状态和 output-OFF Pulse/1 Vpp 状态完成新鲜 V2 实机读取；其余活跃 facet
+仍按各节证据边界处理。
 
 ## 2. 所有阶段共同规则
 
@@ -261,9 +262,11 @@ frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无�
 
 2026-08-30 证据：DG4202 `00.01.14` 的 CH1/CH2 均为 OFF、SIN、1 kHz、5 Vpp、
 0 V offset、FIX、sweep OFF。公开 CLI 完成 40-query Source V2 快照，前后锚点一致，
-session health 前后均为 healthy。该状态只验证 Burst OFF 与其它条件 facet 的未激活结果，
-不构成 Pulse/Sweep/Burst/Harmonic 活跃态实机验收。当前公开 API 缺少这些模式的完整
-配置与恢复事务，因此不使用 raw SCPI 临时激活。
+session health 前后均为 healthy。随后使用既有 V1 事务将两路临时设为 PULSE、1 Vpp，
+输出始终 OFF；第二次 V2 快照完成 52 queries，并返回两路 DUTY hold、500 µs width、
+50% duty、0 s delay 和 1.9531 µs 双边沿。最终新会话确认两路恢复为 OFF、SIN、1 kHz、
+5 Vpp、0 V offset、FIX。该证据接受 Pulse 活跃 facet；Sweep、Burst ON 和 Harmonic
+活跃态仍未验收，不使用 raw SCPI 临时激活。
 
 ## 11. M7 — Sweep 受控事务
 
@@ -281,9 +284,10 @@ session health 前后均为 healthy。该状态只验证 Burst OFF 与其它条�
 - Burst profile：mode、cycles、phase、internal period、delay、gate polarity、trigger source/slope/trigger-out；
 - Marker 只在相关 sweep/burst profile 中开放，不做全局裸 setter。
 
-只读阶段已完成离线精确命令与失败测试；活跃态实机证据尚未取得。后续事务写要求输出与
-trigger 显式分离；immediate trigger 不允许重试。退出门包括输出 OFF 失败处理、边沿/占空比
-约束和示波器时域证据。
+只读阶段已完成离线精确命令与失败测试；Pulse 活跃 facet 已在两路 output OFF、1 Vpp
+状态下通过实机读取，Burst ON 仍未验收。后续事务写要求输出与 trigger 显式分离；
+immediate trigger 不允许重试。退出门包括输出 OFF 失败处理、边沿/占空比约束和示波器
+时域证据。
 
 ## 13. M9 — 双通道 Coupling 原子事务
 
@@ -329,10 +333,10 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 ## 17. 当前证据边界
 
 - 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门，以及 M6
-  全局 counter-OFF 零写入门；`0.7.0` 当前 OFF/SIN/FIX 状态的 40-query Source V2
-  快照也已通过。
+  全局 counter-OFF 零写入门；`0.7.0` 的 40-query 基线 Source V2 快照和 52-query
+  output-OFF Pulse 活跃快照也已通过。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
-- 尚未通过：M7–M12 的全部受控写退出门；Pulse/Sweep/Burst/Harmonic 活跃 V2 facet 和
+- 尚未通过：M7–M12 的全部受控写退出门；Sweep、Burst ON、Harmonic 活跃 V2 facet 和
   M6 counter-ON 五元组仍没有新鲜实机证据。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

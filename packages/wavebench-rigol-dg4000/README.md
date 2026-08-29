@@ -117,8 +117,11 @@ AC coupling、1 MΩ、1X attenuation、USER1 gate、HF rejection OFF、0 V trigg
 `00.01.14` 的 CH1/CH2 均为 OFF、SIN、1 kHz、5 Vpp、0 V offset、FIX、sweep OFF；
 `source.snapshot_v2` 完成 40 次纯查询，前后锚点一致，会话保持 healthy。Burst OFF
 以类型化状态返回；Sweep、Pulse 与 Harmonic 因激活条件不成立而返回
-`inactive_by_anchor`。本次没有读取错误队列、改变仪器状态或采集 RTM2032 波形，
-因此不构成这些 facet 活跃状态的实机证据。
+`inactive_by_anchor`。随后使用既有 V1 事务在输出始终 OFF 的条件下，将两路临时设为
+PULSE、1 Vpp；第二次 V2 快照完成 52 次查询，并在两路返回 DUTY hold、500 µs width、
+50% duty、0 s delay 和 1.9531 µs 双边沿。最终新会话确认两路均恢复为 OFF、SIN、
+1 kHz、5 Vpp、0 V offset、FIX。全程未输出波形或采集 RTM2032；Sweep、Burst ON 和
+Harmonic 活跃态仍无本轮实机证据。
 
 ## 开发验证
 
@@ -147,5 +150,5 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
   不发送 `AUTO`/statistics clear，也不把离线验证的 counter-ON 测量解析写成实机结论。
 - `0.7.0`：要求 WaveBench `>=0.8.25`，新增纯查询 `source.snapshot_v2`；Basic、输出
   开关、Sweep、Pulse、Burst 和部分 Harmonic facet 进入类型化快照。当前 OFF/SIN/FIX
-  实机状态完成 40 次纯查询验收；活跃 Sweep/Pulse/Burst/Harmonic 仍只有既有 V1 或
-  离线证据，不增加对应写 capability。
+  实机状态完成 40 次纯查询验收，Pulse/1 Vpp/output-OFF 活跃态完成 52 次查询验收；
+  Sweep、Burst ON 和 Harmonic 活跃态仍只有既有 V1 或离线证据，不增加对应写 capability。
