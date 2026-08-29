@@ -42,6 +42,7 @@ from wavebench.instruments import (
     SourceSafetyProfile,
     SourceSweepCapabilityProfile,
     SourceSweepSpacing,
+    SourceSyncCapabilityProfile,
     SourceTopologyContract,
     SourceTriggerSource,
     SourceWaveformKind,
@@ -187,6 +188,11 @@ def _source_extensions() -> SourceDescriptorExtensions:
         reference_channel_readable=True,
         relation_graph_readable=False,
     )
+    sync_profile = SourceSyncCapabilityProfile(
+        enabled_readable=True,
+        polarity_readable=True,
+        source_channel_readable=False,
+    )
     channel_features = tuple(
         SourceFeatureCapability(
             feature=feature,
@@ -206,6 +212,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
             (SourceFeature.OUTPUT, output_profile),
             (SourceFeature.PULSE, pulse_profile),
             (SourceFeature.SWEEP, sweep_profile),
+            (SourceFeature.SYNC, sync_profile),
         )
         for channel in _V2_CHANNELS
     )
@@ -380,8 +387,17 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     effect=SourceQueryEffect.PURE_READ,
                     max_queries=16,
                 ),
+                SourceFacetQueryContract(
+                    feature=SourceFeature.SYNC,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.SYNC,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=2,
+                    required=True,
+                ),
             ),
-            max_queries=130,
+            max_queries=134,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),

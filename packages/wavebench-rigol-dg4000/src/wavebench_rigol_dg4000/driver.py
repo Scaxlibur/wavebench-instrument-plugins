@@ -53,6 +53,8 @@ from wavebench.instruments import (
     SourceSweepMarker,
     SourceSweepSpacing,
     SourceSweepProfile,
+    SourceSyncPolarity,
+    SourceSyncState,
     SourceStatus,
     SourceTriggerOutput,
     SourceTriggerSlope,
@@ -984,6 +986,37 @@ class DG4202Source:
             dimensions=tuple(dimensions),
         )
 
+    def _v2_sync_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> SourceSyncState:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":OUTP{channel}:SYNC?"),
+                field_name="sync state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        polarity = _normalize_enum(
+            self._v2_query(plan, f":OUTP{channel}:SYNC:POL?"),
+            field_name="sync polarity",
+            aliases=_EDGE_ALIASES,
+        )
+        return SourceSyncState(
+            enabled=Observed.value_of(enabled),
+            polarity=Observed.value_of(
+                SourceSyncPolarity.POSITIVE
+                if polarity == "POSITIVE"
+                else SourceSyncPolarity.NEGATIVE
+            ),
+            source_channel=Observed.missing(
+                Availability.NOT_QUERIED,
+                SourceReasonCode.NOT_REQUESTED,
+            ),
+        )
+
     @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
@@ -1038,6 +1071,7 @@ class DG4202Source:
                 SourceFieldId.OUTPUT,
                 SourceFieldId.PULSE,
                 SourceFieldId.SWEEP,
+                SourceFieldId.SYNC,
             }:
                 if field_ref.target.scope.value != "channel":
                     raise DataError("DG4000 Source V2 channel facets must be channel scoped")
@@ -1060,6 +1094,11 @@ class DG4202Source:
                     and item.phase is not SourceQueryPhase.FACET
                 ):
                     raise DataError("DG4000 Source V2 modulation must be a facet query")
+                if (
+                    field_ref.field is SourceFieldId.SYNC
+                    and item.phase is not SourceQueryPhase.FACET
+                ):
+                    raise DataError("DG4000 Source V2 sync must be a facet query")
             else:
                 raise DataError("DG4000 Source V2 query plan requests an unsupported field")
             targets = phase_fields.setdefault(item.phase, {}).setdefault(
@@ -1126,6 +1165,12 @@ class DG4202Source:
         )
         if not modulation_channels <= channels:
             raise DataError("DG4000 Source V2 modulation requires matching basic anchors")
+        sync_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.SYNC,
+            set(),
+        )
+        if not sync_channels <= channels:
+            raise DataError("DG4000 Source V2 sync requires matching basic anchors")
 
     def execute_source_query_plan_v2(
         self,
@@ -1215,6 +1260,10 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.MODULATION:
                     assert channel is not None
                     value = self._v2_modulation_facet(channel, plan)
+                    query_count = 2
+                elif field_ref.field is SourceFieldId.SYNC:
+                    assert channel is not None
+                    value = self._v2_sync_facet(channel, plan)
                     query_count = 2
                 elif field_ref.field is SourceFieldId.SWEEP:
                     assert channel is not None

@@ -20,6 +20,7 @@ from wavebench.instruments import (
     SourceInputCoupling,
     SourceModulationKind,
     SourceSemanticQueryPlan,
+    SourceSyncPolarity,
     SourceWaveformKind,
 )
 from wavebench.instruments.api import DriverContext
@@ -297,9 +298,9 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 91
-    assert len(execution.items) == 24
-    assert len(transport.queries) == 91
+    assert execution.query_count == 95
+    assert len(execution.items) == 26
+    assert len(transport.queries) == 95
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
     assert ":SOUR2:FREQ:MODE?" not in transport.queries
@@ -351,8 +352,8 @@ def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 59
-    assert len(transport.queries) == 59
+    assert execution.query_count == 63
+    assert len(transport.queries) == 63
     assert all(
         channel.sweep.availability is Availability.NOT_APPLICABLE
         for channel in snapshot.channels
@@ -374,8 +375,8 @@ def test_source_v2_reads_documented_pulse_facet_only_for_pulse_waveforms() -> No
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 71
-    assert len(transport.queries) == 71
+    assert execution.query_count == 75
+    assert len(transport.queries) == 75
     assert all(channel.pulse.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].pulse.value.width_s.value == 0.0005
     assert snapshot.channels[0].sweep.availability is Availability.NOT_APPLICABLE
@@ -396,8 +397,8 @@ def test_source_v2_reads_full_burst_facet_only_when_burst_is_enabled() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 77
-    assert len(transport.queries) == 77
+    assert execution.query_count == 81
+    assert len(transport.queries) == 81
     assert all(channel.burst.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].burst.value.enabled.value is True
     assert snapshot.channels[0].burst.value.cycles.value == 4
@@ -418,8 +419,8 @@ def test_source_v2_reads_partial_harmonic_facet_for_harmonic_waveforms() -> None
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 65
-    assert len(transport.queries) == 65
+    assert execution.query_count == 69
+    assert len(transport.queries) == 69
     assert all(
         channel.harmonics.availability is Availability.VALUE
         for channel in snapshot.channels
@@ -446,7 +447,7 @@ def test_source_v2_reads_counter_off_without_fabricating_gate_time() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 59
+    assert execution.query_count == 63
     counter = snapshot.system.value.counters[0]
     assert counter.input_id == "counter"
     assert counter.enabled.value is False
@@ -476,7 +477,7 @@ def test_source_v2_reads_counter_on_measurement_tuple() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 60
+    assert execution.query_count == 64
     counter = snapshot.system.value.counters[0]
     assert counter.enabled.value is True
     assert tuple(item.kind for item in counter.measurements.value) == (
@@ -520,7 +521,7 @@ def test_source_v2_reads_parameterized_coupling_as_one_channel_set() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 59
+    assert execution.query_count == 63
     coupling = snapshot.cross_channel.value.relations[0]
     assert coupling.channels == (1, 2)
     assert coupling.enabled.value is True
@@ -586,6 +587,67 @@ def test_source_v2_rejects_invalid_coupling_readback_without_writes(
     assert transport.byte_writes == []
 
 
+def test_source_v2_reads_channel_sync_state_and_polarity_only() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "sync": "0",
+            "sync_polarity": "NEGATIVE",
+        }
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 63
+    assert all(channel.sync.value.enabled.value is False for channel in snapshot.channels)
+    assert all(
+        channel.sync.value.polarity.value is SourceSyncPolarity.NEGATIVE
+        for channel in snapshot.channels
+    )
+    assert all(
+        channel.sync.value.source_channel.availability is Availability.NOT_QUERIED
+        for channel in snapshot.channels
+    )
+    assert transport.queries.count(":OUTP1:SYNC?") == 1
+    assert transport.queries.count(":OUTP1:SYNC:POL?") == 1
+    assert transport.queries.count(":OUTP2:SYNC?") == 1
+    assert transport.queries.count(":OUTP2:SYNC:POL?") == 1
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    (
+        (":OUTP1:SYNC?", "MAYBE", "sync state"),
+        (":OUTP1:SYNC:POL?", "BOTH", "sync polarity"),
+    ),
+)
+def test_source_v2_rejects_invalid_sync_readback_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    transport.query_overrides[command] = response
+    _context, plan = _source_v2_plan()
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
 @pytest.mark.parametrize(
     ("response", "expected"),
     (
@@ -621,7 +683,7 @@ def test_source_v2_reads_modulation_state_and_type_only(
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 59
+    assert execution.query_count == 63
     assert all(channel.modulation.value.enabled.value is True for channel in snapshot.channels)
     assert all(channel.modulation.value.kind.value is expected for channel in snapshot.channels)
     modulation = snapshot.channels[0].modulation.value
@@ -651,7 +713,7 @@ def test_source_v2_reuses_basic_anchor_for_partial_arbitrary_read(
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 59
+    assert execution.query_count == 63
     assert all(channel.arbitrary.availability is Availability.VALUE for channel in snapshot.channels)
     arbitrary = snapshot.channels[0].arbitrary.value
     assert arbitrary.selected_waveform_id.value == waveform.lower()
@@ -687,7 +749,7 @@ def test_source_v2_accepts_documented_long_waveform_tokens_without_changing_v1()
 @pytest.mark.parametrize(
     ("plan", "message"),
     (
-        (_source_v2_plan(max_queries=129)[1], "total query budget"),
+        (_source_v2_plan(max_queries=133)[1], "total query budget"),
         (_source_v2_plan(deadline_monotonic=0.0)[1], "deadline has expired"),
     ),
 )
@@ -717,7 +779,7 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert "source.snapshot_v2" in item.capabilities
     assert item.source_extensions is not None
     assert item.source_extensions.topology.input_ids == ("counter",)
-    assert item.source_extensions.query_contract.max_queries == 130
+    assert item.source_extensions.query_contract.max_queries == 134
     arbitrary = next(
         feature
         for feature in item.source_extensions.features
@@ -751,6 +813,22 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     )
     assert coupling_query.fields == (SourceFieldId.COUPLING,)
     assert coupling_query.max_queries == 5
+    sync = tuple(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "sync"
+    )
+    assert tuple(feature.channels for feature in sync) == ((1,), (2,))
+    assert all(feature.profile.enabled_readable is True for feature in sync)
+    assert all(feature.profile.polarity_readable is True for feature in sync)
+    assert all(feature.profile.source_channel_readable is False for feature in sync)
+    sync_query = next(
+        facet
+        for facet in item.source_extensions.query_contract.facets
+        if facet.feature.value == "sync"
+    )
+    assert sync_query.fields == (SourceFieldId.SYNC,)
+    assert sync_query.max_queries == 2
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
     assert "source.counter_profile" in item.capabilities
