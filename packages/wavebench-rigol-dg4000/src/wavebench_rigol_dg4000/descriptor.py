@@ -13,6 +13,8 @@ from wavebench.instruments import (
     SourceBurstCapabilityProfile,
     SourceBurstMode,
     SourceConstraintApplicability,
+    SourceCounterCapabilityProfile,
+    SourceCounterMeasurementKind,
     SourceDescriptorExtensions,
     SourceFacetQueryContract,
     SourceFacetScope,
@@ -115,7 +117,19 @@ def _source_extensions() -> SourceDescriptorExtensions:
         configured_order_readable=True,
         preset_readable=True,
     )
-    features = tuple(
+    counter_profile = SourceCounterCapabilityProfile(
+        input_ids=("counter",),
+        measurement_kinds=(
+            SourceCounterMeasurementKind.DUTY_PERCENT,
+            SourceCounterMeasurementKind.FREQUENCY_HZ,
+            SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+            SourceCounterMeasurementKind.PERIOD_S,
+            SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+        ),
+        configuration_readable=False,
+        query_effect=SourceQueryEffect.PURE_READ,
+    )
+    channel_features = tuple(
         SourceFeatureCapability(
             feature=feature,
             support=SupportState.SUPPORTED,
@@ -135,9 +149,29 @@ def _source_extensions() -> SourceDescriptorExtensions:
         )
         for channel in _V2_CHANNELS
     )
+    features = tuple(
+        sorted(
+            (
+                *channel_features,
+                SourceFeatureCapability(
+                    feature=SourceFeature.COUNTER,
+                    support=SupportState.SUPPORTED,
+                    directions=(SourceFeatureDirection.READ,),
+                    scope=SourceFacetScope.INPUT,
+                    channels=(),
+                    applicability=applicability,
+                    profile=counter_profile,
+                ),
+            ),
+            key=lambda item: (item.feature.value, item.scope.value, item.channels),
+        )
+    )
     return SourceDescriptorExtensions(
         contract_version=SOURCE_CONTRACT_VERSION,
-        topology=SourceTopologyContract(channels=_V2_CHANNELS),
+        topology=SourceTopologyContract(
+            channels=_V2_CHANNELS,
+            input_ids=("counter",),
+        ),
         features=features,
         query_contract=SourceQueryContract(
             anchor_fields=(
@@ -171,6 +205,15 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     activation_any=(),
                     effect=SourceQueryEffect.PURE_READ,
                     max_queries=10,
+                    required=True,
+                ),
+                SourceFacetQueryContract(
+                    feature=SourceFeature.COUNTER,
+                    scope=SourceFacetScope.INPUT,
+                    fields=(SourceFieldId.COUNTER,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=11,
                     required=True,
                 ),
                 SourceFacetQueryContract(
@@ -234,7 +277,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=16,
                 ),
             ),
-            max_queries=108,
+            max_queries=119,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),

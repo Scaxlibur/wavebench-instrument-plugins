@@ -22,12 +22,16 @@ from wavebench.instruments import (
     SourceAmplitudeUnit,
     SourceBurstMode,
     SourceChannelProfile,
+    SourceCounterInputState,
     SourceCounterMeasurement,
+    SourceCounterMeasurementKind,
+    SourceCounterMeasurementV2,
     SourceCounterProfile,
     SourceFieldId,
     SourceFrequencyMode,
     SourceGatePolarity,
     SourceHarmonicPreset,
+    SourceInputCoupling,
     SourceProtocolQueryRecord,
     SourcePulseHoldBasis,
     SourceQueryEffect,
@@ -764,6 +768,67 @@ class DG4202Source:
             raise DataError(f"inconsistent DG4000 harmonic profile: {exc}") from exc
 
     @staticmethod
+    def _v2_counter_facet(
+        input_id: str,
+        profile: SourceCounterProfile,
+    ) -> SourceCounterInputState:
+        if profile.measurement is None:
+            measurements = Observed.missing(
+                Availability.NOT_APPLICABLE,
+                SourceReasonCode.INACTIVE_BY_ANCHOR,
+            )
+        else:
+            measurement = profile.measurement
+            measurements = Observed.value_of(
+                tuple(
+                    sorted(
+                        (
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.FREQUENCY_HZ,
+                                measurement.frequency_hz,
+                            ),
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.PERIOD_S,
+                                measurement.period_s,
+                            ),
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.DUTY_PERCENT,
+                                measurement.duty_cycle_percent,
+                            ),
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+                                measurement.positive_width_s,
+                            ),
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+                                measurement.negative_width_s,
+                            ),
+                        ),
+                        key=lambda item: item.kind.value,
+                    )
+                )
+            )
+        unsupported = Observed.missing(
+            Availability.UNSUPPORTED,
+            SourceReasonCode.DESCRIPTOR_UNSUPPORTED,
+        )
+        return SourceCounterInputState(
+            input_id=input_id,
+            enabled=Observed.value_of(profile.enabled),
+            measurements=measurements,
+            coupling=Observed.value_of(
+                SourceInputCoupling.AC
+                if profile.coupling == "AC"
+                else SourceInputCoupling.DC
+            ),
+            impedance_ohm=Observed.value_of(profile.impedance_ohm),
+            attenuation=Observed.value_of(profile.attenuation),
+            gate_time_s=unsupported,
+            trigger_level_v=Observed.value_of(profile.trigger_level_v),
+            statistics_enabled=Observed.value_of(profile.statistics_enabled),
+        )
+
+    @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
             raise DataError("DG4000 Source V2 query plan has an invalid type")
@@ -778,7 +843,10 @@ class DG4202Source:
                 "DG4000 Source V2 query plan exceeds its declared total query budget"
             )
 
-        phase_fields: dict[SourceQueryPhase, dict[SourceFieldId, set[int | None]]] = {}
+        phase_fields: dict[
+            SourceQueryPhase,
+            dict[SourceFieldId, set[int | str | None]],
+        ] = {}
         for item in plan.items:
             if item.effect is not SourceQueryEffect.PURE_READ:
                 raise DataError("DG4000 Source V2 snapshots only support pure reads")
@@ -789,6 +857,14 @@ class DG4202Source:
                 if field_ref.target.scope.value != "instrument":
                     raise DataError("DG4000 Source V2 identity must be instrument scoped")
                 target = None
+            elif field_ref.field is SourceFieldId.COUNTER:
+                if field_ref.target.scope.value != "input":
+                    raise DataError("DG4000 Source V2 counter must be input scoped")
+                target = field_ref.target.input_id
+                if target != "counter":
+                    raise DataError("DG4000 Source V2 counter input is unsupported")
+                if item.phase is not SourceQueryPhase.FACET:
+                    raise DataError("DG4000 Source V2 counter must be a facet query")
             elif field_ref.field in {
                 SourceFieldId.BASIC,
                 SourceFieldId.BURST,
@@ -903,6 +979,14 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.BURST:
                     assert channel is not None
                     value, query_count = self._v2_burst_facet(channel, plan)
+                elif field_ref.field is SourceFieldId.COUNTER:
+                    input_id = field_ref.target.input_id
+                    assert input_id is not None
+                    value = self._v2_counter_facet(
+                        input_id,
+                        self.get_counter_profile(),
+                    )
+                    query_count = 11 if value.enabled.value else 10
                 elif field_ref.field is SourceFieldId.HARMONICS:
                     assert channel is not None
                     basic = before_basic.get(channel)

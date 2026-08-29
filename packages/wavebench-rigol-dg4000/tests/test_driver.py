@@ -11,8 +11,10 @@ from wavebench.instruments import (
     DG4000ByteOrder,
     DG4000DacBlock,
     SourceAmplitudeUnit,
+    SourceCounterMeasurementKind,
     SourceFieldId,
     SourceFrequencyMode,
+    SourceInputCoupling,
     SourceSemanticQueryPlan,
     SourceWaveformKind,
 )
@@ -281,9 +283,9 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 72
-    assert len(execution.items) == 18
-    assert len(transport.queries) == 72
+    assert execution.query_count == 82
+    assert len(execution.items) == 19
+    assert len(transport.queries) == 82
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
     assert ":SOUR2:FREQ:MODE?" not in transport.queries
@@ -332,8 +334,8 @@ def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 40
-    assert len(transport.queries) == 40
+    assert execution.query_count == 50
+    assert len(transport.queries) == 50
     assert all(
         channel.sweep.availability is Availability.NOT_APPLICABLE
         for channel in snapshot.channels
@@ -355,8 +357,8 @@ def test_source_v2_reads_documented_pulse_facet_only_for_pulse_waveforms() -> No
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 52
-    assert len(transport.queries) == 52
+    assert execution.query_count == 62
+    assert len(transport.queries) == 62
     assert all(channel.pulse.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].pulse.value.width_s.value == 0.0005
     assert snapshot.channels[0].sweep.availability is Availability.NOT_APPLICABLE
@@ -377,8 +379,8 @@ def test_source_v2_reads_full_burst_facet_only_when_burst_is_enabled() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 58
-    assert len(transport.queries) == 58
+    assert execution.query_count == 68
+    assert len(transport.queries) == 68
     assert all(channel.burst.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].burst.value.enabled.value is True
     assert snapshot.channels[0].burst.value.cycles.value == 4
@@ -399,8 +401,8 @@ def test_source_v2_reads_partial_harmonic_facet_for_harmonic_waveforms() -> None
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 46
-    assert len(transport.queries) == 46
+    assert execution.query_count == 56
+    assert len(transport.queries) == 56
     assert all(
         channel.harmonics.availability is Availability.VALUE
         for channel in snapshot.channels
@@ -410,6 +412,71 @@ def test_source_v2_reads_partial_harmonic_facet_for_harmonic_waveforms() -> None
     assert harmonics.configured_order.value == 8
     assert harmonics.maximum_supported_order.value == 16
     assert harmonics.components.availability is Availability.NOT_QUERIED
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_counter_off_without_fabricating_gate_time() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 50
+    counter = snapshot.system.value.counters[0]
+    assert counter.input_id == "counter"
+    assert counter.enabled.value is False
+    assert counter.measurements.availability is Availability.NOT_APPLICABLE
+    assert counter.coupling.value is SourceInputCoupling.AC
+    assert counter.impedance_ohm.value == 1_000_000.0
+    assert counter.attenuation.value == 1
+    assert counter.gate_time_s.availability is Availability.UNSUPPORTED
+    assert counter.trigger_level_v.value == 0.0
+    assert counter.statistics_enabled.value is False
+    assert transport.queries.count(":COUN?") == 1
+    assert ":COUN:MEAS?" not in transport.queries
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_counter_on_measurement_tuple() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"swe": "OFF", "counter": "ON"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 51
+    counter = snapshot.system.value.counters[0]
+    assert counter.enabled.value is True
+    assert tuple(item.kind for item in counter.measurements.value) == (
+        SourceCounterMeasurementKind.DUTY_PERCENT,
+        SourceCounterMeasurementKind.FREQUENCY_HZ,
+        SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+        SourceCounterMeasurementKind.PERIOD_S,
+        SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+    )
+    assert tuple(item.value for item in counter.measurements.value) == (
+        40.0,
+        1000.0,
+        0.0006,
+        0.001,
+        0.0004,
+    )
+    assert transport.queries.count(":COUN:MEAS?") == 1
     assert transport.writes == []
     assert transport.byte_writes == []
 
@@ -464,6 +531,8 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert item.wavebench_min_version == "0.8.25"
     assert "source.snapshot_v2" in item.capabilities
     assert item.source_extensions is not None
+    assert item.source_extensions.topology.input_ids == ("counter",)
+    assert item.source_extensions.query_contract.max_queries == 119
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
     assert "source.counter_profile" in item.capabilities
