@@ -958,7 +958,7 @@ class DG4202Source:
         states = _parse_coupling_states(self._v2_query(plan, ":COUP?"))
         reference_channel = int(
             _normalize_enum(
-                self._v2_query(plan, ":COUP:CHAN:BASE?"),
+                self._v2_query(plan, ":COUP:CHANNEL:BASE?"),
                 field_name="coupling base channel",
                 aliases={"CH1": "1", "CH2": "2"},
             )

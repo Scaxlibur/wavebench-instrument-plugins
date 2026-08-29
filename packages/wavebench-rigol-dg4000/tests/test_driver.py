@@ -242,7 +242,7 @@ class FakeTransport:
             ":COUN:STATI:STAT?": self.state["counter_statistics"],
             ":COUN:STATI:DISP?": self.state["counter_statistics_display"],
             ":COUP?": self.state["coupling"],
-            ":COUP:CHAN:BASE?": self.state["coupling_base"],
+            ":COUP:CHANNEL:BASE?": self.state["coupling_base"],
             ":COUP:AMPL:DEV?": str(self.state["coupling_amplitude_deviation"]),
             ":COUP:FREQ:DEV?": str(self.state["coupling_frequency_deviation"]),
             ":COUP:PHAS:DEV?": str(self.state["coupling_phase_deviation"]),
@@ -549,7 +549,7 @@ def test_source_v2_reads_parameterized_coupling_as_one_channel_set() -> None:
         if command.startswith(":COUP")
     ) == (
         ":COUP?",
-        ":COUP:CHAN:BASE?",
+        ":COUP:CHANNEL:BASE?",
         ":COUP:AMPL:DEV?",
         ":COUP:FREQ:DEV?",
         ":COUP:PHAS:DEV?",
@@ -564,7 +564,7 @@ def test_source_v2_reads_parameterized_coupling_as_one_channel_set() -> None:
         (":COUP?", "FREQ:OFF,PHASE:OFF", "must contain"),
         (":COUP?", "FREQ:OFF,PHASE:OFF,FREQ:ON", "unique"),
         (":COUP?", "FREQ:MAYBE,PHASE:OFF,AMPL:OFF", "frequency coupling state"),
-        (":COUP:CHAN:BASE?", "CH3", "coupling base channel"),
+        (":COUP:CHANNEL:BASE?", "CH3", "coupling base channel"),
         (":COUP:AMPL:DEV?", "nan", "amplitude coupling deviation"),
         (":COUP:AMPL:DEV?", "21", "amplitude coupling deviation response"),
         (":COUP:FREQ:DEV?", "-1", "frequency coupling deviation response"),
