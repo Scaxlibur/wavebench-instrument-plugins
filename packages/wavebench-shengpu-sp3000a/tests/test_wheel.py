@@ -1,38 +1,13 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
-import subprocess
 import sys
-import sysconfig
 import tarfile
 
-import wavebench
+from _shengpu_sp3000a_wheel_helpers import _run, _write_isolated_runtime_bridge
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-
-
-def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=True)
-
-
-def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
-    bridge = workspace / "runtime-bridge"
-    bridge.mkdir()
-    for source in Path(sysconfig.get_paths()["purelib"]).iterdir():
-        name = source.name
-        if (
-            name.startswith("wavebench")
-            or name.endswith((".dist-info", ".egg-info", ".pth", ".egg"))
-        ):
-            continue
-        os.symlink(source, bridge / name, target_is_directory=source.is_dir())
-    Path(purelib, "wavebench-test-runtime.pth").write_text(
-        str(Path(wavebench.__file__).resolve().parents[1]) + "\n" + str(bridge) + "\n",
-        encoding="utf-8",
-    )
-
 
 def test_sdist_excludes_local_vendor_manuals(tmp_path: Path) -> None:
     _run(
