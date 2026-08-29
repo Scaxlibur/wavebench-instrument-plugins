@@ -8,12 +8,12 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `0.8.7`
-- WaveBench：`>=0.8.7,<0.9`
+- 开发基线：WaveBench `0.8.25`
+- WaveBench：`>=0.8.25,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件的 0.12.0 开发线对齐 WaveBench `v0.8.7`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.13.0 开发线对齐 WaveBench `v0.8.25`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -29,6 +29,8 @@
 - RTM2032 CH1/CH2 的只读 K15 history 时间戳表；
 - 显式确认已配置槽位后的自动测量只读统计；
 - 现有 math、FFT、reference、cursor 状态的只读 metadata/readout；
+- Scope V2 只读接口：通道输入状态、B1 门控的数字状态、严格的 identity 五字段 snapshot、
+  仅支持 1–4 号槽且不含 buffer 的测量统计，以及已配置 FFT 的三字段状态；
 - RTM2032 CH2 edge trigger 的厂商专用最小受控配置闭环；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
@@ -175,6 +177,17 @@ RTM2032 实机会回读 `CSV,0`）。随后逐通道查询
 不切换 STOP/RUN，不修改格式、点数、显示或阈值，也不读取错误队列。当前只有 FakeTransport
 离线验收。RTM2032 只读预检已确认 B1 和 `CSV,0` 门控可通过，但当时 D0 未显示且
 `DIGital0:DATA:POINts?` 返回 0，驱动在 `DATA?` 前拒绝继续；因此数字波形 payload 仍未验收。
+
+0.13.0 将五类既有只读能力接入 WaveBench 0.8.25 的 Scope V2 契约。通道输入状态只从
+`CHANnel<n>:COUPling?` 映射 coupling 与 termination，数值阻抗明确标记为 unavailable；数字状态
+复用既有 B1 门控查询，未提供的 threshold scope 与 timing calibration 明确标记为 unavailable；
+snapshot 固定为 identity 五字段、最多两次查询；测量统计只接受 1–4 号已配置槽位，不读取
+buffer，并要求五个聚合值均为有限数；FFT 状态只提供 average complete、RBW 与 sample rate。
+这些适配器不新增 SCPI 写入，不改变既有 V1 方法、FFT 数值分析或波形采集逻辑。
+RTM2032 的 CH1/CH2 输入状态、CH1/CH2 identity snapshot 和 D0 数字状态已通过受控只读验收；
+相关会话全部强制为 `read_only`，write request 与 binary write 均为 0。测量统计与 FFT V2
+仍以离线等价测试和既有 V1 实机证据为边界；由于没有新鲜的前面板配置确认，本轮未冒充
+`configured=True` 重跑。
 
 ## 开发验证
 
