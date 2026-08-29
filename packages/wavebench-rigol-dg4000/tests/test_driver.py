@@ -15,6 +15,7 @@ from wavebench.instruments import (
     SourceFieldId,
     SourceFrequencyMode,
     SourceInputCoupling,
+    SourceModulationKind,
     SourceSemanticQueryPlan,
     SourceWaveformKind,
 )
@@ -283,9 +284,9 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 82
-    assert len(execution.items) == 19
-    assert len(transport.queries) == 82
+    assert execution.query_count == 86
+    assert len(execution.items) == 21
+    assert len(transport.queries) == 86
     assert transport.queries.count("*IDN?") == 2
     assert ":SOUR1:FREQ:MODE?" not in transport.queries
     assert ":SOUR2:FREQ:MODE?" not in transport.queries
@@ -295,6 +296,8 @@ def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
     assert tuple(channel.channel for channel in snapshot.channels) == (1, 2)
     assert snapshot.channels[0].sweep.availability is Availability.VALUE
     assert snapshot.channels[0].sweep.value.start_hz.value == 100.0
+    assert snapshot.channels[0].modulation.value.enabled.value is False
+    assert snapshot.channels[0].modulation.value.kind.value is SourceModulationKind.AM
 
     observations = tuple(
         observation
@@ -334,8 +337,8 @@ def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 50
-    assert len(transport.queries) == 50
+    assert execution.query_count == 54
+    assert len(transport.queries) == 54
     assert all(
         channel.sweep.availability is Availability.NOT_APPLICABLE
         for channel in snapshot.channels
@@ -357,8 +360,8 @@ def test_source_v2_reads_documented_pulse_facet_only_for_pulse_waveforms() -> No
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 62
-    assert len(transport.queries) == 62
+    assert execution.query_count == 66
+    assert len(transport.queries) == 66
     assert all(channel.pulse.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].pulse.value.width_s.value == 0.0005
     assert snapshot.channels[0].sweep.availability is Availability.NOT_APPLICABLE
@@ -379,8 +382,8 @@ def test_source_v2_reads_full_burst_facet_only_when_burst_is_enabled() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 68
-    assert len(transport.queries) == 68
+    assert execution.query_count == 72
+    assert len(transport.queries) == 72
     assert all(channel.burst.availability is Availability.VALUE for channel in snapshot.channels)
     assert snapshot.channels[0].burst.value.enabled.value is True
     assert snapshot.channels[0].burst.value.cycles.value == 4
@@ -401,8 +404,8 @@ def test_source_v2_reads_partial_harmonic_facet_for_harmonic_waveforms() -> None
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 56
-    assert len(transport.queries) == 56
+    assert execution.query_count == 60
+    assert len(transport.queries) == 60
     assert all(
         channel.harmonics.availability is Availability.VALUE
         for channel in snapshot.channels
@@ -429,7 +432,7 @@ def test_source_v2_reads_counter_off_without_fabricating_gate_time() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 50
+    assert execution.query_count == 54
     counter = snapshot.system.value.counters[0]
     assert counter.input_id == "counter"
     assert counter.enabled.value is False
@@ -459,7 +462,7 @@ def test_source_v2_reads_counter_on_measurement_tuple() -> None:
         session_health_after="healthy",
     )
 
-    assert execution.query_count == 51
+    assert execution.query_count == 55
     counter = snapshot.system.value.counters[0]
     assert counter.enabled.value is True
     assert tuple(item.kind for item in counter.measurements.value) == (
@@ -477,6 +480,55 @@ def test_source_v2_reads_counter_on_measurement_tuple() -> None:
         0.0004,
     )
     assert transport.queries.count(":COUN:MEAS?") == 1
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    (
+        ("AM", SourceModulationKind.AM),
+        ("ASK", SourceModulationKind.ASK),
+        ("FM", SourceModulationKind.FM),
+        ("FSK", SourceModulationKind.FSK),
+        ("PM", SourceModulationKind.PM),
+        ("PSK", SourceModulationKind.PSK),
+        ("PWM", SourceModulationKind.PWM),
+        ("BPSK", SourceModulationKind.OTHER),
+        ("QPSK", SourceModulationKind.OTHER),
+        ("3FSK", SourceModulationKind.OTHER),
+        ("4FSK", SourceModulationKind.OTHER),
+        ("OSK", SourceModulationKind.OTHER),
+    ),
+)
+def test_source_v2_reads_modulation_state_and_type_only(
+    response: str,
+    expected: SourceModulationKind,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {"swe": "OFF", "modulation": "ON", "modulation_type": response}
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 54
+    assert all(channel.modulation.value.enabled.value is True for channel in snapshot.channels)
+    assert all(channel.modulation.value.kind.value is expected for channel in snapshot.channels)
+    modulation = snapshot.channels[0].modulation.value
+    assert modulation.source.availability is Availability.NOT_QUERIED
+    assert modulation.parameters.availability is Availability.NOT_QUERIED
+    assert modulation.internal_frequency_hz.availability is Availability.NOT_QUERIED
+    assert modulation.internal_waveform_kind.availability is Availability.NOT_QUERIED
+    assert transport.queries.count(":SOUR1:MOD:STAT?") == 1
+    assert transport.queries.count(":SOUR2:MOD:TYPE?") == 1
     assert transport.writes == []
     assert transport.byte_writes == []
 
@@ -532,7 +584,7 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert "source.snapshot_v2" in item.capabilities
     assert item.source_extensions is not None
     assert item.source_extensions.topology.input_ids == ("counter",)
-    assert item.source_extensions.query_contract.max_queries == 119
+    assert item.source_extensions.query_contract.max_queries == 123
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
     assert "source.counter_profile" in item.capabilities

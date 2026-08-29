@@ -15,6 +15,7 @@ from wavebench.instruments import (
     DG4000DacBlock,
     HarmonicCompleteness,
     HarmonicFacet,
+    ModulationFacet,
     Observed,
     OutputFacet,
     PulseFacet,
@@ -32,6 +33,7 @@ from wavebench.instruments import (
     SourceGatePolarity,
     SourceHarmonicPreset,
     SourceInputCoupling,
+    SourceModulationKind,
     SourceProtocolQueryRecord,
     SourcePulseHoldBasis,
     SourceQueryEffect,
@@ -828,6 +830,47 @@ class DG4202Source:
             statistics_enabled=Observed.value_of(profile.statistics_enabled),
         )
 
+    def _v2_modulation_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> ModulationFacet:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":SOUR{channel}:MOD:STAT?"),
+                field_name="modulation state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        modulation_type = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:MOD:TYPE?"),
+            field_name="modulation type",
+            aliases=_MODULATION_TYPE_ALIASES,
+        )
+        not_queried = Observed.missing(
+            Availability.NOT_QUERIED,
+            SourceReasonCode.NOT_REQUESTED,
+        )
+        return ModulationFacet(
+            enabled=Observed.value_of(enabled),
+            kind=Observed.value_of(
+                {
+                    "AM": SourceModulationKind.AM,
+                    "ASK": SourceModulationKind.ASK,
+                    "FM": SourceModulationKind.FM,
+                    "FSK": SourceModulationKind.FSK,
+                    "PM": SourceModulationKind.PM,
+                    "PSK": SourceModulationKind.PSK,
+                    "PWM": SourceModulationKind.PWM,
+                }.get(modulation_type, SourceModulationKind.OTHER)
+            ),
+            source=not_queried,
+            parameters=not_queried,
+            internal_frequency_hz=not_queried,
+            internal_waveform_kind=not_queried,
+        )
+
     @staticmethod
     def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
         if not isinstance(plan, SourceSemanticQueryPlan):
@@ -869,6 +912,7 @@ class DG4202Source:
                 SourceFieldId.BASIC,
                 SourceFieldId.BURST,
                 SourceFieldId.HARMONICS,
+                SourceFieldId.MODULATION,
                 SourceFieldId.OUTPUT,
                 SourceFieldId.PULSE,
                 SourceFieldId.SWEEP,
@@ -888,6 +932,11 @@ class DG4202Source:
                     and item.phase is not SourceQueryPhase.FACET
                 ):
                     raise DataError("DG4000 Source V2 optional field must be a facet query")
+                if (
+                    field_ref.field is SourceFieldId.MODULATION
+                    and item.phase is not SourceQueryPhase.FACET
+                ):
+                    raise DataError("DG4000 Source V2 modulation must be a facet query")
             else:
                 raise DataError("DG4000 Source V2 query plan requests an unsupported field")
             targets = phase_fields.setdefault(item.phase, {}).setdefault(
@@ -942,6 +991,12 @@ class DG4202Source:
         )
         if not harmonic_channels <= channels:
             raise DataError("DG4000 Source V2 harmonics require matching basic anchors")
+        modulation_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.MODULATION,
+            set(),
+        )
+        if not modulation_channels <= channels:
+            raise DataError("DG4000 Source V2 modulation requires matching basic anchors")
 
     def execute_source_query_plan_v2(
         self,
@@ -1006,6 +1061,10 @@ class DG4202Source:
                         continue
                     value = self._v2_harmonic_facet(channel, plan)
                     query_count = 3
+                elif field_ref.field is SourceFieldId.MODULATION:
+                    assert channel is not None
+                    value = self._v2_modulation_facet(channel, plan)
+                    query_count = 2
                 elif field_ref.field is SourceFieldId.SWEEP:
                     assert channel is not None
                     basic = before_basic.get(channel)

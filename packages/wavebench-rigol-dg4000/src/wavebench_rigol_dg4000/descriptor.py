@@ -25,6 +25,10 @@ from wavebench.instruments import (
     SourceFrequencyMode,
     SourceHarmonicCapabilityProfile,
     SourceHarmonicPreset,
+    SourceModulationCapabilityProfile,
+    SourceModulationKind,
+    SourceModulationParameterKind,
+    SourceModulationSource,
     SourceOutputCapabilityProfile,
     SourcePulseCapabilityProfile,
     SourcePulseHoldBasis,
@@ -129,6 +133,33 @@ def _source_extensions() -> SourceDescriptorExtensions:
         configuration_readable=False,
         query_effect=SourceQueryEffect.PURE_READ,
     )
+    modulation_profile = SourceModulationCapabilityProfile(
+        kinds=(
+            SourceModulationKind.AM,
+            SourceModulationKind.ASK,
+            SourceModulationKind.FM,
+            SourceModulationKind.FSK,
+            SourceModulationKind.OTHER,
+            SourceModulationKind.PM,
+            SourceModulationKind.PSK,
+            SourceModulationKind.PWM,
+        ),
+        sources=(
+            SourceModulationSource.CHANNEL,
+            SourceModulationSource.EXTERNAL,
+            SourceModulationSource.INTERNAL,
+        ),
+        parameter_kinds=(
+            SourceModulationParameterKind.DEPTH_PERCENT,
+            SourceModulationParameterKind.DUTY_DEVIATION_PERCENT,
+            SourceModulationParameterKind.FREQUENCY_DEVIATION_HZ,
+            SourceModulationParameterKind.PHASE_DEVIATION_DEG,
+            SourceModulationParameterKind.SYMBOL_RATE_HZ,
+            SourceModulationParameterKind.WIDTH_DEVIATION_S,
+        ),
+        inactive_readable=True,
+        configuration_readable=False,
+    )
     channel_features = tuple(
         SourceFeatureCapability(
             feature=feature,
@@ -143,6 +174,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
             (SourceFeature.BASIC, basic_profile),
             (SourceFeature.BURST, burst_profile),
             (SourceFeature.HARMONICS, harmonic_profile),
+            (SourceFeature.MODULATION, modulation_profile),
             (SourceFeature.OUTPUT, output_profile),
             (SourceFeature.PULSE, pulse_profile),
             (SourceFeature.SWEEP, sweep_profile),
@@ -234,6 +266,15 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=3,
                 ),
                 SourceFacetQueryContract(
+                    feature=SourceFeature.MODULATION,
+                    scope=SourceFacetScope.CHANNEL,
+                    fields=(SourceFieldId.MODULATION,),
+                    activation_any=(),
+                    effect=SourceQueryEffect.PURE_READ,
+                    max_queries=2,
+                    required=True,
+                ),
+                SourceFacetQueryContract(
                     feature=SourceFeature.OUTPUT,
                     scope=SourceFacetScope.CHANNEL,
                     fields=(SourceFieldId.OUTPUT,),
@@ -277,7 +318,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     max_queries=16,
                 ),
             ),
-            max_queries=119,
+            max_queries=123,
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),
