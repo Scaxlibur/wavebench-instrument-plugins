@@ -159,6 +159,22 @@ _MODULATION_TYPE_ALIASES = {
 _Query = Callable[[str], str]
 
 
+@dataclass(frozen=True, slots=True)
+class _CounterReadback:
+    enabled: bool
+    measurement: SourceCounterMeasurement | None
+    measurement_unavailable: bool
+    coupling: str
+    impedance_ohm: float
+    attenuation: int
+    gate_time: str
+    high_frequency_rejection_enabled: bool
+    trigger_level_v: float
+    sensitivity_percent: float
+    statistics_enabled: bool
+    statistics_display: str
+
+
 def _validate_channel(channel: int) -> None:
     if channel not in (1, 2):
         raise DataError("DG4000 channel must be 1 or 2")
@@ -1458,15 +1474,23 @@ class DG4202Source:
     @staticmethod
     def _v2_counter_facet(
         input_id: str,
-        profile: SourceCounterProfile,
+        readback: _CounterReadback,
     ) -> SourceCounterInputState:
-        if profile.measurement is None:
+        if readback.measurement is None:
             measurements = Observed.missing(
-                Availability.NOT_APPLICABLE,
-                SourceReasonCode.INACTIVE_BY_ANCHOR,
+                (
+                    Availability.UNAVAILABLE
+                    if readback.measurement_unavailable
+                    else Availability.NOT_APPLICABLE
+                ),
+                (
+                    SourceReasonCode.RESPONSE_INVALID_VALUE
+                    if readback.measurement_unavailable
+                    else SourceReasonCode.INACTIVE_BY_ANCHOR
+                ),
             )
         else:
-            measurement = profile.measurement
+            measurement = readback.measurement
             measurements = Observed.value_of(
                 tuple(
                     sorted(
@@ -1502,18 +1526,18 @@ class DG4202Source:
         )
         return SourceCounterInputState(
             input_id=input_id,
-            enabled=Observed.value_of(profile.enabled),
+            enabled=Observed.value_of(readback.enabled),
             measurements=measurements,
             coupling=Observed.value_of(
                 SourceInputCoupling.AC
-                if profile.coupling == "AC"
+                if readback.coupling == "AC"
                 else SourceInputCoupling.DC
             ),
-            impedance_ohm=Observed.value_of(profile.impedance_ohm),
-            attenuation=Observed.value_of(profile.attenuation),
+            impedance_ohm=Observed.value_of(readback.impedance_ohm),
+            attenuation=Observed.value_of(readback.attenuation),
             gate_time_s=unsupported,
-            trigger_level_v=Observed.value_of(profile.trigger_level_v),
-            statistics_enabled=Observed.value_of(profile.statistics_enabled),
+            trigger_level_v=Observed.value_of(readback.trigger_level_v),
+            statistics_enabled=Observed.value_of(readback.statistics_enabled),
         )
 
     @staticmethod
@@ -1931,7 +1955,10 @@ class DG4202Source:
                     assert input_id is not None
                     value = self._v2_counter_facet(
                         input_id,
-                        self._get_counter_profile(query=plan_query),
+                        self._read_counter(
+                            query=plan_query,
+                            tolerate_invalid_measurement=True,
+                        ),
                     )
                     latest_counter[input_id] = value
                     query_count = 11 if value.enabled.value else 10
@@ -2464,7 +2491,12 @@ class DG4202Source:
     def get_counter_profile(self) -> SourceCounterProfile:
         return self._get_counter_profile(query=self.transport.query)
 
-    def _get_counter_profile(self, *, query: _Query) -> SourceCounterProfile:
+    def _read_counter(
+        self,
+        *,
+        query: _Query,
+        tolerate_invalid_measurement: bool,
+    ) -> _CounterReadback:
         with self._io_lock:
             self._ensure_identity(query=query)
             enabled = self._query_state(
@@ -2472,11 +2504,18 @@ class DG4202Source:
                 field_name="counter state",
                 query=query,
             )
-            measurement = (
-                _parse_counter_measurement(query(":COUN:MEAS?"))
-                if enabled
-                else None
-            )
+            measurement = None
+            measurement_unavailable = False
+            if enabled:
+                try:
+                    measurement = _parse_counter_measurement(query(":COUN:MEAS?"))
+                except DataError:
+                    if not tolerate_invalid_measurement:
+                        raise
+                    # A just-enabled Counter can report all-zero values while its
+                    # gate is settling.  Keep configuration readable so OFF
+                    # remains available, but do not fabricate a measurement.
+                    measurement_unavailable = True
             coupling = _normalize_enum(
                 query(":COUN:COUP?"),
                 field_name="counter coupling",
@@ -2520,22 +2559,42 @@ class DG4202Source:
                 field_name="counter statistics display",
                 aliases=_COUNTER_STATISTICS_DISPLAY_ALIASES,
             )
-            try:
-                return SourceCounterProfile(
-                    enabled=enabled,
-                    measurement=measurement,
-                    coupling=coupling,
-                    impedance_ohm=impedance_ohm,
-                    attenuation=int(attenuation_text),
-                    gate_time=gate_time,
-                    high_frequency_rejection_enabled=high_frequency_rejection_enabled,
-                    trigger_level_v=trigger_level_v,
-                    sensitivity_percent=sensitivity_percent,
-                    statistics_enabled=statistics_enabled,
-                    statistics_display=statistics_display,
-                )
-            except ValueError as exc:
-                raise DataError(f"inconsistent DG4000 counter profile: {exc}") from exc
+            return _CounterReadback(
+                enabled=enabled,
+                measurement=measurement,
+                measurement_unavailable=measurement_unavailable,
+                coupling=coupling,
+                impedance_ohm=impedance_ohm,
+                attenuation=int(attenuation_text),
+                gate_time=gate_time,
+                high_frequency_rejection_enabled=high_frequency_rejection_enabled,
+                trigger_level_v=trigger_level_v,
+                sensitivity_percent=sensitivity_percent,
+                statistics_enabled=statistics_enabled,
+                statistics_display=statistics_display,
+            )
+
+    def _get_counter_profile(self, *, query: _Query) -> SourceCounterProfile:
+        readback = self._read_counter(
+            query=query,
+            tolerate_invalid_measurement=False,
+        )
+        try:
+            return SourceCounterProfile(
+                enabled=readback.enabled,
+                measurement=readback.measurement,
+                coupling=readback.coupling,
+                impedance_ohm=readback.impedance_ohm,
+                attenuation=readback.attenuation,
+                gate_time=readback.gate_time,
+                high_frequency_rejection_enabled=readback.high_frequency_rejection_enabled,
+                trigger_level_v=readback.trigger_level_v,
+                sensitivity_percent=readback.sensitivity_percent,
+                statistics_enabled=readback.statistics_enabled,
+                statistics_display=readback.statistics_display,
+            )
+        except ValueError as exc:
+            raise DataError(f"inconsistent DG4000 counter profile: {exc}") from exc
 
     def set_frequency(
         self,

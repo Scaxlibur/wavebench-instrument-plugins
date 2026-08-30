@@ -29,7 +29,6 @@ from wavebench.instruments import (
     SourceArbitraryVolatileReplaceRequest,
     SourceAmplitudeUnit,
     SourceBasicConfigureRequest,
-    SourceCounterConfigurationField,
     SourceCounterConfigurationPatch,
     SourceCounterConfigureRequest,
     SourceCounterEnableRequest,
@@ -45,6 +44,7 @@ from wavebench.instruments import (
     SourceModulationKind,
     SourceNoiseOverlayScaleKind,
     SourceOutputRequest,
+    SourceReasonCode,
     SourceSemanticQueryPlan,
     SourceSyncPolarity,
     SourceWaveformKind,
@@ -376,7 +376,7 @@ def _counter_v2_request(**values: object) -> SourceCounterConfigureRequest:
     )
 
 
-def _advanced_write_candidate_descriptor():
+def _arbitrary_volatile_write_candidate_descriptor():
     item = descriptor()
     assert item.source_extensions is not None
     extensions = replace(
@@ -384,52 +384,15 @@ def _advanced_write_candidate_descriptor():
         features=tuple(
             replace(
                 feature,
-                directions=(
-                    (
-                        SourceFeatureDirection.CONFIGURE,
-                        SourceFeatureDirection.DISABLE,
-                        SourceFeatureDirection.ENABLE,
-                        SourceFeatureDirection.READ,
-                    )
-                    if feature.feature is SourceFeature.COUNTER
-                    else (SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ)
-                ),
-                profile=(
-                    replace(
-                        feature.profile,
-                        volatile_replace_min_points=2,
-                        volatile_replace_max_points=16_384,
-                        volatile_replace_max_payload_bytes=32_768,
-                    )
-                    if feature.feature is SourceFeature.ARBITRARY
-                    else replace(
-                        feature.profile,
-                        configuration_readable=True,
-                        readable_configuration_fields=(
-                            SourceCounterConfigurationField.ATTENUATION,
-                            SourceCounterConfigurationField.COUPLING,
-                            SourceCounterConfigurationField.IMPEDANCE_OHM,
-                            SourceCounterConfigurationField.STATISTICS_ENABLED,
-                            SourceCounterConfigurationField.TRIGGER_LEVEL_V,
-                        ),
-                        configurable_fields=(
-                            SourceCounterConfigurationField.ATTENUATION,
-                            SourceCounterConfigurationField.COUPLING,
-                            SourceCounterConfigurationField.IMPEDANCE_OHM,
-                            SourceCounterConfigurationField.STATISTICS_ENABLED,
-                            SourceCounterConfigurationField.TRIGGER_LEVEL_V,
-                        ),
-                        enabled_configurable=True,
-                    )
-                    if feature.feature is SourceFeature.COUNTER
-                    else feature.profile
+                directions=(SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ),
+                profile=replace(
+                    feature.profile,
+                    volatile_replace_min_points=2,
+                    volatile_replace_max_points=16_384,
+                    volatile_replace_max_payload_bytes=32_768,
                 ),
             )
-            if feature.feature
-            in {
-                SourceFeature.ARBITRARY,
-                SourceFeature.COUNTER,
-            }
+            if feature.feature is SourceFeature.ARBITRARY
             else feature
             for feature in item.source_extensions.features
         ),
@@ -439,15 +402,12 @@ def _advanced_write_candidate_descriptor():
         capabilities=(
             *item.capabilities,
             "source.arbitrary_volatile_replace_v2",
-            "source.counter_configure_v2",
-            "source.counter_enable_v2",
-            "source.counter_measure_v2",
         ),
         source_extensions=extensions,
     )
 
 
-def test_production_source_v2_basic_output_satisfies_core_descriptor_gate() -> None:
+def test_production_source_v2_basic_output_counter_satisfies_core_descriptor_gate() -> None:
     item = descriptor()
     driver = DG4202Source(DualChannelFakeTransport())
 
@@ -457,12 +417,14 @@ def test_production_source_v2_basic_output_satisfies_core_descriptor_gate() -> N
     assert "source.basic_configure_v2" in item.capabilities
     assert "source.basic_live_configure_v2" in item.capabilities
     assert "source.output_v2" in item.capabilities
+    assert "source.counter_configure_v2" in item.capabilities
+    assert "source.counter_enable_v2" in item.capabilities
+    assert "source.counter_measure_v2" in item.capabilities
     assert "source.arbitrary_volatile_replace_v2" not in item.capabilities
-    assert "source.counter_configure_v2" not in item.capabilities
 
 
-def test_advanced_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
-    candidate = _advanced_write_candidate_descriptor()
+def test_arbitrary_volatile_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
+    candidate = _arbitrary_volatile_write_candidate_descriptor()
     driver = DG4202Source(DualChannelFakeTransport())
 
     validate_source_descriptor(candidate, driver)
@@ -502,7 +464,7 @@ def _counter_core_service(
             config=config,
             logger=CommandLogger(),
             session=driver,
-            descriptor=_advanced_write_candidate_descriptor(),
+            descriptor=descriptor(),
             transport=guarded,
             session_state=session_state,
         ),
@@ -1064,6 +1026,51 @@ def test_source_v2_reads_counter_on_measurement_tuple() -> None:
     assert transport.byte_writes == []
 
 
+def test_source_v2_counter_keeps_safe_disable_available_while_measurement_settles() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "counter": "ON",
+            "counter_measurement": "0,0,0,0,0",
+        }
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    counter = snapshot.system.value.counters[0]
+    assert counter.enabled.value is True
+    assert counter.measurements.availability is Availability.UNAVAILABLE
+    assert counter.measurements.reason_code is SourceReasonCode.RESPONSE_INVALID_VALUE
+    assert transport.queries.count(":COUN:MEAS?") == 1
+    assert transport.writes == []
+
+
+def test_source_v2_counter_invalid_measurement_still_allows_safe_disable() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "counter": "ON",
+            "counter_measurement": "0,0,0,0,0",
+        }
+    )
+    service, driver = _counter_core_service(transport)
+
+    disabled, _ = service.set_counter_enabled_v2(SourceCounterEnableRequest("counter", False))
+
+    assert disabled.enabled is False
+    assert transport.writes == [":COUN OFF"]
+    assert driver._configuration_writes_blocked is False
+
+
 def test_source_v2_reads_parameterized_coupling_as_one_channel_set() -> None:
     transport = DualChannelFakeTransport()
     transport.state.update(
@@ -1482,6 +1489,20 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
         SourceFeatureDirection.ENABLE,
         SourceFeatureDirection.READ,
     )
+    counter = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature is SourceFeature.COUNTER
+    )
+    assert counter.directions == (
+        SourceFeatureDirection.CONFIGURE,
+        SourceFeatureDirection.DISABLE,
+        SourceFeatureDirection.ENABLE,
+        SourceFeatureDirection.READ,
+    )
+    assert counter.profile.configuration_readable is True
+    assert counter.profile.enabled_configurable is True
+    assert counter.profile.readable_configuration_fields == counter.profile.configurable_fields
     coupling = next(
         feature
         for feature in item.source_extensions.features

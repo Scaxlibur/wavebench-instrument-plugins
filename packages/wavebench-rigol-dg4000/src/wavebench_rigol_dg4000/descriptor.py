@@ -16,6 +16,7 @@ from wavebench.instruments import (
     SourceBurstMode,
     SourceConstraintApplicability,
     SourceCounterCapabilityProfile,
+    SourceCounterConfigurationField,
     SourceCounterMeasurementKind,
     SourceCouplingCapabilityProfile,
     SourceCouplingDimension,
@@ -146,8 +147,23 @@ def _source_extensions() -> SourceDescriptorExtensions:
             SourceCounterMeasurementKind.PERIOD_S,
             SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
         ),
-        configuration_readable=False,
+        configuration_readable=True,
         query_effect=SourceQueryEffect.PURE_READ,
+        readable_configuration_fields=(
+            SourceCounterConfigurationField.ATTENUATION,
+            SourceCounterConfigurationField.COUPLING,
+            SourceCounterConfigurationField.IMPEDANCE_OHM,
+            SourceCounterConfigurationField.STATISTICS_ENABLED,
+            SourceCounterConfigurationField.TRIGGER_LEVEL_V,
+        ),
+        configurable_fields=(
+            SourceCounterConfigurationField.ATTENUATION,
+            SourceCounterConfigurationField.COUPLING,
+            SourceCounterConfigurationField.IMPEDANCE_OHM,
+            SourceCounterConfigurationField.STATISTICS_ENABLED,
+            SourceCounterConfigurationField.TRIGGER_LEVEL_V,
+        ),
+        enabled_configurable=True,
     )
     modulation_profile = SourceModulationCapabilityProfile(
         kinds=(
@@ -242,7 +258,12 @@ def _source_extensions() -> SourceDescriptorExtensions:
                 SourceFeatureCapability(
                     feature=SourceFeature.COUNTER,
                     support=SupportState.SUPPORTED,
-                    directions=(SourceFeatureDirection.READ,),
+                    directions=(
+                        SourceFeatureDirection.CONFIGURE,
+                        SourceFeatureDirection.DISABLE,
+                        SourceFeatureDirection.ENABLE,
+                        SourceFeatureDirection.READ,
+                    ),
                     scope=SourceFacetScope.INPUT,
                     channels=(),
                     applicability=applicability,
@@ -455,6 +476,9 @@ def descriptor() -> InstrumentDescriptor:
             "source.basic_configure_v2",
             "source.basic_live_configure_v2",
             "source.output_v2",
+            "source.counter_configure_v2",
+            "source.counter_enable_v2",
+            "source.counter_measure_v2",
             "source.idn",
             "source.errors",
             "source.status",
@@ -475,8 +499,9 @@ def descriptor() -> InstrumentDescriptor:
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary=(
-            "Installable RIGOL DG4000-series source driver for read-only channel, sweep, "
-            "and counter profiles, fixed waveforms, output control, and validated DAC14 uploads."
+            "Installable RIGOL DG4000-series source driver for typed channel, sweep, and "
+            "Counter profiles and operations, fixed waveforms, output control, and validated "
+            "DAC14 uploads."
         ),
         wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",
