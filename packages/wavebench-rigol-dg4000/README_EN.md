@@ -33,16 +33,30 @@ output-enabled, Sweep, Pulse, Burst, partial Harmonic, Modulation state/type, pa
 Noise Overlay, and Sync facets for CH1/CH2, plus the global Counter and parameterized CH1/CH2
 Coupling state. The Harmonic facet does not claim per-order component readback.
 
+The current development branch also declares the explicit Source V2 P1 write capabilities
+`source.basic_configure_v2`, `source.basic_live_configure_v2`, and `source.output_v2`.
+
 WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
 
-Version `0.7.0` adds a pure-query Source V2 adapter to the existing M1-M6 surface without declaring
-any Source V2 write capability. It preserves the M1/M2/M4 transaction boundaries from `0.3.0`:
-all I/O shares one reentrant lock;
-fixed-wave writes use a pre-write snapshot, per-step readback, off-first recovery, and ambiguous-
-write latching; DAC14 upload is accepted only while the target channel is already OFF, in FIX
-mode, with sweep OFF. Overwriting the volatile USER waveform is reported as an irreversible side
-effect. DG4202 firmware `00.01.14` has passed the M1-M5 CH1/CH2 hardware exit gates and the M6
-counter-OFF gate. The M3, M5, and M6 profiles are read-only contexts: they do not widen core basic
+The current `0.7.0` development branch adds Source V2 P1 beside the read-only snapshot surface.
+`source.basic_configure_v2` requires target output OFF, FIX mode, and a fresh V2 snapshot, and
+changes exactly one Basic field per request. It currently accepts SIN/SQU/RAMP/PULS/NOIS/DC,
+frequency, Vpp, offset, or square duty. `source.basic_live_configure_v2` changes exactly one
+frequency or Vpp field while output remains ON in FIX mode, without output cycling.
+`source.output_v2` separately enables or disables one channel and the Core reads back its final
+state.
+
+The DG descriptor explicitly sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
+`source.output`, discrete frequency-response, `arb-load`, and basic restore paths therefore remain
+V1. Only the explicit V2 CLI, run step, or Service operation uses the P1 adapter. This avoids
+silently replacing legacy DAC14 upload or restore transactions with incomplete Basic/Output V2
+composition.
+
+P1 preserves the V1 M1/M2/M4 transaction boundaries from `0.3.0`: all I/O shares one reentrant
+lock; fixed-wave writes use a pre-write snapshot, per-step readback, off-first recovery, and
+ambiguous-write latching; DAC14 upload is accepted only while the target channel is already OFF,
+in FIX mode, with sweep OFF. Overwriting the volatile USER waveform is reported as an irreversible
+side effect. The M3, M5, and M6 profiles are read-only contexts: they do not widen core basic
 restoration or promise restoration of load, polarity, noise, sync, burst, modulation, marker,
 pulse hold, a complete sweep/counter profile, or volatile USER contents. No result is extrapolated
 to another model, firmware, channel wiring, or the counter-ON measurement path.
@@ -139,6 +153,16 @@ completions, or instrument mutations. All three Coupling dimensions were OFF wit
 both Sync outputs were ON/POSITIVE and both Noise Overlay states were OFF/10%. Final channel state
 was unchanged and the session closed healthy. RTM2032 was not accessed, triggered, or captured.
 
+The same date also completed normal-path P1 acceptance. With output OFF, CH1→RTM CH1 wrote and
+read back RAMP, PULSE, NOISE, DC, and SIN through V2 postconditions, then captured sine at
+1 kHz/1 Vpp, after a live frequency change to 2 kHz, and after a live Vpp change to 2 Vpp.
+CH2→RTM CH2 configured SQUARE/25% duty at 1 kHz/1 Vpp and completed the same live frequency and
+Vpp captures. Each channel emitted alone, no output exceeded 2 Vpp, and every capture quality and
+expectation gate passed. A separate restoration run independently read both channels as OFF, SIN,
+1 kHz, 5 Vpp, 0 V, FIX, and 50% duty; both RTM inputs remained high-Z. This evidence covers normal
+writes, postconditions, and final OFF only, not timeout, ambiguous-write, or recovery-failure fault
+injection on hardware.
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an
@@ -161,9 +185,9 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
   passes three strict zero-write M6 rounds with the counter OFF, without automatically enabling
   the counter, sending `AUTO`/statistics clear, or presenting offline-only counter-ON parsing as a
   hardware result.
-- `0.7.0` requires WaveBench `>=0.8.25` and adds pure-query `source.snapshot_v2` with typed Basic,
-  output-enabled, Sweep, Pulse, Burst, partial Harmonic, Modulation, partial ARB, Noise Overlay,
-  Sync, Counter, and parameterized Coupling state. The current OFF/SIN/FIX state passed the final
-  67-query hardware read, and the output-OFF PULSE/1 Vpp state passed a 52-query read. Active Sweep,
-  Burst ON, and Harmonic retain only prior V1 or offline evidence, and no matching write capability
-  is declared.
+- The `0.7.0` development branch requires WaveBench `>=0.8.25`, retains pure-query
+  `source.snapshot_v2`, and declares Basic/Live Basic/Output P1 capabilities. DG4202 `00.01.14`
+  normal paths were accepted separately on CH1 and CH2 through high-impedance RTM2032 captures,
+  while V1 routes remain unmigrated. Volatile ARB, Counter, Sweep, Burst, Coupling, Noise Overlay,
+  and Sync write capabilities remain undeclared, and no hardware fault-injection conclusion exists
+  for recovery.

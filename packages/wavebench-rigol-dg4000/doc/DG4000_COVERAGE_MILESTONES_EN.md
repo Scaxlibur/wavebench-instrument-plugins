@@ -258,10 +258,10 @@ command. The offline fault matrix covers every query position, unknown enums, no
 range configuration, and the counter-ON tuple's field count, finiteness, frequency/period,
 pulse-width/period, and duty/width relationships. Counter-ON has no hardware measurement conclusion.
 
-## 10.1. Read-only Source V2 migration
+## 10.1. Source V2 P1 migration
 
-**Status: partial.** Version `0.7.0` adds `source.snapshot_v2` and declares no Source V2 write
-capability.
+**Status: partial.** The current `0.7.0` development branch retains `source.snapshot_v2` and
+declares `source.basic_configure_v2`, `source.basic_live_configure_v2`, and `source.output_v2`.
 
 - Basic reads CH1/CH2 function, frequency mode/value, unit-bearing amplitude, offset, phase, and
   square duty.
@@ -279,10 +279,20 @@ capability.
   deviation for amplitude/frequency/phase.
 - Sync and Noise Overlay read enabled/polarity and enabled/percent scale per channel.
 - Counter reuses the strict M6 profile and sends no measurement query while OFF.
+- Basic P1 requires output OFF, FIX mode, and a fresh snapshot, then writes exactly one Basic field:
+  SIN/SQU/RAMP/PULS/NOIS/DC, frequency, Vpp, offset, or square duty.
+- Live Basic P1 requires output ON and FIX mode, and writes exactly one frequency or Vpp field
+  without output cycling.
+- Output P1 uses independent ON/OFF operations, each with preflight and final-state readback.
 
 The worst-case query budget is 138. Every item is `PURE_READ`; identity, Basic, and Output are read
 before and after optional facets. Core reports anchor drift, and the driver sends no selector or
 write for this snapshot.
+
+The DG descriptor sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
+`source.output`, discrete frequency-response, `arb-load`, and basic restore paths retain their V1
+contracts; only explicit V2 CLI, run-step, or Service operations call the P1 adapter. Volatile ARB,
+Counter, Sweep, Burst, Coupling, Noise Overlay, and Sync remain undeclared production writes.
 
 2026-08-30 evidence: DG4202 `00.01.14` reported CH1/CH2 OFF, SIN, 1 kHz, 5 Vpp, 0 V offset,
 FIX, and sweep OFF. The public CLI completed a 40-query Source V2 snapshot with matching anchors
@@ -302,6 +312,15 @@ completed 67 queries with matching anchors and healthy session state. The comple
 mutations. All Coupling dimensions were OFF with CH1 as reference; both Sync states were
 ON/POSITIVE and both Noise Overlay states were OFF/10%. Both channels remained OFF, SIN, 1 kHz,
 5 Vpp, 0 V offset, and FIX, and the session closed healthy. RTM2032 was not accessed or captured.
+
+The same date, normal-path P1 acceptance used isolated current Core, DG, and RTM wheels. CH1→RTM
+CH1 completed V2 write/readback for RAMP/PULSE/NOISE/DC/SIN while output was OFF, then
+high-impedance captures at sine 1 kHz/1 Vpp, live 2 kHz/1 Vpp, and live 2 kHz/2 Vpp. CH2→RTM CH2
+completed SQUARE/25% duty, 1 kHz/1 Vpp, and the equivalent two live-change captures. Each channel
+emitted alone and no output exceeded 2 Vpp; every capture quality/expectation gate passed. A
+separate restoration run finally read both channels as OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty, with
+both RTM inputs high-Z. No timeout, ambiguous-write, or recovery-failure fault was injected into
+hardware.
 
 ## 10.2. Candidate Coupling, Noise Overlay, and Sync writes
 
@@ -407,11 +426,14 @@ Final exit requires every public write capability to have normal-path, failure-m
 
 - External-plugin hardware accepted: M1-M5 CH1/CH2 gates and the global M6 counter-OFF zero-write
   gate on DG4202 firmware `00.01.14`; the `0.7.0` 52-query output-OFF active Pulse snapshot and final
-  67-query all-facet baseline snapshot also pass. The final harness issued 112 queries and zero
+  67-query all-facet baseline snapshot also pass. P1 Basic/Live Basic/Output normal paths pass in
+  the CH1/CH2 high-impedance RTM loops; after restoration, both channels read
+  OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty. The final read-only harness issued 112 queries and zero
   text/binary writes.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
 - Not passed: all M7-M12 controlled-write exit gates. Coupling, Noise Overlay, and Sync have
   candidate write designs only and declare no production capability. Active Sweep, Burst ON,
-  Harmonic V2 facets, and the M6 counter-ON tuple still lack fresh hardware evidence.
+  Harmonic V2 facets, and the M6 counter-ON tuple still lack fresh hardware evidence. P1 timeout,
+  ambiguous-write, and recovery-failure still lack a hardware fault-injection conclusion.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

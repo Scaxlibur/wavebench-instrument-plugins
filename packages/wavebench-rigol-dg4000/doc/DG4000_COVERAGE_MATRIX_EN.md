@@ -3,10 +3,11 @@
 [中文](DG4000_COVERAGE_MATRIX.md)
 
 See the [DG4000 coverage milestones](DG4000_COVERAGE_MILESTONES_EN.md) for implementation order,
-transaction rules, and hardware exit gates. Version `0.7.0` preserves M0-M6 and adds a pure-query
-`source.snapshot_v2` adapter. The M4/M5 CH1/CH2 gates, global counter-OFF M6 gate, and current
-OFF/SIN/FIX Source V2 read gate have passed. Controlled writes in M7-M12 remain pending. Listing a
-command in this matrix does not make it implemented.
+transaction rules, and hardware exit gates. The `0.7.0` development branch preserves M0-M6 and the
+pure-query `source.snapshot_v2` adapter, and declares Basic/Live Basic/Output Source V2 P1. The
+M4/M5 CH1/CH2 gates, global counter-OFF M6 gate, Source V2 read-only gate, and P1 normal-path gate
+have passed. Controlled writes in M7-M12 remain pending. Listing a command in this matrix does not
+make it implemented.
 
 ## Purpose, scope, and counting method
 
@@ -31,7 +32,7 @@ optional keywords, short forms, and transcription defects such as missing bracke
 headings make a percentage misleading. The matrix therefore reports auditable functional domains
 and public-capability evidence rather than a falsely precise percentage.
 
-The external plugin declares fourteen WaveBench capabilities. It is a controlled implementation
+The external plugin declares seventeen WaveBench capabilities. It is a controlled implementation
 for basic DG4202 dual-channel output, read-only channel/sweep context, global counter context, and a
 narrow arbitrary-wave upload path, not a general DG4000 SCPI shell and not a claim to every DG4000
 model, firmware, or accessory feature.
@@ -46,6 +47,23 @@ Coverage labels:
 - **Denied by default**: the manual command exists but network, storage, output, or global-state risk prevents exposure.
 
 ## Coverage matrix
+
+### Source V2 P1
+
+This table describes only the explicit V2 write surface of the current development branch. The DG
+descriptor sets `v1_route_migration_enabled=false`, so these capabilities do not take over a legacy
+V1 route.
+
+| Capability | Public entry and strict boundary | DG4202 `00.01.14` normal-path evidence |
+|---|---|---|
+| `source.basic_configure_v2` | CLI `source basic-configure-v2`; run `source.basic_configure_v2`. Target output must be OFF, mode must be FIX, and a fresh V2 snapshot is required. The DG adapter accepts exactly one Basic field: SIN/SQU/RAMP/PULS/NOIS/DC, frequency, Vpp, offset, or square duty. | CH1 wrote/read back RAMP/PULSE/NOISE/DC/SIN while OFF; CH2 wrote/read back SQUARE/25% duty, frequency, and Vpp. External high-impedance capture covers CH1 sine and CH2 square only. |
+| `source.basic_live_configure_v2` | CLI `source basic-live-configure-v2`; run `source.basic_live_configure_v2`. Output must be ON, mode must be FIX, and exactly one frequency or Vpp field is accepted; output cycling is forbidden. | CH1 and CH2 each completed independent 1 kHz→2 kHz and 1 Vpp→2 Vpp live writes followed by high-impedance capture. |
+| `source.output_v2` | CLI `source output-v2`; run `source.output_enable_v2` / `source.output_disable_v2`. The Core performs V2 preflight and final-state readback independently for ON and OFF. | Both channels separately emitted at low voltage, captured, and reached V2 OFF; a separate restoration run confirmed both channels OFF again. |
+| Legacy V1 routes | `source.set-*`, `source.output`, discrete frequency response, `arb-load`, basic restore, and their existing artifacts retain V1 contracts. | Core route tests and the DG P1 plan confirm that only explicit V2 entry points call the P1 adapter. |
+
+P1 does not declare volatile ARB, Counter, Sweep, Burst, Coupling, Noise Overlay, or Sync write
+capabilities. It also has no hardware fault injection for timeout, ambiguous-write, or
+recovery-failure; those behaviors retain offline fault-matrix evidence only.
 
 | Domain | Manual command surface | Current public coverage | Evidence | Main gap and safety boundary | Recommendation |
 |---|---|---|---|---|---|
@@ -178,8 +196,11 @@ Two deliberate exceptions need separate treatment:
   Pulse facets at output OFF, PULSE, and 1 Vpp. The final OFF/SIN/FIX snapshot included Counter,
   Modulation, partial ARB, Coupling, Sync, and Noise Overlay in 67 pure queries. Its complete
   harness issued 112 queries and zero text/binary writes, with matching anchors and healthy session
-  state; both channels remained OFF/SIN/1 kHz/5 Vpp/0 V/FIX. Active Sweep, Burst ON, Harmonic, and
-  the counter-ON tuple still lack fresh hardware evidence.
+  state. P1 additionally accepted low-voltage/high-impedance CH1/CH2 Basic/Live Basic/Output normal
+  paths with every capture quality/expectation gate passing; a separate restoration run read both
+  channels OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty. Active Sweep, Burst ON, Harmonic, and the
+  counter-ON tuple still lack fresh hardware evidence, as do timeout, ambiguous-write, and
+  recovery-failure hardware fault-injection conclusions.
 - **Historical arbitrary evidence**: prior bundled-driver evidence remains provenance only. The
   current external plugin now has independent CH1/CH2 protocol evidence and does not substitute
   historical results for acceptance.

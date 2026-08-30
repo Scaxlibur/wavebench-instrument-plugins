@@ -77,6 +77,8 @@ def _source_extensions() -> SourceDescriptorExtensions:
         offset_readable=True,
         phase_readable=True,
         square_duty_readable=True,
+        live_frequency_configurable=True,
+        live_amplitude_vpp_configurable=True,
     )
     output_profile = SourceOutputCapabilityProfile(
         output_readable=True,
@@ -203,7 +205,17 @@ def _source_extensions() -> SourceDescriptorExtensions:
         SourceFeatureCapability(
             feature=feature,
             support=SupportState.SUPPORTED,
-            directions=(SourceFeatureDirection.READ,),
+            directions=(
+                (SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ)
+                if feature is SourceFeature.BASIC
+                else (
+                    SourceFeatureDirection.DISABLE,
+                    SourceFeatureDirection.ENABLE,
+                    SourceFeatureDirection.READ,
+                )
+                if feature is SourceFeature.OUTPUT
+                else (SourceFeatureDirection.READ,)
+            ),
             scope=SourceFacetScope.CHANNEL,
             channels=(channel,),
             applicability=applicability,
@@ -417,6 +429,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
             timeout_ms=5_000,
         ),
         safety_profile=SourceSafetyProfile(),
+        v1_route_migration_enabled=False,
     )
 
 
@@ -439,6 +452,9 @@ def descriptor() -> InstrumentDescriptor:
         aliases=(),
         capabilities=(
             "source.snapshot_v2",
+            "source.basic_configure_v2",
+            "source.basic_live_configure_v2",
+            "source.output_v2",
             "source.idn",
             "source.errors",
             "source.status",

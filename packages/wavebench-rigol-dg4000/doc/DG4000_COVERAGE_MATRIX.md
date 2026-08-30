@@ -3,10 +3,10 @@
 [English](DG4000_COVERAGE_MATRIX_EN.md)
 
 分阶段实现顺序、事务规则和实机退出门见
-[DG4000 功能覆盖里程碑](DG4000_COVERAGE_MILESTONES.md)。当前 `0.7.0` 保留 M0–M6，
-并增加纯查询 `source.snapshot_v2` 适配。M4/M5 的 CH1/CH2 完整实机门、M6 的全局
-counter-OFF 实机门，以及当前 OFF/SIN/FIX 状态的 Source V2 只读门已通过。M7–M12
-的受控写入仍未通过。命令出现在本矩阵中不等于已实现。
+[DG4000 功能覆盖里程碑](DG4000_COVERAGE_MILESTONES.md)。当前 `0.7.0` 开发分支保留
+M0–M6、只读 `source.snapshot_v2`，并开放 Basic／Live Basic／Output Source V2 P1。
+M4/M5 的 CH1/CH2 完整实机门、M6 的全局 counter-OFF 实机门、Source V2 只读门和 P1
+normal-path 门已通过。M7–M12 的受控写入仍未通过。命令出现在本矩阵中不等于已实现。
 
 ## 目的、范围与统计口径
 
@@ -29,7 +29,7 @@ counter-OFF 实机门，以及当前 OFF/SIN/FIX 状态的 Source V2 只读门�
 关键字、同义短写，以及转录中的缺失 `]`、缺失代码围栏和断裂标题都会造成歧义。因此矩阵
 按可审计的功能域和公开 capability 说明覆盖状态，而不报告一个伪精确的百分比。
 
-当前外置插件声明 14 项 WaveBench capability。它是对 DG4202 双通道基础输出、只读
+当前外置插件声明 17 项 WaveBench capability。它是对 DG4202 双通道基础输出、只读
 通道/sweep 上下文、全局 counter 上下文和窄任意波上传的受控实现，不是通用 DG4000
 SCPI shell，也不承诺覆盖手册中所有 DG4000 型号、固件或外部附件能力。
 
@@ -43,6 +43,21 @@ SCPI shell，也不承诺覆盖手册中所有 DG4000 型号、固件或外部�
 - **默认拒绝**：即使手册提供命令，也因网络、存储、输出安全或全局状态风险而不暴露。
 
 ## 功能覆盖矩阵
+
+### Source V2 P1
+
+下表仅描述当前开发分支的显式 V2 写入口。DG descriptor 设置
+`v1_route_migration_enabled=false`，因此这三项 capability 不接管任何 legacy V1 route。
+
+| capability | 公开入口与严格边界 | DG4202 `00.01.14` normal-path 证据 |
+|---|---|---|
+| `source.basic_configure_v2` | CLI `source basic-configure-v2`；run `source.basic_configure_v2`。目标输出必须 OFF、频率模式必须 FIX、必须先取得 fresh V2 snapshot；DG adapter 每次只接受一个 Basic field。可请求 SIN/SQU/RAMP/PULS/NOIS/DC、frequency、Vpp、offset 或 square duty。 | CH1 在 OFF 下完成 RAMP/PULSE/NOISE/DC/SIN 写入与 V2 postcondition；CH2 完成 SQUARE/25% duty、frequency 和 Vpp 写入。外部高阻采集只覆盖 CH1 正弦与 CH2 方波。 |
+| `source.basic_live_configure_v2` | CLI `source basic-live-configure-v2`；run `source.basic_live_configure_v2`。输出必须 ON、频率模式必须 FIX，且一次只能改一个 frequency 或 Vpp field；禁止 output cycling。 | CH1/CH2 都完成 1 kHz→2 kHz 和 1 Vpp→2 Vpp 的独立 live 写后高阻采集。 |
+| `source.output_v2` | CLI `source output-v2`；run `source.output_enable_v2` / `source.output_disable_v2`。Core 对 ON/OFF 分别执行 V2 preflight 和最终状态回读。 | 两路各自低压输出、采集、V2 OFF；独立恢复 run 再次确认两路 OFF。 |
+| legacy V1 route | `source.set-*`、`source.output`、离散频响、`arb-load`、basic restore 与原有 artifact 保持 V1 合同。 | Core 路由测试与 DG P1 实机计划共同确认 V2 只由显式入口调用。 |
+
+P1 没有公开 volatile ARB、Counter、Sweep、Burst、Coupling、Noise Overlay 或 Sync 写 capability；
+也没有对 timeout、二义写或 recovery-failure 做上机故障注入。此类结果继续以离线故障矩阵为准。
 
 | 功能域 | 手册命令面 | 当前公开覆盖 | 证据状态 | 主要缺口与安全边界 | 建议 |
 |---|---|---|---|---|---|
@@ -141,7 +156,7 @@ SOURce<n>:VOLTage:OFFSet <voltage>  SOURce<n>:FUNCtion[:SHAPe] USER
 
 - **手册侧**：本地 `vendor-local` 中文 DG4000 手册，仅用于内部审计；本文不复制手册正文或将它打进发行包。
 - **实现侧**：外置插件的 `driver.py`、`descriptor.py` 和 FakeTransport 测试；内建 fallback 的历史文档仅用于区分来源，不自动成为外置插件验收。
-- **外置实机侧**：DG4202 固件 `00.01.14` 已通过 M1–M5 双通道门和 M6 全局 counter-OFF 门；M4 CH1/CH2 的 DAC14 与 RTM2032 证据、M5 的 sweep OFF/ON 预置证据和 M6 的 counter-OFF 证据保持不变。`0.7.0` 先在 output OFF、PULSE、1 Vpp 状态完成 52-query 快照和完整双通道 Pulse facet；最终 OFF/SIN/FIX 快照纳入 Counter、Modulation、部分 ARB、Coupling、Sync 与 Noise Overlay，共 67 次纯查询。完整 harness 为 112 queries、0 text/binary writes，锚点一致、会话 healthy；最终两路保持 OFF/SIN/1 kHz/5 Vpp/0 V/FIX。Sweep、Burst ON、Harmonic 活跃 V2 分支和 counter-ON 五元组仍无新鲜实机证据。
+- **外置实机侧**：DG4202 固件 `00.01.14` 已通过 M1–M5 双通道门和 M6 全局 counter-OFF 门；M4 CH1/CH2 的 DAC14 与 RTM2032 证据、M5 的 sweep OFF/ON 预置证据和 M6 的 counter-OFF 证据保持不变。`0.7.0` 的只读 V2 最终快照为 67 次纯查询，完整 harness 为 112 queries、0 text/binary writes，锚点一致、会话 healthy。P1 normal path 另完成 CH1/CH2 Basic／Live Basic／Output 的低压高阻验收，所有 capture quality/expect 门通过；恢复后两路均为 OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty。Sweep、Burst ON、Harmonic 活跃 V2 分支和 counter-ON 五元组仍无新鲜实机证据；timeout、二义写和 recovery-failure 也尚无上机故障注入结论。
 - **历史任意波侧**：旧内建 DG4202 证据仅用于来源区分；当前外置插件已有独立 CH1/CH2 协议证据，不再用历史结果替代验收。
 
 只有明确控制过的命令、实际回读/外部测量和所需恢复检查，才能提升为「外置实机通过」。

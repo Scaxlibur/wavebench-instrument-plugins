@@ -246,9 +246,10 @@ OFF 分支未查询 `MEASure?`，也未发送 enable、`AUTO` 或 statistics cle
 覆盖每个查询位置、未知枚举、非有限/越界配置，以及 counter-ON 五元组的字段数、有限性、
 frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无实机测量结论。
 
-## 10.1. Source V2 只读迁移
+## 10.1. Source V2 P1 迁移
 
-**状态：部分完成。** `0.7.0` 新增 `source.snapshot_v2`，不声明任何 Source V2 写能力。
+**状态：部分完成。** 当前 `0.7.0` 开发分支保留 `source.snapshot_v2`，并声明
+`source.basic_configure_v2`、`source.basic_live_configure_v2` 与 `source.output_v2`。
 
 - Basic：CH1/CH2 function、frequency mode/value、带单位 amplitude、offset、phase 和 square duty；
 - Output：只读取 enabled，load/polarity 继续由 V1 `source.channel_profile` 提供；
@@ -263,9 +264,18 @@ frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无�
   三维 enabled 与 typed deviation。
 - Sync 与 Noise Overlay：每通道分别读取 enabled/polarity 和 enabled/percent scale。
 - Counter：复用 M6 严格 profile；OFF 时不发送 measurement query。
+- Basic P1：输出 OFF、FIX 和 fresh snapshot 后，每次只写一个 Basic field；接受
+  SIN/SQU/RAMP/PULS/NOIS/DC、frequency、Vpp、offset 或 square duty。
+- Live Basic P1：输出 ON、FIX 时每次只写一个 frequency 或 Vpp field，禁止 output cycle。
+- Output P1：ON/OFF 是独立 operation，各自有 preflight 和最终状态回读。
 
 最坏查询预算为 138。每个查询项均为 `PURE_READ`，identity、Basic 与 Output 在前后阶段
 复读；任何锚点漂移由 Core 标记，驱动不为快照发送 selector 或 write。
+
+DG descriptor 设置 `v1_route_migration_enabled=false`。因此既有 V1 `source.set-*`、
+`source.output`、离散频响、`arb-load` 与 basic restore 保持 V1 合同；只有显式 V2 CLI、
+run step 或 Service operation 调用 P1 adapter。volatile ARB、Counter、Sweep、Burst、
+Coupling、Noise Overlay 和 Sync 仍不声明生产写 capability。
 
 2026-08-30 证据：DG4202 `00.01.14` 的 CH1/CH2 均为 OFF、SIN、1 kHz、5 Vpp、
 0 V offset、FIX、sweep OFF。公开 CLI 完成 40-query Source V2 快照，前后锚点一致，
@@ -282,6 +292,13 @@ session health 前后均为 healthy。随后使用既有 V1 事务将两路临�
 write request、transmitted、completed 和 instrument mutation 均为 0。Coupling 三维均为
 OFF、基准 CH1；两路 Sync 均为 ON/POSITIVE，Noise Overlay 均为 OFF/10%。最终两路保持
 OFF、SIN、1 kHz、5 Vpp、0 V offset、FIX，session 健康关闭；RTM2032 未被访问或采集。
+
+同日 P1 normal-path 验收使用当前 Core、DG 和 RTM 的隔离 wheel。CH1→RTM CH1 在输出 OFF
+下完成 RAMP/PULSE/NOISE/DC/SIN 的 V2 write/readback，随后以正弦分别完成 1 kHz/1 Vpp、
+live 2 kHz/1 Vpp、live 2 kHz/2 Vpp 的高阻采集。CH2→RTM CH2 完成 SQUARE/25% duty、
+1 kHz/1 Vpp 与同样两次 live 变更采集。每路最大 2 Vpp、每次只开启对应通道，所有
+capture quality/expect 门均通过。独立恢复 run 最终复读两路 OFF/SIN/1 kHz/5 Vpp/0 V/FIX/
+50% duty，RTM 两路均为 high-Z。未向在线仪器注入 timeout、二义写或 recovery-failure。
 
 ## 10.2. Counter V2 写能力候选
 
@@ -392,10 +409,12 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 
 - 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门，以及 M6
   全局 counter-OFF 零写入门；`0.7.0` 的 52-query output-OFF Pulse 活跃快照和最终
-  67-query 全 facet 基线快照也已通过。最终 harness 为 112 queries、0 text/binary writes。
+  67-query 全 facet 基线快照也已通过。P1 的 Basic／Live Basic／Output normal path 已在
+  CH1/CH2 高阻 RTM 闭环通过，恢复后两路均为 OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty。
+  最终只读 harness 为 112 queries、0 text/binary writes。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
 - 尚未通过：M7–M12 的全部受控写退出门；Coupling、Noise Overlay 与 Sync 只有写候选设计，
   未声明生产 capability。Sweep、Burst ON、Harmonic 活跃 V2 facet 和 M6 counter-ON 五元组
-  仍没有新鲜实机证据。
+  仍没有新鲜实机证据。P1 timeout、二义写和 recovery-failure 仍无上机 fault-injection 结论。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

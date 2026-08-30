@@ -376,7 +376,7 @@ def _counter_v2_request(**values: object) -> SourceCounterConfigureRequest:
     )
 
 
-def _write_candidate_descriptor():
+def _advanced_write_candidate_descriptor():
     item = descriptor()
     assert item.source_extensions is not None
     extensions = replace(
@@ -385,15 +385,7 @@ def _write_candidate_descriptor():
             replace(
                 feature,
                 directions=(
-                    (SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ)
-                    if feature.feature is SourceFeature.BASIC
-                    else (
-                        SourceFeatureDirection.DISABLE,
-                        SourceFeatureDirection.ENABLE,
-                        SourceFeatureDirection.READ,
-                    )
-                    if feature.feature is SourceFeature.OUTPUT
-                    else (
+                    (
                         SourceFeatureDirection.CONFIGURE,
                         SourceFeatureDirection.DISABLE,
                         SourceFeatureDirection.ENABLE,
@@ -404,12 +396,6 @@ def _write_candidate_descriptor():
                 ),
                 profile=(
                     replace(
-                        feature.profile,
-                        live_frequency_configurable=True,
-                        live_amplitude_vpp_configurable=True,
-                    )
-                    if feature.feature is SourceFeature.BASIC
-                    else replace(
                         feature.profile,
                         volatile_replace_min_points=2,
                         volatile_replace_max_points=16_384,
@@ -442,9 +428,7 @@ def _write_candidate_descriptor():
             if feature.feature
             in {
                 SourceFeature.ARBITRARY,
-                SourceFeature.BASIC,
                 SourceFeature.COUNTER,
-                SourceFeature.OUTPUT,
             }
             else feature
             for feature in item.source_extensions.features
@@ -454,9 +438,6 @@ def _write_candidate_descriptor():
         item,
         capabilities=(
             *item.capabilities,
-            "source.basic_configure_v2",
-            "source.basic_live_configure_v2",
-            "source.output_v2",
             "source.arbitrary_volatile_replace_v2",
             "source.counter_configure_v2",
             "source.counter_enable_v2",
@@ -466,20 +447,31 @@ def _write_candidate_descriptor():
     )
 
 
-def test_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
-    candidate = _write_candidate_descriptor()
+def test_production_source_v2_basic_output_satisfies_core_descriptor_gate() -> None:
+    item = descriptor()
+    driver = DG4202Source(DualChannelFakeTransport())
+
+    validate_source_descriptor(item, driver)
+    validate_declared_capabilities(item, driver)
+
+    assert "source.basic_configure_v2" in item.capabilities
+    assert "source.basic_live_configure_v2" in item.capabilities
+    assert "source.output_v2" in item.capabilities
+    assert "source.arbitrary_volatile_replace_v2" not in item.capabilities
+    assert "source.counter_configure_v2" not in item.capabilities
+
+
+def test_advanced_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
+    candidate = _advanced_write_candidate_descriptor()
     driver = DG4202Source(DualChannelFakeTransport())
 
     validate_source_descriptor(candidate, driver)
     validate_declared_capabilities(candidate, driver)
 
-    assert "source.basic_configure_v2" in candidate.capabilities
-    assert "source.output_v2" in candidate.capabilities
     assert "source.arbitrary_volatile_replace_v2" in candidate.capabilities
     assert "source.counter_configure_v2" in candidate.capabilities
     assert "source.counter_enable_v2" in candidate.capabilities
     assert "source.counter_measure_v2" in candidate.capabilities
-    assert "source.basic_configure_v2" not in descriptor().capabilities
 
 
 def _counter_core_service(
@@ -510,7 +502,7 @@ def _counter_core_service(
             config=config,
             logger=CommandLogger(),
             session=driver,
-            descriptor=_write_candidate_descriptor(),
+            descriptor=_advanced_write_candidate_descriptor(),
             transport=guarded,
             session_state=session_state,
         ),
@@ -1446,7 +1438,11 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert item.version == "0.7.0"
     assert item.wavebench_min_version == "0.8.25"
     assert "source.snapshot_v2" in item.capabilities
+    assert "source.basic_configure_v2" in item.capabilities
+    assert "source.basic_live_configure_v2" in item.capabilities
+    assert "source.output_v2" in item.capabilities
     assert item.source_extensions is not None
+    assert item.source_extensions.v1_route_migration_enabled is False
     assert item.source_extensions.topology.input_ids == ("counter",)
     assert item.source_extensions.query_contract.max_queries == 138
     _context, plan = _source_v2_plan()
@@ -1468,6 +1464,24 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert arbitrary.profile.selection_readable is True
     assert arbitrary.profile.storage_metadata_readable is False
     assert arbitrary.profile.sample_rate_readable is False
+    basic = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "basic" and feature.channels == (1,)
+    )
+    assert basic.directions == (SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ)
+    assert basic.profile.live_frequency_configurable is True
+    assert basic.profile.live_amplitude_vpp_configurable is True
+    output = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "output" and feature.channels == (1,)
+    )
+    assert output.directions == (
+        SourceFeatureDirection.DISABLE,
+        SourceFeatureDirection.ENABLE,
+        SourceFeatureDirection.READ,
+    )
     coupling = next(
         feature
         for feature in item.source_extensions.features
