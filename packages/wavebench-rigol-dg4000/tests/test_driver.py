@@ -10,22 +10,29 @@ from wavebench.instruments import (
     Availability,
     DG4000ByteOrder,
     DG4000DacBlock,
+    Observed,
+    PatchAction,
     SourceArbitraryPlaybackMode,
     SourceAmplitudeUnit,
+    SourceBasicConfigureRequest,
     SourceCounterMeasurementKind,
     SourceCouplingDimension,
     SourceCouplingParameterKind,
     SourceFieldId,
+    SourceFeature,
+    SourceFeatureDirection,
     SourceFrequencyMode,
     SourceInputCoupling,
     SourceModulationKind,
     SourceNoiseOverlayScaleKind,
+    SourceOutputRequest,
     SourceSemanticQueryPlan,
     SourceSyncPolarity,
     SourceWaveformKind,
 )
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
+from wavebench.instruments.source_extension_capabilities import validate_source_descriptor
 from wavebench.logging import CommandLogger
 from wavebench.services.source_snapshot_v2 import (
     build_source_snapshot,
@@ -285,6 +292,215 @@ def _source_v2_plan(
     if deadline_monotonic is not None:
         plan = replace(plan, deadline_monotonic=deadline_monotonic)
     return context, plan
+
+
+def _prime_v2_write_cache(
+    driver: DG4202Source,
+    *,
+    transport: FakeTransport | None = None,
+    channel: int = 1,
+) -> None:
+    if transport is not None:
+        transport.state["mode"] = "FIX"
+        transport.state["swe"] = "OFF"
+        transport.state["unit"] = "VPP"
+    _context, plan = _source_v2_plan()
+    driver.execute_source_query_plan_v2(plan)
+    assert channel in driver._v2_preflight_snapshots
+
+
+def _basic_v2_request(channel: int, **values: object) -> SourceBasicConfigureRequest:
+    from wavebench.instruments import PatchValue, SourceBasicPatch
+
+    fields = {
+        name: PatchValue(PatchAction.SET, value)
+        for name, value in values.items()
+    }
+    return SourceBasicConfigureRequest(channel=channel, patch=SourceBasicPatch(**fields))
+
+
+def _write_candidate_descriptor():
+    item = descriptor()
+    assert item.source_extensions is not None
+    extensions = replace(
+        item.source_extensions,
+        features=tuple(
+            replace(
+                feature,
+                directions=(
+                    (SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ)
+                    if feature.feature is SourceFeature.BASIC
+                    else (
+                        SourceFeatureDirection.DISABLE,
+                        SourceFeatureDirection.ENABLE,
+                        SourceFeatureDirection.READ,
+                    )
+                ),
+                profile=(
+                    replace(
+                        feature.profile,
+                        live_frequency_configurable=True,
+                        live_amplitude_vpp_configurable=True,
+                    )
+                    if feature.feature is SourceFeature.BASIC
+                    else feature.profile
+                ),
+            )
+            if feature.feature in {SourceFeature.BASIC, SourceFeature.OUTPUT}
+            else feature
+            for feature in item.source_extensions.features
+        ),
+    )
+    return replace(
+        item,
+        capabilities=(
+            *item.capabilities,
+            "source.basic_configure_v2",
+            "source.basic_live_configure_v2",
+            "source.output_v2",
+        ),
+        source_extensions=extensions,
+    )
+
+
+def test_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
+    candidate = _write_candidate_descriptor()
+    driver = DG4202Source(DualChannelFakeTransport())
+
+    validate_source_descriptor(candidate, driver)
+    validate_declared_capabilities(candidate, driver)
+
+    assert "source.basic_configure_v2" in candidate.capabilities
+    assert "source.output_v2" in candidate.capabilities
+    assert "source.basic_configure_v2" not in descriptor().capabilities
+
+
+def test_source_v2_basic_and_output_writes_use_only_preflight_cache() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    basic = driver.configure_source_basic_v2(
+        _basic_v2_request(1, frequency_hz=1_000.0)
+    )
+    assert basic.output_enabled is False
+    assert basic.basic.frequency_hz.value == 1_000.0
+    assert transport.writes == [":SOUR1:FREQ 1000"]
+    assert transport.queries == queries_before
+
+    enabled = driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    assert enabled.enabled is True
+    assert enabled.final_amplitude is not None
+    assert enabled.final_amplitude.unit is SourceAmplitudeUnit.VPP
+    assert enabled.final_offset_v == 0.0
+    assert transport.writes[-1] == ":OUTP1 ON"
+    assert transport.queries == queries_before
+
+
+def test_source_v2_basic_write_requires_fresh_preflight_and_safe_fixed_state() -> None:
+    transport = FakeTransport()
+    driver = DG4202Source(transport)
+    request = _basic_v2_request(1, frequency_hz=1_000.0)
+
+    with pytest.raises(DataError, match="fresh source.snapshot_v2 preflight"):
+        driver.configure_source_basic_v2(request)
+    assert transport.writes == []
+
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    basic, output = driver._v2_preflight_snapshots[1]
+    driver._v2_preflight_snapshots[1] = (
+        basic,
+        replace(output, enabled=Observed.value_of(True)),
+    )
+    with pytest.raises(DataError, match="requires output OFF"):
+        driver.configure_source_basic_v2(request)
+    assert transport.writes == []
+
+    driver._v2_preflight_snapshots[1] = (
+        replace(basic, frequency_mode=Observed.value_of(SourceFrequencyMode.SWEEP)),
+        output,
+    )
+    with pytest.raises(DataError, match="requires fixed-frequency mode"):
+        driver.configure_source_basic_v2(request)
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("amplitude_vpp", 2.0, ":SOUR1:VOLT 2"),
+        ("offset_v", 0.25, ":SOUR1:VOLT:OFFS 0.25"),
+        ("square_duty_cycle_percent", 25.0, ":SOUR1:FUNC:SQU:DCYC 25"),
+        ("waveform_kind", SourceWaveformKind.RAMP, ":SOUR1:FUNC RAMP"),
+    ],
+)
+def test_source_v2_basic_write_maps_one_supported_field(
+    field: str,
+    value: object,
+    expected: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["mode"] = "FIX"
+    transport.state["swe"] = "OFF"
+    if field == "square_duty_cycle_percent":
+        transport.state["func"] = "SQU"
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+
+    result = driver.configure_source_basic_v2(_basic_v2_request(1, **{field: value}))
+
+    assert result.output_enabled is False
+    assert transport.writes == [expected]
+
+
+def test_source_v2_live_frequency_is_one_write_and_never_cycles_output() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["mode"] = "FIX"
+    transport.state["swe"] = "OFF"
+    transport.state["out"] = "ON"
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+
+    result = driver.configure_source_basic_live_v2(
+        _basic_v2_request(1, frequency_hz=1_000.0)
+    )
+
+    assert result.output_enabled is True
+    assert transport.writes == [":SOUR1:FREQ 1000"]
+
+
+def test_source_v2_ambiguous_write_latches_and_invalidates_cache() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    transport.fail_write_commands.add(":SOUR1:FREQ 1000")
+
+    with pytest.raises(InstrumentError, match="write result is unknown"):
+        driver.configure_source_basic_v2(_basic_v2_request(1, frequency_hz=1_000.0))
+
+    assert driver._v2_preflight_snapshots == {}
+    assert driver.set_source_output_v2(
+        SourceOutputRequest(channel=1, enabled=False)
+    ).enabled is False
+    assert transport.writes[-1] == ":OUTP1 OFF"
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.configure_source_basic_v2(_basic_v2_request(1, frequency_hz=2_000.0))
+
+
+def test_source_v2_output_off_stays_available_after_write_latch() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    driver._configuration_writes_blocked = True
+
+    result = driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=False))
+
+    assert result.enabled is False
+    assert transport.writes == [":OUTP1 OFF"]
 
 
 def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:

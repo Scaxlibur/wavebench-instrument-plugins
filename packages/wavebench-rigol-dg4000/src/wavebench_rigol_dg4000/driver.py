@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import isclose, isfinite
 from threading import RLock
 
@@ -21,9 +21,13 @@ from wavebench.instruments import (
     NoiseOverlayFacet,
     Observed,
     OutputFacet,
+    PatchAction,
     PulseFacet,
     SourceAmplitude,
     SourceAmplitudeUnit,
+    SourceBasicConfigureRequest,
+    SourceBasicConfigureResult,
+    SourceBasicLiveConfigureResult,
     SourceBurstMode,
     SourceChannelProfile,
     SourceCouplingDimension,
@@ -45,6 +49,8 @@ from wavebench.instruments import (
     SourceModulationKind,
     SourceNoiseOverlayScale,
     SourceNoiseOverlayScaleKind,
+    SourceOutputRequest,
+    SourceOutputResult,
     SourceProtocolQueryRecord,
     SourcePulseHoldBasis,
     SourceQueryEffect,
@@ -324,6 +330,11 @@ class DG4202Source:
     _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _identity: tuple[str, str, str, str] | None = field(default=None, init=False, repr=False)
     _configuration_writes_blocked: bool = field(default=False, init=False, repr=False)
+    _v2_preflight_snapshots: dict[int, tuple[BasicWaveFacet, OutputFacet]] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
 
     def _query_finite_float(
         self,
@@ -553,6 +564,335 @@ class DG4202Source:
             display_load=not_queried,
             polarity=not_queried,
         )
+
+    def _v2_preflight_snapshot(
+        self,
+        channel: int,
+    ) -> tuple[BasicWaveFacet, OutputFacet]:
+        _validate_channel(channel)
+        try:
+            return self._v2_preflight_snapshots[channel]
+        except KeyError as exc:
+            raise DataError(
+                "DG4000 Source V2 write requires a fresh source.snapshot_v2 preflight"
+            ) from exc
+
+    def _ensure_v2_write_identity(self) -> None:
+        """Require the identity already observed during the V2 preflight.
+
+        A V2 MAIN phase permits writes only.  Falling back to ``*IDN?`` here
+        would silently violate that Core-owned authorization boundary.
+        """
+
+        if self._identity is None:
+            raise DataError("DG4000 Source V2 write requires preflight identity")
+        if self._identity[1] not in _WRITE_ACCEPTED_MODELS:
+            raise DataError(
+                f"DG4000 configuration writes are not accepted on model {self._identity[1]}"
+            )
+
+    @staticmethod
+    def _v2_result_amplitude_offset(
+        basic: BasicWaveFacet,
+    ) -> tuple[SourceAmplitude, float]:
+        if (
+            basic.amplitude.availability is not Availability.VALUE
+            or not isinstance(basic.amplitude.value, SourceAmplitude)
+            or basic.amplitude.value.unit is not SourceAmplitudeUnit.VPP
+        ):
+            raise DataError("DG4000 Source V2 write requires a verified Vpp amplitude")
+        if basic.offset_v.availability is not Availability.VALUE:
+            raise DataError("DG4000 Source V2 write requires a verified voltage offset")
+        return basic.amplitude.value, float(basic.offset_v.value)
+
+    @staticmethod
+    def _v2_basic_set_field(request: SourceBasicConfigureRequest) -> tuple[str, object]:
+        fields = tuple(
+            (name, patch_value.value)
+            for name, patch_value in (
+                ("waveform_kind", request.patch.waveform_kind),
+                ("frequency_hz", request.patch.frequency_hz),
+                ("amplitude_vpp", request.patch.amplitude_vpp),
+                ("offset_v", request.patch.offset_v),
+                ("square_duty_cycle_percent", request.patch.square_duty_cycle_percent),
+            )
+            if patch_value.action is PatchAction.SET
+        )
+        if len(fields) != 1:
+            raise DataError(
+                "DG4000 Source V2 basic configuration supports one SET field per write"
+            )
+        return fields[0]
+
+    @staticmethod
+    def _v2_validate_basic_preflight(
+        basic: BasicWaveFacet,
+        output: OutputFacet,
+        *,
+        output_enabled: bool,
+    ) -> None:
+        if (
+            output.enabled.availability is not Availability.VALUE
+            or output.enabled.value is not output_enabled
+        ):
+            expected = "ON" if output_enabled else "OFF"
+            raise DataError(
+                f"DG4000 Source V2 basic configuration requires output {expected}"
+            )
+        if (
+            basic.frequency_mode.availability is not Availability.VALUE
+            or basic.frequency_mode.value is not SourceFrequencyMode.FIXED
+        ):
+            raise DataError(
+                "DG4000 Source V2 basic configuration requires fixed-frequency mode"
+            )
+        if (
+            basic.waveform_kind.availability is not Availability.VALUE
+            or basic.waveform_kind.value
+            not in {
+                SourceWaveformKind.SINE,
+                SourceWaveformKind.SQUARE,
+                SourceWaveformKind.RAMP,
+                SourceWaveformKind.PULSE,
+                SourceWaveformKind.NOISE,
+                SourceWaveformKind.DC,
+            }
+        ):
+            raise DataError(
+                "DG4000 Source V2 basic configuration requires a fixed basic waveform"
+            )
+        DG4202Source._v2_result_amplitude_offset(basic)
+
+    @staticmethod
+    def _v2_basic_command(
+        channel: int,
+        basic: BasicWaveFacet,
+        field_name: str,
+        raw_value: object,
+    ) -> tuple[str | None, BasicWaveFacet]:
+        if field_name == "frequency_hz":
+            value_hz = _finite_float(raw_value, field_name="frequency")
+            if value_hz <= 0:
+                raise DataError("frequency must be > 0")
+            if (
+                basic.frequency_hz.availability is Availability.VALUE
+                and DG4202Source._numeric_matches(basic.frequency_hz.value, value_hz)
+            ):
+                return None, basic
+            return (
+                f":SOUR{channel}:FREQ {value_hz:.12g}",
+                replace(basic, frequency_hz=Observed.value_of(value_hz)),
+            )
+        if field_name == "amplitude_vpp":
+            value_vpp = _finite_float(raw_value, field_name="amplitude")
+            if value_vpp <= 0:
+                raise DataError("amplitude must be > 0")
+            amplitude, _ = DG4202Source._v2_result_amplitude_offset(basic)
+            if DG4202Source._numeric_matches(amplitude.value, value_vpp):
+                return None, basic
+            return (
+                f":SOUR{channel}:VOLT {value_vpp:.12g}",
+                replace(
+                    basic,
+                    amplitude=Observed.value_of(
+                        SourceAmplitude(value_vpp, SourceAmplitudeUnit.VPP)
+                    ),
+                ),
+            )
+        if field_name == "offset_v":
+            value_v = _finite_float(raw_value, field_name="offset")
+            if (
+                basic.offset_v.availability is Availability.VALUE
+                and DG4202Source._numeric_matches(basic.offset_v.value, value_v)
+            ):
+                return None, basic
+            return (
+                f":SOUR{channel}:VOLT:OFFS {value_v:.12g}",
+                replace(basic, offset_v=Observed.value_of(value_v)),
+            )
+        if field_name == "square_duty_cycle_percent":
+            value_percent = _finite_float(raw_value, field_name="duty cycle percent")
+            if value_percent <= 0 or value_percent >= 100:
+                raise DataError("duty cycle percent must be > 0 and < 100")
+            if (
+                basic.waveform_kind.availability is not Availability.VALUE
+                or basic.waveform_kind.value is not SourceWaveformKind.SQUARE
+            ):
+                raise DataError("DG4000 Source V2 duty-cycle writes require the SQUARE function")
+            if (
+                basic.square_duty_cycle_percent.availability is Availability.VALUE
+                and DG4202Source._numeric_matches(
+                    basic.square_duty_cycle_percent.value,
+                    value_percent,
+                )
+            ):
+                return None, basic
+            return (
+                f":SOUR{channel}:FUNC:SQU:DCYC {value_percent:.12g}",
+                replace(
+                    basic,
+                    square_duty_cycle_percent=Observed.value_of(value_percent),
+                ),
+            )
+        assert field_name == "waveform_kind"
+        if not isinstance(raw_value, SourceWaveformKind):
+            raise DataError("DG4000 Source V2 waveform kind has an invalid type")
+        functions = {
+            SourceWaveformKind.SINE: "SIN",
+            SourceWaveformKind.SQUARE: "SQU",
+            SourceWaveformKind.RAMP: "RAMP",
+            SourceWaveformKind.PULSE: "PULS",
+            SourceWaveformKind.NOISE: "NOIS",
+            SourceWaveformKind.DC: "DC",
+        }
+        try:
+            function = functions[raw_value]
+        except KeyError as exc:
+            raise DataError(
+                "DG4000 Source V2 only configures sine, square, ramp, pulse, noise, and DC"
+            ) from exc
+        if (
+            basic.waveform_kind.availability is Availability.VALUE
+            and basic.waveform_kind.value is raw_value
+        ):
+            return None, basic
+        return (
+            f":SOUR{channel}:FUNC {function}",
+            replace(
+                basic,
+                waveform_kind=Observed.value_of(raw_value),
+                waveform_id=Observed.value_of(function.lower()),
+            ),
+        )
+
+    def _configure_source_basic_v2(
+        self,
+        request: SourceBasicConfigureRequest,
+        *,
+        output_enabled: bool,
+        live: bool,
+    ) -> SourceBasicConfigureResult | SourceBasicLiveConfigureResult:
+        if not isinstance(request, SourceBasicConfigureRequest):
+            raise DataError("DG4000 Source V2 basic request has an invalid type")
+        _validate_channel(request.channel)
+        field_name, raw_value = self._v2_basic_set_field(request)
+        if live and field_name not in {"frequency_hz", "amplitude_vpp"}:
+            raise DataError(
+                "DG4000 Source V2 live basic configuration supports frequency or amplitude only"
+            )
+        with self._io_lock:
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            self._v2_validate_basic_preflight(
+                basic,
+                output,
+                output_enabled=output_enabled,
+            )
+            command, updated = self._v2_basic_command(
+                request.channel,
+                basic,
+                field_name,
+                raw_value,
+            )
+            try:
+                if command is not None:
+                    self._write(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                raise
+            self._v2_preflight_snapshots[request.channel] = (updated, output)
+            if live:
+                return SourceBasicLiveConfigureResult(
+                    channel=request.channel,
+                    basic=updated,
+                    output_enabled=True,
+                )
+            return SourceBasicConfigureResult(
+                channel=request.channel,
+                basic=updated,
+                output_enabled=False,
+            )
+
+    def configure_source_basic_v2(
+        self,
+        request: SourceBasicConfigureRequest,
+    ) -> SourceBasicConfigureResult:
+        result = self._configure_source_basic_v2(
+            request,
+            output_enabled=False,
+            live=False,
+        )
+        assert isinstance(result, SourceBasicConfigureResult)
+        return result
+
+    def configure_source_basic_live_v2(
+        self,
+        request: SourceBasicConfigureRequest,
+    ) -> SourceBasicLiveConfigureResult:
+        result = self._configure_source_basic_v2(
+            request,
+            output_enabled=True,
+            live=True,
+        )
+        assert isinstance(result, SourceBasicLiveConfigureResult)
+        return result
+
+    def set_source_output_v2(
+        self,
+        request: SourceOutputRequest,
+    ) -> SourceOutputResult:
+        if not isinstance(request, SourceOutputRequest):
+            raise DataError("DG4000 Source V2 output request has an invalid type")
+        _validate_channel(request.channel)
+        with self._io_lock:
+            self._ensure_v2_write_identity()
+            if not request.enabled:
+                # Core may enter this safe-state path after the main write
+                # invalidated the preflight cache.  OFF is deliberately
+                # executable from the already-proven session identity alone.
+                try:
+                    self._write(f":OUTP{request.channel} OFF")
+                except _AmbiguousWriteError:
+                    self._configuration_writes_blocked = True
+                    self._v2_preflight_snapshots.clear()
+                    raise
+                cached = self._v2_preflight_snapshots.get(request.channel)
+                if cached is not None:
+                    basic, output = cached
+                    self._v2_preflight_snapshots[request.channel] = (
+                        basic,
+                        replace(output, enabled=Observed.value_of(False)),
+                    )
+                return SourceOutputResult(channel=request.channel, enabled=False)
+
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            if request.enabled:
+                self._ensure_configuration_write_allowed()
+                amplitude, offset_v = self._v2_result_amplitude_offset(basic)
+                command = (
+                    None
+                    if output.enabled.availability is Availability.VALUE
+                    and output.enabled.value is True
+                    else f":OUTP{request.channel} ON"
+                )
+            try:
+                if command is not None:
+                    self._write(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                raise
+            updated_output = replace(output, enabled=Observed.value_of(request.enabled))
+            self._v2_preflight_snapshots[request.channel] = (basic, updated_output)
+            assert amplitude is not None and offset_v is not None
+            return SourceOutputResult(
+                channel=request.channel,
+                enabled=True,
+                final_amplitude=amplitude,
+                final_offset_v=offset_v,
+            )
 
     @staticmethod
     def _v2_sweep_facet(profile: SourceSweepProfile) -> SweepFacet:
@@ -1245,12 +1585,18 @@ class DG4202Source:
 
         self._validate_v2_query_plan(plan)
         with self._io_lock:
+            # A failed or partial query plan must never authorize a later write
+            # with a stale snapshot from an earlier transaction.
+            self._v2_preflight_snapshots.clear()
+
             def plan_query(command: str) -> str:
                 return self._v2_query(plan, command)
 
             records: list[SourceProtocolQueryRecord] = []
             total_queries = 0
             before_basic: dict[int, BasicWaveFacet] = {}
+            latest_basic: dict[int, BasicWaveFacet] = {}
+            latest_output: dict[int, OutputFacet] = {}
             for item in plan.items:
                 field_ref = item.fields[0]
                 channel = field_ref.target.channel
@@ -1266,6 +1612,7 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.BASIC:
                     assert channel is not None
                     value = self._v2_basic_facet(channel, plan)
+                    latest_basic[channel] = value
                     if item.phase is SourceQueryPhase.ANCHOR_BEFORE:
                         before_basic[channel] = value
                     query_count = 8
@@ -1291,6 +1638,7 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.OUTPUT:
                     assert channel is not None
                     value = self._v2_output_facet(channel, plan)
+                    latest_output[channel] = value
                     query_count = 1
                 elif field_ref.field is SourceFieldId.BURST:
                     assert channel is not None
@@ -1394,6 +1742,11 @@ class DG4202Source:
                 total_queries += query_count
             if total_queries > plan.max_queries:
                 raise DataError("DG4000 Source V2 query plan exceeded its total query budget")
+            self._v2_preflight_snapshots = {
+                channel: (basic, latest_output[channel])
+                for channel, basic in latest_basic.items()
+                if channel in latest_output
+            }
             return SourceQueryExecutionRecord(
                 contract_version=SOURCE_CONTRACT_VERSION,
                 plan_id=plan.plan_id,
