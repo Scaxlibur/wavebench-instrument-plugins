@@ -30,6 +30,8 @@
   全局 Counter，以及 CH1/CH2 参数化 Coupling；
 - 显式 Source V2 P1 写操作：`source.basic_configure_v2`、
   `source.basic_live_configure_v2` 和 `source.output_v2`；
+- Source V2 Counter 生产操作：`source.counter_configure_v2`、
+  `source.counter_enable_v2`（覆盖独立 disable）和 `source.counter_measure_v2`；
 - 固定频率、函数、VPP 幅度、方波占空比和显式输出控制；
 - 只读任意波形 SCPI 能力探测；
 - 使用 WaveBench 公共 `DG4000DacBlock` 契约上传已校验的 DAC14 binary block。
@@ -46,14 +48,17 @@ WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅�
 descriptor 导入不连接仪器。factory 只通过 `DriverContext` 打开当前配置的 transport。默认离线测试不扫描资源、不连接仪器，也不发送真实 SCPI。输出控制、任意波形上传和其他写操作不会盲目重试。
 
 当前开发分支的 `0.7.0` 在原有 M1–M6 和只读 `source.snapshot_v2` 之外开放 Source V2
-P1：`source.basic_configure_v2` 仅在目标输出 OFF、FIX 模式和 fresh V2 snapshot 条件下，
+P1 与 Counter V2：`source.basic_configure_v2` 仅在目标输出 OFF、FIX 模式和 fresh V2 snapshot 条件下，
 一次修改一个 Basic 字段；当前可请求 SIN/SQU/RAMP/PULS/NOIS/DC、frequency、Vpp、offset
 或 square duty。`source.basic_live_configure_v2` 仅在输出 ON、FIX 模式下修改一个 frequency
 或 Vpp 字段，禁止输出循环。`source.output_v2` 单独执行 ON/OFF，并由 Core 读取最终状态。
+Counter V2 每次只配置 coupling、输入阻抗、衰减、trigger level 或 statistics enable 中的一项；
+enable/disable 不隐式配置或清统计，measure 只读取已启用 Counter 的有效五元组。Counter 刚启用或
+无输入时的无效测量在 V2 snapshot 中标为不可用，仍允许安全 disable；legacy profile 保持严格。
 
 为保持 legacy 合同，DG descriptor 明确设置 `v1_route_migration_enabled=false`。既有 V1
 `source.set-*`、`source.output`、离散频响、`arb-load` 和 basic restore 继续调用 V1 路由；
-只有显式的 V2 CLI、run step 或 Service 调用使用 P1 adapter。它避免以不完整的
+只有显式的 V2 CLI、run step 或 Service 调用使用 P1/Counter V2 adapter。它避免以不完整的
 Basic/Output V2 组合替换 DAC14 upload 或 restore 事务。
 
 P1 仍保留 `0.3.0` 的 V1 M1/M2/M4 事务边界：所有 I/O 使用同一可重入锁，固定波写入采用
@@ -61,7 +66,7 @@ P1 仍保留 `0.3.0` 的 V1 M1/M2/M4 事务边界：所有 I/O 使用同一可�
 且 sweep OFF，并明确把被覆盖的 volatile USER 波表视为不可恢复副作用。M3/M5/M6 profile
 都是只读上下文，不扩大 core 的 basic restore，也不承诺恢复 load、polarity、noise、sync、
 burst、modulation、marker、pulse hold、完整 sweep/counter profile 或 volatile USER 内容。
-结论不外推到其它型号、固件、通道接线或 counter-ON 测量路径。
+结论不外推到其它型号、固件或未验收的通道接线。
 
 Coupling、Noise Overlay 与 Sync 的后续写入只完成合同和恢复顺序设计，当前 descriptor
 仍只声明 READ。Coupling 需要双通道完整目标和恢复；Noise Overlay 配置成功不能绕过独立的
@@ -157,6 +162,13 @@ live Vpp 采集。两路最高输出为 2 Vpp，每次仅开启对应通道，�
 RTM 两路均为 high-Z。该证据只覆盖正常写入、后置回读和最终 OFF，不覆盖 timeout、二义写
 或 recovery-failure 的实机故障注入。
 
+2026-08-31，Counter V2 在 DG4202 与 RTM2032 CH1 的三通接线下完成独立验收。Counter 输入
+约束为不超过 5 Vpp，实际发射 1 kHz、1 Vpp 正弦。输入阻抗 50 Ω／1 MΩ、衰减 1X／10X、
+trigger level、statistics 与 AC/DC coupling 均逐项写入并回读；Counter 测得 1000.011247 Hz，
+RTM 捕获与 FFT 为 1000 Hz、1.0 Vpp。随后输出关闭、Counter 关闭、耦合恢复 AC，新的会话复读
+CH1 OFF、5 Vpp 配置与 Counter OFF。输出始终 OFF 的 Counter 启用→关闭也通过，验证暂不可用测量
+不会阻断安全关闭。timeout、二义写与 recovery-failure 仍无实机故障注入结论。
+
 ## 开发验证
 
 ```bash
@@ -183,7 +195,7 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
   `00.01.14` 在 counter OFF 下完成三轮严格零写 M6 实机门，不自动启用 counter，
   不发送 `AUTO`/statistics clear，也不把离线验证的 counter-ON 测量解析写成实机结论。
 - `0.7.0` 开发分支：要求 WaveBench `>=0.8.25`，保留只读 `source.snapshot_v2`，并开放
-  Basic／Live Basic／Output P1 capability。Source V2 正常路径已在 DG4202 `00.01.14` 的
-  CH1/CH2 分别经 RTM2032 高阻采集验证；V1 路由保持不迁移。volatile ARB、Counter、
+  Basic／Live Basic／Output P1 与 Counter V2 capability。Source V2 正常路径已在 DG4202 `00.01.14`
+  的 CH1/CH2 高阻采集及 Counter→RTM CH1 三通测量中验证；V1 路由保持不迁移。volatile ARB、
   Sweep、Burst、Coupling、Noise Overlay 和 Sync 写 capability 仍未公开，故障 recovery
   尚无实机 fault-injection 结论。

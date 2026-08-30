@@ -261,7 +261,8 @@ pulse-width/period, and duty/width relationships. Counter-ON has no hardware mea
 ## 10.1. Source V2 P1 migration
 
 **Status: partial.** The current `0.7.0` development branch retains `source.snapshot_v2` and
-declares `source.basic_configure_v2`, `source.basic_live_configure_v2`, and `source.output_v2`.
+declares `source.basic_configure_v2`, `source.basic_live_configure_v2`, `source.output_v2`,
+`source.counter_configure_v2`, `source.counter_enable_v2`, and `source.counter_measure_v2`.
 
 - Basic reads CH1/CH2 function, frequency mode/value, unit-bearing amplitude, offset, phase, and
   square duty.
@@ -278,7 +279,8 @@ declares `source.basic_configure_v2`, `source.basic_live_configure_v2`, and `sou
 - Coupling reads one CH1/CH2 `CHANNEL_SET` with global state, reference channel, and typed enabled +
   deviation for amplitude/frequency/phase.
 - Sync and Noise Overlay read enabled/polarity and enabled/percent scale per channel.
-- Counter reuses the strict M6 profile and sends no measurement query while OFF.
+- Counter reuses the strict M6 profile and sends no measurement query while OFF; V2 additionally
+  permits one-field configuration, independent enable/disable, and a five-field measurement while enabled.
 - Basic P1 requires output OFF, FIX mode, and a fresh snapshot, then writes exactly one Basic field:
   SIN/SQU/RAMP/PULS/NOIS/DC, frequency, Vpp, offset, or square duty.
 - Live Basic P1 requires output ON and FIX mode, and writes exactly one frequency or Vpp field
@@ -291,8 +293,8 @@ write for this snapshot.
 
 The DG descriptor sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
 `source.output`, discrete frequency-response, `arb-load`, and basic restore paths retain their V1
-contracts; only explicit V2 CLI, run-step, or Service operations call the P1 adapter. Volatile ARB,
-Counter, Sweep, Burst, Coupling, Noise Overlay, and Sync remain undeclared production writes.
+contracts; only explicit V2 CLI, run-step, or Service operations call the P1/Counter V2 adapter.
+Volatile ARB, Sweep, Burst, Coupling, Noise Overlay, and Sync remain undeclared production writes.
 
 2026-08-30 evidence: DG4202 `00.01.14` reported CH1/CH2 OFF, SIN, 1 kHz, 5 Vpp, 0 V offset,
 FIX, and sweep OFF. The public CLI completed a 40-query Source V2 snapshot with matching anchors
@@ -322,7 +324,32 @@ separate restoration run finally read both channels as OFF/SIN/1 kHz/5 Vpp/0 V/F
 both RTM inputs high-Z. No timeout, ambiguous-write, or recovery-failure fault was injected into
 hardware.
 
-## 10.2. Candidate Coupling, Noise Overlay, and Sync writes
+## 10.2. Counter V2 production writes
+
+**Status: accepted for the declared DG4202 production subset.** Core and descriptor declare
+`source.counter_configure_v2`, `source.counter_enable_v2`, and `source.counter_measure_v2`; the
+same enable capability covers the separate `source.counter_disable_v2` Core operation. The adapter
+uses a fresh Source V2 Counter cache; MAIN does not query or call a V1 setter.
+
+- Configuration accepts only coupling, 50 ohm/1 megaohm impedance, 1X/10X attenuation, a trigger
+  level from -2.5 V to 2.5 V, and statistics enable. Each operation sends one `:COUN:*` command and
+  Core independently reads it back.
+- Enable/disable sends only `:COUN ON|OFF`, with no implicit configuration, AUTO, gate, or clear.
+  Measure sends `:COUN:MEAS?` only after a fresh snapshot proves Counter ON. A settling or no-input
+  zero result is unavailable in V2 snapshot state and still permits disable; the legacy profile and
+  measure operation remain strict about an invalid tuple.
+- On 2026-08-31, a DG CH1→T→RTM CH1 high-impedance plus DG Counter fixture used a 5 Vpp Counter
+  input limit and a 1 kHz/1 Vpp emitted signal. Every configuration field was read back; Counter
+  reported 1000.011247 Hz while RTM capture/FFT reported 1000 Hz and 1.0 Vpp. A fresh session ended
+  with CH1 OFF/5 Vpp configuration and Counter OFF/AC. Counter enable→disable with output held OFF
+  also passed.
+
+An ambiguous write clears the Counter cache and latches later configuration writes. Core does not
+roll back configuration or automatically disable; it marks the session conservatively failed. No
+hardware fault was injected for timeout, ambiguous-write, or recovery-failure. AUTO, gate, HF,
+sensitivity, statistics display, and statistics clear remain outside production capability.
+
+## 10.3. Candidate Coupling, Noise Overlay, and Sync writes
 
 **Status: designed; not implemented and no capability is registered.** The Core Source RFC R8
 candidate owns the generic contract. This section records only DG4202 protocol order and exit gates;
@@ -424,16 +451,17 @@ Final exit requires every public write capability to have normal-path, failure-m
 
 ## 17. Current evidence boundary
 
-- External-plugin hardware accepted: M1-M5 CH1/CH2 gates and the global M6 counter-OFF zero-write
-  gate on DG4202 firmware `00.01.14`; the `0.7.0` 52-query output-OFF active Pulse snapshot and final
+- External-plugin hardware accepted: M1-M5 CH1/CH2 gates, the global M6 counter-OFF zero-write
+  gate, and Counter V2 configuration/enable/disable/measurement with RTM/FFT cross-check on DG4202
+  firmware `00.01.14`; the `0.7.0` 52-query output-OFF active Pulse snapshot and final
   67-query all-facet baseline snapshot also pass. P1 Basic/Live Basic/Output normal paths pass in
   the CH1/CH2 high-impedance RTM loops; after restoration, both channels read
   OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty. The final read-only harness issued 112 queries and zero
   text/binary writes.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
 - Not passed: all M7-M12 controlled-write exit gates. Coupling, Noise Overlay, and Sync have
-  candidate write designs only and declare no production capability. Active Sweep, Burst ON,
-  Harmonic V2 facets, and the M6 counter-ON tuple still lack fresh hardware evidence. P1 timeout,
-  ambiguous-write, and recovery-failure still lack a hardware fault-injection conclusion.
+  candidate write designs only and declare no production capability. Active Sweep, Burst ON, and
+  Harmonic V2 facets still lack fresh hardware evidence. P1/Counter timeout, ambiguous-write, and
+  recovery-failure still lack a hardware fault-injection conclusion.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

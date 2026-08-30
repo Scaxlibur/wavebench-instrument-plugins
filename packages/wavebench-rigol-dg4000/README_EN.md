@@ -33,22 +33,30 @@ output-enabled, Sweep, Pulse, Burst, partial Harmonic, Modulation state/type, pa
 Noise Overlay, and Sync facets for CH1/CH2, plus the global Counter and parameterized CH1/CH2
 Coupling state. The Harmonic facet does not claim per-order component readback.
 
-The current development branch also declares the explicit Source V2 P1 write capabilities
-`source.basic_configure_v2`, `source.basic_live_configure_v2`, and `source.output_v2`.
+The current development branch also declares explicit Source V2 P1 write capabilities
+`source.basic_configure_v2`, `source.basic_live_configure_v2`, and `source.output_v2`, plus
+production Counter V2 capabilities `source.counter_configure_v2`, `source.counter_enable_v2`
+(which covers the separate disable operation), and `source.counter_measure_v2`.
 
 WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
 
-The current `0.7.0` development branch adds Source V2 P1 beside the read-only snapshot surface.
+The current `0.7.0` development branch adds Source V2 P1 and Counter V2 beside the read-only
+snapshot surface.
 `source.basic_configure_v2` requires target output OFF, FIX mode, and a fresh V2 snapshot, and
 changes exactly one Basic field per request. It currently accepts SIN/SQU/RAMP/PULS/NOIS/DC,
 frequency, Vpp, offset, or square duty. `source.basic_live_configure_v2` changes exactly one
 frequency or Vpp field while output remains ON in FIX mode, without output cycling.
 `source.output_v2` separately enables or disables one channel and the Core reads back its final
 state.
+Counter V2 changes exactly one of coupling, input impedance, attenuation, trigger level, or
+statistics enable per request. Enable/disable never configures input state or clears statistics;
+measure accepts only an already-enabled valid five-field result. A settling or no-input Counter
+measurement is unavailable in a V2 snapshot but does not block a safe disable; the legacy profile
+remains strict.
 
 The DG descriptor explicitly sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
 `source.output`, discrete frequency-response, `arb-load`, and basic restore paths therefore remain
-V1. Only the explicit V2 CLI, run step, or Service operation uses the P1 adapter. This avoids
+V1. Only the explicit V2 CLI, run step, or Service operation uses the P1/Counter V2 adapter. This avoids
 silently replacing legacy DAC14 upload or restore transactions with incomplete Basic/Output V2
 composition.
 
@@ -59,7 +67,7 @@ in FIX mode, with sweep OFF. Overwriting the volatile USER waveform is reported 
 side effect. The M3, M5, and M6 profiles are read-only contexts: they do not widen core basic
 restoration or promise restoration of load, polarity, noise, sync, burst, modulation, marker,
 pulse hold, a complete sweep/counter profile, or volatile USER contents. No result is extrapolated
-to another model, firmware, channel wiring, or the counter-ON measurement path.
+to another model, firmware, or unaccepted channel wiring.
 
 Future Coupling, Noise Overlay, and Sync writes currently have contract and recovery-order designs
 only; the descriptor still declares READ only. Coupling requires a complete dual-channel target and
@@ -163,6 +171,15 @@ expectation gate passed. A separate restoration run independently read both chan
 writes, postconditions, and final OFF only, not timeout, ambiguous-write, or recovery-failure fault
 injection on hardware.
 
+On 2026-08-31, Counter V2 completed an independent acceptance using a T connection from DG4202 CH1
+to RTM2032 CH1 and the DG Counter input. The Counter input limit was 5 Vpp; the emitted signal was
+only 1 kHz at 1 Vpp. The transaction wrote and read back 50 ohm/1 megaohm impedance, 1X/10X
+attenuation, trigger level, statistics, and AC/DC coupling one field at a time. Counter reported
+1000.011247 Hz while the RTM capture and FFT reported 1000 Hz at 1.0 Vpp. The final fresh-session
+readback confirmed CH1 OFF with its 5 Vpp configuration and Counter OFF/AC. A Counter enable→disable
+run with output held OFF also passed, proving an unavailable measurement cannot block safe disable.
+No timeout, ambiguous-write, or recovery-failure fault was injected into hardware.
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an
@@ -186,8 +203,9 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
   the counter, sending `AUTO`/statistics clear, or presenting offline-only counter-ON parsing as a
   hardware result.
 - The `0.7.0` development branch requires WaveBench `>=0.8.25`, retains pure-query
-  `source.snapshot_v2`, and declares Basic/Live Basic/Output P1 capabilities. DG4202 `00.01.14`
-  normal paths were accepted separately on CH1 and CH2 through high-impedance RTM2032 captures,
-  while V1 routes remain unmigrated. Volatile ARB, Counter, Sweep, Burst, Coupling, Noise Overlay,
+  `source.snapshot_v2`, and declares Basic/Live Basic/Output P1 plus Counter V2 capabilities.
+  DG4202 `00.01.14` normal paths were accepted on CH1 and CH2 through high-impedance RTM2032
+  captures and on Counter through the CH1 T connection, while V1 routes remain unmigrated. Volatile
+  ARB, Sweep, Burst, Coupling, Noise Overlay,
   and Sync write capabilities remain undeclared, and no hardware fault-injection conclusion exists
   for recovery.
