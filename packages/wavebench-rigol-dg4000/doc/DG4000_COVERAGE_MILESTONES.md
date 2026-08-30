@@ -283,7 +283,22 @@ write request、transmitted、completed 和 instrument mutation 均为 0。Coupl
 OFF、基准 CH1；两路 Sync 均为 ON/POSITIVE，Noise Overlay 均为 OFF/10%。最终两路保持
 OFF、SIN、1 kHz、5 Vpp、0 V offset、FIX，session 健康关闭；RTM2032 未被访问或采集。
 
-## 10.2. Coupling、Noise Overlay 与 Sync 写能力候选
+## 10.2. Counter V2 写能力候选
+
+**状态：离线候选；未注册 production capability。** Core 已提供独立的单字段配置、启停和测量合同，DG4202 adapter
+使用前一轮 Source V2 snapshot 的 Counter cache，MAIN 不查询、不调用 V1 setter。
+
+- 配置仅接受 coupling、50 Ω／1 MΩ impedance、1X／10X attenuation、-2.5 V 至 2.5 V trigger level 与
+  statistics enable。每次只写一个 `:COUN:*` 命令，正常完成后由 Core 独立回读。
+- enable/disable 仅写 `:COUN ON|OFF`，不附带配置、AUTO、gate 或 clear。measure 仅对已经由 fresh snapshot
+  证实为 ON 的 Counter 发送 `:COUN:MEAS?`。
+- 二义写会清 Counter cache 并锁定后续配置写；Core 不回滚配置、不自动 disable，而是将 session 标记为保守失效。
+  当前 CH1/CH2→RTM 接线不包含 Counter 输入，因此没有候选写、Counter ON 或测量的实机证据。
+
+production descriptor 继续只声明只读 Counter。提升前至少需要独立安全信号夹具、输入端接确认、每个写命令的
+读回与失败矩阵，以及最终 Counter OFF 的新会话复核。
+
+## 10.3. Coupling、Noise Overlay 与 Sync 写能力候选
 
 **状态：设计完成；未实现、未注册 capability。** 通用合同由 Core Source RFC 的 R8 候选章节
 定义；本节只记录 DG4202 的协议顺序和退出门，不把设计文档当作写授权。

@@ -38,10 +38,17 @@ from wavebench.instruments import (
     SourceCouplingParameter,
     SourceCouplingParameterKind,
     SourceCouplingState,
+    SourceCounterConfigurationField,
+    SourceCounterConfigureRequest,
+    SourceCounterConfigureResult,
+    SourceCounterEnableRequest,
+    SourceCounterEnableResult,
     SourceCounterInputState,
     SourceCounterMeasurement,
     SourceCounterMeasurementKind,
     SourceCounterMeasurementV2,
+    SourceCounterMeasureRequest,
+    SourceCounterMeasureResult,
     SourceCounterProfile,
     SourceFieldId,
     SourceFeature,
@@ -363,6 +370,11 @@ class DG4202Source:
         init=False,
         repr=False,
     )
+    _v2_counter_preflight_snapshots: dict[str, SourceCounterInputState] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
 
     def _query_finite_float(
         self,
@@ -603,6 +615,16 @@ class DG4202Source:
         except KeyError as exc:
             raise DataError(
                 "DG4000 Source V2 write requires a fresh source.snapshot_v2 preflight"
+            ) from exc
+
+    def _v2_counter_preflight_snapshot(self, input_id: str) -> SourceCounterInputState:
+        if input_id != "counter":
+            raise DataError("DG4000 Source V2 counter input is unsupported")
+        try:
+            return self._v2_counter_preflight_snapshots[input_id]
+        except KeyError as exc:
+            raise DataError(
+                "DG4000 Source V2 Counter operation requires a fresh source.snapshot_v2 preflight"
             ) from exc
 
     def _ensure_v2_write_identity(self) -> None:
@@ -969,6 +991,189 @@ class DG4202Source:
                 content_readback_verified=False,
                 previous_content_restorable=False,
             )
+
+    @staticmethod
+    def _v2_counter_patch_field(
+        request: SourceCounterConfigureRequest,
+    ) -> tuple[SourceCounterConfigurationField, object]:
+        if not isinstance(request, SourceCounterConfigureRequest):
+            raise DataError("DG4000 Source V2 Counter request has an invalid type")
+        fields = tuple(
+            (field, patch_value.value)
+            for field, patch_value in (
+                (SourceCounterConfigurationField.COUPLING, request.patch.coupling),
+                (SourceCounterConfigurationField.IMPEDANCE_OHM, request.patch.impedance_ohm),
+                (SourceCounterConfigurationField.ATTENUATION, request.patch.attenuation),
+                (SourceCounterConfigurationField.TRIGGER_LEVEL_V, request.patch.trigger_level_v),
+                (
+                    SourceCounterConfigurationField.STATISTICS_ENABLED,
+                    request.patch.statistics_enabled,
+                ),
+            )
+            if patch_value.action is PatchAction.SET
+        )
+        if len(fields) != 1:  # pragma: no cover - the Core model enforces this.
+            raise DataError("DG4000 Source V2 Counter requires one SET field")
+        return fields[0]
+
+    @staticmethod
+    def _v2_counter_configuration_command(
+        state: SourceCounterInputState,
+        request: SourceCounterConfigureRequest,
+    ) -> tuple[str | None, SourceCounterInputState]:
+        field, raw_value = DG4202Source._v2_counter_patch_field(request)
+
+        def current(observed: Observed[object], label: str) -> object:
+            if observed.availability is not Availability.VALUE:
+                raise DataError(f"DG4000 Source V2 Counter requires readable {label}")
+            return observed.value
+
+        if field is SourceCounterConfigurationField.COUPLING:
+            if raw_value not in {SourceInputCoupling.AC, SourceInputCoupling.DC}:
+                raise DataError("DG4000 Source V2 Counter coupling must be AC or DC")
+            if current(state.coupling, "coupling") is raw_value:
+                return None, state
+            token = "AC" if raw_value is SourceInputCoupling.AC else "DC"
+            return f":COUN:COUP {token}", replace(
+                state,
+                coupling=Observed.value_of(raw_value),
+            )
+        if field is SourceCounterConfigurationField.IMPEDANCE_OHM:
+            value = _finite_float(raw_value, field_name="counter impedance")
+            if value not in {50.0, 1_000_000.0}:
+                raise DataError("DG4000 Source V2 Counter impedance must be 50 or 1000000 ohms")
+            if current(state.impedance_ohm, "impedance") == value:
+                return None, state
+            return (":COUN:IMP 50" if value == 50.0 else ":COUN:IMP 1M"), replace(
+                state,
+                impedance_ohm=Observed.value_of(value),
+            )
+        if field is SourceCounterConfigurationField.ATTENUATION:
+            if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value not in {1, 10}:
+                raise DataError("DG4000 Source V2 Counter attenuation must be 1X or 10X")
+            if current(state.attenuation, "attenuation") == raw_value:
+                return None, state
+            return f":COUN:ATT {raw_value}X", replace(
+                state,
+                attenuation=Observed.value_of(raw_value),
+            )
+        if field is SourceCounterConfigurationField.TRIGGER_LEVEL_V:
+            value = _finite_float(raw_value, field_name="counter trigger level")
+            if not -2.5 <= value <= 2.5:
+                raise DataError("DG4000 Source V2 Counter trigger level must be from -2.5 to 2.5 V")
+            if current(state.trigger_level_v, "trigger level") == value:
+                return None, state
+            return f":COUN:LEVE {value:.12g}", replace(
+                state,
+                trigger_level_v=Observed.value_of(value),
+            )
+        assert field is SourceCounterConfigurationField.STATISTICS_ENABLED
+        if not isinstance(raw_value, bool):
+            raise DataError("DG4000 Source V2 Counter statistics state must be bool")
+        if current(state.statistics_enabled, "statistics state") is raw_value:
+            return None, state
+        return f":COUN:STATI:STAT {'ON' if raw_value else 'OFF'}", replace(
+            state,
+            statistics_enabled=Observed.value_of(raw_value),
+        )
+
+    def configure_source_counter_v2(
+        self,
+        request: SourceCounterConfigureRequest,
+    ) -> SourceCounterConfigureResult:
+        if not isinstance(request, SourceCounterConfigureRequest):
+            raise DataError("DG4000 Source V2 Counter request has an invalid type")
+        with self._io_lock:
+            state = self._v2_counter_preflight_snapshot(request.input_id)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            command, updated = self._v2_counter_configuration_command(state, request)
+            try:
+                if command is not None:
+                    self._write(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_counter_preflight_snapshots.clear()
+                raise
+            self._v2_counter_preflight_snapshots[request.input_id] = updated
+            return SourceCounterConfigureResult(request.input_id, updated)
+
+    def set_source_counter_enabled_v2(
+        self,
+        request: SourceCounterEnableRequest,
+    ) -> SourceCounterEnableResult:
+        if not isinstance(request, SourceCounterEnableRequest):
+            raise DataError("DG4000 Source V2 Counter enable request has an invalid type")
+        with self._io_lock:
+            state = self._v2_counter_preflight_snapshot(request.input_id)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            if state.enabled.availability is not Availability.VALUE:
+                raise DataError("DG4000 Source V2 Counter requires readable enabled state")
+            try:
+                if state.enabled.value is not request.enabled:
+                    self._write(f":COUN {'ON' if request.enabled else 'OFF'}")
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_counter_preflight_snapshots.clear()
+                raise
+            measurements = (
+                Observed.missing(
+                    Availability.NOT_QUERIED,
+                    SourceReasonCode.NOT_REQUESTED,
+                )
+                if request.enabled
+                else Observed.missing(
+                    Availability.NOT_APPLICABLE,
+                    SourceReasonCode.INACTIVE_BY_ANCHOR,
+                )
+            )
+            self._v2_counter_preflight_snapshots[request.input_id] = replace(
+                state,
+                enabled=Observed.value_of(request.enabled),
+                measurements=measurements,
+            )
+            return SourceCounterEnableResult(request.input_id, request.enabled)
+
+    def measure_source_counter_v2(
+        self,
+        request: SourceCounterMeasureRequest,
+    ) -> SourceCounterMeasureResult:
+        if not isinstance(request, SourceCounterMeasureRequest):
+            raise DataError("DG4000 Source V2 Counter measure request has an invalid type")
+        with self._io_lock:
+            state = self._v2_counter_preflight_snapshot(request.input_id)
+            if state.enabled.availability is not Availability.VALUE or state.enabled.value is not True:
+                raise DataError("DG4000 Source V2 Counter measure requires Counter enabled")
+            measurement = _parse_counter_measurement(self.transport.query(":COUN:MEAS?"))
+            measurements = tuple(
+                sorted(
+                    (
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.FREQUENCY_HZ,
+                            measurement.frequency_hz,
+                        ),
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.PERIOD_S,
+                            measurement.period_s,
+                        ),
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.DUTY_PERCENT,
+                            measurement.duty_cycle_percent,
+                        ),
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+                            measurement.positive_width_s,
+                        ),
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+                            measurement.negative_width_s,
+                        ),
+                    ),
+                    key=lambda item: item.kind.value,
+                )
+            )
+            return SourceCounterMeasureResult(request.input_id, measurements)
 
     @staticmethod
     def _v2_sweep_facet(profile: SourceSweepProfile) -> SweepFacet:
@@ -1664,6 +1869,7 @@ class DG4202Source:
             # A failed or partial query plan must never authorize a later write
             # with a stale snapshot from an earlier transaction.
             self._v2_preflight_snapshots.clear()
+            self._v2_counter_preflight_snapshots.clear()
 
             def plan_query(command: str) -> str:
                 return self._v2_query(plan, command)
@@ -1673,6 +1879,7 @@ class DG4202Source:
             before_basic: dict[int, BasicWaveFacet] = {}
             latest_basic: dict[int, BasicWaveFacet] = {}
             latest_output: dict[int, OutputFacet] = {}
+            latest_counter: dict[str, SourceCounterInputState] = {}
             for item in plan.items:
                 field_ref = item.fields[0]
                 channel = field_ref.target.channel
@@ -1726,6 +1933,7 @@ class DG4202Source:
                         input_id,
                         self._get_counter_profile(query=plan_query),
                     )
+                    latest_counter[input_id] = value
                     query_count = 11 if value.enabled.value else 10
                 elif field_ref.field is SourceFieldId.COUPLING:
                     value = self._v2_coupling_facet(plan)
@@ -1823,6 +2031,7 @@ class DG4202Source:
                 for channel, basic in latest_basic.items()
                 if channel in latest_output
             }
+            self._v2_counter_preflight_snapshots = latest_counter
             return SourceQueryExecutionRecord(
                 contract_version=SOURCE_CONTRACT_VERSION,
                 plan_id=plan.plan_id,

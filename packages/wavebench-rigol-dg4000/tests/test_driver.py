@@ -3,9 +3,20 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from hashlib import sha256
+from pathlib import Path
 
 import pytest
 
+from wavebench.config import (
+    AutoscaleConfig,
+    ConnectionConfig,
+    OutputConfig,
+    SafetyLimitsConfig,
+    ScopeConfig,
+    SourceConfig,
+    WaveBenchConfig,
+    WaveformConfig,
+)
 from wavebench.errors import DataError, InstrumentError
 from wavebench.instruments import (
     Availability,
@@ -13,10 +24,16 @@ from wavebench.instruments import (
     DG4000DacBlock,
     Observed,
     PatchAction,
+    PatchValue,
     SourceArbitraryPlaybackMode,
     SourceArbitraryVolatileReplaceRequest,
     SourceAmplitudeUnit,
     SourceBasicConfigureRequest,
+    SourceCounterConfigurationField,
+    SourceCounterConfigurationPatch,
+    SourceCounterConfigureRequest,
+    SourceCounterEnableRequest,
+    SourceCounterMeasureRequest,
     SourceCounterMeasurementKind,
     SourceCouplingDimension,
     SourceCouplingParameterKind,
@@ -36,17 +53,22 @@ from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.source_extension_capabilities import validate_source_descriptor
 from wavebench.logging import CommandLogger
+from wavebench.services.source_service import SourceService
 from wavebench.services.source_snapshot_v2 import (
     build_source_snapshot,
     build_source_snapshot_plan,
     new_source_snapshot_context,
 )
+from wavebench.transport.guarded import GuardedAuditedTransport
+from wavebench.transport.session import InstrumentSessionState
 
 from wavebench_rigol_dg4000 import descriptor
 from wavebench_rigol_dg4000.driver import DG4202Source
 
 
 class FakeTransport:
+    resource = "fake-dg4202"
+
     def __init__(self, channel: int = 1, *, model: str = "DG4202") -> None:
         self.channel = channel
         self.model = model
@@ -143,7 +165,19 @@ class FakeTransport:
 
     def _apply_write(self, command: str) -> None:
         prefix = f":SOUR{self.channel}"
-        if command.startswith(f"{prefix}:FREQ:MODE "):
+        if command.startswith(":COUN:COUP "):
+            self.state["counter_coupling"] = command.split()[-1]
+        elif command.startswith(":COUN:IMP "):
+            self.state["counter_impedance"] = command.split()[-1]
+        elif command.startswith(":COUN:ATT "):
+            self.state["counter_attenuation"] = command.split()[-1]
+        elif command.startswith(":COUN:LEVE "):
+            self.state["counter_level"] = float(command.split()[-1])
+        elif command.startswith(":COUN:STATI:STAT "):
+            self.state["counter_statistics"] = command.split()[-1]
+        elif command.startswith(":COUN "):
+            self.state["counter"] = command.split()[-1]
+        elif command.startswith(f"{prefix}:FREQ:MODE "):
             self.state["mode"] = command.split()[-1]
             self.state["swe"] = "OFF" if self.state["mode"] == "FIX" else "ON"
         elif command.startswith(f"{prefix}:FREQ "):
@@ -169,7 +203,7 @@ class FakeTransport:
             self.fail_byte_write = False
             raise InstrumentError("injected ambiguous binary write failure")
 
-    def query(self, command: str) -> str:
+    def query(self, command: str, **_ignored: object) -> str:
         self.queries.append(command)
         if command in self.fail_queries:
             raise InstrumentError(f"injected query failure: {command}")
@@ -268,9 +302,9 @@ class FakeTransport:
 
 
 class DualChannelFakeTransport(FakeTransport):
-    def query(self, command: str) -> str:
+    def query(self, command: str, **kwargs: object) -> str:
         translated = command.replace(":SOUR2", ":SOUR1").replace(":OUTP2", ":OUTP1")
-        response = super().query(translated)
+        response = super().query(translated, **kwargs)
         self.queries[-1] = command
         return response
 
@@ -330,6 +364,18 @@ def _volatile_v2_request(payload: bytes) -> SourceArbitraryVolatileReplaceReques
     )
 
 
+def _counter_v2_request(**values: object) -> SourceCounterConfigureRequest:
+    return SourceCounterConfigureRequest(
+        "counter",
+        SourceCounterConfigurationPatch(
+            **{
+                name: PatchValue(PatchAction.SET, value)
+                for name, value in values.items()
+            }
+        ),
+    )
+
+
 def _write_candidate_descriptor():
     item = descriptor()
     assert item.source_extensions is not None
@@ -347,6 +393,13 @@ def _write_candidate_descriptor():
                         SourceFeatureDirection.READ,
                     )
                     if feature.feature is SourceFeature.OUTPUT
+                    else (
+                        SourceFeatureDirection.CONFIGURE,
+                        SourceFeatureDirection.DISABLE,
+                        SourceFeatureDirection.ENABLE,
+                        SourceFeatureDirection.READ,
+                    )
+                    if feature.feature is SourceFeature.COUNTER
                     else (SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ)
                 ),
                 profile=(
@@ -363,6 +416,26 @@ def _write_candidate_descriptor():
                         volatile_replace_max_payload_bytes=32_768,
                     )
                     if feature.feature is SourceFeature.ARBITRARY
+                    else replace(
+                        feature.profile,
+                        configuration_readable=True,
+                        readable_configuration_fields=(
+                            SourceCounterConfigurationField.ATTENUATION,
+                            SourceCounterConfigurationField.COUPLING,
+                            SourceCounterConfigurationField.IMPEDANCE_OHM,
+                            SourceCounterConfigurationField.STATISTICS_ENABLED,
+                            SourceCounterConfigurationField.TRIGGER_LEVEL_V,
+                        ),
+                        configurable_fields=(
+                            SourceCounterConfigurationField.ATTENUATION,
+                            SourceCounterConfigurationField.COUPLING,
+                            SourceCounterConfigurationField.IMPEDANCE_OHM,
+                            SourceCounterConfigurationField.STATISTICS_ENABLED,
+                            SourceCounterConfigurationField.TRIGGER_LEVEL_V,
+                        ),
+                        enabled_configurable=True,
+                    )
+                    if feature.feature is SourceFeature.COUNTER
                     else feature.profile
                 ),
             )
@@ -370,6 +443,7 @@ def _write_candidate_descriptor():
             in {
                 SourceFeature.ARBITRARY,
                 SourceFeature.BASIC,
+                SourceFeature.COUNTER,
                 SourceFeature.OUTPUT,
             }
             else feature
@@ -384,6 +458,9 @@ def _write_candidate_descriptor():
             "source.basic_live_configure_v2",
             "source.output_v2",
             "source.arbitrary_volatile_replace_v2",
+            "source.counter_configure_v2",
+            "source.counter_enable_v2",
+            "source.counter_measure_v2",
         ),
         source_extensions=extensions,
     )
@@ -399,7 +476,64 @@ def test_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
     assert "source.basic_configure_v2" in candidate.capabilities
     assert "source.output_v2" in candidate.capabilities
     assert "source.arbitrary_volatile_replace_v2" in candidate.capabilities
+    assert "source.counter_configure_v2" in candidate.capabilities
+    assert "source.counter_enable_v2" in candidate.capabilities
+    assert "source.counter_measure_v2" in candidate.capabilities
     assert "source.basic_configure_v2" not in descriptor().capabilities
+
+
+def _counter_core_service(
+    transport: DualChannelFakeTransport,
+) -> tuple[SourceService, DG4202Source]:
+    session_state = InstrumentSessionState(epoch_id="dg4202-counter-v2")
+    guarded = GuardedAuditedTransport(transport, session_state=session_state)
+    driver = DG4202Source(guarded)
+    config = WaveBenchConfig(
+        connection=ConnectionConfig("lan", "TCPIP::scope::INSTR", 1_000, 1_000),
+        scope=ScopeConfig("rtm2032", None, 1, False, True),
+        autoscale=AutoscaleConfig(True, True),
+        waveform=WaveformConfig("real", "lsbf", "DMAX"),
+        output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+        source_path=Path("wavebench.toml"),
+        source=SourceConfig(
+            "rigol.dg4202",
+            "TCPIP::source::INSTR",
+            1,
+            False,
+            True,
+            0,
+        ),
+        safety_limits=SafetyLimitsConfig(),
+    )
+    return (
+        SourceService(
+            config=config,
+            logger=CommandLogger(),
+            session=driver,
+            descriptor=_write_candidate_descriptor(),
+            transport=guarded,
+            session_state=session_state,
+        ),
+        driver,
+    )
+
+
+def test_source_v2_counter_candidate_routes_through_core_without_v1_or_extra_writes() -> None:
+    transport = DualChannelFakeTransport()
+    service, driver = _counter_core_service(transport)
+
+    configured, _ = service.configure_counter_v2(
+        _counter_v2_request(coupling=SourceInputCoupling.DC)
+    )
+    enabled, _ = service.set_counter_enabled_v2(SourceCounterEnableRequest("counter", True))
+    measured = service.measure_counter_v2(SourceCounterMeasureRequest("counter"))
+
+    assert configured.state.coupling.value is SourceInputCoupling.DC
+    assert enabled.enabled is True
+    assert len(measured.measurements) == 5
+    assert transport.writes == [":COUN:COUP DC", ":COUN ON"]
+    assert transport.byte_writes == []
+    assert driver._configuration_writes_blocked is False
 
 
 def test_source_v2_basic_and_output_writes_use_only_preflight_cache() -> None:
@@ -609,6 +743,120 @@ def test_source_v2_volatile_replace_ambiguous_write_latches_and_keeps_off_recove
     _prime_v2_write_cache(driver, transport=transport)
     with pytest.raises(InstrumentError, match="writes are blocked"):
         driver.replace_source_arbitrary_volatile_v2(_volatile_v2_request(payload), payload)
+
+
+@pytest.mark.parametrize(
+    ("counter_request", "expected"),
+    (
+        (_counter_v2_request(coupling=SourceInputCoupling.DC), ":COUN:COUP DC"),
+        (_counter_v2_request(impedance_ohm=50.0), ":COUN:IMP 50"),
+        (_counter_v2_request(attenuation=10), ":COUN:ATT 10X"),
+        (_counter_v2_request(trigger_level_v=-2.5), ":COUN:LEVE -2.5"),
+        (_counter_v2_request(statistics_enabled=True), ":COUN:STATI:STAT ON"),
+    ),
+)
+def test_source_v2_counter_configuration_uses_one_cached_write(
+    counter_request: SourceCounterConfigureRequest,
+    expected: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    result = driver.configure_source_counter_v2(counter_request)
+
+    assert result.input_id == "counter"
+    assert transport.writes == [expected]
+    assert transport.queries == queries_before
+
+
+def test_source_v2_counter_enable_and_disable_do_not_change_configuration() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    assert driver.set_source_counter_enabled_v2(
+        SourceCounterEnableRequest("counter", True)
+    ).enabled is True
+    assert driver.set_source_counter_enabled_v2(
+        SourceCounterEnableRequest("counter", False)
+    ).enabled is False
+
+    assert transport.writes == [":COUN ON", ":COUN OFF"]
+    assert transport.queries == queries_before
+
+
+def test_source_v2_counter_measure_uses_only_documented_measure_query() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["counter"] = "ON"
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    result = driver.measure_source_counter_v2(SourceCounterMeasureRequest("counter"))
+
+    assert tuple(item.kind for item in result.measurements) == (
+        SourceCounterMeasurementKind.DUTY_PERCENT,
+        SourceCounterMeasurementKind.FREQUENCY_HZ,
+        SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+        SourceCounterMeasurementKind.PERIOD_S,
+        SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+    )
+    assert transport.writes == []
+    assert transport.queries == [*queries_before, ":COUN:MEAS?"]
+
+
+@pytest.mark.parametrize(
+    "counter_request",
+    (
+        _counter_v2_request(impedance_ohm=75.0),
+        _counter_v2_request(attenuation=2),
+        _counter_v2_request(trigger_level_v=2.51),
+    ),
+)
+def test_source_v2_counter_configuration_rejects_manual_out_of_range_values_before_write(
+    counter_request: SourceCounterConfigureRequest,
+) -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    with pytest.raises(DataError, match="Counter"):
+        driver.configure_source_counter_v2(counter_request)
+
+    assert transport.writes == []
+    assert transport.queries == queries_before
+
+
+def test_source_v2_counter_measure_refuses_disabled_cached_counter_before_io() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    with pytest.raises(DataError, match="requires Counter enabled"):
+        driver.measure_source_counter_v2(SourceCounterMeasureRequest("counter"))
+
+    assert transport.writes == []
+    assert transport.queries == queries_before
+
+
+def test_source_v2_counter_ambiguous_write_latches_only_counter_configuration() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    transport.fail_write_commands.add(":COUN:COUP DC")
+
+    with pytest.raises(InstrumentError, match="write result is unknown"):
+        driver.configure_source_counter_v2(_counter_v2_request(coupling=SourceInputCoupling.DC))
+
+    assert driver._v2_counter_preflight_snapshots == {}
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.configure_source_counter_v2(_counter_v2_request(coupling=SourceInputCoupling.DC))
 
 
 def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
