@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from hashlib import sha256
 
 import pytest
 
@@ -13,6 +14,7 @@ from wavebench.instruments import (
     Observed,
     PatchAction,
     SourceArbitraryPlaybackMode,
+    SourceArbitraryVolatileReplaceRequest,
     SourceAmplitudeUnit,
     SourceBasicConfigureRequest,
     SourceCounterMeasurementKind,
@@ -319,6 +321,15 @@ def _basic_v2_request(channel: int, **values: object) -> SourceBasicConfigureReq
     return SourceBasicConfigureRequest(channel=channel, patch=SourceBasicPatch(**fields))
 
 
+def _volatile_v2_request(payload: bytes) -> SourceArbitraryVolatileReplaceRequest:
+    return SourceArbitraryVolatileReplaceRequest(
+        channel=1,
+        payload_sha256="sha256:" + sha256(payload).hexdigest(),
+        payload_size_bytes=len(payload),
+        point_count=len(payload) // 2,
+    )
+
+
 def _write_candidate_descriptor():
     item = descriptor()
     assert item.source_extensions is not None
@@ -335,6 +346,8 @@ def _write_candidate_descriptor():
                         SourceFeatureDirection.ENABLE,
                         SourceFeatureDirection.READ,
                     )
+                    if feature.feature is SourceFeature.OUTPUT
+                    else (SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ)
                 ),
                 profile=(
                     replace(
@@ -343,10 +356,22 @@ def _write_candidate_descriptor():
                         live_amplitude_vpp_configurable=True,
                     )
                     if feature.feature is SourceFeature.BASIC
+                    else replace(
+                        feature.profile,
+                        volatile_replace_min_points=2,
+                        volatile_replace_max_points=16_384,
+                        volatile_replace_max_payload_bytes=32_768,
+                    )
+                    if feature.feature is SourceFeature.ARBITRARY
                     else feature.profile
                 ),
             )
-            if feature.feature in {SourceFeature.BASIC, SourceFeature.OUTPUT}
+            if feature.feature
+            in {
+                SourceFeature.ARBITRARY,
+                SourceFeature.BASIC,
+                SourceFeature.OUTPUT,
+            }
             else feature
             for feature in item.source_extensions.features
         ),
@@ -358,6 +383,7 @@ def _write_candidate_descriptor():
             "source.basic_configure_v2",
             "source.basic_live_configure_v2",
             "source.output_v2",
+            "source.arbitrary_volatile_replace_v2",
         ),
         source_extensions=extensions,
     )
@@ -372,6 +398,7 @@ def test_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
 
     assert "source.basic_configure_v2" in candidate.capabilities
     assert "source.output_v2" in candidate.capabilities
+    assert "source.arbitrary_volatile_replace_v2" in candidate.capabilities
     assert "source.basic_configure_v2" not in descriptor().capabilities
 
 
@@ -501,6 +528,87 @@ def test_source_v2_output_off_stays_available_after_write_latch() -> None:
 
     assert result.enabled is False
     assert transport.writes == [":OUTP1 OFF"]
+
+
+def test_source_v2_volatile_replace_uses_one_binary_write_and_no_text_writes() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    payload = b"\x00\x00\xff\x3f"
+    request = _volatile_v2_request(payload)
+    queries_before = list(transport.queries)
+
+    result = driver.replace_source_arbitrary_volatile_v2(request, payload)
+
+    assert transport.byte_writes == [b":DATA:DAC VOLATILE,#14" + payload]
+    assert transport.writes == []
+    assert transport.queries == queries_before
+    assert result.selected_waveform_id == "user"
+    assert result.content_readback_verified is False
+    assert result.previous_content_restorable is False
+    basic, output = driver._v2_preflight_snapshots[1]
+    assert basic.waveform_kind.value is SourceWaveformKind.ARBITRARY
+    assert basic.waveform_id.value == "user"
+    assert output.enabled.value is False
+
+
+@pytest.mark.parametrize(
+    ("payload", "volatile_request"),
+    (
+        (
+            b"\x00\x00\xff\x3f",
+            SourceArbitraryVolatileReplaceRequest(
+                1,
+                "sha256:" + "0" * 64,
+                4,
+                2,
+            ),
+        ),
+        (
+            b"\x00\x00\xff\x3f",
+            SourceArbitraryVolatileReplaceRequest(
+                1,
+                "sha256:" + sha256(b"\x00\x00\xff\x3f").hexdigest(),
+                4,
+                1,
+            ),
+        ),
+    ),
+)
+def test_source_v2_volatile_replace_rejects_invalid_payload_before_io(
+    payload: bytes,
+    volatile_request: SourceArbitraryVolatileReplaceRequest,
+) -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+
+    with pytest.raises(DataError, match="volatile replace"):
+        driver.replace_source_arbitrary_volatile_v2(volatile_request, payload)
+
+    assert transport.byte_writes == []
+    assert transport.writes == []
+    assert transport.queries == []
+
+
+def test_source_v2_volatile_replace_ambiguous_write_latches_and_keeps_off_recovery() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    transport.fail_byte_write = True
+    payload = b"\x00\x00\xff\x3f"
+
+    with pytest.raises(InstrumentError, match="volatile waveform may have changed"):
+        driver.replace_source_arbitrary_volatile_v2(_volatile_v2_request(payload), payload)
+
+    assert len(transport.byte_writes) == 1
+    assert driver._v2_preflight_snapshots == {}
+    assert driver.set_source_output_v2(
+        SourceOutputRequest(channel=1, enabled=False)
+    ).enabled is False
+    assert transport.writes == [":OUTP1 OFF"]
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.replace_source_arbitrary_volatile_v2(_volatile_v2_request(payload), payload)
 
 
 def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:

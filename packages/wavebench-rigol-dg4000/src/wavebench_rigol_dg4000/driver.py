@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from hashlib import sha256
 import time
 from dataclasses import dataclass, field, replace
 from math import isclose, isfinite
@@ -25,6 +26,8 @@ from wavebench.instruments import (
     PulseFacet,
     SourceAmplitude,
     SourceAmplitudeUnit,
+    SourceArbitraryVolatileReplaceRequest,
+    SourceArbitraryVolatileReplaceResult,
     SourceBasicConfigureRequest,
     SourceBasicConfigureResult,
     SourceBasicLiveConfigureResult,
@@ -317,6 +320,31 @@ def _validate_dac14_block(block: DG4000DacBlock) -> None:
         for index in range(0, len(payload), 2)
     ):
         raise DataError("DG4000 DAC14 samples must be within 0..16383")
+
+
+def _build_volatile_dac14_command(
+    request: SourceArbitraryVolatileReplaceRequest,
+    payload: object,
+) -> bytes:
+    if not isinstance(request, SourceArbitraryVolatileReplaceRequest):
+        raise DataError("DG4000 Source V2 volatile replace request has an invalid type")
+    if not isinstance(payload, bytes):
+        raise DataError("DG4000 Source V2 volatile replace payload must be bytes")
+    if len(payload) != request.payload_size_bytes:
+        raise DataError("DG4000 Source V2 volatile replace payload size does not match")
+    if "sha256:" + sha256(payload).hexdigest() != request.payload_sha256:
+        raise DataError("DG4000 Source V2 volatile replace payload SHA-256 does not match")
+    if request.point_count < 2 or request.point_count > 16_384:
+        raise DataError("DG4000 Source V2 volatile replace requires 2..16384 points")
+    if len(payload) != request.point_count * 2:
+        raise DataError("DG4000 Source V2 volatile replace point count does not match payload")
+    if any(
+        int.from_bytes(payload[index : index + 2], "little") > 16_383
+        for index in range(0, len(payload), 2)
+    ):
+        raise DataError("DG4000 Source V2 volatile replace samples must be within 0..16383")
+    length = str(len(payload)).encode("ascii")
+    return b":DATA:DAC VOLATILE,#" + str(len(length)).encode("ascii") + length + payload
 
 
 class _AmbiguousWriteError(InstrumentError):
@@ -892,6 +920,54 @@ class DG4202Source:
                 enabled=True,
                 final_amplitude=amplitude,
                 final_offset_v=offset_v,
+            )
+
+    def replace_source_arbitrary_volatile_v2(
+        self,
+        request: SourceArbitraryVolatileReplaceRequest,
+        payload: bytes,
+    ) -> SourceArbitraryVolatileReplaceResult:
+        _validate_channel(request.channel)
+        command = _build_volatile_dac14_command(request, payload)
+        with self._io_lock:
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            if (
+                output.enabled.availability is not Availability.VALUE
+                or output.enabled.value is not False
+            ):
+                raise DataError("DG4000 Source V2 volatile replace requires output OFF")
+            if (
+                basic.frequency_mode.availability is not Availability.VALUE
+                or basic.frequency_mode.value is not SourceFrequencyMode.FIXED
+            ):
+                raise DataError(
+                    "DG4000 Source V2 volatile replace requires fixed-frequency mode"
+                )
+            try:
+                self._write_bytes(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                raise
+            self._v2_preflight_snapshots[request.channel] = (
+                replace(
+                    basic,
+                    waveform_kind=Observed.value_of(SourceWaveformKind.ARBITRARY),
+                    waveform_id=Observed.value_of("user"),
+                ),
+                output,
+            )
+            return SourceArbitraryVolatileReplaceResult(
+                channel=request.channel,
+                payload_sha256=request.payload_sha256,
+                payload_size_bytes=request.payload_size_bytes,
+                point_count=request.point_count,
+                selected_waveform_id="user",
+                write_completed=True,
+                content_readback_verified=False,
+                previous_content_restorable=False,
             )
 
     @staticmethod
