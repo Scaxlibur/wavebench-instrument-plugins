@@ -35,7 +35,7 @@ def test_discovers_only_installable_plugin_packages():
         "wavebench-siglent-sds800x-hd",
     ]
     assert [project.driver_ids for project in projects] == [
-        ("rigol.dg4202", "rigol.dg4202-v2"),
+        ("rigol.dg4202", "rigol.dg4202-v2", "rigol.dg4202-v2-workspace"),
         ("rigol.dm3000",),
         ("rigol.dp800",),
         ("rigol.ds1000z",),

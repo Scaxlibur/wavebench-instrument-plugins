@@ -458,6 +458,17 @@ contract, and resource-limit audit. DAC16 cannot reuse `DG4000DacBlock` while pr
 DAC14. Freeze chunking, byte order, maximum points, RAM/DDR lifetime, and readback semantics first.
 These may remain in backlog permanently without a concrete experiment need.
 
+`rigol.dg4202-v2-workspace` separately owns
+`source.arbitrary_workspace_volatile_replace_v2`, retaining only identity/snapshot and
+`source.output_v2` needed for the OFF safety closure. It describes one unscoped volatile DAC14
+workspace and does not replace an existing channel-scoped ARB contract. Core confirms CH1 and CH2
+are both OFF before the write and verifies both OFF after it; on a failure it makes at most one
+OFF-recovery attempt per still-usable output. The result does
+not identify a USER channel or promise content readback or restoration. Keeping this entry point
+separate from `rigol.dg4202-v2` prevents an unaccepted workspace capability from changing the
+descriptor bound to Sweep conformance. It has no manifest before hardware acceptance and must not
+be described as channel-directed upload.
+
 ## 16. M12 — Model matrix and release convergence
 
 **Status: partial.**

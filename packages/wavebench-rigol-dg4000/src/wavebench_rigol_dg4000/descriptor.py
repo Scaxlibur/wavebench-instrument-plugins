@@ -13,6 +13,7 @@ from wavebench.instruments import (
     SourceAnchorField,
     SourceArbitraryCapabilityProfile,
     SourceArbitraryPlaybackMode,
+    SourceArbitraryWorkspaceCapabilityProfile,
     SourceBasicCapabilityProfile,
     SourceBurstCapabilityProfile,
     SourceBurstMode,
@@ -531,6 +532,44 @@ def _source_extensions_v2() -> SourceDescriptorExtensions:
     return replace(extensions, features=tuple(features))
 
 
+def _source_extensions_v2_workspace() -> SourceDescriptorExtensions:
+    """Expose only the workspace write plus its read/OFF safety substrate."""
+
+    extensions = _source_extensions()
+    features = [
+        replace(
+            feature,
+            directions=(SourceFeatureDirection.READ,)
+            if feature.feature in {SourceFeature.BASIC, SourceFeature.COUNTER}
+            else feature.directions,
+            evidence_refs=(),
+        )
+        for feature in extensions.features
+    ]
+    features.append(
+        SourceFeatureCapability(
+            feature=SourceFeature.ARBITRARY_WORKSPACE,
+            support=SupportState.SUPPORTED,
+            directions=(SourceFeatureDirection.CONFIGURE,),
+            scope=SourceFacetScope.INSTRUMENT,
+            channels=(),
+            applicability=SourceConstraintApplicability(),
+            profile=SourceArbitraryWorkspaceCapabilityProfile(
+                workspace_id="volatile",
+                volatile_replace_min_points=2,
+                volatile_replace_max_points=16_384,
+                volatile_replace_max_payload_bytes=32_768,
+            ),
+        )
+    )
+    return replace(
+        extensions,
+        features=tuple(
+            sorted(features, key=lambda item: (item.feature.value, item.scope.value, item.channels))
+        ),
+    )
+
+
 def descriptor() -> InstrumentDescriptor:
     return InstrumentDescriptor(
         driver_id="rigol.dg4202",
@@ -610,4 +649,29 @@ def descriptor_v2() -> InstrumentDescriptor:
         source="entry_point:rigol.dg4202-v2",
         factory=_open_driver_v2,
         source_extensions=_source_extensions_v2(),
+    )
+
+
+def descriptor_v2_workspace() -> InstrumentDescriptor:
+    """Explicit opt-in for one unscoped, volatile DG4202 ARB workspace write."""
+
+    legacy = descriptor()
+    return replace(
+        legacy,
+        driver_id="rigol.dg4202-v2-workspace",
+        display_name="RIGOL DG4000 Source V2 Volatile Workspace (opt-in)",
+        aliases=(),
+        capabilities=(
+            "source.idn",
+            "source.snapshot_v2",
+            "source.output_v2",
+            "source.arbitrary_workspace_volatile_replace_v2",
+        ),
+        summary=(
+            "Explicit opt-in RIGOL DG4202 Source V2 driver for one unscoped volatile "
+            "ARB workspace replacement with every output protected OFF."
+        ),
+        source="entry_point:rigol.dg4202-v2-workspace",
+        factory=_open_driver,
+        source_extensions=_source_extensions_v2_workspace(),
     )

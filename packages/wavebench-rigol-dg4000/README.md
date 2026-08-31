@@ -9,6 +9,7 @@
 - distribution：`wavebench-rigol-dg4000`
 - canonical driver ID：`rigol.dg4202`
 - opt-in advanced driver ID：`rigol.dg4202-v2`
+- opt-in workspace driver ID：`rigol.dg4202-v2-workspace`
 - WaveBench：`>=0.8.25,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
@@ -46,8 +47,8 @@ WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅�
 
 当前 wheel 随 distribution 包含 10 份 Source conformance manifest，并与 wheel 的非 manifest 内容绑定。
 它们记录 DG4202 `00.01.14` 上已验收的 Basic、Output、Counter V2，以及仅属于
-`rigol.dg4202-v2` 的受限 Sweep configure/manual-fire 范围。volatile ARB 和 Harmonic 活跃态
-仍没有 conformance 声明。
+`rigol.dg4202-v2` 的受限 Sweep configure/manual-fire 范围。通道型 volatile ARB、Harmonic
+活跃态和无通道工作区接口均未绑定 conformance manifest。
 
 ## 安全边界
 
@@ -75,6 +76,14 @@ ARB 仍为只读，`source.arbitrary_volatile_replace_v2` 不公开。该 entry 
 V1 表面保持不变。Sweep 的实机证据仅覆盖输出 OFF 配置线性 1–2 kHz、101 点、12 s、manual trigger，随后在同一
 会话显式 fire、每路三次 RTM 高阻采集和输出 OFF；它不外推任意 Sweep 参数，也不改变 legacy V1 Sweep 路由。V2
 操作结束时会保持 Sweep ON，验收使用独立 legacy 事务恢复 FIX/OFF。
+
+`rigol.dg4202-v2-workspace` 是另一条独立 opt-in entry point。除只读 identity／snapshot 和用于
+OFF safety closure 的 `source.output_v2` 外，它只公开
+`source.arbitrary_workspace_volatile_replace_v2`；不公开 V1 setter、Basic／Live Basic 或 Counter 写能力。
+它把 `TRACe:DATA:DAC VOLATILE` 建模为整机的无通道 volatile 工作区：写前要求 CH1/CH2 都为 OFF，写入失败后
+对仍可用的两路各最多尝试一次 OFF recovery。该接口不接受 channel 参数，不声称 USER 被选到哪一路，不读取或恢复
+被覆盖的内容。现有
+`source.arbitrary_volatile_replace_v2` 仍是通道型合同，DG4202 不声明它。
 
 为保持 legacy 合同，DG descriptor 明确设置 `v1_route_migration_enabled=false`。既有 V1
 `source.set-*`、`source.output`、离散频响、`arb-load` 和 basic restore 继续调用 V1 路由；

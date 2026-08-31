@@ -9,6 +9,7 @@ An executable WaveBench instrument plugin for the dual-channel RIGOL DG4202 and 
 - Distribution: `wavebench-rigol-dg4000`
 - Canonical driver ID: `rigol.dg4202`
 - Opt-in advanced driver ID: `rigol.dg4202-v2`
+- Opt-in workspace driver ID: `rigol.dg4202-v2-workspace`
 - WaveBench: `>=0.8.25,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa`
@@ -69,6 +70,15 @@ channel selector, so ARB remains read-only on that entry point and
 may leave through an explicit Basic V2 Sine request; that operation neither reads nor restores volatile
 USER content. The `rigol.dg4202` legacy V1 surface is unchanged.
 
+`rigol.dg4202-v2-workspace` is a separate opt-in entry point. Apart from read-only identity/snapshot
+and `source.output_v2` for the OFF safety closure, it exposes only
+`source.arbitrary_workspace_volatile_replace_v2`; it exposes no V1 setters, Basic/Live Basic, or
+Counter write capability. It models `TRACe:DATA:DAC VOLATILE` as an instrument-wide unscoped volatile
+workspace: CH1 and CH2 must both be OFF before the write, and a failure makes at most one OFF-recovery
+attempt per still-usable output. It takes no channel argument, makes no claim about which channel
+selected USER, and neither reads nor restores overwritten content. DG4202 continues
+not to declare the channel-scoped `source.arbitrary_volatile_replace_v2` contract.
+
 The opt-in Sweep evidence is deliberately narrow: output-OFF configuration of a linear 1–2 kHz,
 101-point, 12-second, manual-trigger Sweep, then same-session fire, three high-impedance RTM
 captures per channel, and output OFF. It does not generalize to arbitrary Sweep parameters and does
@@ -104,8 +114,9 @@ and is excluded from releases.
 
 The current wheel carries ten Source conformance manifests bound to its non-manifest contents. They
 record the accepted Basic, Output, and Counter V2 scope for DG4202 firmware `00.01.14`, plus the
-restricted opt-in Sweep configure/manual-fire scope of `rigol.dg4202-v2`. Volatile ARB and active
-Harmonic candidates remain outside conformance claims.
+restricted opt-in Sweep configure/manual-fire scope of `rigol.dg4202-v2`. Channel-scoped volatile
+ARB, active Harmonic candidates, and the unscoped workspace entry point remain outside conformance
+claims.
 
 The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs.
 

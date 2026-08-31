@@ -65,6 +65,10 @@ def test_wheel_contains_license_and_expected_entry_points(tmp_path: Path) -> Non
     assert [(item.name, item.value) for item in entry_points] == [
         ("rigol.dg4202", "wavebench_rigol_dg4000:descriptor"),
         ("rigol.dg4202-v2", "wavebench_rigol_dg4000:descriptor_v2"),
+        (
+            "rigol.dg4202-v2-workspace",
+            "wavebench_rigol_dg4000:descriptor_v2_workspace",
+        ),
     ]
 
 
@@ -92,7 +96,7 @@ def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) ->
     package = inspect_plugin_wheel(wheel)
 
     assert package.source_conformance_wheel_sha256 == (
-        "sha256:e5ef80f60223b3c5fdeeeef3840c9d073f16e9cf43982d9bf838107dc1a6be44"
+        "sha256:ec422181d128fd9207a59596ef02c3428fc152bb5b774cd4678a52fb57e6bb95"
     )
     assert {
         (item.manifest_id, item.claimed_level.value, item.channels)
@@ -211,6 +215,7 @@ def test_wheel_install_migration_routing_and_uninstall_fallback(tmp_path: Path) 
     ] == [
         ("rigol.dg4202", "healthy"),
         ("rigol.dg4202-v2", "healthy"),
+        ("rigol.dg4202-v2-workspace", "healthy"),
     ]
     discovery_script = """
 from importlib.metadata import entry_points
@@ -222,18 +227,26 @@ def forbidden(*args, **kwargs):
 
 PyVisaTransport.open = forbidden
 points = list(entry_points().select(group="wavebench.instruments"))
-assert [point.name for point in points] == ["rigol.dg4202", "rigol.dg4202-v2"]
+assert [point.name for point in points] == [
+    "rigol.dg4202",
+    "rigol.dg4202-v2",
+    "rigol.dg4202-v2-workspace",
+]
 descriptors = {point.name: point.load()() for point in points}
 assert descriptors["rigol.dg4202"].distribution == "wavebench-rigol-dg4000"
 assert descriptors["rigol.dg4202-v2"].distribution == "wavebench-rigol-dg4000"
+assert descriptors["rigol.dg4202-v2-workspace"].distribution == "wavebench-rigol-dg4000"
 registry = build_instrument_registry()
 canonical = registry.resolve("rigol.dg4202", expected_kind="source")
 advanced = registry.resolve("rigol.dg4202-v2", expected_kind="source")
+workspace = registry.resolve("rigol.dg4202-v2-workspace", expected_kind="source")
 alias = registry.resolve("dg4202", expected_kind="source")
 assert canonical.origin == "entry_point"
 assert canonical.distribution == "wavebench-rigol-dg4000"
 assert advanced.origin == "entry_point"
 assert advanced.distribution == "wavebench-rigol-dg4000"
+assert workspace.origin == "entry_point"
+assert workspace.distribution == "wavebench-rigol-dg4000"
 assert alias.origin == "builtin"
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)

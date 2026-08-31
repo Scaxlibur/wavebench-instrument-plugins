@@ -28,6 +28,8 @@ from wavebench.instruments import (
     SourceAmplitudeUnit,
     SourceArbitraryVolatileReplaceRequest,
     SourceArbitraryVolatileReplaceResult,
+    SourceArbitraryWorkspaceVolatileReplaceRequest,
+    SourceArbitraryWorkspaceVolatileReplaceResult,
     SourceBasicConfigureRequest,
     SourceBasicConfigureResult,
     SourceBasicLiveConfigureResult,
@@ -350,10 +352,14 @@ def _validate_dac14_block(block: DG4000DacBlock) -> None:
 
 
 def _build_volatile_dac14_command(
-    request: SourceArbitraryVolatileReplaceRequest,
+    request: SourceArbitraryVolatileReplaceRequest
+    | SourceArbitraryWorkspaceVolatileReplaceRequest,
     payload: object,
 ) -> bytes:
-    if not isinstance(request, SourceArbitraryVolatileReplaceRequest):
+    if not isinstance(
+        request,
+        (SourceArbitraryVolatileReplaceRequest, SourceArbitraryWorkspaceVolatileReplaceRequest),
+    ):
         raise DataError("DG4000 Source V2 volatile replace request has an invalid type")
     if not isinstance(payload, bytes):
         raise DataError("DG4000 Source V2 volatile replace payload must be bytes")
@@ -1038,6 +1044,43 @@ class DG4202Source:
                 payload_size_bytes=request.payload_size_bytes,
                 point_count=request.point_count,
                 selected_waveform_id="user",
+                write_completed=True,
+                content_readback_verified=False,
+                previous_content_restorable=False,
+            )
+
+    def replace_source_arbitrary_workspace_volatile_v2(
+        self,
+        request: SourceArbitraryWorkspaceVolatileReplaceRequest,
+        payload: bytes,
+    ) -> SourceArbitraryWorkspaceVolatileReplaceResult:
+        command = _build_volatile_dac14_command(request, payload)
+        with self._io_lock:
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            snapshots = self._v2_preflight_snapshots
+            if tuple(sorted(snapshots)) != (1, 2) or any(
+                output.enabled.availability is not Availability.VALUE
+                or output.enabled.value is not False
+                for _, output in snapshots.values()
+            ):
+                raise DataError(
+                    "DG4000 Source V2 volatile workspace replace requires both outputs OFF"
+                )
+            try:
+                self._write_bytes(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                raise
+            # The command has no channel selector.  Do not turn a cached
+            # channel state into a claim about which channel selected USER.
+            self._v2_preflight_snapshots.clear()
+            return SourceArbitraryWorkspaceVolatileReplaceResult(
+                workspace_id="volatile",
+                payload_sha256=request.payload_sha256,
+                payload_size_bytes=request.payload_size_bytes,
+                point_count=request.point_count,
                 write_completed=True,
                 content_readback_verified=False,
                 previous_content_restorable=False,

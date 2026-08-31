@@ -12,7 +12,7 @@
   "channels": [1, 2],
   "core_version": "0.8.25",
   "plugin_version": "0.7.0",
-  "wheel_sha256": "sha256:e5ef80f60223b3c5fdeeeef3840c9d073f16e9cf43982d9bf838107dc1a6be44",
+  "wheel_sha256": "sha256:ec422181d128fd9207a59596ef02c3428fc152bb5b774cd4678a52fb57e6bb95",
   "descriptor_digest": "sha256:2956d875216721d37a0a9ff12ecf79a4d6b6bb1669bbd7fa3c504f56999e35ae",
   "source_contract_version": "wavebench.source.v2",
   "fixture": {
@@ -50,5 +50,5 @@
     "no active Harmonic exit hardware evidence",
     "no other firmware or model"
   ],
-  "evidence_digest": "sha256:4cdb0dc403fcbd9d5a2ab547c633693d96b7d1c0d58e5c0eb2f6aa34d57ae503"
+  "evidence_digest": "sha256:e68614079fd34fbef5f1eee6b944b1ea43cca34ed39a40584847f2e4c0650d9a"
 }

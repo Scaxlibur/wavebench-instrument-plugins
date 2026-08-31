@@ -27,6 +27,7 @@ from wavebench.instruments import (
     PatchValue,
     SourceArbitraryPlaybackMode,
     SourceArbitraryVolatileReplaceRequest,
+    SourceArbitraryWorkspaceVolatileReplaceRequest,
     SourceAmplitudeUnit,
     SourceBasicConfigureRequest,
     SourceCounterConfigurationPatch,
@@ -66,7 +67,7 @@ from wavebench.services.source_snapshot_v2 import (
 from wavebench.transport.guarded import GuardedAuditedTransport
 from wavebench.transport.session import InstrumentSessionState
 
-from wavebench_rigol_dg4000 import descriptor, descriptor_v2
+from wavebench_rigol_dg4000 import descriptor, descriptor_v2, descriptor_v2_workspace
 from wavebench_rigol_dg4000.driver import DG4202Source
 
 
@@ -413,6 +414,16 @@ def _volatile_v2_request(payload: bytes) -> SourceArbitraryVolatileReplaceReques
     )
 
 
+def _workspace_volatile_v2_request(
+    payload: bytes,
+) -> SourceArbitraryWorkspaceVolatileReplaceRequest:
+    return SourceArbitraryWorkspaceVolatileReplaceRequest(
+        payload_sha256="sha256:" + sha256(payload).hexdigest(),
+        payload_size_bytes=len(payload),
+        point_count=len(payload) // 2,
+    )
+
+
 def _counter_v2_request(**values: object) -> SourceCounterConfigureRequest:
     return SourceCounterConfigureRequest(
         "counter",
@@ -516,6 +527,41 @@ def test_opt_in_source_v2_descriptor_keeps_unroutable_volatile_arb_read_only() -
         for feature in candidate.source_extensions.features
         if feature.feature is not SourceFeature.SWEEP
     )
+
+
+def test_opt_in_workspace_descriptor_is_separate_from_sweep_evidence() -> None:
+    candidate = descriptor_v2_workspace()
+    driver = DG4202Source(DualChannelFakeTransport())
+
+    validate_source_descriptor(candidate, driver)
+    validate_declared_capabilities(candidate, driver)
+
+    assert candidate.driver_id == "rigol.dg4202-v2-workspace"
+    assert candidate.capabilities == (
+        "source.idn",
+        "source.snapshot_v2",
+        "source.output_v2",
+        "source.arbitrary_workspace_volatile_replace_v2",
+    )
+    assert "source.arbitrary_upload" not in candidate.capabilities
+    assert "source.arbitrary_volatile_replace_v2" not in candidate.capabilities
+    assert "source.arbitrary_workspace_volatile_replace_v2" in candidate.capabilities
+    assert "source.sweep_configure_v2" not in candidate.capabilities
+    assert candidate.source_extensions is not None
+    workspace_features = tuple(
+        feature
+        for feature in candidate.source_extensions.features
+        if feature.feature is SourceFeature.ARBITRARY_WORKSPACE
+    )
+    assert len(workspace_features) == 1
+    assert workspace_features[0].scope.value == "instrument"
+    assert workspace_features[0].directions == (SourceFeatureDirection.CONFIGURE,)
+    assert all(
+        feature.directions == (SourceFeatureDirection.READ,)
+        for feature in candidate.source_extensions.features
+        if feature.feature in {SourceFeature.BASIC, SourceFeature.COUNTER}
+    )
+    assert all(not feature.evidence_refs for feature in candidate.source_extensions.features)
 
 
 @pytest.mark.parametrize("feature", (SourceFeature.BURST, SourceFeature.MODULATION))
@@ -817,6 +863,69 @@ def test_source_v2_volatile_replace_uses_one_binary_write_and_no_text_writes() -
     assert basic.waveform_kind.value is SourceWaveformKind.ARBITRARY
     assert basic.waveform_id.value == "user"
     assert output.enabled.value is False
+
+
+def test_source_v2_workspace_volatile_replace_uses_one_binary_write_without_channel_claim() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    payload = b"\x00\x00\xff\x3f"
+    request = _workspace_volatile_v2_request(payload)
+    queries_before = list(transport.queries)
+
+    result = driver.replace_source_arbitrary_workspace_volatile_v2(request, payload)
+
+    assert transport.byte_writes == [b":DATA:DAC VOLATILE,#14" + payload]
+    assert transport.writes == []
+    assert transport.queries == queries_before
+    assert result.workspace_id == "volatile"
+    assert result.content_readback_verified is False
+    assert result.previous_content_restorable is False
+    assert driver._v2_preflight_snapshots == {}
+
+
+def test_source_v2_workspace_volatile_replace_requires_both_outputs_off() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    basic, output = driver._v2_preflight_snapshots[2]
+    driver._v2_preflight_snapshots[2] = (
+        basic,
+        replace(output, enabled=Observed.value_of(True)),
+    )
+    payload = b"\x00\x00\xff\x3f"
+
+    with pytest.raises(DataError, match="both outputs OFF"):
+        driver.replace_source_arbitrary_workspace_volatile_v2(
+            _workspace_volatile_v2_request(payload),
+            payload,
+        )
+
+    assert transport.byte_writes == []
+    assert transport.writes == []
+
+
+def test_source_v2_workspace_volatile_replace_ambiguous_write_latches() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    transport.fail_byte_write = True
+    payload = b"\x00\x00\xff\x3f"
+
+    with pytest.raises(InstrumentError, match="volatile waveform may have changed"):
+        driver.replace_source_arbitrary_workspace_volatile_v2(
+            _workspace_volatile_v2_request(payload),
+            payload,
+        )
+
+    assert len(transport.byte_writes) == 1
+    assert driver._v2_preflight_snapshots == {}
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.replace_source_arbitrary_workspace_volatile_v2(
+            _workspace_volatile_v2_request(payload),
+            payload,
+        )
 
 
 @pytest.mark.parametrize(

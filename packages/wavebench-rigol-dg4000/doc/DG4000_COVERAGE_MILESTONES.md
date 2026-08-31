@@ -417,6 +417,13 @@ Basic waveform 变化伪装成只改 Harmonic state。该候选已有离线回�
 `DG4000DacBlock` 冒充 DAC14；分包、字节序、最大点数、RAM/DDR 生命周期与回读语义
 必须先冻结。没有具体实验需求时可永久留在 backlog。
 
+`rigol.dg4202-v2-workspace` 单独承载 `source.arbitrary_workspace_volatile_replace_v2`，仅保留 identity／snapshot
+和 OFF safety closure 所需的 `source.output_v2`：它只表示一个无通道 volatile DAC14 工作区，不替代已有通道型
+ARB 合同。Core 在写前确认 CH1/CH2 均 OFF，写后验证两路 OFF；失败时仅对仍可用的两路各最多尝试一次 OFF recovery。
+结果不标识 USER 属于哪一路，也不承诺内容读回或恢复。该 entry point
+与 `rigol.dg4202-v2` 分离，避免未验收工作区能力改变已绑定的 Sweep conformance 制品。实机验收前不
+附加 manifest，也不将其描述为通道定向上传。
+
 ## 16. M12 — 型号矩阵与发布收口
 
 **状态：部分完成。**
