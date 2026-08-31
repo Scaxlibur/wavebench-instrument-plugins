@@ -710,6 +710,7 @@ class DG4202Source:
         output: OutputFacet,
         *,
         output_enabled: bool,
+        allow_harmonic_sine_exit: bool = False,
     ) -> None:
         if (
             output.enabled.availability is not Availability.VALUE
@@ -726,10 +727,10 @@ class DG4202Source:
             raise DataError(
                 "DG4000 Source V2 basic configuration requires fixed-frequency mode"
             )
-        if (
-            basic.waveform_kind.availability is not Availability.VALUE
-            or basic.waveform_kind.value
-            not in {
+        fixed_basic_waveform = (
+            basic.waveform_kind.availability is Availability.VALUE
+            and basic.waveform_kind.value
+            in {
                 SourceWaveformKind.SINE,
                 SourceWaveformKind.SQUARE,
                 SourceWaveformKind.RAMP,
@@ -737,7 +738,15 @@ class DG4202Source:
                 SourceWaveformKind.NOISE,
                 SourceWaveformKind.DC,
             }
-        ):
+        )
+        harmonic_sine_exit = (
+            allow_harmonic_sine_exit
+            and basic.waveform_kind.availability is Availability.VALUE
+            and basic.waveform_kind.value is SourceWaveformKind.OTHER
+            and basic.waveform_id.availability is Availability.VALUE
+            and basic.waveform_id.value in {"harm", "harmonic"}
+        )
+        if not fixed_basic_waveform and not harmonic_sine_exit:
             raise DataError(
                 "DG4000 Source V2 basic configuration requires a fixed basic waveform"
             )
@@ -868,6 +877,9 @@ class DG4202Source:
                 basic,
                 output,
                 output_enabled=output_enabled,
+                allow_harmonic_sine_exit=(
+                    field_name == "waveform_kind" and raw_value is SourceWaveformKind.SINE
+                ),
             )
             command, updated = self._v2_basic_command(
                 request.channel,

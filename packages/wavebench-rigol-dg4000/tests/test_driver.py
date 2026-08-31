@@ -735,6 +735,20 @@ def test_source_v2_basic_write_maps_one_supported_field(
     assert transport.writes == [expected]
 
 
+def test_source_v2_basic_sine_write_can_exit_verified_harmonic_waveform() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "HARMONIC", "swe": "OFF"})
+    service, _driver = _counter_core_service(transport)
+
+    result, _ = service.configure_basic_v2(
+        _basic_v2_request(1, waveform_kind=SourceWaveformKind.SINE)
+    )
+
+    assert result.basic.waveform_kind.value is SourceWaveformKind.SINE
+    assert transport.writes == [":SOUR1:FUNC SIN"]
+    assert transport.state["out"] == "OFF"
+
+
 def test_source_v2_live_frequency_is_one_write_and_never_cycles_output() -> None:
     transport = DualChannelFakeTransport()
     transport.state["mode"] = "FIX"
