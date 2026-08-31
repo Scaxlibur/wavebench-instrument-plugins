@@ -11,6 +11,7 @@ from zipfile import ZipFile
 
 import wavebench
 from wavebench.instruments.source_extensions import source_v2_digest
+from wavebench.plugins.lifecycle import PluginLifecycle
 from wavebench.plugins.package_inspect import inspect_plugin_wheel
 
 from wavebench_rigol_dg4000 import descriptor
@@ -198,20 +199,15 @@ def test_wheel_install_migration_routing_and_uninstall_fallback(tmp_path: Path) 
         cwd=tmp_path,
     ).stdout.strip()
     _write_isolated_runtime_bridge(purelib=Path(purelib), workspace=tmp_path)
-    _run(
-        [
-            str(python),
-            "-m",
-            "pip",
-            "install",
-            "--isolated",
-            "--no-deps",
-            "--no-index",
-            "--disable-pip-version-check",
-            str(plugin_wheel),
-        ],
-        cwd=tmp_path,
-    )
+    lifecycle = PluginLifecycle(python_executable=python)
+    assert lifecycle.install(plugin_wheel).status == "installed"
+    assert [
+        (item.driver_id, item.status)
+        for item in lifecycle.installed()
+    ] == [
+        ("rigol.dg4202", "healthy"),
+        ("rigol.dg4202-v2", "healthy"),
+    ]
     discovery_script = """
 from importlib.metadata import entry_points
 from wavebench.instruments.registry import build_instrument_registry
@@ -237,17 +233,8 @@ assert advanced.distribution == "wavebench-rigol-dg4000"
 assert alias.origin == "builtin"
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)
-    _run(
-        [
-            str(python),
-            "-m",
-            "pip",
-            "uninstall",
-            "--yes",
-            "wavebench-rigol-dg4000",
-        ],
-        cwd=tmp_path,
-    )
+    assert lifecycle.remove("rigol.dg4202-v2").status == "removed"
+    assert lifecycle.installed() == ()
     uninstall_script = """
 from importlib.metadata import entry_points
 from wavebench.instruments.registry import build_instrument_registry
