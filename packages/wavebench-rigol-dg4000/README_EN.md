@@ -62,6 +62,11 @@ claim about preserving per-order parameters. Sweep configure/fire and volatile A
 offline candidates, but their overlap with the V1 Sweep and `arb-load` composite contracts keeps
 those capabilities out of the production descriptor.
 
+`rigol.dg4202-v2` is a separate opt-in entry point that exposes only
+`source.sweep_configure_v2` and `source.sweep_fire_v2`. `TRACe:DATA:DAC VOLATILE` has no verified
+channel selector, so ARB remains read-only on that entry point and
+`source.arbitrary_volatile_replace_v2` is not declared. The `rigol.dg4202` legacy surface is unchanged.
+
 The DG descriptor explicitly sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
 `source.output`, discrete frequency-response, `arb-load`, and basic restore paths therefore remain
 V1. Only the explicit V2 CLI, run step, or Service operation uses the P1/Counter V2 adapter. This avoids

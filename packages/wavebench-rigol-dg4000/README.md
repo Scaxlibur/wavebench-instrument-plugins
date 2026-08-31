@@ -66,6 +66,10 @@ DG4000 没有独立的 Harmonic state-off 命令，因此 descriptor 不声明
 Harmonic 状态的别名，也不声称保留逐阶参数。Sweep configure/fire 与 volatile ARB adapter 已有离线候选，
 但它们会与 V1 Sweep／`arb-load` 复合合同重叠，当前 production descriptor 不声明这些 capability。
 
+`rigol.dg4202-v2` 是独立的 opt-in entry point，仅公开 `source.sweep_configure_v2` 和
+`source.sweep_fire_v2`。`TRACe:DATA:DAC VOLATILE` 没有已验证的通道 selector，故该 entry point 的
+ARB 仍为只读，`source.arbitrary_volatile_replace_v2` 不公开；`rigol.dg4202` 的 legacy 表面保持不变。
+
 为保持 legacy 合同，DG descriptor 明确设置 `v1_route_migration_enabled=false`。既有 V1
 `source.set-*`、`source.output`、离散频响、`arb-load` 和 basic restore 继续调用 V1 路由；
 只有显式的 V2 CLI、run step 或 Service 调用使用 P1/Counter V2 adapter。它避免以不完整的

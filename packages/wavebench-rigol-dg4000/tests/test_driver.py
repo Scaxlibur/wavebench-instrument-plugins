@@ -468,7 +468,7 @@ def test_production_source_v2_basic_output_counter_satisfies_core_descriptor_gat
     assert "source.arbitrary_volatile_replace_v2" not in item.capabilities
 
 
-def test_opt_in_source_v2_descriptor_satisfies_advanced_core_descriptor_gates() -> None:
+def test_opt_in_source_v2_descriptor_keeps_unroutable_volatile_arb_read_only() -> None:
     candidate = descriptor_v2()
     driver = DG4202Source(DualChannelFakeTransport())
 
@@ -477,7 +477,7 @@ def test_opt_in_source_v2_descriptor_satisfies_advanced_core_descriptor_gates() 
 
     assert candidate.driver_id == "rigol.dg4202-v2"
     assert candidate.aliases == ()
-    assert "source.arbitrary_volatile_replace_v2" in candidate.capabilities
+    assert "source.arbitrary_volatile_replace_v2" not in candidate.capabilities
     assert "source.counter_configure_v2" in candidate.capabilities
     assert "source.counter_enable_v2" in candidate.capabilities
     assert "source.counter_measure_v2" in candidate.capabilities
@@ -486,6 +486,16 @@ def test_opt_in_source_v2_descriptor_satisfies_advanced_core_descriptor_gates() 
     assert "source.sweep_configure_v2" not in descriptor().capabilities
     assert "source.sweep_fire_v2" not in descriptor().capabilities
     assert candidate.source_extensions is not None
+    arbitrary_features = tuple(
+        feature
+        for feature in candidate.source_extensions.features
+        if feature.feature is SourceFeature.ARBITRARY
+    )
+    assert arbitrary_features
+    assert all(
+        feature.directions == (SourceFeatureDirection.READ,)
+        for feature in arbitrary_features
+    )
     assert all(not feature.evidence_refs for feature in candidate.source_extensions.features)
 
 
