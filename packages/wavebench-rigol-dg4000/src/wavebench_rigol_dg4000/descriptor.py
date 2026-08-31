@@ -99,6 +99,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
         ),
         timing_readable=True,
         gate_readable=True,
+        inactive_readable=True,
     )
     sweep_profile = SourceSweepCapabilityProfile(
         spacing_modes=(
@@ -113,6 +114,10 @@ def _source_extensions() -> SourceDescriptorExtensions:
         ),
         timing_readable=True,
         marker_readable=True,
+        implicit_disable_features=(
+            SourceFeature.BURST,
+            SourceFeature.MODULATION,
+        ),
     )
     pulse_profile = SourcePulseCapabilityProfile(
         hold_modes=(SourcePulseHoldBasis.DUTY, SourcePulseHoldBasis.WIDTH),

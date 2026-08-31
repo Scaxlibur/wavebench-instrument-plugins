@@ -17,7 +17,7 @@ from wavebench.config import (
     WaveBenchConfig,
     WaveformConfig,
 )
-from wavebench.errors import DataError, InstrumentError
+from wavebench.errors import ConfigError, DataError, InstrumentError
 from wavebench.instruments import (
     Availability,
     DG4000ByteOrder,
@@ -34,6 +34,7 @@ from wavebench.instruments import (
     SourceCounterEnableRequest,
     SourceCounterMeasureRequest,
     SourceCounterMeasurementKind,
+    SourceFireRequest,
     SourceCouplingDimension,
     SourceCouplingParameterKind,
     SourceFieldId,
@@ -46,7 +47,10 @@ from wavebench.instruments import (
     SourceOutputRequest,
     SourceReasonCode,
     SourceSemanticQueryPlan,
+    SourceSweepConfigureRequest,
+    SourceSweepSpacing,
     SourceSyncPolarity,
+    SourceTriggerSource,
     SourceWaveformKind,
 )
 from wavebench.instruments.api import DriverContext
@@ -136,6 +140,7 @@ class FakeTransport:
             "sweep_trigger_source": "INT",
             "sweep_trigger_slope": "POS",
             "sweep_trigger_out": "OFF",
+            "sweep_fire_count": 0,
             "counter": "OFF",
             "counter_measurement": "1.000000E+03,1.000000E-03,4.000000E+01,4.000000E-04,6.000000E-04",
             "counter_coupling": "AC",
@@ -164,6 +169,10 @@ class FakeTransport:
             raise InstrumentError(f"injected ambiguous write failure: {command}")
 
     def _apply_write(self, command: str) -> None:
+        for item in command.split(";"):
+            self._apply_write_item(item)
+
+    def _apply_write_item(self, command: str) -> None:
         prefix = f":SOUR{self.channel}"
         if command.startswith(":COUN:COUP "):
             self.state["counter_coupling"] = command.split()[-1]
@@ -182,6 +191,46 @@ class FakeTransport:
             self.state["swe"] = "OFF" if self.state["mode"] == "FIX" else "ON"
         elif command.startswith(f"{prefix}:FREQ "):
             self.state["freq"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:FREQ:STAR "):
+            self.state["sweep_start"] = float(command.split()[-1])
+            self.state["sweep_center"] = (
+                self.state["sweep_start"] + self.state["sweep_stop"]
+            ) / 2
+            self.state["sweep_span"] = self.state["sweep_stop"] - self.state["sweep_start"]
+        elif command.startswith(f"{prefix}:FREQ:STOP "):
+            self.state["sweep_stop"] = float(command.split()[-1])
+            self.state["sweep_center"] = (
+                self.state["sweep_start"] + self.state["sweep_stop"]
+            ) / 2
+            self.state["sweep_span"] = self.state["sweep_stop"] - self.state["sweep_start"]
+        elif command.startswith(f"{prefix}:SWE:SPAC "):
+            self.state["sweep_spacing"] = command.split()[-1]
+        elif command.startswith(f"{prefix}:SWE:STEP "):
+            self.state["sweep_steps"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:TIME "):
+            self.state["sweep_time"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:HTIM:STAR "):
+            self.state["sweep_start_hold"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:HTIM:STOP "):
+            self.state["sweep_stop_hold"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:RTIM "):
+            self.state["sweep_return_time"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:TRIG:SOUR "):
+            self.state["sweep_trigger_source"] = command.split()[-1]
+        elif command.startswith(f"{prefix}:SWE:TRIG:SLOP "):
+            self.state["sweep_trigger_slope"] = command.split()[-1]
+        elif command.startswith(f"{prefix}:SWE:TRIG:TRIGOUT "):
+            self.state["sweep_trigger_out"] = command.split()[-1]
+        elif command == f"{prefix}:SWE:TRIG":
+            self.state["sweep_fire_count"] += 1
+        elif command.startswith(f"{prefix}:SWE:STAT "):
+            self.state["swe"] = command.split()[-1]
+            self.state["mode"] = "SWE" if self.state["swe"] == "ON" else "FIX"
+            if self.state["swe"] == "ON":
+                self.state["burst"] = "OFF"
+                self.state["modulation"] = "OFF"
+        elif command.startswith(f"{prefix}:MARK:STAT "):
+            self.state["marker"] = command.split()[-1]
         elif command.startswith(f":OUTP{self.channel} "):
             self.state["out"] = command.split()[-1]
         elif command.startswith(f"{prefix}:FUNC:SHAP "):
@@ -407,6 +456,64 @@ def _arbitrary_volatile_write_candidate_descriptor():
     )
 
 
+def _sweep_write_candidate_descriptor():
+    item = descriptor()
+    assert item.source_extensions is not None
+    extensions = replace(
+        item.source_extensions,
+        features=tuple(
+            replace(
+                feature,
+                directions=(
+                    SourceFeatureDirection.CONFIGURE,
+                    SourceFeatureDirection.FIRE,
+                    SourceFeatureDirection.READ,
+                ),
+                profile=replace(feature.profile, configuration_readable=True),
+            )
+            if feature.feature is SourceFeature.SWEEP
+            else feature
+            for feature in item.source_extensions.features
+        ),
+    )
+    return replace(
+        item,
+        capabilities=(
+            *item.capabilities,
+            "source.sweep_configure_v2",
+            "source.sweep_fire_v2",
+        ),
+        source_extensions=extensions,
+    )
+
+
+def _sweep_write_candidate_without_interlock_readback(feature: SourceFeature):
+    item = _sweep_write_candidate_descriptor()
+    assert item.source_extensions is not None
+    features = tuple(
+        replace(feature_capability, profile=replace(feature_capability.profile, inactive_readable=False))
+        if feature_capability.feature is feature
+        else feature_capability
+        for feature_capability in item.source_extensions.features
+    )
+    return replace(item, source_extensions=replace(item.source_extensions, features=features))
+
+
+def _sweep_v2_request(
+    *,
+    trigger_source: SourceTriggerSource = SourceTriggerSource.INTERNAL,
+) -> SourceSweepConfigureRequest:
+    return SourceSweepConfigureRequest(
+        channel=1,
+        start_hz=100.0,
+        stop_hz=1_000.0,
+        spacing=SourceSweepSpacing.LINEAR,
+        steps=101,
+        sweep_time_s=1.0,
+        trigger_source=trigger_source,
+    )
+
+
 def test_production_source_v2_basic_output_counter_satisfies_core_descriptor_gate() -> None:
     item = descriptor()
     driver = DG4202Source(DualChannelFakeTransport())
@@ -434,6 +541,27 @@ def test_arbitrary_volatile_source_v2_write_candidate_satisfies_core_descriptor_
     assert "source.counter_configure_v2" in candidate.capabilities
     assert "source.counter_enable_v2" in candidate.capabilities
     assert "source.counter_measure_v2" in candidate.capabilities
+
+
+def test_sweep_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
+    candidate = _sweep_write_candidate_descriptor()
+    driver = DG4202Source(DualChannelFakeTransport())
+
+    validate_source_descriptor(candidate, driver)
+    validate_declared_capabilities(candidate, driver)
+
+    assert "source.sweep_configure_v2" in candidate.capabilities
+    assert "source.sweep_fire_v2" in candidate.capabilities
+    assert "source.sweep_configure_v2" not in descriptor().capabilities
+    assert "source.sweep_fire_v2" not in descriptor().capabilities
+
+
+@pytest.mark.parametrize("feature", (SourceFeature.BURST, SourceFeature.MODULATION))
+def test_sweep_source_v2_candidate_requires_declared_inactive_interlock_readback(
+    feature: SourceFeature,
+) -> None:
+    with pytest.raises(ConfigError, match=f"readable inactive {feature.value} state"):
+        validate_source_descriptor(_sweep_write_candidate_without_interlock_readback(feature))
 
 
 def _counter_core_service(
@@ -465,6 +593,42 @@ def _counter_core_service(
             logger=CommandLogger(),
             session=driver,
             descriptor=descriptor(),
+            transport=guarded,
+            session_state=session_state,
+        ),
+        driver,
+    )
+
+
+def _sweep_core_service(
+    transport: DualChannelFakeTransport,
+) -> tuple[SourceService, DG4202Source]:
+    session_state = InstrumentSessionState(epoch_id="dg4202-sweep-v2")
+    guarded = GuardedAuditedTransport(transport, session_state=session_state)
+    driver = DG4202Source(guarded)
+    config = WaveBenchConfig(
+        connection=ConnectionConfig("lan", "TCPIP::scope::INSTR", 1_000, 1_000),
+        scope=ScopeConfig("rtm2032", None, 1, False, True),
+        autoscale=AutoscaleConfig(True, True),
+        waveform=WaveformConfig("real", "lsbf", "DMAX"),
+        output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+        source_path=Path("wavebench.toml"),
+        source=SourceConfig(
+            "rigol.dg4202",
+            "TCPIP::source::INSTR",
+            1,
+            False,
+            True,
+            0,
+        ),
+        safety_limits=SafetyLimitsConfig(),
+    )
+    return (
+        SourceService(
+            config=config,
+            logger=CommandLogger(),
+            session=driver,
+            descriptor=_sweep_write_candidate_descriptor(),
             transport=guarded,
             session_state=session_state,
         ),
@@ -697,6 +861,128 @@ def test_source_v2_volatile_replace_ambiguous_write_latches_and_keeps_off_recove
     _prime_v2_write_cache(driver, transport=transport)
     with pytest.raises(InstrumentError, match="writes are blocked"):
         driver.replace_source_arbitrary_volatile_v2(_volatile_v2_request(payload), payload)
+
+
+@pytest.mark.parametrize(
+    ("trigger_source", "expected_source"),
+    (
+        (SourceTriggerSource.INTERNAL, "INT"),
+        (SourceTriggerSource.MANUAL, "MAN"),
+    ),
+)
+def test_source_v2_sweep_configure_uses_one_compound_write_and_cached_readback(
+    trigger_source: SourceTriggerSource,
+    expected_source: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    result = driver.configure_source_sweep_v2(
+        _sweep_v2_request(trigger_source=trigger_source)
+    )
+
+    assert transport.queries == queries_before
+    assert len(transport.writes) == 1
+    assert transport.writes[0] == (
+        ":SOUR1:FREQ:STAR 100;:SOUR1:FREQ:STOP 1000;:SOUR1:SWE:SPAC LIN;"
+        ":SOUR1:SWE:STEP 101;:SOUR1:SWE:TIME 1;:SOUR1:SWE:HTIM:STAR 0;"
+        ":SOUR1:SWE:HTIM:STOP 0;:SOUR1:SWE:RTIM 0;"
+        f":SOUR1:SWE:TRIG:SOUR {expected_source};:SOUR1:SWE:TRIG:SLOP POS;"
+        ":SOUR1:SWE:TRIG:TRIGOUT OFF;:SOUR1:MARK:STAT OFF;:SOUR1:SWE:STAT ON"
+    )
+    assert result.output_enabled is False
+    assert result.basic.frequency_mode.value is SourceFrequencyMode.SWEEP
+    assert result.sweep.enabled.value is True
+    assert result.sweep.trigger.value.source.value is trigger_source
+
+
+def test_source_v2_sweep_configure_requires_output_off_and_inactive_side_effects() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    basic, output = driver._v2_preflight_snapshots[1]
+    driver._v2_preflight_snapshots[1] = (basic, replace(output, enabled=Observed.value_of(True)))
+
+    with pytest.raises(DataError, match="requires output OFF"):
+        driver.configure_source_sweep_v2(_sweep_v2_request())
+
+    transport = DualChannelFakeTransport()
+    transport.state["modulation"] = "ON"
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(DataError, match="inactive modulation"):
+        driver.configure_source_sweep_v2(_sweep_v2_request())
+
+    assert transport.writes == []
+
+
+def test_source_v2_sweep_ambiguous_configure_latches_and_preserves_off_escape_hatch() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    command = driver._v2_sweep_program_message(_sweep_v2_request())
+    transport.fail_write_commands.add(command)
+
+    with pytest.raises(InstrumentError, match="write result is unknown"):
+        driver.configure_source_sweep_v2(_sweep_v2_request())
+
+    assert driver._v2_preflight_snapshots == {}
+    assert driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=False)).enabled is False
+    assert transport.writes[-1] == ":OUTP1 OFF"
+
+
+def test_source_v2_sweep_fire_is_one_channel_scoped_write_after_manual_configuration() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    driver.configure_source_sweep_v2(
+        _sweep_v2_request(trigger_source=SourceTriggerSource.MANUAL)
+    )
+    driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    queries_before = list(transport.queries)
+
+    result = driver.fire_source_sweep_v2(SourceFireRequest(channel=1))
+
+    assert result.channel == 1
+    assert transport.writes[-1] == ":SOUR1:SWE:TRIG"
+    assert transport.state["sweep_fire_count"] == 1
+    assert transport.queries == queries_before
+
+
+def test_source_v2_sweep_fire_rejects_internal_or_unknown_configuration_before_write() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    driver.configure_source_sweep_v2(_sweep_v2_request())
+    driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    writes_before = list(transport.writes)
+
+    with pytest.raises(DataError, match="manual trigger source"):
+        driver.fire_source_sweep_v2(SourceFireRequest(channel=1))
+
+    driver._v2_sweep_preflight_snapshots.clear()
+    with pytest.raises(DataError, match="fresh configured Sweep readback"):
+        driver.fire_source_sweep_v2(SourceFireRequest(channel=1))
+
+    assert transport.writes == writes_before
+
+
+def test_source_v2_sweep_candidate_routes_through_core_and_preserves_receipt() -> None:
+    transport = DualChannelFakeTransport()
+    service, driver = _sweep_core_service(transport)
+    configured, _ = service.configure_sweep_v2(
+        _sweep_v2_request(trigger_source=SourceTriggerSource.MANUAL)
+    )
+    assert configured.sweep.trigger.value.source.value is SourceTriggerSource.MANUAL
+
+    service.set_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    fired, _ = service.fire_sweep_v2(SourceFireRequest(channel=1))
+
+    assert fired.channel == 1
+    assert transport.writes[-1] == ":SOUR1:SWE:TRIG"
+    assert driver._configuration_writes_blocked is False
 
 
 @pytest.mark.parametrize(

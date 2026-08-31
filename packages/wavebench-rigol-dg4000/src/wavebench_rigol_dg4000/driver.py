@@ -50,6 +50,8 @@ from wavebench.instruments import (
     SourceCounterMeasureRequest,
     SourceCounterMeasureResult,
     SourceCounterProfile,
+    SourceFireRequest,
+    SourceFireResult,
     SourceFieldId,
     SourceFeature,
     SourceFrequencyMode,
@@ -71,6 +73,8 @@ from wavebench.instruments import (
     SourceRuntimeIdentity,
     SourceSemanticQueryPlan,
     SourceSweepMarker,
+    SourceSweepConfigureRequest,
+    SourceSweepConfigureResult,
     SourceSweepSpacing,
     SourceSweepProfile,
     SourceSyncPolarity,
@@ -387,6 +391,16 @@ class DG4202Source:
         repr=False,
     )
     _v2_counter_preflight_snapshots: dict[str, SourceCounterInputState] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
+    _v2_sweep_preflight_snapshots: dict[int, SweepFacet] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
+    _v2_sweep_side_effect_preflight: dict[int, tuple[ModulationFacet, BurstFacet]] = field(
         default_factory=dict,
         init=False,
         repr=False,
@@ -1007,6 +1021,162 @@ class DG4202Source:
                 content_readback_verified=False,
                 previous_content_restorable=False,
             )
+
+    @staticmethod
+    def _v2_configured_sweep_facet(
+        request: SourceSweepConfigureRequest,
+    ) -> SweepFacet:
+        trigger_source = request.trigger_source
+        return SweepFacet(
+            enabled=Observed.value_of(True),
+            start_hz=Observed.value_of(request.start_hz),
+            stop_hz=Observed.value_of(request.stop_hz),
+            spacing=Observed.value_of(request.spacing),
+            steps=Observed.value_of(request.steps),
+            sweep_time_s=Observed.value_of(request.sweep_time_s),
+            start_hold_s=Observed.value_of(0.0),
+            stop_hold_s=Observed.value_of(0.0),
+            return_time_s=Observed.value_of(0.0),
+            trigger=Observed.value_of(
+                SourceTriggerState(
+                    source=Observed.value_of(trigger_source),
+                    slope=Observed.value_of(SourceTriggerSlope.POSITIVE),
+                    output=Observed.value_of(SourceTriggerOutput.OFF),
+                )
+            ),
+            marker=Observed.value_of(
+                SourceSweepMarker(
+                    enabled=Observed.value_of(False),
+                    frequency_hz=Observed.missing(
+                        Availability.NOT_QUERIED,
+                        SourceReasonCode.NOT_REQUESTED,
+                    ),
+                )
+            ),
+        )
+
+    @staticmethod
+    def _v2_sweep_program_message(request: SourceSweepConfigureRequest) -> str:
+        spacing = {
+            SourceSweepSpacing.LINEAR: "LIN",
+            SourceSweepSpacing.LOGARITHMIC: "LOG",
+            SourceSweepSpacing.STEP: "STE",
+        }[request.spacing]
+        trigger_source = {
+            SourceTriggerSource.INTERNAL: "INT",
+            SourceTriggerSource.MANUAL: "MAN",
+        }[request.trigger_source]
+        channel = request.channel
+        return ";".join(
+            (
+                f":SOUR{channel}:FREQ:STAR {request.start_hz:.12g}",
+                f":SOUR{channel}:FREQ:STOP {request.stop_hz:.12g}",
+                f":SOUR{channel}:SWE:SPAC {spacing}",
+                f":SOUR{channel}:SWE:STEP {request.steps}",
+                f":SOUR{channel}:SWE:TIME {request.sweep_time_s:.12g}",
+                f":SOUR{channel}:SWE:HTIM:STAR 0",
+                f":SOUR{channel}:SWE:HTIM:STOP 0",
+                f":SOUR{channel}:SWE:RTIM 0",
+                f":SOUR{channel}:SWE:TRIG:SOUR {trigger_source}",
+                f":SOUR{channel}:SWE:TRIG:SLOP POS",
+                f":SOUR{channel}:SWE:TRIG:TRIGOUT OFF",
+                f":SOUR{channel}:MARK:STAT OFF",
+                f":SOUR{channel}:SWE:STAT ON",
+            )
+        )
+
+    def _v2_require_sweep_side_effects_already_off(self, channel: int) -> None:
+        try:
+            modulation, burst = self._v2_sweep_side_effect_preflight[channel]
+        except KeyError as exc:
+            raise DataError(
+                "DG4000 Source V2 Sweep configuration requires verified inactive "
+                "modulation and burst state"
+            ) from exc
+        for name, facet in (("modulation", modulation), ("burst", burst)):
+            if facet.enabled.availability is not Availability.VALUE or facet.enabled.value is not False:
+                raise DataError(
+                    "DG4000 Source V2 Sweep configuration requires inactive "
+                    f"{name} state"
+                )
+
+    def configure_source_sweep_v2(
+        self,
+        request: SourceSweepConfigureRequest,
+    ) -> SourceSweepConfigureResult:
+        if not isinstance(request, SourceSweepConfigureRequest):
+            raise DataError("DG4000 Source V2 Sweep request has an invalid type")
+        _validate_channel(request.channel)
+        with self._io_lock:
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            if (
+                output.enabled.availability is not Availability.VALUE
+                or output.enabled.value is not False
+            ):
+                raise DataError("DG4000 Source V2 Sweep configuration requires output OFF")
+            self._v2_result_amplitude_offset(basic)
+            self._v2_require_sweep_side_effects_already_off(request.channel)
+            updated_basic = replace(
+                basic,
+                frequency_mode=Observed.value_of(SourceFrequencyMode.SWEEP),
+            )
+            updated_sweep = self._v2_configured_sweep_facet(request)
+            try:
+                self._write(self._v2_sweep_program_message(request))
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                self._v2_sweep_preflight_snapshots.clear()
+                self._v2_sweep_side_effect_preflight.clear()
+                raise
+            self._v2_preflight_snapshots[request.channel] = (updated_basic, output)
+            self._v2_sweep_preflight_snapshots[request.channel] = updated_sweep
+            return SourceSweepConfigureResult(
+                channel=request.channel,
+                basic=updated_basic,
+                sweep=updated_sweep,
+                output_enabled=False,
+            )
+
+    def fire_source_sweep_v2(self, request: SourceFireRequest) -> SourceFireResult:
+        if not isinstance(request, SourceFireRequest):
+            raise DataError("DG4000 Source V2 Sweep fire request has an invalid type")
+        _validate_channel(request.channel)
+        with self._io_lock:
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            try:
+                sweep = self._v2_sweep_preflight_snapshots[request.channel]
+            except KeyError as exc:
+                raise DataError(
+                    "DG4000 Source V2 Sweep fire requires a fresh configured Sweep readback"
+                ) from exc
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            if (
+                basic.frequency_mode.availability is not Availability.VALUE
+                or basic.frequency_mode.value is not SourceFrequencyMode.SWEEP
+            ):
+                raise DataError("DG4000 Source V2 Sweep fire requires sweep frequency mode")
+            if output.enabled.availability is not Availability.VALUE or output.enabled.value is not True:
+                raise DataError("DG4000 Source V2 Sweep fire requires output ON")
+            if (
+                sweep.trigger.availability is not Availability.VALUE
+                or not isinstance(sweep.trigger.value, SourceTriggerState)
+                or sweep.trigger.value.source.availability is not Availability.VALUE
+                or sweep.trigger.value.source.value is not SourceTriggerSource.MANUAL
+            ):
+                raise DataError("DG4000 Source V2 Sweep fire requires manual trigger source")
+            try:
+                self._write(f":SOUR{request.channel}:SWE:TRIG")
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                self._v2_sweep_preflight_snapshots.clear()
+                self._v2_sweep_side_effect_preflight.clear()
+                raise
+            return SourceFireResult(channel=request.channel)
 
     @staticmethod
     def _v2_counter_patch_field(
@@ -1894,6 +2064,8 @@ class DG4202Source:
             # with a stale snapshot from an earlier transaction.
             self._v2_preflight_snapshots.clear()
             self._v2_counter_preflight_snapshots.clear()
+            self._v2_sweep_preflight_snapshots.clear()
+            self._v2_sweep_side_effect_preflight.clear()
 
             def plan_query(command: str) -> str:
                 return self._v2_query(plan, command)
@@ -1903,7 +2075,10 @@ class DG4202Source:
             before_basic: dict[int, BasicWaveFacet] = {}
             latest_basic: dict[int, BasicWaveFacet] = {}
             latest_output: dict[int, OutputFacet] = {}
+            latest_burst: dict[int, BurstFacet] = {}
             latest_counter: dict[str, SourceCounterInputState] = {}
+            latest_modulation: dict[int, ModulationFacet] = {}
+            latest_sweep: dict[int, SweepFacet] = {}
             for item in plan.items:
                 field_ref = item.fields[0]
                 channel = field_ref.target.channel
@@ -1950,6 +2125,7 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.BURST:
                     assert channel is not None
                     value, query_count = self._v2_burst_facet(channel, plan)
+                    latest_burst[channel] = value
                 elif field_ref.field is SourceFieldId.COUNTER:
                     input_id = field_ref.target.input_id
                     assert input_id is not None
@@ -1987,6 +2163,7 @@ class DG4202Source:
                 elif field_ref.field is SourceFieldId.MODULATION:
                     assert channel is not None
                     value = self._v2_modulation_facet(channel, plan)
+                    latest_modulation[channel] = value
                     query_count = 2
                 elif field_ref.field is SourceFieldId.NOISE_OVERLAY:
                     assert channel is not None
@@ -2016,6 +2193,7 @@ class DG4202Source:
                     value = self._v2_sweep_facet(
                         self._get_sweep_profile(channel, query=plan_query)
                     )
+                    latest_sweep[channel] = value
                     query_count = 16
                 else:
                     assert field_ref.field is SourceFieldId.PULSE
@@ -2059,6 +2237,11 @@ class DG4202Source:
                 if channel in latest_output
             }
             self._v2_counter_preflight_snapshots = latest_counter
+            self._v2_sweep_preflight_snapshots = latest_sweep
+            self._v2_sweep_side_effect_preflight = {
+                channel: (latest_modulation[channel], latest_burst[channel])
+                for channel in latest_modulation.keys() & latest_burst.keys()
+            }
             return SourceQueryExecutionRecord(
                 contract_version=SOURCE_CONTRACT_VERSION,
                 plan_id=plan.plan_id,
