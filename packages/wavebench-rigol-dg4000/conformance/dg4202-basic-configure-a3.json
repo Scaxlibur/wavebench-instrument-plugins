@@ -1,0 +1,54 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "dg4202-basic-configure-a3",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A3",
+  "capability": "source.basic_configure_v2",
+  "feature": "basic",
+  "direction": "configure",
+  "model": "DG4202",
+  "firmware_id": "00.01.14",
+  "option_ids": [],
+  "channels": [1, 2],
+  "core_version": "0.8.25",
+  "plugin_version": "0.7.0",
+  "wheel_sha256": "sha256:928d5b468de7c119376f6b52cc7c7133ac9bf2d4f183df4a2b29d8df557cc21a",
+  "descriptor_digest": "sha256:7e4925b018d84626b997e536fa617de6a17228a455dc640bd842b319267fc379",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "resource": "redacted",
+    "scope_model": "RTM2032",
+    "wiring": "source_ch1_to_scope_ch1_source_ch2_to_scope_ch2"
+  },
+  "safety_limits": {
+    "maximum_test_vpp": 2.0,
+    "offset_v": 0.0,
+    "source_limit_vpp": 5.0
+  },
+  "budget": {
+    "admitted": true,
+    "output_state_before_write": "off"
+  },
+  "results": {
+    "live_frequency_and_vpp_channels": [1, 2],
+    "maximum_vpp": 2.0,
+    "postcondition_readback": true
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "channels": [1, 2],
+    "output_state": "off"
+  },
+  "coverage": [
+    "Basic V2 normal-path configuration and external measurement on both channels"
+  ],
+  "limitations": [
+    "no fault-injection hardware evidence",
+    "no active Harmonic exit hardware evidence",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:0d879ce6948073aaf7eb8f3d8f9a09198acfdf5d9f6da88a1fbce7a101e562f5"
+}

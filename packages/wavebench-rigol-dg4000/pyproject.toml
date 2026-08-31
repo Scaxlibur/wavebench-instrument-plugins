@@ -21,6 +21,9 @@ dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/wavebench_rigol_dg4000"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"conformance" = "wavebench_rigol_dg4000-0.7.0.dist-info/wavebench-source-conformance"
+
 [tool.hatch.build.targets.sdist]
 exclude = ["/doc/vendor-local"]
 

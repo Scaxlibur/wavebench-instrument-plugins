@@ -1,0 +1,52 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "dg4202-counter-configure-a2",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A2",
+  "capability": "source.counter_configure_v2",
+  "feature": "counter",
+  "direction": "configure",
+  "model": "DG4202",
+  "firmware_id": "00.01.14",
+  "option_ids": [],
+  "channels": [],
+  "core_version": "0.8.25",
+  "plugin_version": "0.7.0",
+  "wheel_sha256": "sha256:928d5b468de7c119376f6b52cc7c7133ac9bf2d4f183df4a2b29d8df557cc21a",
+  "descriptor_digest": "sha256:7e4925b018d84626b997e536fa617de6a17228a455dc640bd842b319267fc379",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "counter_input": "counter",
+    "resource": "redacted",
+    "source_channel": 1
+  },
+  "safety_limits": {
+    "maximum_input_vpp": 5.0,
+    "source_limit_vpp": 5.0
+  },
+  "budget": {
+    "admitted": true,
+    "one_field_per_transaction": true
+  },
+  "results": {
+    "configuration_fields": ["coupling", "impedance", "attenuation", "trigger_level", "statistics"],
+    "postcondition_readback": true
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "counter_state": "off",
+    "output_state": "off"
+  },
+  "coverage": [
+    "single-field Counter configuration and independent readback"
+  ],
+  "limitations": [
+    "no timeout or ambiguous-write hardware evidence",
+    "no AUTO gate or statistics clear claim",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:3481fb178e6356b339d6fa57bb908c8937df600877afc0c2506b5b6a31b1d921"
+}

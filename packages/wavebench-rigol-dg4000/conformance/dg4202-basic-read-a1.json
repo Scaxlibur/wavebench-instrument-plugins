@@ -1,0 +1,51 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "dg4202-basic-read-a1",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A1",
+  "capability": "source.snapshot_v2",
+  "feature": "basic",
+  "direction": "read",
+  "model": "DG4202",
+  "firmware_id": "00.01.14",
+  "option_ids": [],
+  "channels": [1, 2],
+  "core_version": "0.8.25",
+  "plugin_version": "0.7.0",
+  "wheel_sha256": "sha256:928d5b468de7c119376f6b52cc7c7133ac9bf2d4f183df4a2b29d8df557cc21a",
+  "descriptor_digest": "sha256:7e4925b018d84626b997e536fa617de6a17228a455dc640bd842b319267fc379",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "resource": "redacted",
+    "transport": "managed WaveBench session"
+  },
+  "safety_limits": {
+    "output_state": "off",
+    "source_limit_vpp": 5.0
+  },
+  "budget": {
+    "admitted": true,
+    "declared_query_limit": 138
+  },
+  "results": {
+    "consistent": true,
+    "queries": 67,
+    "writes": 0
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "channels": [1, 2],
+    "output_state": "off"
+  },
+  "coverage": [
+    "dual-channel Basic snapshot on the exact model and firmware"
+  ],
+  "limitations": [
+    "no active Harmonic or Sweep state claim",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:5767d0c5bf3027ce7edda71f24042bee143f36500e0d646cdbf7f45552e2478d"
+}

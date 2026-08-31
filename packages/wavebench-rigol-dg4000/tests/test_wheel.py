@@ -10,6 +10,7 @@ import tarfile
 from zipfile import ZipFile
 
 import wavebench
+from wavebench.plugins.package_inspect import inspect_plugin_wheel
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +59,47 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
     assert [(item.name, item.value) for item in entry_points] == [
         ("rigol.dg4202", "wavebench_rigol_dg4000:descriptor")
     ]
+
+
+def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) -> None:
+    wheelhouse = tmp_path / "wheelhouse"
+    wheelhouse.mkdir()
+    _run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "wheel",
+            "--no-build-isolation",
+            "--no-deps",
+            "--no-index",
+            "--disable-pip-version-check",
+            "--wheel-dir",
+            str(wheelhouse),
+            str(PACKAGE_ROOT),
+        ],
+        cwd=tmp_path,
+    )
+    wheel = next(wheelhouse.glob(f"wavebench_rigol_dg4000-{PACKAGE_VERSION}-*.whl"))
+
+    package = inspect_plugin_wheel(wheel)
+
+    assert package.source_conformance_wheel_sha256 == (
+        "sha256:928d5b468de7c119376f6b52cc7c7133ac9bf2d4f183df4a2b29d8df557cc21a"
+    )
+    assert {
+        (item.manifest_id, item.claimed_level.value, item.channels)
+        for item in package.source_conformance_manifests
+    } == {
+        ("dg4202-basic-configure-a3", "A3", (1, 2)),
+        ("dg4202-basic-read-a1", "A1", (1, 2)),
+        ("dg4202-counter-configure-a2", "A2", ()),
+        ("dg4202-counter-enable-a2", "A2", ()),
+        ("dg4202-counter-measure-a3", "A3", ()),
+        ("dg4202-output-disable-a2", "A2", (1, 2)),
+        ("dg4202-output-enable-a2", "A2", (1, 2)),
+        ("dg4202-output-read-a1", "A1", (1, 2)),
+    }
 
 
 def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) -> None:

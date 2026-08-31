@@ -1,0 +1,52 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "dg4202-counter-measure-a3",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A3",
+  "capability": "source.counter_measure_v2",
+  "feature": "counter",
+  "direction": "read",
+  "model": "DG4202",
+  "firmware_id": "00.01.14",
+  "option_ids": [],
+  "channels": [],
+  "core_version": "0.8.25",
+  "plugin_version": "0.7.0",
+  "wheel_sha256": "sha256:928d5b468de7c119376f6b52cc7c7133ac9bf2d4f183df4a2b29d8df557cc21a",
+  "descriptor_digest": "sha256:7e4925b018d84626b997e536fa617de6a17228a455dc640bd842b319267fc379",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "counter_input": "counter",
+    "scope_model": "RTM2032",
+    "wiring": "source_ch1_to_counter_and_scope_ch1"
+  },
+  "safety_limits": {
+    "maximum_input_vpp": 5.0,
+    "maximum_test_vpp": 1.0
+  },
+  "budget": {
+    "admitted": true,
+    "counter_enabled_before_measure": true
+  },
+  "results": {
+    "counter_frequency_hz": 1000.011247,
+    "scope_fft_frequency_hz": 1000.0,
+    "source_frequency_hz": 1000.0
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "counter_state": "off",
+    "output_state": "off"
+  },
+  "coverage": [
+    "Counter five-measurement tuple with RTM frequency and FFT cross-check"
+  ],
+  "limitations": [
+    "no no-input or fault-injection measurement claim",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:749c7219dca9ecc87fb8b30a462e3301c829615f2371f9d274907d0aefacfe61"
+}

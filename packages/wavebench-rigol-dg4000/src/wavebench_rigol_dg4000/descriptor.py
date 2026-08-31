@@ -54,6 +54,21 @@ from wavebench.instruments import (
 
 
 _V2_CHANNELS = (1, 2)
+_CONFORMANCE_PREFIX = "dist-info:wavebench-source-conformance/"
+_BASIC_EVIDENCE_REFS = (
+    _CONFORMANCE_PREFIX + "dg4202-basic-configure-a3.json",
+    _CONFORMANCE_PREFIX + "dg4202-basic-read-a1.json",
+)
+_OUTPUT_EVIDENCE_REFS = (
+    _CONFORMANCE_PREFIX + "dg4202-output-disable-a2.json",
+    _CONFORMANCE_PREFIX + "dg4202-output-enable-a2.json",
+    _CONFORMANCE_PREFIX + "dg4202-output-read-a1.json",
+)
+_COUNTER_EVIDENCE_REFS = (
+    _CONFORMANCE_PREFIX + "dg4202-counter-configure-a2.json",
+    _CONFORMANCE_PREFIX + "dg4202-counter-enable-a2.json",
+    _CONFORMANCE_PREFIX + "dg4202-counter-measure-a3.json",
+)
 
 
 def _source_extensions() -> SourceDescriptorExtensions:
@@ -241,6 +256,13 @@ def _source_extensions() -> SourceDescriptorExtensions:
             channels=(channel,),
             applicability=applicability,
             profile=profile,
+            evidence_refs=(
+                _BASIC_EVIDENCE_REFS
+                if feature is SourceFeature.BASIC
+                else _OUTPUT_EVIDENCE_REFS
+                if feature is SourceFeature.OUTPUT
+                else ()
+            ),
         )
         for feature, profile in (
             (SourceFeature.ARBITRARY, arbitrary_profile),
@@ -273,6 +295,7 @@ def _source_extensions() -> SourceDescriptorExtensions:
                     channels=(),
                     applicability=applicability,
                     profile=counter_profile,
+                    evidence_refs=_COUNTER_EVIDENCE_REFS,
                 ),
                 SourceFeatureCapability(
                     feature=SourceFeature.COUPLING,
