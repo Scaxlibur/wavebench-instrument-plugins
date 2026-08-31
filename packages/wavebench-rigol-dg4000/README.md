@@ -8,6 +8,7 @@
 
 - distribution：`wavebench-rigol-dg4000`
 - canonical driver ID：`rigol.dg4202`
+- opt-in advanced driver ID：`rigol.dg4202-v2`
 - WaveBench：`>=0.8.25,<0.9`
 - Python：`>=3.11`
 - transport backend：`pyvisa`
@@ -43,9 +44,10 @@ WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅�
 [DG4000 覆盖里程碑](doc/DG4000_COVERAGE_MILESTONES.md)。本地厂商手册保存在被忽略的
 `doc/vendor-local/`，不进入发行包。
 
-当前 wheel 随 distribution 包含 8 份 Source conformance manifest，并与 wheel 的非 manifest 内容绑定。
-它们只记录 DG4202 `00.01.14` 上已验收的 Basic、Output 和 Counter V2 范围；Sweep、volatile ARB
-和 Harmonic 活跃态候选没有被写入 production capability 或 conformance 声明。
+当前 wheel 随 distribution 包含 10 份 Source conformance manifest，并与 wheel 的非 manifest 内容绑定。
+它们记录 DG4202 `00.01.14` 上已验收的 Basic、Output、Counter V2，以及仅属于
+`rigol.dg4202-v2` 的受限 Sweep configure/manual-fire 范围。volatile ARB 和 Harmonic 活跃态
+仍没有 conformance 声明。
 
 ## 安全边界
 
@@ -63,14 +65,16 @@ enable/disable 不隐式配置或清统计，measure 只读取已启用 Counter 
 DG4000 没有独立的 Harmonic state-off 命令，因此 descriptor 不声明
 `source.harmonics_disable_v2`。输出 OFF、FIX 且 Basic readback 明确为 `HARM`／`HARMONIC` 时，
 `source.basic_configure_v2` 的 Sine request 可以退出该波形；这是 Basic waveform 切换，不是仅修改
-Harmonic 状态的别名，也不声称保留逐阶参数。Sweep configure/fire 与 volatile ARB adapter 已有离线候选，
-但它们会与 V1 Sweep／`arb-load` 复合合同重叠，当前 production descriptor 不声明这些 capability。
+Harmonic 状态的别名，也不声称保留逐阶参数。volatile ARB adapter 仍只保留离线候选；它与
+V1 `arb-load` 复合合同重叠，当前不声明为 V2 capability。
 
-`rigol.dg4202-v2` 是独立的 opt-in entry point，仅公开 `source.sweep_configure_v2` 和
-`source.sweep_fire_v2`。`TRACe:DATA:DAC VOLATILE` 没有已验证的通道 selector，故该 entry point 的
+`rigol.dg4202-v2` 是独立的 opt-in entry point，保留旧 driver 的基础 V2 surface，并仅额外公开
+`source.sweep_configure_v2` 和 `source.sweep_fire_v2`。`TRACe:DATA:DAC VOLATILE` 没有已验证的通道 selector，故该 entry point 的
 ARB 仍为只读，`source.arbitrary_volatile_replace_v2` 不公开。该 entry point 的 OFF／FIX `USER` 状态仅可
 通过显式 Basic V2 Sine request 退出；该操作不会读取或恢复 volatile USER 内容。`rigol.dg4202` 的 legacy
-V1 表面保持不变。
+V1 表面保持不变。Sweep 的实机证据仅覆盖输出 OFF 配置线性 1–2 kHz、101 点、12 s、manual trigger，随后在同一
+会话显式 fire、每路三次 RTM 高阻采集和输出 OFF；它不外推任意 Sweep 参数，也不改变 legacy V1 Sweep 路由。V2
+操作结束时会保持 Sweep ON，验收使用独立 legacy 事务恢复 FIX/OFF。
 
 为保持 legacy 合同，DG descriptor 明确设置 `v1_route_migration_enabled=false`。既有 V1
 `source.set-*`、`source.output`、离散频响、`arb-load` 和 basic restore 继续调用 V1 路由；
@@ -185,6 +189,13 @@ RTM 捕获与 FFT 为 1000 Hz、1.0 Vpp。随后输出关闭、Counter 关闭、
 CH1 OFF、5 Vpp 配置与 Counter OFF。输出始终 OFF 的 Counter 启用→关闭也通过，验证暂不可用测量
 不会阻断安全关闭。timeout、二义写与 recovery-failure 仍无实机故障注入结论。
 
+同日，`rigol.dg4202-v2` 完成受控 Sweep 实机验收。CH1 和 CH2 分别在输出 OFF 时配置为
+线性 1–2 kHz、101 点、12 s、manual trigger、marker OFF；随后仅开启当前通道，在同一会话中
+fire 并完成三次 RTM 高阻采集。CH1 的三段频率估计为约 1202/1546/1872 Hz，CH2 为约
+1265/1628/1982 Hz，最大采集 Vpp 为 1.016。每个 run 均在两路 output OFF 后结束；V2 不恢复
+Sweep 状态，因此再用独立 legacy 事务复原两路 FIX/OFF，并由新会话确认。已关闭的 marker 保留
+陈旧频率属于只读设备状态，不会再被误判为配置不一致；启用 marker 时仍要求其位于 Sweep 窗口内。
+
 ## 开发验证
 
 ```bash
@@ -211,7 +222,8 @@ python -m wavebench plugin install packages/wavebench-rigol-dg4000 --dry-run
   `00.01.14` 在 counter OFF 下完成三轮严格零写 M6 实机门，不自动启用 counter，
   不发送 `AUTO`/statistics clear，也不把离线验证的 counter-ON 测量解析写成实机结论。
 - `0.7.0` 开发分支：要求 WaveBench `>=0.8.25`，保留只读 `source.snapshot_v2`，并开放
-  Basic／Live Basic／Output P1 与 Counter V2 capability。Source V2 正常路径已在 DG4202 `00.01.14`
-  的 CH1/CH2 高阻采集及 Counter→RTM CH1 三通测量中验证；V1 路由保持不迁移。volatile ARB、
-  Sweep、Burst、Coupling、Noise Overlay 和 Sync 写 capability 仍未公开，故障 recovery
-  尚无实机 fault-injection 结论。
+  Basic／Live Basic／Output P1 与 Counter V2 capability。`rigol.dg4202-v2` 另以独立 opt-in
+  entry point 开放受限的 Sweep configure/manual-fire；它不迁移 V1 路由，也不开放 volatile ARB。
+  Source V2 正常路径已在 DG4202 `00.01.14` 的 CH1/CH2 高阻采集及 Counter→RTM CH1 三通测量中
+  验证；Sweep 则在两路独立的低压高阻回路通过。Burst、Coupling、Noise Overlay 和 Sync 写 capability
+  仍未公开，故障 recovery 尚无实机 fault-injection 结论。

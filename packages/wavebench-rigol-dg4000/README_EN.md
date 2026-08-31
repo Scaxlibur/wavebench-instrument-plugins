@@ -8,6 +8,7 @@ An executable WaveBench instrument plugin for the dual-channel RIGOL DG4202 and 
 
 - Distribution: `wavebench-rigol-dg4000`
 - Canonical driver ID: `rigol.dg4202`
+- Opt-in advanced driver ID: `rigol.dg4202-v2`
 - WaveBench: `>=0.8.25,<0.9`
 - Python: `>=3.11`
 - Transport backend: `pyvisa`
@@ -58,16 +59,21 @@ DG4000 has no independent Harmonic state-off command, so the descriptor does not
 `source.harmonics_disable_v2`. When output is OFF, frequency mode is FIX, and Basic readback is
 explicitly `HARM`/`HARMONIC`, a Sine `source.basic_configure_v2` request may leave that waveform.
 This is a Basic waveform change, not an alias for a state-only Harmonic disable, and it makes no
-claim about preserving per-order parameters. Sweep configure/fire and volatile ARB adapters have
-offline candidates, but their overlap with the V1 Sweep and `arb-load` composite contracts keeps
-those capabilities out of the production descriptor.
+claim about preserving per-order parameters. The volatile ARB adapter remains an offline candidate;
+its overlap with the V1 `arb-load` composite contract keeps it out of the V2 capability surface.
 
-`rigol.dg4202-v2` is a separate opt-in entry point that exposes only
-`source.sweep_configure_v2` and `source.sweep_fire_v2`. `TRACe:DATA:DAC VOLATILE` has no verified
+`rigol.dg4202-v2` is a separate opt-in entry point that retains the legacy driver's basic V2
+surface and adds only `source.sweep_configure_v2` and `source.sweep_fire_v2`. `TRACe:DATA:DAC VOLATILE` has no verified
 channel selector, so ARB remains read-only on that entry point and
 `source.arbitrary_volatile_replace_v2` is not declared. An OFF/FIX `USER` state on that entry point
 may leave through an explicit Basic V2 Sine request; that operation neither reads nor restores volatile
 USER content. The `rigol.dg4202` legacy V1 surface is unchanged.
+
+The opt-in Sweep evidence is deliberately narrow: output-OFF configuration of a linear 1–2 kHz,
+101-point, 12-second, manual-trigger Sweep, then same-session fire, three high-impedance RTM
+captures per channel, and output OFF. It does not generalize to arbitrary Sweep parameters and does
+not replace the legacy V1 Sweep route. The V2 operation leaves Sweep enabled; acceptance used a
+separate legacy transaction to return both channels to FIX/OFF.
 
 The DG descriptor explicitly sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
 `source.output`, discrete frequency-response, `arb-load`, and basic restore paths therefore remain
@@ -96,10 +102,10 @@ current public APIs, offline/hardware evidence, and high-risk commands denied by
 hardware-acceptance boundaries. The local vendor manual remains under ignored `doc/vendor-local/`
 and is excluded from releases.
 
-The current wheel carries eight Source conformance manifests bound to its non-manifest contents.
-They record only the accepted Basic, Output, and Counter V2 scope for DG4202 firmware `00.01.14`.
-Sweep, volatile ARB, and active Harmonic candidates are not production capabilities or conformance
-claims.
+The current wheel carries ten Source conformance manifests bound to its non-manifest contents. They
+record the accepted Basic, Output, and Counter V2 scope for DG4202 firmware `00.01.14`, plus the
+restricted opt-in Sweep configure/manual-fire scope of `rigol.dg4202-v2`. Volatile ARB and active
+Harmonic candidates remain outside conformance claims.
 
 The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs.
 
@@ -200,6 +206,16 @@ readback confirmed CH1 OFF with its 5 Vpp configuration and Counter OFF/AC. A Co
 run with output held OFF also passed, proving an unavailable measurement cannot block safe disable.
 No timeout, ambiguous-write, or recovery-failure fault was injected into hardware.
 
+On the same date, `rigol.dg4202-v2` completed controlled Sweep acceptance. CH1 and CH2 were each
+configured while output was OFF for a linear 1–2 kHz, 101-point, 12-second manual-trigger Sweep
+with marker OFF. The selected channel was then enabled, fired in the same session, and captured
+three times through the high-impedance RTM input. CH1 frequency estimates were approximately
+1202/1546/1872 Hz and CH2 estimates approximately 1265/1628/1982 Hz; maximum captured Vpp was
+1.016. Each run ended with both outputs OFF. Since V2 does not restore Sweep state, a separate
+legacy transaction returned both channels to FIX/OFF and a fresh session verified the result. A
+disabled marker may retain a stale frequency as read-only device state; enabled markers remain
+range-checked against the Sweep window.
+
 ## Development checks
 
 Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an
@@ -224,8 +240,9 @@ Use the repository-level [editable development environment](../../doc/DEVELOPMEN
   hardware result.
 - The `0.7.0` development branch requires WaveBench `>=0.8.25`, retains pure-query
   `source.snapshot_v2`, and declares Basic/Live Basic/Output P1 plus Counter V2 capabilities.
-  DG4202 `00.01.14` normal paths were accepted on CH1 and CH2 through high-impedance RTM2032
-  captures and on Counter through the CH1 T connection, while V1 routes remain unmigrated. Volatile
-  ARB, Sweep, Burst, Coupling, Noise Overlay,
-  and Sync write capabilities remain undeclared, and no hardware fault-injection conclusion exists
-  for recovery.
+  `rigol.dg4202-v2` separately declares restricted Sweep configure/manual-fire as an opt-in driver;
+  it does not migrate V1 routes or expose volatile ARB. DG4202 `00.01.14` normal paths were accepted
+  on CH1 and CH2 through high-impedance RTM2032 captures and on Counter through the CH1 T connection;
+  the restricted Sweep path passed independent low-voltage high-impedance loops on both channels.
+  Burst, Coupling, Noise Overlay, and Sync write capabilities remain undeclared, and no hardware
+  fault-injection conclusion exists for recovery.

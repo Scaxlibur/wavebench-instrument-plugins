@@ -497,7 +497,25 @@ def test_opt_in_source_v2_descriptor_keeps_unroutable_volatile_arb_read_only() -
         feature.directions == (SourceFeatureDirection.READ,)
         for feature in arbitrary_features
     )
-    assert all(not feature.evidence_refs for feature in candidate.source_extensions.features)
+    sweep_features = tuple(
+        feature
+        for feature in candidate.source_extensions.features
+        if feature.feature is SourceFeature.SWEEP
+    )
+    assert sweep_features
+    assert all(
+        feature.evidence_refs
+        == (
+            "dist-info:wavebench-source-conformance/dg4202-v2-sweep-configure-a4.json",
+            "dist-info:wavebench-source-conformance/dg4202-v2-sweep-fire-a4.json",
+        )
+        for feature in sweep_features
+    )
+    assert all(
+        not feature.evidence_refs
+        for feature in candidate.source_extensions.features
+        if feature.feature is not SourceFeature.SWEEP
+    )
 
 
 @pytest.mark.parametrize("feature", (SourceFeature.BURST, SourceFeature.MODULATION))

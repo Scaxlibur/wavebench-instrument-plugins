@@ -17,12 +17,12 @@ Current version: `wavebench-rigol-dg4000 0.7.0`.
 | M4 | **Complete** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
 | M5 | **Complete** | Query-only sweep profile |
 | M6 | **Complete** | Non-destructive counter profile |
-| M7 | **Candidate complete** | Source V2 Sweep configure/manual-fire adapter implemented offline; no production capability |
+| M7 | **Complete (restricted opt-in)** | `rigol.dg4202-v2` Source V2 Sweep configure/manual-fire passed the DG4202 dual-channel A4 hardware gate |
 | M8 | **Partial** | Source V2 Pulse/Burst read facets implemented; Marker and controlled writes pending |
 | M9 | **Partial** | Coupling read facet and candidate write transaction designed; production writes pending |
 | M10 | Not started | Basic AM/FM/PM/PWM modulation |
 | M11 | **Partial** | Partial Harmonic read facet implemented; components, advanced modulation, and formats pending |
-| M12 | **Partial** | Basic/Output/Counter wheel-bound conformance complete; advanced capabilities remain unaccepted |
+| M12 | **Partial** | Basic/Output/Counter and restricted opt-in Sweep wheel-bound conformance complete; remaining advanced capabilities are unaccepted |
 
 M0 completion adds no instrument function. Version `0.7.0` preserves the M1-M5 DG4202 CH1/CH2
 hardware gates and global counter-OFF M6 gate while adding a pure-query Source V2 adapter. Only
@@ -75,7 +75,7 @@ Delivered scope:
 Exit evidence:
 
 - package tests, Ruff, and `wavebench plugin package check` pass;
-- the real wheel has one `wavebench.instruments` entry point and contains the MIT LICENSE;
+- the real wheel has exactly the expected `rigol.dg4202` and `rigol.dg4202-v2` `wavebench.instruments` entry points and contains the MIT LICENSE;
 - the real sdist contains no local vendor material.
 
 ## 5. M1 — Strict closure of current APIs
@@ -294,7 +294,8 @@ write for this snapshot.
 The DG descriptor sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
 `source.output`, discrete frequency-response, `arb-load`, and basic restore paths retain their V1
 contracts; only explicit V2 CLI, run-step, or Service operations call the P1/Counter V2 adapter.
-Volatile ARB, Sweep, Burst, Coupling, Noise Overlay, and Sync remain undeclared production writes.
+The separate `rigol.dg4202-v2` entry point additionally declares restricted Sweep configure/fire;
+volatile ARB, Burst, Coupling, Noise Overlay, and Sync remain undeclared production writes.
 
 2026-08-30 evidence: DG4202 `00.01.14` reported CH1/CH2 OFF, SIN, 1 kHz, 5 Vpp, 0 V offset,
 FIX, and sweep OFF. The public CLI completed a 40-query Source V2 snapshot with matching anchors
@@ -382,8 +383,8 @@ CH2-to-CH2 main-output wiring is not Sync-port evidence.
 
 ## 11. M7 — Controlled sweep transaction
 
-**Status: OFF-only configure and manual-fire offline candidates are complete; no production
-capability is declared.** Independent hardware acceptance must follow M2, M3, and M5.
+**Status: complete, but only as a restricted capability of the separate `rigol.dg4202-v2` opt-in
+driver.** `rigol.dg4202` retains its existing V1 Sweep route; this is not a full V1 API migration.
 
 The transaction covers start/stop or center/span, spacing/steps/time, marker, trigger source/slope/trigger-out, and sweep state. A manual immediate trigger or `*TRG` exists only as one explicit action inside an established, readback-confirmed sweep session.
 
@@ -393,7 +394,19 @@ Because the manual says enabling Sweep disables Burst and Modulation, Core requi
 readable and OFF before and after this driver's declared dynamic closure. It never automatically
 disables, restores, or re-enables either state.
 
-Exit gate: complete snapshot→write→readback→external measurement→OFF→restore. Any failure leaves output OFF. Accept CH1/CH2 separately; never expose a generic sweep without load and frequency constraints. The candidate cannot promote the production descriptor or replace the V1 Sweep route.
+2026-08-31 evidence: CH1 and CH2 each configured an output-OFF linear 1–2 kHz, 101-point,
+12-second, manual-trigger Sweep with marker OFF; the selected channel was then enabled, fired in
+the same session, and captured three times through the high-impedance RTM. CH1 frequency estimates
+were approximately 1202/1546/1872 Hz and CH2 approximately 1265/1628/1982 Hz; the maximum capture
+was 1.016 Vpp. Each run ended with both outputs OFF. A disabled marker's retained 550 Hz value is
+not an enabled-configuration error; enabled markers remain window-checked.
+
+Exit gate: complete snapshot→write→readback→external measurement→OFF→separate recovery. Any
+failure leaves output OFF; CH1/CH2 are accepted separately. The conformance for
+`source.sweep_configure_v2` / `source.sweep_fire_v2` is bound only to this fixture and parameter
+set; it does not generalize frequency, amplitude, or timing. V2 does not restore Sweep state, so
+acceptance used a separate legacy transaction and fresh session to return both channels to FIX/OFF.
+It adds no raw `*TRG` and does not replace the V1 Sweep route.
 
 ## 12. M8 — Pulse, burst, and marker
 
@@ -457,9 +470,10 @@ M12 adds no raw SCPI or high-side-effect maintenance command. It converges:
 - slow transport, query/write timeout, partial binary failure, concurrency, latched behavior, and artifact redaction;
 - compatibility range and changelog language that never turns “identifiable model” into “accepted model.”
 
-The current `0.7.0` wheel places eight Basic, Output, and Counter conformance manifests in its own
-dist-info and binds them to the descriptor and wheel non-manifest members. That mechanism does not
-promote the evidence level for Sweep, volatile ARB, or active Harmonic candidates.
+The current `0.7.0` wheel places ten Basic, Output, Counter, and restricted opt-in Sweep conformance
+manifests in its own dist-info and binds them to their descriptors and wheel non-manifest members.
+That mechanism does not promote volatile ARB, Burst, Coupling, Noise Overlay, Sync, or active
+Harmonic candidates.
 
 Final exit requires every public write capability to have normal-path, failure-matrix, recovery/latch evidence and hardware acceptance on an explicitly named model/channel. Everything else remains uncovered or denied by default.
 
@@ -472,11 +486,14 @@ Final exit requires every public write capability to have normal-path, failure-m
   the CH1/CH2 high-impedance RTM loops; after restoration, both channels read
   OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty. The final read-only harness issued 112 queries and zero
   text/binary writes.
+- Restricted opt-in Sweep hardware accepted: `rigol.dg4202-v2` completed output-OFF configuration,
+  same-session manual fire, three high-impedance RTM captures, dual-output OFF, and separate legacy
+  recovery plus fresh-session FIX/OFF verification on CH1 and CH2. The conclusion is limited to a
+  1–2 kHz linear, 101-point, 12-second, 1 Vpp, marker-OFF fixture.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: M7 production promotion and its A4 fire exit gate, plus the remaining M8-M12
-  controlled-write exit gates. Coupling, Noise Overlay, and Sync have
-  candidate write designs only and declare no production capability. Active Sweep, Burst ON, and
-  Harmonic V2 facets still lack fresh hardware evidence. P1/Counter timeout, ambiguous-write, and
+- Not passed: the remaining M8-M12 controlled-write exit gates. Coupling, Noise Overlay, and Sync
+  have candidate write designs only and declare no production capability. Burst ON and Harmonic V2
+  facets still lack fresh hardware evidence. P1/Counter timeout, ambiguous-write, and
   recovery-failure still lack a hardware fault-injection conclusion.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

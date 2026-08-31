@@ -14,12 +14,13 @@ from wavebench.instruments.source_extensions import source_v2_digest
 from wavebench.plugins.lifecycle import PluginLifecycle
 from wavebench.plugins.package_inspect import inspect_plugin_wheel
 
-from wavebench_rigol_dg4000 import descriptor
+from wavebench_rigol_dg4000 import descriptor, descriptor_v2
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_VERSION = "0.7.0"
 _SOURCE_DESCRIPTOR_DIGEST = "sha256:2956d875216721d37a0a9ff12ecf79a4d6b6bb1669bbd7fa3c504f56999e35ae"
+_SOURCE_V2_DESCRIPTOR_DIGEST = "sha256:a0d0f347a9eea02d00ed0b6cc99884dd1fb3d5bdfb88c334683a009441c246a8"
 
 
 def test_wheel_contains_license_and_expected_entry_points(tmp_path: Path) -> None:
@@ -91,7 +92,7 @@ def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) ->
     package = inspect_plugin_wheel(wheel)
 
     assert package.source_conformance_wheel_sha256 == (
-        "sha256:8b7855e1e7bd1ae175b8aeb7c4c7714bbfac916668455e70a8b30d96544f6dd8"
+        "sha256:e5ef80f60223b3c5fdeeeef3840c9d073f16e9cf43982d9bf838107dc1a6be44"
     )
     assert {
         (item.manifest_id, item.claimed_level.value, item.channels)
@@ -105,11 +106,14 @@ def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) ->
         ("dg4202-output-disable-a2", "A2", (1, 2)),
         ("dg4202-output-enable-a2", "A2", (1, 2)),
         ("dg4202-output-read-a1", "A1", (1, 2)),
+        ("dg4202-v2-sweep-configure-a4", "A4", (1, 2)),
+        ("dg4202-v2-sweep-fire-a4", "A4", (1, 2)),
     }
 
 
 def test_source_v2_descriptor_digest_remains_bound_to_release_evidence() -> None:
     assert source_v2_digest(descriptor().source_extensions) == _SOURCE_DESCRIPTOR_DIGEST
+    assert source_v2_digest(descriptor_v2().source_extensions) == _SOURCE_V2_DESCRIPTOR_DIGEST
 
 
 def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) -> None:

@@ -6,8 +6,9 @@ See the [DG4000 coverage milestones](DG4000_COVERAGE_MILESTONES_EN.md) for imple
 transaction rules, and hardware exit gates. The `0.7.0` development branch preserves M0-M6 and the
 pure-query `source.snapshot_v2` adapter, and declares Basic/Live Basic/Output Source V2 P1. The
 M4/M5 CH1/CH2 gates, global counter-OFF M6 gate, Source V2 read-only gate, and P1 normal-path gate
-have passed. Controlled writes in M7-M12 remain pending. Listing a command in this matrix does not
-make it implemented.
+have passed. The restricted opt-in M7 Sweep configure/manual-fire gate has passed; the remaining
+controlled writes in M8-M12 remain pending. Listing a command in this matrix does not make it
+implemented.
 
 ## Purpose, scope, and counting method
 
@@ -32,10 +33,11 @@ optional keywords, short forms, and transcription defects such as missing bracke
 headings make a percentage misleading. The matrix therefore reports auditable functional domains
 and public-capability evidence rather than a falsely precise percentage.
 
-The external plugin declares seventeen WaveBench capabilities. It is a controlled implementation
-for basic DG4202 dual-channel output, read-only channel/sweep context, global counter context, and a
-narrow arbitrary-wave upload path, not a general DG4000 SCPI shell and not a claim to every DG4000
-model, firmware, or accessory feature.
+`rigol.dg4202` retains its existing WaveBench capability set; the separate `rigol.dg4202-v2`
+descriptor adds only two restricted Sweep capabilities. The distribution remains a controlled
+implementation for basic DG4202 dual-channel output, read-only channel/sweep context, global counter
+context, and a narrow arbitrary-wave upload path, not a general DG4000 SCPI shell and not a claim to
+every DG4000 model, firmware, or accessory feature.
 
 Coverage labels:
 
@@ -48,21 +50,24 @@ Coverage labels:
 
 ## Coverage matrix
 
-### Source V2 P1
+### Source V2 public write surface
 
-This table describes only the explicit V2 write surface of the current development branch. The DG
-descriptor sets `v1_route_migration_enabled=false`, so these capabilities do not take over a legacy
-V1 route.
+This table describes the explicit V2 write surface of the current development branch. The DG
+descriptor sets `v1_route_migration_enabled=false`, so P1/Counter capabilities do not take over a
+legacy V1 route; Sweep is public only through the separate opt-in driver.
 
 | Capability | Public entry and strict boundary | DG4202 `00.01.14` normal-path evidence |
 |---|---|---|
 | `source.basic_configure_v2` | CLI `source basic-configure-v2`; run `source.basic_configure_v2`. Target output must be OFF, mode must be FIX, and a fresh V2 snapshot is required. The DG adapter accepts exactly one Basic field: SIN/SQU/RAMP/PULS/NOIS/DC, frequency, Vpp, offset, or square duty. | CH1 wrote/read back RAMP/PULSE/NOISE/DC/SIN while OFF; CH2 wrote/read back SQUARE/25% duty, frequency, and Vpp. External high-impedance capture covers CH1 sine and CH2 square only. |
 | `source.basic_live_configure_v2` | CLI `source basic-live-configure-v2`; run `source.basic_live_configure_v2`. Output must be ON, mode must be FIX, and exactly one frequency or Vpp field is accepted; output cycling is forbidden. | CH1 and CH2 each completed independent 1 kHz→2 kHz and 1 Vpp→2 Vpp live writes followed by high-impedance capture. |
 | `source.output_v2` | CLI `source output-v2`; run `source.output_enable_v2` / `source.output_disable_v2`. The Core performs V2 preflight and final-state readback independently for ON and OFF. | Both channels separately emitted at low voltage, captured, and reached V2 OFF; a separate restoration run confirmed both channels OFF again. |
+| `source.sweep_configure_v2` | `rigol.dg4202-v2` only; run `source.sweep_configure_v2`. Output must be OFF, the V2 snapshot fresh, and Burst/Modulation OFF; configuration has independent readback. | CH1/CH2 each configured and read back a linear 1–2 kHz, 101-point, 12-second, manual-trigger Sweep with marker OFF. |
+| `source.sweep_fire_v2` | `rigol.dg4202-v2` only; run `source.sweep_fire_v2`. It reuses a same-session configured Sweep, requires selected-channel output ON and manual trigger, and is never blindly retried. | CH1/CH2 each completed same-session fire and three high-impedance RTM captures; each run ended dual-output OFF, then a legacy transaction returned FIX/OFF. |
 | Legacy V1 routes | `source.set-*`, `source.output`, discrete frequency response, `arb-load`, basic restore, and their existing artifacts retain V1 contracts. | Core route tests and the DG P1 plan confirm that only explicit V2 entry points call the P1 adapter. |
 
-P1 does not declare volatile ARB, Counter, Sweep, Burst, Coupling, Noise Overlay, or Sync write
-capabilities. It also has no hardware fault injection for timeout, ambiguous-write, or
+Apart from the restricted opt-in Sweep capability, the V2 surface does not declare volatile ARB,
+Burst, Coupling, Noise Overlay, or Sync writes. Sweep evidence does not generalize frequency,
+amplitude, or timing. There is no hardware fault injection for timeout, ambiguous-write, or
 recovery-failure; those behaviors retain offline fault-matrix evidence only.
 
 | Domain | Manual command surface | Current public coverage | Evidence | Main gap and safety boundary | Recommendation |
@@ -76,7 +81,7 @@ recovery-failure; those behaviors retain offline fault-matrix evidence only.
 | Output enable | `OUTPut[<n>][:STATe] ON|OFF` | `source.output`; arbitrary upload does not enable output unless explicitly requested | **External hardware accepted** for explicit M2 ON-to-OFF and restore on CH1/CH2; M4 adds triangle loops on both channels | It directly affects the DUT; no implicit enable or retry | Keep it separate and require higher-level workflows to record the requested output state |
 | Output load, polarity, noise, sync | `OUTPut:IMPedance/LOAD`, `POLarity`, `NOISe:*`, `SYNC:*` | `source.channel_profile` returns load/polarity/noise/sync read-only; `source.snapshot_v2` adds typed Noise Overlay and Sync facets with enabled, scale, and polarity | **External hardware accepted**: M3 completed 45 queries and zero text/binary writes; the final 67-query V2 snapshot returned Noise Overlay OFF/10% and Sync ON/POSITIVE on both channels | Basic restore still excludes these fields; no setters are public; enabled Noise Overlay lacks a deterministic hard-peak bound, and Sync enable lacks a physical-port model and A5 wiring evidence | Candidate writes are split into Noise OFF-only configuration, Sync configuration, and separate physical-port enable/disable; production remains READ only |
 | Dual-channel coupling | `COUPling:AMPL/FREQuency/PHASe`, base channel, state | `source.snapshot_v2` returns one `CHANNEL_SET` with global state, reference channel, and enabled + typed deviation for amplitude/frequency/phase | **External hardware accepted (read-only)**: the final 67-query snapshot returned all dimensions OFF with CH1 as reference; FakeTransport covers mixed dimensions, strict ranges, and zero writes | The relation graph is not readable, the descriptor declares no CONFIGURE direction, and complete-target restore/write fault injection is absent | Core's pre-stable candidate replaces the unreleased boolean Coupling request; DG writes still require dual-channel OFF, full restoration, and A4/A5 evidence |
-| Sweep and manual/external trigger | `SWEep:*`, frequency start/stop/center/span, `*TRG` | `source.sweep_profile` retains complete V1 readback; `source.snapshot_v2` reuses that strict profile as a typed Sweep facet when frequency mode is Sweep; no setter/trigger | **M5 external hardware accepted** for sweep-OFF/ON staging; the V2 active branch has exact offline tests, while the current FIX hardware snapshot correctly returns `inactive_by_anchor` | Restore still excludes complete Sweep, the V2 active branch lacks fresh hardware evidence, and `*TRG`/immediate trigger remain denied | Controlled writes still require a complete snapshot, per-field readback, external measurement, off-first restoration, and non-retryable trigger semantics |
+| Sweep and manual/external trigger | `SWEep:*`, frequency start/stop/center/span, `*TRG` | `source.sweep_profile` retains complete V1 readback; `source.snapshot_v2` reuses that strict profile as a typed Sweep facet when frequency mode is Sweep; only `rigol.dg4202-v2` exposes configure/manual-fire | **M5 external hardware accepted** for sweep-OFF/ON staging; **restricted opt-in M7 accepted** for CH1/CH2 1–2 kHz, 101-point, 12-second manual-trigger configure/fire plus three external captures | V2 does not restore complete Sweep and acceptance needs separate legacy recovery; no parameter generalization; `*TRG` and raw immediate trigger remain denied | Keep complete snapshots, per-field readback, external measurement, output OFF, and non-retryable trigger semantics; do not migrate opt-in behavior onto V1 routes |
 | Burst, pulse, marker, harmonic | `BURSt:*`, `PULSe:*`, `MARKer:*`, `HARMonic:*` | `source.snapshot_v2` can return a complete Pulse facet, Burst OFF or a complete enabled facet, and a `PARTIAL` Harmonic facet with enabled/configured order/maximum order/preset; per-order amplitude/phase, Marker writes, and all configuration APIs remain private | **Pulse externally accepted; remaining active branches offline-tested**: CH1/CH2 completed a 52-query V2 snapshot and complete Pulse facets at output OFF, PULSE, and 1 Vpp; Burst OFF returned on hardware, while Burst ON/Harmonic active branches retain exact FakeTransport tests only | Harmonic does not claim components; Burst ON/Harmonic active states lack external V2 evidence; configuration and trigger paths lack complete restoration | Keep read-only; stage active hardware states through a separate controlled transaction, never a raw-SCPI bypass |
 | Modulation | `MOD:AM/FM/PM/ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK/PWM:*` | `source.channel_profile` and `source.snapshot_v2` both return modulation state/type read-only; no mode-specific parameters or setters | **Partial read-only context hardware accepted**: the final V2 snapshot returned OFF/AM on CH1/CH2; parameter and write surfaces remain uncovered | State/type queries are not modulation capability; external sources, rates, polarity, and phase interact | **P3:** split capabilities by mode and do not bypass restoration with raw SCPI |
 | Arbitrary upload: DAC14 | `TRACe:DATA:DAC VOLATILE,<binary-block>` or decimal DAC values | `source.arbitrary_upload` accepts only structurally and sample-validated little-endian `DG4000DacBlock`; the target must already be OFF, FIX, and sweep OFF; post-binary fields are read back, and failure latches while reporting volatile USER data as irreversible | **M4 external hardware accepted**: CH1/CH2 both completed output-off upload, readback, error-queue, analog frequency/Vpp/shape loop, and restoration | No public decimal/float upload, DAC16, or arbitrary editing/readback; upload overwrites volatile waveform memory and selects USER | Keep the current narrow protocol; establish lifecycle, readback, and restoration evidence separately before adding formats |
@@ -166,10 +171,10 @@ Two deliberate exceptions need separate treatment:
 
 ## Recommended roadmap
 
-1. **P2/P3: M7-M10 controlled write transactions.** Completed Sweep/Pulse/Burst/Coupling/
-   Noise Overlay/Sync read facets are not configuration capability. Coupling, Noise Overlay, and
-   Sync now have candidate contracts and restore order, but no write capability is registered or
-   implemented.
+1. **P2/P3: M8-M10 controlled write transactions.** M7 is complete only as restricted opt-in
+   Sweep; Pulse/Burst/Coupling/Noise Overlay/Sync read facets are not configuration capability.
+   Coupling, Noise Overlay, and Sync now have candidate contracts and restore order, but no write
+   capability is registered or implemented.
 2. **P3: M11 advanced features.** Harmonic is currently a `PARTIAL` read facet; keep per-order
    components, advanced modulation, and DAC16 as separate models.
 3. **Out of default scope: filesystem, network, internal state slots, PA, restart/shutdown.** They
@@ -200,9 +205,12 @@ Two deliberate exceptions need separate treatment:
   paths with every capture quality/expectation gate passing; a separate restoration run read both
   channels OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty. Counter V2 additionally completed configuration,
   enable/disable, five-field measurement, and RTM/FFT cross-check at 1 kHz/1 Vpp through the CH1 T
-  connection, ending with CH1 OFF/5 Vpp configuration and Counter OFF/AC. Active Sweep, Burst ON,
-  and Harmonic still lack fresh hardware evidence; timeout, ambiguous-write, and recovery-failure
-  hardware fault-injection conclusions also remain absent.
+  connection, ending with CH1 OFF/5 Vpp configuration and Counter OFF/AC. `rigol.dg4202-v2` completed
+  restricted Sweep output-OFF configuration, same-session fire, three high-impedance RTM captures,
+  dual-output OFF, and separate legacy FIX/OFF recovery on CH1/CH2; this covers only a linear
+  1–2 kHz, 101-point, 12-second, 1 Vpp, marker-OFF fixture. Burst ON and active Harmonic still lack
+  fresh hardware evidence; timeout, ambiguous-write, and recovery-failure hardware fault-injection
+  conclusions also remain absent.
 - **Historical arbitrary evidence**: prior bundled-driver evidence remains provenance only. The
   current external plugin now has independent CH1/CH2 protocol evidence and does not substitute
   historical results for acceptance.

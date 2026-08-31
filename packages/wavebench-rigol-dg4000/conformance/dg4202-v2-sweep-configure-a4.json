@@ -1,0 +1,62 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "dg4202-v2-sweep-configure-a4",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A4",
+  "capability": "source.sweep_configure_v2",
+  "feature": "sweep",
+  "direction": "configure",
+  "model": "DG4202",
+  "firmware_id": "00.01.14",
+  "option_ids": [],
+  "channels": [1, 2],
+  "core_version": "0.8.25",
+  "plugin_version": "0.7.0",
+  "wheel_sha256": "sha256:e5ef80f60223b3c5fdeeeef3840c9d073f16e9cf43982d9bf838107dc1a6be44",
+  "descriptor_digest": "sha256:a0d0f347a9eea02d00ed0b6cc99884dd1fb3d5bdfb88c334683a009441c246a8",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "resource": "redacted",
+    "scope_model": "RTM2032",
+    "source_driver": "rigol.dg4202-v2",
+    "wiring": "source_ch1_to_scope_ch1_source_ch2_to_scope_ch2"
+  },
+  "safety_limits": {
+    "maximum_test_vpp": 1.0,
+    "offset_v": 0.0,
+    "source_limit_vpp": 1.0
+  },
+  "budget": {
+    "admitted": true,
+    "output_state_before_write": "off",
+    "sweep_start_hz": 1000.0,
+    "sweep_stop_hz": 2000.0,
+    "sweep_time_s": 12.0
+  },
+  "results": {
+    "channels_configured": [1, 2],
+    "marker_enabled": false,
+    "postcondition_readback": true,
+    "steps": 101,
+    "trigger_source": "manual"
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "output_state": "off",
+    "post_run_legacy_recovery": "fixed_off_verified",
+    "sweep_state": "on"
+  },
+  "coverage": [
+    "Both channels: output-OFF linear 1–2 kHz Sweep configuration with 101 points, 12 seconds, and manual trigger"
+  ],
+  "limitations": [
+    "no hardware fault-injection evidence",
+    "no general frequency, amplitude, timing, or model claim",
+    "V2 leaves Sweep enabled; a separate legacy transaction recovered FIX/OFF",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:51331afd8790e18326280992a4c923573371c55221a84bc9d24a7ba3fa04f39f"
+}

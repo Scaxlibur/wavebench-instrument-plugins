@@ -12,7 +12,7 @@
   "channels": [1, 2],
   "core_version": "0.8.25",
   "plugin_version": "0.7.0",
-  "wheel_sha256": "sha256:8b7855e1e7bd1ae175b8aeb7c4c7714bbfac916668455e70a8b30d96544f6dd8",
+  "wheel_sha256": "sha256:e5ef80f60223b3c5fdeeeef3840c9d073f16e9cf43982d9bf838107dc1a6be44",
   "descriptor_digest": "sha256:2956d875216721d37a0a9ff12ecf79a4d6b6bb1669bbd7fa3c504f56999e35ae",
   "source_contract_version": "wavebench.source.v2",
   "fixture": {
@@ -47,5 +47,5 @@
     "no simultaneous-output claim",
     "no other firmware or model"
   ],
-  "evidence_digest": "sha256:be7ef36da636a546817c73620966ea84ae84a59754a1a83ac47b37ed8c5981f5"
+  "evidence_digest": "sha256:dac0128dae7b5e6ea2171ea58f498e131e47890545874680c269e4280ee2930b"
 }

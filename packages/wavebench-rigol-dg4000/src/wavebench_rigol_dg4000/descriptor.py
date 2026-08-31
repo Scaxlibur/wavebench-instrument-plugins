@@ -71,6 +71,10 @@ _COUNTER_EVIDENCE_REFS = (
     _CONFORMANCE_PREFIX + "dg4202-counter-enable-a2.json",
     _CONFORMANCE_PREFIX + "dg4202-counter-measure-a3.json",
 )
+_SWEEP_EVIDENCE_REFS = (
+    _CONFORMANCE_PREFIX + "dg4202-v2-sweep-configure-a4.json",
+    _CONFORMANCE_PREFIX + "dg4202-v2-sweep-fire-a4.json",
+)
 
 
 def _source_extensions() -> SourceDescriptorExtensions:
@@ -519,7 +523,7 @@ def _source_extensions_v2() -> SourceDescriptorExtensions:
                         SourceFeatureDirection.READ,
                     ),
                     profile=replace(feature.profile, configuration_readable=True),
-                    evidence_refs=(),
+                    evidence_refs=_SWEEP_EVIDENCE_REFS,
                 )
             )
         else:
