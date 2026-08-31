@@ -595,7 +595,7 @@ def descriptor_v2() -> InstrumentDescriptor:
         display_name="RIGOL DG4000 Source V2 Advanced (opt-in)",
         aliases=(),
         capabilities=(
-            *legacy.capabilities,
+            *(capability for capability in legacy.capabilities if capability != "source.arbitrary_upload"),
             "source.sweep_configure_v2",
             "source.sweep_fire_v2",
         ),

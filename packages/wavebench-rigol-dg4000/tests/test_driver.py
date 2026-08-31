@@ -477,6 +477,7 @@ def test_opt_in_source_v2_descriptor_keeps_unroutable_volatile_arb_read_only() -
 
     assert candidate.driver_id == "rigol.dg4202-v2"
     assert candidate.aliases == ()
+    assert "source.arbitrary_upload" not in candidate.capabilities
     assert "source.arbitrary_volatile_replace_v2" not in candidate.capabilities
     assert "source.counter_configure_v2" in candidate.capabilities
     assert "source.counter_enable_v2" in candidate.capabilities
