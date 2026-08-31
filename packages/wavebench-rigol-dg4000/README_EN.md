@@ -63,6 +63,11 @@ This is a Basic waveform change, not an alias for a state-only Harmonic disable,
 claim about preserving per-order parameters. The volatile ARB adapter remains an offline candidate;
 its overlap with the V1 `arb-load` composite contract keeps it out of the V2 capability surface.
 
+A controlled DG4202 `00.01.14` observation confirmed one CH1, output-OFF, FIX `HARM`/`HARMONIC` to
+Sine Basic V2 transition with final readback. It had no oscilloscope loopback or external measurement,
+covers only CH1 and this firmware, makes no per-order-parameter preservation claim, and does not
+raise any conformance-manifest evidence level.
+
 `rigol.dg4202-v2` is a separate opt-in entry point that retains the legacy driver's basic V2
 surface and adds only `source.sweep_configure_v2` and `source.sweep_fire_v2`. `TRACe:DATA:DAC VOLATILE` has no verified
 channel selector, so ARB remains read-only on that entry point and

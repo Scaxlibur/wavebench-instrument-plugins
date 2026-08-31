@@ -561,6 +561,12 @@ def test_opt_in_workspace_descriptor_is_separate_from_sweep_evidence() -> None:
         for feature in candidate.source_extensions.features
         if feature.feature in {SourceFeature.BASIC, SourceFeature.COUNTER}
     )
+    assert all(
+        feature.directions
+        == (SourceFeatureDirection.DISABLE, SourceFeatureDirection.READ)
+        for feature in candidate.source_extensions.features
+        if feature.feature is SourceFeature.OUTPUT
+    )
     assert all(not feature.evidence_refs for feature in candidate.source_extensions.features)
 
 

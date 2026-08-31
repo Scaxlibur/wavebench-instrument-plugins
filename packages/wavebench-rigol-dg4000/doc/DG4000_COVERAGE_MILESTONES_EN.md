@@ -452,9 +452,12 @@ The current Harmonic read result is explicitly `PARTIAL` and excludes USER mask 
 amplitude/phase. DG4000 has no independent Harmonic state-off command. When output is OFF, frequency
 mode is FIX, and Basic readback is explicitly `HARM`/`HARMONIC`, the existing Basic V2 Sine write may
 leave the Harmonic waveform. It does not declare `source.harmonics_disable_v2` or disguise a Basic
-waveform change as a state-only Harmonic change. The candidate has offline regression only and still
-lacks active-Harmonic hardware state and parameter-preservation evidence. Every remaining candidate first needs a manual/firmware probe, independent data
-contract, and resource-limit audit. DAC16 cannot reuse `DG4000DacBlock` while pretending to be
+waveform change as a state-only Harmonic change. A controlled DG4202 `00.01.14` CH1 output-OFF/FIX
+observation completed one active-Harmonic to Sine write with final readback. It had no oscilloscope
+loopback or external measurement, covers neither CH2 nor other firmware, and does not establish
+per-order parameter preservation; it is therefore not A3/A4 conformance and does not change the
+existing Basic-manifest limitation. Every remaining candidate first needs a manual/firmware probe,
+independent data contract, and resource-limit audit. DAC16 cannot reuse `DG4000DacBlock` while pretending to be
 DAC14. Freeze chunking, byte order, maximum points, RAM/DDR lifetime, and readback semantics first.
 These may remain in backlog permanently without a concrete experiment need.
 
@@ -501,10 +504,14 @@ Final exit requires every public write capability to have normal-path, failure-m
   same-session manual fire, three high-impedance RTM captures, dual-output OFF, and separate legacy
   recovery plus fresh-session FIX/OFF verification on CH1 and CH2. The conclusion is limited to a
   1–2 kHz linear, 101-point, 12-second, 1 Vpp, marker-OFF fixture.
+- Active-Harmonic controlled state-transition observation: DG4202 `00.01.14` CH1 changed from
+  `HARM`/`HARMONIC` to Sine while output was OFF and frequency mode was FIX, with final Basic/Output
+  readback. It has no oscilloscope loopback or external measurement, does not establish parameter
+  preservation, and covers neither CH2 nor other firmware; it does not raise Source conformance.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
 - Not passed: the remaining M8-M12 controlled-write exit gates. Coupling, Noise Overlay, and Sync
   have candidate write designs only and declare no production capability. Burst ON and Harmonic V2
-  facets still lack fresh hardware evidence. P1/Counter timeout, ambiguous-write, and
+  facets still lack complete external hardware evidence. P1/Counter timeout, ambiguous-write, and
   recovery-failure still lack a hardware fault-injection conclusion.
 
 Any status upgrade must update both matrices, both milestone documents, both READMEs, tests, and real build-artifact checks together.

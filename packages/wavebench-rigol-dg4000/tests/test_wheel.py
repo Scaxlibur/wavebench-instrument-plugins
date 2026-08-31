@@ -96,7 +96,7 @@ def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) ->
     package = inspect_plugin_wheel(wheel)
 
     assert package.source_conformance_wheel_sha256 == (
-        "sha256:ec422181d128fd9207a59596ef02c3428fc152bb5b774cd4678a52fb57e6bb95"
+        "sha256:5eb021402156069ff367b4e1f8ea34dae963fcd9844bb1fa1ba6120ce872fe10"
     )
     assert {
         (item.manifest_id, item.claimed_level.value, item.channels)
@@ -177,7 +177,7 @@ def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
     )
 
 
-def test_wheel_install_migration_routing_and_uninstall_fallback(tmp_path: Path) -> None:
+def test_wheel_install_migration_doctor_routing_and_uninstall_fallback(tmp_path: Path) -> None:
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir()
     _run(
@@ -250,6 +250,10 @@ assert workspace.distribution == "wavebench-rigol-dg4000"
 assert alias.origin == "builtin"
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)
+    _run(
+        [str(python), "-I", "-m", "wavebench", "plugin", "doctor", "--load"],
+        cwd=tmp_path,
+    )
     assert lifecycle.remove("rigol.dg4202-v2").status == "removed"
     assert lifecycle.installed() == ()
     uninstall_script = """

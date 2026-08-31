@@ -541,6 +541,8 @@ def _source_extensions_v2_workspace() -> SourceDescriptorExtensions:
             feature,
             directions=(SourceFeatureDirection.READ,)
             if feature.feature in {SourceFeature.BASIC, SourceFeature.COUNTER}
+            else (SourceFeatureDirection.DISABLE, SourceFeatureDirection.READ)
+            if feature.feature is SourceFeature.OUTPUT
             else feature.directions,
             evidence_refs=(),
         )

@@ -69,6 +69,10 @@ DG4000 没有独立的 Harmonic state-off 命令，因此 descriptor 不声明
 Harmonic 状态的别名，也不声称保留逐阶参数。volatile ARB adapter 仍只保留离线候选；它与
 V1 `arb-load` 复合合同重叠，当前不声明为 V2 capability。
 
+DG4202 `00.01.14` 已在 CH1、output OFF、FIX 条件下完成一次受控的 `HARM`／`HARMONIC` → Sine
+Basic V2 状态迁移与最终 readback。该观察未经过示波器环回或外部测量，只覆盖 CH1 与该固件，
+不说明逐阶 Harmonic 参数是否保留，也不提升 conformance manifest 的证据等级。
+
 `rigol.dg4202-v2` 是独立的 opt-in entry point，保留旧 driver 的基础 V2 surface，并仅额外公开
 `source.sweep_configure_v2` 和 `source.sweep_fire_v2`。`TRACe:DATA:DAC VOLATILE` 没有已验证的通道 selector，故该 entry point 的
 ARB 仍为只读，`source.arbitrary_volatile_replace_v2` 不公开。该 entry point 的 OFF／FIX `USER` 状态仅可

@@ -412,8 +412,9 @@ dimension 或 graph 状态不可读则零写入。
 当前 Harmonic 只读结果明确为 `PARTIAL`，不包含 USER mask 或逐阶 amplitude/phase。
 DG4000 没有独立 Harmonic state-off 命令。输出 OFF、FIX 且 Basic readback 明确为 `HARM`／`HARMONIC` 时，
 现有 Basic V2 Sine 写可作为明确的离开 Harmonic waveform 操作；它不声明 `source.harmonics_disable_v2`，也不把
-Basic waveform 变化伪装成只改 Harmonic state。该候选已有离线回归，仍缺活跃 Harmonic 的实机状态与参数保持证据。
-其余候选仍需先经过手册/固件探针、独立数据契约和资源上限审计。DAC16 不能复用
+Basic waveform 变化伪装成只改 Harmonic state。DG4202 `00.01.14` 已在 CH1、output OFF、FIX 条件下完成一次
+受控的 active-Harmonic → Sine 写入与最终 readback。该结果没有示波器环回或外部测量，不覆盖 CH2、其它固件或
+逐阶参数保持，因此不是 A3/A4 conformance，也不改变现有 Basic manifest 的限制。其余候选仍需先经过手册/固件探针、独立数据契约和资源上限审计。DAC16 不能复用
 `DG4000DacBlock` 冒充 DAC14；分包、字节序、最大点数、RAM/DDR 生命周期与回读语义
 必须先冻结。没有具体实验需求时可永久留在 backlog。
 
@@ -452,9 +453,12 @@ Coupling、Noise Overlay、Sync 或 Harmonic 活跃态的证据等级。
 - 受限 opt-in Sweep 实机通过：`rigol.dg4202-v2` 在 CH1 与 CH2 分别完成 output-OFF 配置、同会话 manual fire、
   三段 RTM 高阻采集、两路 output OFF，并通过独立 legacy 事务和新会话恢复 FIX/OFF；该结论仅覆盖线性
   1–2 kHz、101 点、12 s、1 Vpp、marker OFF 的夹具。
+- active Harmonic 的受控状态迁移观察：DG4202 `00.01.14` 的 CH1 在 output OFF、FIX 下由
+  `HARM`／`HARMONIC` 切换到 Sine，并完成最终 Basic／Output readback。未进行示波器环回或外部测量，未验证
+  参数保持，不覆盖 CH2 或其它固件，因此不提升 Source conformance 等级。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
 - 尚未通过：M8–M12 的其余受控写退出门；Coupling、Noise Overlay 与 Sync 只有写候选设计，
-  未声明生产 capability。Burst ON 与 Harmonic 活跃 V2 facet 仍没有新鲜实机证据。P1/Counter
+  未声明生产 capability。Burst ON 与 Harmonic 活跃 V2 facet 仍没有完整的外置实机证据。P1/Counter
   timeout、二义写和 recovery-failure 仍无上机 fault-injection 结论。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

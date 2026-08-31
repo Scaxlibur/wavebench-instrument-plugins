@@ -12,7 +12,7 @@
   "channels": [1, 2],
   "core_version": "0.8.25",
   "plugin_version": "0.7.0",
-  "wheel_sha256": "sha256:ec422181d128fd9207a59596ef02c3428fc152bb5b774cd4678a52fb57e6bb95",
+  "wheel_sha256": "sha256:5eb021402156069ff367b4e1f8ea34dae963fcd9844bb1fa1ba6120ce872fe10",
   "descriptor_digest": "sha256:a0d0f347a9eea02d00ed0b6cc99884dd1fb3d5bdfb88c334683a009441c246a8",
   "source_contract_version": "wavebench.source.v2",
   "fixture": {
@@ -58,5 +58,5 @@
     "V2 leaves Sweep enabled; a separate legacy transaction recovered FIX/OFF",
     "no other firmware or model"
   ],
-  "evidence_digest": "sha256:fc0bed044f919e32ffce79dad68658e5299d4d311499c6cfe241aeb1c0a794de"
+  "evidence_digest": "sha256:9dad5e326c2831d1cf204e14fc456ae8bf4d9204383cb4700549f7ff7f58c856"
 }
