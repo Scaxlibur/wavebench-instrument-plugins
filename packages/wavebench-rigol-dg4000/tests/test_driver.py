@@ -66,7 +66,7 @@ from wavebench.services.source_snapshot_v2 import (
 from wavebench.transport.guarded import GuardedAuditedTransport
 from wavebench.transport.session import InstrumentSessionState
 
-from wavebench_rigol_dg4000 import descriptor
+from wavebench_rigol_dg4000 import descriptor, descriptor_v2
 from wavebench_rigol_dg4000.driver import DG4202Source
 
 
@@ -425,70 +425,8 @@ def _counter_v2_request(**values: object) -> SourceCounterConfigureRequest:
     )
 
 
-def _arbitrary_volatile_write_candidate_descriptor():
-    item = descriptor()
-    assert item.source_extensions is not None
-    extensions = replace(
-        item.source_extensions,
-        features=tuple(
-            replace(
-                feature,
-                directions=(SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ),
-                profile=replace(
-                    feature.profile,
-                    volatile_replace_min_points=2,
-                    volatile_replace_max_points=16_384,
-                    volatile_replace_max_payload_bytes=32_768,
-                ),
-            )
-            if feature.feature is SourceFeature.ARBITRARY
-            else feature
-            for feature in item.source_extensions.features
-        ),
-    )
-    return replace(
-        item,
-        capabilities=(
-            *item.capabilities,
-            "source.arbitrary_volatile_replace_v2",
-        ),
-        source_extensions=extensions,
-    )
-
-
-def _sweep_write_candidate_descriptor():
-    item = descriptor()
-    assert item.source_extensions is not None
-    extensions = replace(
-        item.source_extensions,
-        features=tuple(
-            replace(
-                feature,
-                directions=(
-                    SourceFeatureDirection.CONFIGURE,
-                    SourceFeatureDirection.FIRE,
-                    SourceFeatureDirection.READ,
-                ),
-                profile=replace(feature.profile, configuration_readable=True),
-            )
-            if feature.feature is SourceFeature.SWEEP
-            else feature
-            for feature in item.source_extensions.features
-        ),
-    )
-    return replace(
-        item,
-        capabilities=(
-            *item.capabilities,
-            "source.sweep_configure_v2",
-            "source.sweep_fire_v2",
-        ),
-        source_extensions=extensions,
-    )
-
-
 def _sweep_write_candidate_without_interlock_readback(feature: SourceFeature):
-    item = _sweep_write_candidate_descriptor()
+    item = descriptor_v2()
     assert item.source_extensions is not None
     features = tuple(
         replace(feature_capability, profile=replace(feature_capability.profile, inactive_readable=False))
@@ -530,30 +468,25 @@ def test_production_source_v2_basic_output_counter_satisfies_core_descriptor_gat
     assert "source.arbitrary_volatile_replace_v2" not in item.capabilities
 
 
-def test_arbitrary_volatile_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
-    candidate = _arbitrary_volatile_write_candidate_descriptor()
+def test_opt_in_source_v2_descriptor_satisfies_advanced_core_descriptor_gates() -> None:
+    candidate = descriptor_v2()
     driver = DG4202Source(DualChannelFakeTransport())
 
     validate_source_descriptor(candidate, driver)
     validate_declared_capabilities(candidate, driver)
 
+    assert candidate.driver_id == "rigol.dg4202-v2"
+    assert candidate.aliases == ()
     assert "source.arbitrary_volatile_replace_v2" in candidate.capabilities
     assert "source.counter_configure_v2" in candidate.capabilities
     assert "source.counter_enable_v2" in candidate.capabilities
     assert "source.counter_measure_v2" in candidate.capabilities
-
-
-def test_sweep_source_v2_write_candidate_satisfies_core_descriptor_gate() -> None:
-    candidate = _sweep_write_candidate_descriptor()
-    driver = DG4202Source(DualChannelFakeTransport())
-
-    validate_source_descriptor(candidate, driver)
-    validate_declared_capabilities(candidate, driver)
-
     assert "source.sweep_configure_v2" in candidate.capabilities
     assert "source.sweep_fire_v2" in candidate.capabilities
     assert "source.sweep_configure_v2" not in descriptor().capabilities
     assert "source.sweep_fire_v2" not in descriptor().capabilities
+    assert candidate.source_extensions is not None
+    assert all(not feature.evidence_refs for feature in candidate.source_extensions.features)
 
 
 @pytest.mark.parametrize("feature", (SourceFeature.BURST, SourceFeature.MODULATION))
@@ -614,7 +547,7 @@ def _sweep_core_service(
         output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
         source_path=Path("wavebench.toml"),
         source=SourceConfig(
-            "rigol.dg4202",
+            "rigol.dg4202-v2",
             "TCPIP::source::INSTR",
             1,
             False,
@@ -628,7 +561,7 @@ def _sweep_core_service(
             config=config,
             logger=CommandLogger(),
             session=driver,
-            descriptor=_sweep_write_candidate_descriptor(),
+            descriptor=descriptor_v2(),
             transport=guarded,
             session_state=session_state,
         ),

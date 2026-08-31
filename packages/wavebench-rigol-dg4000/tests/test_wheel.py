@@ -21,7 +21,7 @@ PACKAGE_VERSION = "0.7.0"
 _SOURCE_DESCRIPTOR_DIGEST = "sha256:2956d875216721d37a0a9ff12ecf79a4d6b6bb1669bbd7fa3c504f56999e35ae"
 
 
-def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
+def test_wheel_contains_license_and_expected_entry_points(tmp_path: Path) -> None:
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir()
     _run(
@@ -61,7 +61,8 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
         for requirement in requires_dist
     )
     assert [(item.name, item.value) for item in entry_points] == [
-        ("rigol.dg4202", "wavebench_rigol_dg4000:descriptor")
+        ("rigol.dg4202", "wavebench_rigol_dg4000:descriptor"),
+        ("rigol.dg4202-v2", "wavebench_rigol_dg4000:descriptor_v2"),
     ]
 
 
@@ -89,7 +90,7 @@ def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) ->
     package = inspect_plugin_wheel(wheel)
 
     assert package.source_conformance_wheel_sha256 == (
-        "sha256:b03d395871a8d4fc7726ffb4acd541cf643ff4dd32bcbbb2558e486e50c10eaa"
+        "sha256:a437e6444e8efa51979fc459fbae98090b633aff506bf8de545515bc886a27e3"
     )
     assert {
         (item.manifest_id, item.claimed_level.value, item.channels)
@@ -221,14 +222,18 @@ def forbidden(*args, **kwargs):
 
 PyVisaTransport.open = forbidden
 points = list(entry_points().select(group="wavebench.instruments"))
-assert [point.name for point in points] == ["rigol.dg4202"]
-descriptor = points[0].load()()
-assert descriptor.distribution == "wavebench-rigol-dg4000"
+assert [point.name for point in points] == ["rigol.dg4202", "rigol.dg4202-v2"]
+descriptors = {point.name: point.load()() for point in points}
+assert descriptors["rigol.dg4202"].distribution == "wavebench-rigol-dg4000"
+assert descriptors["rigol.dg4202-v2"].distribution == "wavebench-rigol-dg4000"
 registry = build_instrument_registry()
 canonical = registry.resolve("rigol.dg4202", expected_kind="source")
+advanced = registry.resolve("rigol.dg4202-v2", expected_kind="source")
 alias = registry.resolve("dg4202", expected_kind="source")
 assert canonical.origin == "entry_point"
 assert canonical.distribution == "wavebench-rigol-dg4000"
+assert advanced.origin == "entry_point"
+assert advanced.distribution == "wavebench-rigol-dg4000"
 assert alias.origin == "builtin"
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)

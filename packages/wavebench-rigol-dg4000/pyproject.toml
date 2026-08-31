@@ -17,6 +17,7 @@ dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
 
 [project.entry-points."wavebench.instruments"]
 "rigol.dg4202" = "wavebench_rigol_dg4000:descriptor"
+"rigol.dg4202-v2" = "wavebench_rigol_dg4000:descriptor_v2"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wavebench_rigol_dg4000"]

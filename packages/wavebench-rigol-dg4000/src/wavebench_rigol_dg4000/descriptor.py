@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from wavebench.instruments import (
     SOURCE_CONTRACT_VERSION,
     ComponentAmplitudeKind,
@@ -491,6 +493,47 @@ def _open_driver(context):
     )
 
 
+def _source_extensions_v2() -> SourceDescriptorExtensions:
+    """Expose the advanced V2 surface without reusing legacy evidence bindings."""
+
+    extensions = _source_extensions()
+    features = []
+    for feature in extensions.features:
+        if feature.feature is SourceFeature.ARBITRARY:
+            features.append(
+                replace(
+                    feature,
+                    directions=(
+                        SourceFeatureDirection.CONFIGURE,
+                        SourceFeatureDirection.READ,
+                    ),
+                    profile=replace(
+                        feature.profile,
+                        volatile_replace_min_points=2,
+                        volatile_replace_max_points=16_384,
+                        volatile_replace_max_payload_bytes=32_768,
+                    ),
+                    evidence_refs=(),
+                )
+            )
+        elif feature.feature is SourceFeature.SWEEP:
+            features.append(
+                replace(
+                    feature,
+                    directions=(
+                        SourceFeatureDirection.CONFIGURE,
+                        SourceFeatureDirection.FIRE,
+                        SourceFeatureDirection.READ,
+                    ),
+                    profile=replace(feature.profile, configuration_readable=True),
+                    evidence_refs=(),
+                )
+            )
+        else:
+            features.append(replace(feature, evidence_refs=()))
+    return replace(extensions, features=tuple(features))
+
+
 def descriptor() -> InstrumentDescriptor:
     return InstrumentDescriptor(
         driver_id="rigol.dg4202",
@@ -542,4 +585,32 @@ def descriptor() -> InstrumentDescriptor:
             "safety_limits.max_source_vpp",
         ),
         source_extensions=_source_extensions(),
+    )
+
+
+def descriptor_v2() -> InstrumentDescriptor:
+    """Explicit opt-in for DG4202's narrow advanced Source V2 operations.
+
+    The legacy entry point intentionally remains untouched: its composite V1
+    Sweep and ARB transactions are not equivalent to these narrow V2 calls.
+    """
+
+    legacy = descriptor()
+    return replace(
+        legacy,
+        driver_id="rigol.dg4202-v2",
+        display_name="RIGOL DG4000 Source V2 Advanced (opt-in)",
+        aliases=(),
+        capabilities=(
+            *legacy.capabilities,
+            "source.arbitrary_volatile_replace_v2",
+            "source.sweep_configure_v2",
+            "source.sweep_fire_v2",
+        ),
+        summary=(
+            "Explicit opt-in RIGOL DG4202 Source V2 driver for audited volatile USER "
+            "replacement and configure-then-manual-fire Sweep operations."
+        ),
+        source="entry_point:rigol.dg4202-v2",
+        source_extensions=_source_extensions_v2(),
     )
