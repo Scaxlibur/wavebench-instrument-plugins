@@ -895,6 +895,31 @@ def test_source_v2_sweep_configure_uses_one_compound_write_and_cached_readback(
     assert result.sweep.trigger.value.source.value is trigger_source
 
 
+def test_source_v2_sweep_configure_accepts_disabled_stale_marker_frequency() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["marker_frequency"] = 550.0
+    service, driver = _sweep_core_service(transport)
+
+    result, _ = service.configure_sweep_v2(
+        SourceSweepConfigureRequest(
+            channel=1,
+            start_hz=1_000.0,
+            stop_hz=2_000.0,
+            spacing=SourceSweepSpacing.LINEAR,
+            steps=101,
+            sweep_time_s=12.0,
+            trigger_source=SourceTriggerSource.MANUAL,
+        )
+    )
+
+    profile = driver.get_sweep_profile(1)
+    assert result.sweep.enabled.value is True
+    assert result.sweep.marker.value.enabled.value is False
+    assert profile.marker_enabled is False
+    assert profile.marker_frequency_hz == 550.0
+    assert driver._configuration_writes_blocked is False
+
+
 def test_source_v2_sweep_configure_requires_output_off_and_inactive_side_effects() -> None:
     transport = DualChannelFakeTransport()
     driver = DG4202Source(transport)
@@ -2098,7 +2123,6 @@ def test_sweep_profile_rejects_untrusted_responses_without_writes(
         (":SOUR1:SWE:STEP?", "1", "steps"),
         (":SOUR1:SWE:TIME?", "0", "sweep time"),
         (":SOUR1:SWE:HTIM:STAR?", "301", "start hold"),
-        (":SOUR1:MARK:FREQ?", "1001", "marker frequency"),
     ],
 )
 def test_sweep_profile_rejects_inconsistent_field_relationships(
@@ -2110,6 +2134,18 @@ def test_sweep_profile_rejects_inconsistent_field_relationships(
     transport.query_overrides[command] = response
 
     with pytest.raises(DataError, match=message):
+        DG4202Source(transport).get_sweep_profile(1)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_sweep_profile_rejects_enabled_marker_outside_sweep_window() -> None:
+    transport = FakeTransport()
+    transport.state["marker"] = "ON"
+    transport.query_overrides[":SOUR1:MARK:FREQ?"] = "1001"
+
+    with pytest.raises(DataError, match="marker frequency"):
         DG4202Source(transport).get_sweep_profile(1)
 
     assert transport.writes == []
