@@ -12,12 +12,14 @@ from zipfile import ZipFile
 
 import wavebench
 from wavebench.plugins.package_inspect import inspect_plugin_wheel
+from wavebench.instruments.source_extensions import source_v2_digest
 
 from wavebench_siglent_sdg2000x import descriptor
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_VERSION = "0.8.2"
+_SOURCE_DESCRIPTOR_DIGEST = "sha256:3ce159e9fecab956062cc776ced3ed4f13be08b6e2ab6b489ae29035488cf4ca"
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -135,6 +137,10 @@ def test_source_v2_release_version_is_consistent_in_metadata_descriptor_and_docs
         assert f"`{PACKAGE_VERSION}`" in Path(PACKAGE_ROOT, relative_path).read_text(
             encoding="utf-8"
         )
+
+
+def test_source_v2_descriptor_digest_remains_bound_to_release_evidence() -> None:
+    assert source_v2_digest(descriptor().source_extensions) == _SOURCE_DESCRIPTOR_DIGEST
 
 
 def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) -> None:
