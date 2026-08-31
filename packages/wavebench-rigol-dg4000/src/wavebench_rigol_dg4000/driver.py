@@ -382,6 +382,7 @@ class _AmbiguousWriteError(InstrumentError):
 class DG4202Source:
     transport: InstrumentTransport
     check_errors_after_ops: bool = True
+    allow_arbitrary_sine_exit: bool = False
     _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _identity: tuple[str, str, str, str] | None = field(default=None, init=False, repr=False)
     _configuration_writes_blocked: bool = field(default=False, init=False, repr=False)
@@ -711,6 +712,7 @@ class DG4202Source:
         *,
         output_enabled: bool,
         allow_harmonic_sine_exit: bool = False,
+        allow_arbitrary_sine_exit: bool = False,
     ) -> None:
         if (
             output.enabled.availability is not Availability.VALUE
@@ -746,7 +748,12 @@ class DG4202Source:
             and basic.waveform_id.availability is Availability.VALUE
             and basic.waveform_id.value in {"harm", "harmonic"}
         )
-        if not fixed_basic_waveform and not harmonic_sine_exit:
+        arbitrary_sine_exit = (
+            allow_arbitrary_sine_exit
+            and basic.waveform_kind.availability is Availability.VALUE
+            and basic.waveform_kind.value is SourceWaveformKind.ARBITRARY
+        )
+        if not fixed_basic_waveform and not harmonic_sine_exit and not arbitrary_sine_exit:
             raise DataError(
                 "DG4000 Source V2 basic configuration requires a fixed basic waveform"
             )
@@ -873,13 +880,15 @@ class DG4202Source:
             basic, output = self._v2_preflight_snapshot(request.channel)
             self._ensure_v2_write_identity()
             self._ensure_configuration_write_allowed()
+            allow_sine_exit = (
+                field_name == "waveform_kind" and raw_value is SourceWaveformKind.SINE
+            )
             self._v2_validate_basic_preflight(
                 basic,
                 output,
                 output_enabled=output_enabled,
-                allow_harmonic_sine_exit=(
-                    field_name == "waveform_kind" and raw_value is SourceWaveformKind.SINE
-                ),
+                allow_harmonic_sine_exit=allow_sine_exit,
+                allow_arbitrary_sine_exit=(allow_sine_exit and self.allow_arbitrary_sine_exit),
             )
             command, updated = self._v2_basic_command(
                 request.channel,

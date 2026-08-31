@@ -493,6 +493,16 @@ def _open_driver(context):
     )
 
 
+def _open_driver_v2(context):
+    from .driver import DG4202Source
+
+    return DG4202Source(
+        transport=context.open_transport(),
+        check_errors_after_ops=bool(context.settings["check_errors"]),
+        allow_arbitrary_sine_exit=True,
+    )
+
+
 def _source_extensions_v2() -> SourceDescriptorExtensions:
     """Expose the advanced V2 surface without reusing legacy evidence bindings."""
 
@@ -594,5 +604,6 @@ def descriptor_v2() -> InstrumentDescriptor:
             "Sweep operations."
         ),
         source="entry_point:rigol.dg4202-v2",
+        factory=_open_driver_v2,
         source_extensions=_source_extensions_v2(),
     )

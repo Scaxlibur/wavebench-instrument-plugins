@@ -548,7 +548,7 @@ def _sweep_core_service(
 ) -> tuple[SourceService, DG4202Source]:
     session_state = InstrumentSessionState(epoch_id="dg4202-sweep-v2")
     guarded = GuardedAuditedTransport(transport, session_state=session_state)
-    driver = DG4202Source(guarded)
+    driver = DG4202Source(guarded, allow_arbitrary_sine_exit=True)
     config = WaveBenchConfig(
         connection=ConnectionConfig("lan", "TCPIP::scope::INSTR", 1_000, 1_000),
         scope=ScopeConfig("rtm2032", None, 1, False, True),
@@ -690,6 +690,45 @@ def test_source_v2_basic_sine_write_can_exit_verified_harmonic_waveform() -> Non
     assert result.basic.waveform_kind.value is SourceWaveformKind.SINE
     assert transport.writes == [":SOUR1:FUNC SIN"]
     assert transport.state["out"] == "OFF"
+
+
+def test_source_v2_basic_sine_write_can_exit_user_waveform_while_off() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "USER", "mode": "FIX", "swe": "OFF"})
+    service, _driver = _sweep_core_service(transport)
+
+    result, _ = service.configure_basic_v2(
+        _basic_v2_request(1, waveform_kind=SourceWaveformKind.SINE)
+    )
+
+    assert result.basic.waveform_kind.value is SourceWaveformKind.SINE
+    assert transport.writes == [":SOUR1:FUNC SIN"]
+    assert transport.state["out"] == "OFF"
+
+
+def test_source_v2_basic_user_waveform_rejects_non_exit_writes() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "USER", "mode": "FIX", "swe": "OFF"})
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+
+    with pytest.raises(DataError, match="requires a fixed basic waveform"):
+        driver.configure_source_basic_v2(_basic_v2_request(1, frequency_hz=1_000.0))
+
+    assert transport.writes == []
+
+
+def test_legacy_source_v2_basic_user_waveform_rejects_sine_exit() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "USER", "mode": "FIX", "swe": "OFF"})
+    service, _driver = _counter_core_service(transport)
+
+    with pytest.raises(DataError, match="requires a fixed basic waveform"):
+        service.configure_basic_v2(
+            _basic_v2_request(1, waveform_kind=SourceWaveformKind.SINE)
+        )
+
+    assert transport.writes == [":OUTP1 OFF"]
 
 
 def test_source_v2_live_frequency_is_one_write_and_never_cycles_output() -> None:
@@ -2277,8 +2316,15 @@ def test_counter_profile_measurement_query_failure_never_writes() -> None:
     assert transport.byte_writes == []
 
 
-def test_factory_opens_exactly_one_core_transport_and_satisfies_capabilities() -> None:
-    item = descriptor()
+@pytest.mark.parametrize(
+    ("descriptor_factory", "allow_arbitrary_sine_exit"),
+    ((descriptor, False), (descriptor_v2, True)),
+)
+def test_factory_opens_exactly_one_core_transport_and_satisfies_capabilities(
+    descriptor_factory,
+    allow_arbitrary_sine_exit: bool,
+) -> None:
+    item = descriptor_factory()
     transport = FakeTransport()
     opened = 0
 
@@ -2304,6 +2350,7 @@ def test_factory_opens_exactly_one_core_transport_and_satisfies_capabilities() -
 
     assert isinstance(driver, DG4202Source)
     assert driver.transport is transport
+    assert driver.allow_arbitrary_sine_exit is allow_arbitrary_sine_exit
     assert opened == 1
 
 

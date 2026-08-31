@@ -65,7 +65,9 @@ those capabilities out of the production descriptor.
 `rigol.dg4202-v2` is a separate opt-in entry point that exposes only
 `source.sweep_configure_v2` and `source.sweep_fire_v2`. `TRACe:DATA:DAC VOLATILE` has no verified
 channel selector, so ARB remains read-only on that entry point and
-`source.arbitrary_volatile_replace_v2` is not declared. The `rigol.dg4202` legacy surface is unchanged.
+`source.arbitrary_volatile_replace_v2` is not declared. An OFF/FIX `USER` state on that entry point
+may leave through an explicit Basic V2 Sine request; that operation neither reads nor restores volatile
+USER content. The `rigol.dg4202` legacy V1 surface is unchanged.
 
 The DG descriptor explicitly sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
 `source.output`, discrete frequency-response, `arb-load`, and basic restore paths therefore remain

@@ -68,7 +68,9 @@ Harmonic 状态的别名，也不声称保留逐阶参数。Sweep configure/fire
 
 `rigol.dg4202-v2` 是独立的 opt-in entry point，仅公开 `source.sweep_configure_v2` 和
 `source.sweep_fire_v2`。`TRACe:DATA:DAC VOLATILE` 没有已验证的通道 selector，故该 entry point 的
-ARB 仍为只读，`source.arbitrary_volatile_replace_v2` 不公开；`rigol.dg4202` 的 legacy 表面保持不变。
+ARB 仍为只读，`source.arbitrary_volatile_replace_v2` 不公开。该 entry point 的 OFF／FIX `USER` 状态仅可
+通过显式 Basic V2 Sine request 退出；该操作不会读取或恢复 volatile USER 内容。`rigol.dg4202` 的 legacy
+V1 表面保持不变。
 
 为保持 legacy 合同，DG descriptor 明确设置 `v1_route_migration_enabled=false`。既有 V1
 `source.set-*`、`source.output`、离散频响、`arb-load` 和 basic restore 继续调用 V1 路由；
