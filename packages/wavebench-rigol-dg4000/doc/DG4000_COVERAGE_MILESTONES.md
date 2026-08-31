@@ -17,12 +17,12 @@
 | M4 | **完成** | DAC14 任意波事务与外置插件实机复验 |
 | M5 | **完成** | Sweep 只读 profile |
 | M6 | **完成** | Counter 非破坏性只读 profile |
-| M7 | **部分完成** | Sweep Source V2 只读 facet 已实现；受控事务与触发未开始 |
+| M7 | **候选完成** | Sweep Source V2 configure/manual fire 离线 adapter 已实现；未声明生产 capability |
 | M8 | **部分完成** | Pulse/Burst Source V2 只读 facet 已实现；Marker 与受控写未开始 |
 | M9 | **部分完成** | Coupling 只读 facet 与写事务候选设计完成；生产写入未开始 |
 | M10 | 未开始 | 基础调制 AM/FM/PM/PWM |
 | M11 | **部分完成** | 部分 Harmonic 只读 facet 已实现；逐阶分量、高级调制和任意波格式未开始 |
-| M12 | 未开始 | 型号/通道验收矩阵与发布收口 |
+| M12 | **部分完成** | Basic／Output／Counter 的 wheel-bound conformance 已完成；高级能力仍待验收 |
 
 M0 完成不表示仪器功能增加。`0.7.0` 保留 M1–M5 的 DG4202 CH1/CH2 实机退出门和
 M6 的全局 counter-OFF 实机退出门，并增加 Source V2 纯查询适配。只有当前
@@ -350,11 +350,16 @@ sensitivity、statistics display 与 statistics clear 继续不属于 production
 
 ## 11. M7 — Sweep 受控事务
 
-**状态：只读 facet 已实现；受控写与触发未开始，P2。** 必须在 M2、M3、M5 后实施。
+**状态：OFF-only configure 与 manual fire 离线候选已完成；生产 capability 未声明。** 候选必须在 M2、M3、M5 后进行独立实机验收。
 
 事务覆盖 start/stop 或 center/span、spacing/steps/time、marker、trigger source/slope/trigger-out 和 sweep state。手动 immediate trigger 或 `*TRG` 只作为已建立且回读确认的 sweep session 内的一次显式动作。
 
-退出门：完整 snapshot→write→readback→external measurement→OFF→restore；任何失败保持 output OFF；CH1/CH2 分开验收，禁止在没有负载/频率约束时开放通用 sweep。
+DG 候选将 start/stop、spacing、steps、time、hold/return、trigger slope/output、marker 和 Sweep state
+写成一次 compound write；manual fire 只发送 channel-scoped immediate trigger。手册规定启用 Sweep 会关闭
+Burst 与 Modulation，因此 Core 在该 driver 声明的动态闭包中于写前和写后都要求两项可读且为 OFF，不会替用户
+自动关闭、恢复或重新启用它们。
+
+退出门：完整 snapshot→write→readback→external measurement→OFF→restore；任何失败保持 output OFF；CH1/CH2 分开验收，禁止在没有负载/频率约束时开放通用 sweep。当前候选不能提升 production descriptor，也不能替代 V1 Sweep 路由。
 
 ## 12. M8 — Pulse、Burst 与 Marker
 
@@ -395,13 +400,16 @@ dimension 或 graph 状态不可读则零写入。
 候选范围：ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK、harmonic order/type/user/amplitude/phase，以及与 DAC14 明确分离的 `TRACe:DATA:DAC16`、points/value/interpolate/load 查询。
 
 当前 Harmonic 只读结果明确为 `PARTIAL`，不包含 USER mask 或逐阶 amplitude/phase。
+DG4000 没有独立 Harmonic state-off 命令。输出 OFF、FIX 且 Basic readback 明确为 `HARM`／`HARMONIC` 时，
+现有 Basic V2 Sine 写可作为明确的离开 Harmonic waveform 操作；它不声明 `source.harmonics_disable_v2`，也不把
+Basic waveform 变化伪装成只改 Harmonic state。该候选已有离线回归，仍缺活跃 Harmonic 的实机状态与参数保持证据。
 其余候选仍需先经过手册/固件探针、独立数据契约和资源上限审计。DAC16 不能复用
 `DG4000DacBlock` 冒充 DAC14；分包、字节序、最大点数、RAM/DDR 生命周期与回读语义
 必须先冻结。没有具体实验需求时可永久留在 backlog。
 
 ## 16. M12 — 型号矩阵与发布收口
 
-**状态：未开始。**
+**状态：部分完成。**
 
 M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 
@@ -410,6 +418,9 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 - lifecycle、wheel/sdist、editable、升级/降级/卸载回退与公开安装文档；
 - 慢传输、query/write timeout、binary partial failure、并发、锁存后行为和 artifact 脱敏；
 - 版本兼容范围与变更日志，不把「某型号可识别」写成「该型号已验收」。
+
+当前 `0.7.0` wheel 已将 Basic、Output 和 Counter 的 8 份 conformance manifest 放入自身 dist-info，并
+绑定 descriptor 与 wheel 的非 manifest 成员。该机制不提升 Sweep、volatile ARB 或 Harmonic 活跃态的证据等级。
 
 最终退出门要求所有公开写 capability 都有正常路径、失败矩阵、恢复/锁存证据和至少一个明确型号/通道的实机验收；其余命令保持未覆盖或默认拒绝。
 
@@ -421,7 +432,7 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
   CH1/CH2 高阻 RTM 闭环通过，恢复后两路均为 OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty。
   最终只读 harness 为 112 queries、0 text/binary writes。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
-- 尚未通过：M7–M12 的全部受控写退出门；Coupling、Noise Overlay 与 Sync 只有写候选设计，
+- 尚未通过：M7 的 production promotion 与实机 A4 fire 退出门，以及 M8–M12 的其余受控写退出门；Coupling、Noise Overlay 与 Sync 只有写候选设计，
   未声明生产 capability。Sweep、Burst ON 与 Harmonic 活跃 V2 facet 仍没有新鲜实机证据。P1/Counter
   timeout、二义写和 recovery-failure 仍无上机 fault-injection 结论。
 

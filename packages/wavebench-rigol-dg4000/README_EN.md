@@ -54,6 +54,14 @@ measure accepts only an already-enabled valid five-field result. A settling or n
 measurement is unavailable in a V2 snapshot but does not block a safe disable; the legacy profile
 remains strict.
 
+DG4000 has no independent Harmonic state-off command, so the descriptor does not declare
+`source.harmonics_disable_v2`. When output is OFF, frequency mode is FIX, and Basic readback is
+explicitly `HARM`/`HARMONIC`, a Sine `source.basic_configure_v2` request may leave that waveform.
+This is a Basic waveform change, not an alias for a state-only Harmonic disable, and it makes no
+claim about preserving per-order parameters. Sweep configure/fire and volatile ARB adapters have
+offline candidates, but their overlap with the V1 Sweep and `arb-load` composite contracts keeps
+those capabilities out of the production descriptor.
+
 The DG descriptor explicitly sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
 `source.output`, discrete frequency-response, `arb-load`, and basic restore paths therefore remain
 V1. Only the explicit V2 CLI, run step, or Service operation uses the P1/Counter V2 adapter. This avoids
@@ -80,6 +88,11 @@ current public APIs, offline/hardware evidence, and high-risk commands denied by
 [DG4000 coverage milestones](doc/DG4000_COVERAGE_MILESTONES_EN.md) define staged exit gates and
 hardware-acceptance boundaries. The local vendor manual remains under ignored `doc/vendor-local/`
 and is excluded from releases.
+
+The current wheel carries eight Source conformance manifests bound to its non-manifest contents.
+They record only the accepted Basic, Output, and Counter V2 scope for DG4202 firmware `00.01.14`.
+Sweep, volatile ARB, and active Harmonic candidates are not production capabilities or conformance
+claims.
 
 The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs.
 

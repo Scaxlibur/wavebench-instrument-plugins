@@ -56,8 +56,9 @@ SCPI shell，也不承诺覆盖手册中所有 DG4000 型号、固件或外部�
 | `source.output_v2` | CLI `source output-v2`；run `source.output_enable_v2` / `source.output_disable_v2`。Core 对 ON/OFF 分别执行 V2 preflight 和最终状态回读。 | 两路各自低压输出、采集、V2 OFF；独立恢复 run 再次确认两路 OFF。 |
 | legacy V1 route | `source.set-*`、`source.output`、离散频响、`arb-load`、basic restore 与原有 artifact 保持 V1 合同。 | Core 路由测试与 DG P1 实机计划共同确认 V2 只由显式入口调用。 |
 
-P1 没有公开 volatile ARB、Counter、Sweep、Burst、Coupling、Noise Overlay 或 Sync 写 capability；
-也没有对 timeout、二义写或 recovery-failure 做上机故障注入。此类结果继续以离线故障矩阵为准。
+P1/Counter 之外没有公开 volatile ARB、Sweep、Burst、Coupling、Noise Overlay 或 Sync 写 capability。
+volatile ARB 与 Sweep 的离线 adapter 候选不改变该 production 边界；也没有对 timeout、二义写或 recovery-failure
+做上机故障注入。此类结果继续以离线故障矩阵为准。
 
 | 功能域 | 手册命令面 | 当前公开覆盖 | 证据状态 | 主要缺口与安全边界 | 建议 |
 |---|---|---|---|---|---|

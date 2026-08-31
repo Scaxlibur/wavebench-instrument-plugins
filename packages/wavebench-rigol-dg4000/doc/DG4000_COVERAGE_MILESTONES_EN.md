@@ -17,12 +17,12 @@ Current version: `wavebench-rigol-dg4000 0.7.0`.
 | M4 | **Complete** | DAC14 arbitrary-wave transaction and external-plugin hardware reacceptance |
 | M5 | **Complete** | Query-only sweep profile |
 | M6 | **Complete** | Non-destructive counter profile |
-| M7 | **Partial** | Source V2 Sweep read facet implemented; controlled transaction/trigger pending |
+| M7 | **Candidate complete** | Source V2 Sweep configure/manual-fire adapter implemented offline; no production capability |
 | M8 | **Partial** | Source V2 Pulse/Burst read facets implemented; Marker and controlled writes pending |
 | M9 | **Partial** | Coupling read facet and candidate write transaction designed; production writes pending |
 | M10 | Not started | Basic AM/FM/PM/PWM modulation |
 | M11 | **Partial** | Partial Harmonic read facet implemented; components, advanced modulation, and formats pending |
-| M12 | Not started | Model/channel acceptance matrix and release convergence |
+| M12 | **Partial** | Basic/Output/Counter wheel-bound conformance complete; advanced capabilities remain unaccepted |
 
 M0 completion adds no instrument function. Version `0.7.0` preserves the M1-M5 DG4202 CH1/CH2
 hardware gates and global counter-OFF M6 gate while adding a pure-query Source V2 adapter. Only
@@ -382,12 +382,18 @@ CH2-to-CH2 main-output wiring is not Sync-port evidence.
 
 ## 11. M7 — Controlled sweep transaction
 
-**Status: read facet implemented; controlled writes and trigger not started, P2.** Requires M2,
-M3, and M5.
+**Status: OFF-only configure and manual-fire offline candidates are complete; no production
+capability is declared.** Independent hardware acceptance must follow M2, M3, and M5.
 
 The transaction covers start/stop or center/span, spacing/steps/time, marker, trigger source/slope/trigger-out, and sweep state. A manual immediate trigger or `*TRG` exists only as one explicit action inside an established, readback-confirmed sweep session.
 
-Exit gate: complete snapshot→write→readback→external measurement→OFF→restore. Any failure leaves output OFF. Accept CH1/CH2 separately; never expose a generic sweep without load and frequency constraints.
+The DG candidate writes start/stop, spacing, steps, time, hold/return, trigger slope/output, marker,
+and Sweep state as one compound write; manual fire sends only a channel-scoped immediate trigger.
+Because the manual says enabling Sweep disables Burst and Modulation, Core requires both states to be
+readable and OFF before and after this driver's declared dynamic closure. It never automatically
+disables, restores, or re-enables either state.
+
+Exit gate: complete snapshot→write→readback→external measurement→OFF→restore. Any failure leaves output OFF. Accept CH1/CH2 separately; never expose a generic sweep without load and frequency constraints. The candidate cannot promote the production descriptor or replace the V1 Sweep route.
 
 ## 12. M8 — Pulse, burst, and marker
 
@@ -430,14 +436,18 @@ Exit gate: reuse M2/M3 transaction foundations; configure while modulation is OF
 Candidates include ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK, harmonic order/type/user/amplitude/phase, and `TRACe:DATA:DAC16`, points/value/interpolate/load queries under a contract distinct from DAC14.
 
 The current Harmonic read result is explicitly `PARTIAL` and excludes USER mask and per-order
-amplitude/phase. Every remaining candidate first needs a manual/firmware probe, independent data
+amplitude/phase. DG4000 has no independent Harmonic state-off command. When output is OFF, frequency
+mode is FIX, and Basic readback is explicitly `HARM`/`HARMONIC`, the existing Basic V2 Sine write may
+leave the Harmonic waveform. It does not declare `source.harmonics_disable_v2` or disguise a Basic
+waveform change as a state-only Harmonic change. The candidate has offline regression only and still
+lacks active-Harmonic hardware state and parameter-preservation evidence. Every remaining candidate first needs a manual/firmware probe, independent data
 contract, and resource-limit audit. DAC16 cannot reuse `DG4000DacBlock` while pretending to be
 DAC14. Freeze chunking, byte order, maximum points, RAM/DDR lifetime, and readback semantics first.
 These may remain in backlog permanently without a concrete experiment need.
 
 ## 16. M12 — Model matrix and release convergence
 
-**Status: not started.**
+**Status: partial.**
 
 M12 adds no raw SCPI or high-side-effect maintenance command. It converges:
 
@@ -446,6 +456,10 @@ M12 adds no raw SCPI or high-side-effect maintenance command. It converges:
 - lifecycle, wheel/sdist, editable install, upgrade/downgrade/uninstall fallback, and public install docs;
 - slow transport, query/write timeout, partial binary failure, concurrency, latched behavior, and artifact redaction;
 - compatibility range and changelog language that never turns “identifiable model” into “accepted model.”
+
+The current `0.7.0` wheel places eight Basic, Output, and Counter conformance manifests in its own
+dist-info and binds them to the descriptor and wheel non-manifest members. That mechanism does not
+promote the evidence level for Sweep, volatile ARB, or active Harmonic candidates.
 
 Final exit requires every public write capability to have normal-path, failure-matrix, recovery/latch evidence and hardware acceptance on an explicitly named model/channel. Everything else remains uncovered or denied by default.
 
@@ -459,7 +473,8 @@ Final exit requires every public write capability to have normal-path, failure-m
   OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty. The final read-only harness issued 112 queries and zero
   text/binary writes.
 - Historical evidence remains provenance only and no longer substitutes for current-plugin acceptance.
-- Not passed: all M7-M12 controlled-write exit gates. Coupling, Noise Overlay, and Sync have
+- Not passed: M7 production promotion and its A4 fire exit gate, plus the remaining M8-M12
+  controlled-write exit gates. Coupling, Noise Overlay, and Sync have
   candidate write designs only and declare no production capability. Active Sweep, Burst ON, and
   Harmonic V2 facets still lack fresh hardware evidence. P1/Counter timeout, ambiguous-write, and
   recovery-failure still lack a hardware fault-injection conclusion.

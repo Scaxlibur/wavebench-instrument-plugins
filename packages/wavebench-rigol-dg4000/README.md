@@ -43,6 +43,10 @@ WaveBench 核心继续负责波形文件加载、归一化、DAC14 编码、幅�
 [DG4000 覆盖里程碑](doc/DG4000_COVERAGE_MILESTONES.md)。本地厂商手册保存在被忽略的
 `doc/vendor-local/`，不进入发行包。
 
+当前 wheel 随 distribution 包含 8 份 Source conformance manifest，并与 wheel 的非 manifest 内容绑定。
+它们只记录 DG4202 `00.01.14` 上已验收的 Basic、Output 和 Counter V2 范围；Sweep、volatile ARB
+和 Harmonic 活跃态候选没有被写入 production capability 或 conformance 声明。
+
 ## 安全边界
 
 descriptor 导入不连接仪器。factory 只通过 `DriverContext` 打开当前配置的 transport。默认离线测试不扫描资源、不连接仪器，也不发送真实 SCPI。输出控制、任意波形上传和其他写操作不会盲目重试。
@@ -55,6 +59,12 @@ P1 与 Counter V2：`source.basic_configure_v2` 仅在目标输出 OFF、FIX 模
 Counter V2 每次只配置 coupling、输入阻抗、衰减、trigger level 或 statistics enable 中的一项；
 enable/disable 不隐式配置或清统计，measure 只读取已启用 Counter 的有效五元组。Counter 刚启用或
 无输入时的无效测量在 V2 snapshot 中标为不可用，仍允许安全 disable；legacy profile 保持严格。
+
+DG4000 没有独立的 Harmonic state-off 命令，因此 descriptor 不声明
+`source.harmonics_disable_v2`。输出 OFF、FIX 且 Basic readback 明确为 `HARM`／`HARMONIC` 时，
+`source.basic_configure_v2` 的 Sine request 可以退出该波形；这是 Basic waveform 切换，不是仅修改
+Harmonic 状态的别名，也不声称保留逐阶参数。Sweep configure/fire 与 volatile ARB adapter 已有离线候选，
+但它们会与 V1 Sweep／`arb-load` 复合合同重叠，当前 production descriptor 不声明这些 capability。
 
 为保持 legacy 合同，DG descriptor 明确设置 `v1_route_migration_enabled=false`。既有 V1
 `source.set-*`、`source.output`、离散频响、`arb-load` 和 basic restore 继续调用 V1 路由；
