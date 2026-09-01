@@ -6,6 +6,7 @@ from hashlib import sha256
 import math
 from threading import RLock
 import time
+from typing import TYPE_CHECKING
 import zlib
 
 import numpy as np
@@ -52,6 +53,14 @@ from wavebench.instruments import (
     ScopeWaveformTransferStateSnapshot,
 )
 from wavebench.transport import BinaryResponseFraming, InstrumentTransport, ReplayPolicy
+
+if TYPE_CHECKING:
+    from wavebench.instruments import (
+        ScopeChannelDisplayBaseline,
+        ScopeChannelDisplayRequest,
+        ScopeChannelDisplayRestoreResult,
+        ScopeChannelDisplayState,
+    )
 
 from .parsers import (
     MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS,
@@ -488,6 +497,65 @@ class MSO8104Scope:
                 coupling=coupling,
                 impedance=impedance,
             )
+
+    def get_channel_display_state_v2(self, channel: int) -> ScopeChannelDisplayState:
+        from wavebench.instruments import ScopeChannelDisplayState
+
+        self._validate_analog_channel(channel)
+        with self._io_lock:
+            self._require_open()
+            return ScopeChannelDisplayState(
+                channel=channel,
+                enabled=parse_display_state(
+                    self.transport.query(f":CHANnel{channel}:DISPlay?")
+                ),
+            )
+
+    def configure_channel_display_v2(
+        self,
+        request: ScopeChannelDisplayRequest,
+        *,
+        baseline: ScopeChannelDisplayBaseline,
+    ) -> None:
+        from wavebench.instruments import (
+            ScopeChannelDisplayBaseline,
+            ScopeChannelDisplayRequest,
+        )
+
+        if not isinstance(request, ScopeChannelDisplayRequest):
+            raise TypeError("MSO8104 channel display request has an invalid type")
+        if not isinstance(baseline, ScopeChannelDisplayBaseline):
+            raise TypeError("MSO8104 channel display baseline has an invalid type")
+        self._validate_analog_channel(request.channel)
+        if baseline.snapshot.channel != request.channel:
+            raise ValueError("MSO8104 channel display baseline uses a different channel")
+        with self._io_lock:
+            self._require_open()
+            state = "ON" if request.enabled else "OFF"
+            self.transport.write(f":CHANnel{request.channel}:DISPlay {state}")
+
+    def restore_channel_display_v2(
+        self,
+        baseline: ScopeChannelDisplayBaseline,
+    ) -> ScopeChannelDisplayRestoreResult:
+        from wavebench.instruments import (
+            ScopeChannelDisplayBaseline,
+            ScopeChannelDisplayRestoreResult,
+        )
+
+        if not isinstance(baseline, ScopeChannelDisplayBaseline):
+            raise TypeError("MSO8104 channel display baseline has an invalid type")
+        channel = baseline.snapshot.channel
+        self._validate_analog_channel(channel)
+        with self._io_lock:
+            self._require_open()
+            state = "ON" if baseline.snapshot.enabled else "OFF"
+            self.transport.write(f":CHANnel{channel}:DISPlay {state}")
+        return ScopeChannelDisplayRestoreResult(
+            status="completed",
+            attempted_fields=baseline.restore_order,
+            restored_fields=baseline.restore_order,
+        )
 
     def get_digital_status_v2(self, channel: int) -> ScopeDigitalChannelStatusV2:
         self._validate_digital_channel(channel)
