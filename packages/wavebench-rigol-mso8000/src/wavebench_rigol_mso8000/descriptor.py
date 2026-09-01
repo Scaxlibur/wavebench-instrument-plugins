@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from wavebench.errors import DataError
-from wavebench.instruments import InstrumentDescriptor, OptionSpec
-from wavebench.instruments.scope_extensions import (
+from wavebench.instruments import (
+    InstrumentDescriptor,
+    OptionSpec,
     ScopeAcquisitionControlProfile,
     ScopeAcquisitionStatusProfileV2,
     ScopeCursorReadoutProfileV2,
@@ -16,7 +17,7 @@ from wavebench.instruments.scope_extensions import (
     ScopeWaveformBinaryOperationProfile,
     ScopeWaveformBinaryProfile,
 )
-from wavebench.transport.contracts import BinaryResponseFraming
+from wavebench.transport import BinaryResponseFraming
 
 from .parsers import (
     MSO8104_ACQUISITION_STATUS_V2_CONDITIONALLY_APPLICABLE_FIELDS,

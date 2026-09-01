@@ -1,18 +1,94 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from hashlib import sha256
+import time
+from dataclasses import dataclass, field, replace
 from math import isclose, isfinite
 from threading import RLock
 
 from wavebench.errors import DataError, InstrumentError
-from wavebench.instruments import DG4000DacBlock
-from wavebench.instruments.models import (
+from wavebench.instruments import (
+    SOURCE_CONTRACT_VERSION,
+    Availability,
+    ArbitraryFacet,
     ArbitraryQueryProbeResult,
+    BasicWaveFacet,
+    BurstFacet,
+    DG4000DacBlock,
+    HarmonicCompleteness,
+    HarmonicFacet,
+    ModulationFacet,
+    NoiseOverlayFacet,
+    Observed,
+    OutputFacet,
+    PatchAction,
+    PulseFacet,
+    SourceAmplitude,
+    SourceAmplitudeUnit,
+    SourceArbitraryVolatileReplaceRequest,
+    SourceArbitraryVolatileReplaceResult,
+    SourceArbitraryWorkspaceVolatileReplaceRequest,
+    SourceArbitraryWorkspaceVolatileReplaceResult,
+    SourceBasicConfigureRequest,
+    SourceBasicConfigureResult,
+    SourceBasicLiveConfigureResult,
+    SourceBurstMode,
     SourceChannelProfile,
+    SourceCouplingDimension,
+    SourceCouplingDimensionState,
+    SourceCouplingParameter,
+    SourceCouplingParameterKind,
+    SourceCouplingState,
+    SourceCounterConfigurationField,
+    SourceCounterConfigureRequest,
+    SourceCounterConfigureResult,
+    SourceCounterEnableRequest,
+    SourceCounterEnableResult,
+    SourceCounterInputState,
     SourceCounterMeasurement,
+    SourceCounterMeasurementKind,
+    SourceCounterMeasurementV2,
+    SourceCounterMeasureRequest,
+    SourceCounterMeasureResult,
     SourceCounterProfile,
+    SourceFireRequest,
+    SourceFireResult,
+    SourceFieldId,
+    SourceFeature,
+    SourceFrequencyMode,
+    SourceGatePolarity,
+    SourceHarmonicPreset,
+    SourceInputCoupling,
+    SourceModulationKind,
+    SourceNoiseOverlayScale,
+    SourceNoiseOverlayScaleKind,
+    SourceOutputRequest,
+    SourceOutputResult,
+    SourceProtocolQueryRecord,
+    SourcePulseHoldBasis,
+    SourceQueryEffect,
+    SourceQueryExecutionRecord,
+    SourceQueryItemOutcome,
+    SourceQueryPhase,
+    SourceReasonCode,
+    SourceRuntimeIdentity,
+    SourceSemanticQueryPlan,
+    SourceSweepMarker,
+    SourceSweepConfigureRequest,
+    SourceSweepConfigureResult,
+    SourceSweepSpacing,
     SourceSweepProfile,
+    SourceSyncPolarity,
+    SourceSyncState,
     SourceStatus,
+    SourceTriggerOutput,
+    SourceTriggerSlope,
+    SourceTriggerSource,
+    SourceTriggerState,
+    SourceTypedObservation,
+    SourceWaveformKind,
+    SweepFacet,
 )
 from wavebench.transport.base import InstrumentTransport
 
@@ -86,6 +162,23 @@ _MODULATION_TYPE_ALIASES = {
     name: name
     for name in ("AM", "FM", "PM", "ASK", "FSK", "PSK", "PWM", "BPSK", "QPSK", "3FSK", "4FSK", "OSK")
 }
+_Query = Callable[[str], str]
+
+
+@dataclass(frozen=True, slots=True)
+class _CounterReadback:
+    enabled: bool
+    measurement: SourceCounterMeasurement | None
+    measurement_unavailable: bool
+    coupling: str
+    impedance_ohm: float
+    attenuation: int
+    gate_time: str
+    high_frequency_rejection_enabled: bool
+    trigger_level_v: float
+    sensitivity_percent: float
+    statistics_enabled: bool
+    statistics_display: str
 
 
 def _validate_channel(channel: int) -> None:
@@ -192,6 +285,40 @@ def _parse_counter_impedance(response: str) -> float:
     return parsed
 
 
+def _parse_coupling_states(response: str) -> dict[SourceCouplingDimension, bool]:
+    parts = tuple(item.strip() for item in str(response).strip().strip('"').split(","))
+    if len(parts) != 3 or any(not item for item in parts):
+        raise DataError("coupling state must contain frequency, phase, and amplitude")
+    dimensions = {
+        "AMPL": SourceCouplingDimension.AMPLITUDE,
+        "AMPLITUDE": SourceCouplingDimension.AMPLITUDE,
+        "FREQ": SourceCouplingDimension.FREQUENCY,
+        "FREQUENCY": SourceCouplingDimension.FREQUENCY,
+        "PHAS": SourceCouplingDimension.PHASE,
+        "PHASE": SourceCouplingDimension.PHASE,
+    }
+    states: dict[SourceCouplingDimension, bool] = {}
+    for part in parts:
+        key, separator, raw_state = part.partition(":")
+        if not separator or ":" in raw_state:
+            raise DataError(f"unexpected coupling state response: {response!r}")
+        try:
+            dimension = dimensions[key.strip().upper()]
+        except KeyError as exc:
+            raise DataError(f"unexpected coupling dimension response: {key!r}") from exc
+        if dimension in states:
+            raise DataError("coupling state dimensions must be unique")
+        state = _normalize_enum(
+            raw_state,
+            field_name=f"{dimension.value} coupling state",
+            aliases=_STATE_ALIASES,
+        )
+        states[dimension] = state == "ON"
+    if set(states) != set(SourceCouplingDimension):
+        raise DataError("coupling state must contain frequency, phase, and amplitude")
+    return states
+
+
 def _validate_dac14_block(block: DG4000DacBlock) -> None:
     if not isinstance(block, DG4000DacBlock):
         raise DataError("arbitrary upload requires a validated DG4000DacBlock")
@@ -224,6 +351,35 @@ def _validate_dac14_block(block: DG4000DacBlock) -> None:
         raise DataError("DG4000 DAC14 samples must be within 0..16383")
 
 
+def _build_volatile_dac14_command(
+    request: SourceArbitraryVolatileReplaceRequest
+    | SourceArbitraryWorkspaceVolatileReplaceRequest,
+    payload: object,
+) -> bytes:
+    if not isinstance(
+        request,
+        (SourceArbitraryVolatileReplaceRequest, SourceArbitraryWorkspaceVolatileReplaceRequest),
+    ):
+        raise DataError("DG4000 Source V2 volatile replace request has an invalid type")
+    if not isinstance(payload, bytes):
+        raise DataError("DG4000 Source V2 volatile replace payload must be bytes")
+    if len(payload) != request.payload_size_bytes:
+        raise DataError("DG4000 Source V2 volatile replace payload size does not match")
+    if "sha256:" + sha256(payload).hexdigest() != request.payload_sha256:
+        raise DataError("DG4000 Source V2 volatile replace payload SHA-256 does not match")
+    if request.point_count < 2 or request.point_count > 16_384:
+        raise DataError("DG4000 Source V2 volatile replace requires 2..16384 points")
+    if len(payload) != request.point_count * 2:
+        raise DataError("DG4000 Source V2 volatile replace point count does not match payload")
+    if any(
+        int.from_bytes(payload[index : index + 2], "little") > 16_383
+        for index in range(0, len(payload), 2)
+    ):
+        raise DataError("DG4000 Source V2 volatile replace samples must be within 0..16383")
+    length = str(len(payload)).encode("ascii")
+    return b":DATA:DAC VOLATILE,#" + str(len(length)).encode("ascii") + length + payload
+
+
 class _AmbiguousWriteError(InstrumentError):
     pass
 
@@ -232,16 +388,48 @@ class _AmbiguousWriteError(InstrumentError):
 class DG4202Source:
     transport: InstrumentTransport
     check_errors_after_ops: bool = True
+    allow_arbitrary_sine_exit: bool = False
     _io_lock: RLock = field(default_factory=RLock, init=False, repr=False)
     _identity: tuple[str, str, str, str] | None = field(default=None, init=False, repr=False)
     _configuration_writes_blocked: bool = field(default=False, init=False, repr=False)
+    _v2_preflight_snapshots: dict[int, tuple[BasicWaveFacet, OutputFacet]] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
+    _v2_counter_preflight_snapshots: dict[str, SourceCounterInputState] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
+    _v2_sweep_preflight_snapshots: dict[int, SweepFacet] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
+    _v2_sweep_side_effect_preflight: dict[int, tuple[ModulationFacet, BurstFacet]] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
 
-    def _query_finite_float(self, command: str, *, field_name: str) -> float:
-        return _finite_float(self.transport.query(command), field_name=field_name)
+    def _query_finite_float(
+        self,
+        command: str,
+        *,
+        field_name: str,
+        query: _Query | None = None,
+    ) -> float:
+        return _finite_float((query or self.transport.query)(command), field_name=field_name)
 
-    def _ensure_identity(self, *, write: bool = False) -> tuple[str, str, str, str]:
+    def _ensure_identity(
+        self,
+        *,
+        write: bool = False,
+        query: _Query | None = None,
+    ) -> tuple[str, str, str, str]:
         if self._identity is None:
-            self._identity = _parse_identity(self.transport.query("*IDN?"))
+            self._identity = _parse_identity((query or self.transport.query)("*IDN?"))
         if write and self._identity[1] not in _WRITE_ACCEPTED_MODELS:
             raise DataError(
                 f"DG4000 configuration writes are not accepted on model {self._identity[1]}"
@@ -287,10 +475,16 @@ class DG4202Source:
             aliases=_STATE_ALIASES,
         )
 
-    def _query_state(self, command: str, *, field_name: str) -> bool:
+    def _query_state(
+        self,
+        command: str,
+        *,
+        field_name: str,
+        query: _Query | None = None,
+    ) -> bool:
         return (
             _normalize_enum(
-                self.transport.query(command),
+                (query or self.transport.query)(command),
                 field_name=field_name,
                 aliases=_STATE_ALIASES,
             )
@@ -326,6 +520,1798 @@ class DG4202Source:
             field_name="frequency mode",
             aliases={"FIX": "FIX", "SWE": "SWE"},
         )
+
+    def _v2_query(self, plan: SourceSemanticQueryPlan, command: str) -> str:
+        if time.monotonic() > plan.deadline_monotonic:
+            raise DataError("DG4000 Source V2 query plan deadline has expired")
+        return self.transport.query(command)
+
+    @staticmethod
+    def _v2_waveform(response: str) -> tuple[SourceWaveformKind, str]:
+        token = str(response).strip().strip('"').upper()
+        if not token or not token.replace("_", "").isalnum():
+            raise DataError(f"unexpected DG4000 function response: {response!r}")
+        kinds = {
+            "SIN": SourceWaveformKind.SINE,
+            "SINUSOID": SourceWaveformKind.SINE,
+            "SQU": SourceWaveformKind.SQUARE,
+            "SQUARE": SourceWaveformKind.SQUARE,
+            "RAMP": SourceWaveformKind.RAMP,
+            "TRI": SourceWaveformKind.RAMP,
+            "TRIANGLE": SourceWaveformKind.RAMP,
+            "PULS": SourceWaveformKind.PULSE,
+            "PULSE": SourceWaveformKind.PULSE,
+            "NOIS": SourceWaveformKind.NOISE,
+            "NOISE": SourceWaveformKind.NOISE,
+            "DC": SourceWaveformKind.DC,
+            "HARM": SourceWaveformKind.OTHER,
+            "HARMONIC": SourceWaveformKind.OTHER,
+            "ARB": SourceWaveformKind.ARBITRARY,
+            "CUSTOM": SourceWaveformKind.ARBITRARY,
+            "USER": SourceWaveformKind.ARBITRARY,
+        }
+        return kinds.get(token, SourceWaveformKind.ARBITRARY), token.lower()
+
+    def _v2_basic_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> BasicWaveFacet:
+        waveform_kind, waveform_id = self._v2_waveform(
+            self._v2_query(plan, f":SOUR{channel}:FUNC?")
+        )
+        frequency_hz = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:FREQ?"),
+            field_name="frequency",
+        )
+        amplitude = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:VOLT?"),
+            field_name="amplitude",
+        )
+        amplitude_unit = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:VOLT:UNIT?"),
+            field_name="amplitude unit",
+            aliases={"VPP": "VPP", "VRMS": "VRMS", "DBM": "DBM"},
+        )
+        offset_v = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:VOLT:OFFS?"),
+            field_name="offset",
+        )
+        phase_deg = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PHAS?"),
+            field_name="phase",
+        )
+        if not 0 <= phase_deg <= 360:
+            raise DataError("phase response must be from 0 to 360 degrees")
+        sweep_enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":SOUR{channel}:SWE:STAT?"),
+                field_name="sweep state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        duty_cycle = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:FUNC:SQU:DCYC?"),
+            field_name="square duty cycle",
+        )
+        if duty_cycle <= 0 or duty_cycle >= 100:
+            raise DataError("square duty cycle response must be > 0 and < 100")
+        units = {
+            "VPP": SourceAmplitudeUnit.VPP,
+            "VRMS": SourceAmplitudeUnit.VRMS,
+            "DBM": SourceAmplitudeUnit.DBM,
+        }
+        return BasicWaveFacet(
+            waveform_kind=Observed.value_of(waveform_kind),
+            waveform_id=Observed.value_of(waveform_id),
+            frequency_mode=Observed.value_of(
+                SourceFrequencyMode.SWEEP
+                if sweep_enabled
+                else SourceFrequencyMode.FIXED
+            ),
+            frequency_hz=Observed.value_of(frequency_hz),
+            amplitude=Observed.value_of(
+                SourceAmplitude(amplitude, units[amplitude_unit])
+            ),
+            offset_v=Observed.value_of(offset_v),
+            phase_deg=Observed.value_of(phase_deg),
+            square_duty_cycle_percent=Observed.value_of(duty_cycle),
+        )
+
+    def _v2_output_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> OutputFacet:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":OUTP{channel}?"),
+                field_name="output state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        not_queried = Observed.missing(
+            Availability.NOT_QUERIED,
+            SourceReasonCode.NOT_REQUESTED,
+        )
+        return OutputFacet(
+            enabled=Observed.value_of(enabled),
+            display_load=not_queried,
+            polarity=not_queried,
+        )
+
+    def _v2_preflight_snapshot(
+        self,
+        channel: int,
+    ) -> tuple[BasicWaveFacet, OutputFacet]:
+        _validate_channel(channel)
+        try:
+            return self._v2_preflight_snapshots[channel]
+        except KeyError as exc:
+            raise DataError(
+                "DG4000 Source V2 write requires a fresh source.snapshot_v2 preflight"
+            ) from exc
+
+    def _v2_counter_preflight_snapshot(self, input_id: str) -> SourceCounterInputState:
+        if input_id != "counter":
+            raise DataError("DG4000 Source V2 counter input is unsupported")
+        try:
+            return self._v2_counter_preflight_snapshots[input_id]
+        except KeyError as exc:
+            raise DataError(
+                "DG4000 Source V2 Counter operation requires a fresh source.snapshot_v2 preflight"
+            ) from exc
+
+    def _ensure_v2_write_identity(self) -> None:
+        """Require the identity already observed during the V2 preflight.
+
+        A V2 MAIN phase permits writes only.  Falling back to ``*IDN?`` here
+        would silently violate that Core-owned authorization boundary.
+        """
+
+        if self._identity is None:
+            raise DataError("DG4000 Source V2 write requires preflight identity")
+        if self._identity[1] not in _WRITE_ACCEPTED_MODELS:
+            raise DataError(
+                f"DG4000 configuration writes are not accepted on model {self._identity[1]}"
+            )
+
+    @staticmethod
+    def _v2_result_amplitude_offset(
+        basic: BasicWaveFacet,
+    ) -> tuple[SourceAmplitude, float]:
+        if (
+            basic.amplitude.availability is not Availability.VALUE
+            or not isinstance(basic.amplitude.value, SourceAmplitude)
+            or basic.amplitude.value.unit is not SourceAmplitudeUnit.VPP
+        ):
+            raise DataError("DG4000 Source V2 write requires a verified Vpp amplitude")
+        if basic.offset_v.availability is not Availability.VALUE:
+            raise DataError("DG4000 Source V2 write requires a verified voltage offset")
+        return basic.amplitude.value, float(basic.offset_v.value)
+
+    @staticmethod
+    def _v2_basic_set_field(request: SourceBasicConfigureRequest) -> tuple[str, object]:
+        fields = tuple(
+            (name, patch_value.value)
+            for name, patch_value in (
+                ("waveform_kind", request.patch.waveform_kind),
+                ("frequency_hz", request.patch.frequency_hz),
+                ("amplitude_vpp", request.patch.amplitude_vpp),
+                ("offset_v", request.patch.offset_v),
+                ("square_duty_cycle_percent", request.patch.square_duty_cycle_percent),
+            )
+            if patch_value.action is PatchAction.SET
+        )
+        if len(fields) != 1:
+            raise DataError(
+                "DG4000 Source V2 basic configuration supports one SET field per write"
+            )
+        return fields[0]
+
+    @staticmethod
+    def _v2_validate_basic_preflight(
+        basic: BasicWaveFacet,
+        output: OutputFacet,
+        *,
+        output_enabled: bool,
+        allow_harmonic_sine_exit: bool = False,
+        allow_arbitrary_sine_exit: bool = False,
+    ) -> None:
+        if (
+            output.enabled.availability is not Availability.VALUE
+            or output.enabled.value is not output_enabled
+        ):
+            expected = "ON" if output_enabled else "OFF"
+            raise DataError(
+                f"DG4000 Source V2 basic configuration requires output {expected}"
+            )
+        if (
+            basic.frequency_mode.availability is not Availability.VALUE
+            or basic.frequency_mode.value is not SourceFrequencyMode.FIXED
+        ):
+            raise DataError(
+                "DG4000 Source V2 basic configuration requires fixed-frequency mode"
+            )
+        fixed_basic_waveform = (
+            basic.waveform_kind.availability is Availability.VALUE
+            and basic.waveform_kind.value
+            in {
+                SourceWaveformKind.SINE,
+                SourceWaveformKind.SQUARE,
+                SourceWaveformKind.RAMP,
+                SourceWaveformKind.PULSE,
+                SourceWaveformKind.NOISE,
+                SourceWaveformKind.DC,
+            }
+        )
+        harmonic_sine_exit = (
+            allow_harmonic_sine_exit
+            and basic.waveform_kind.availability is Availability.VALUE
+            and basic.waveform_kind.value is SourceWaveformKind.OTHER
+            and basic.waveform_id.availability is Availability.VALUE
+            and basic.waveform_id.value in {"harm", "harmonic"}
+        )
+        arbitrary_sine_exit = (
+            allow_arbitrary_sine_exit
+            and basic.waveform_kind.availability is Availability.VALUE
+            and basic.waveform_kind.value is SourceWaveformKind.ARBITRARY
+        )
+        if not fixed_basic_waveform and not harmonic_sine_exit and not arbitrary_sine_exit:
+            raise DataError(
+                "DG4000 Source V2 basic configuration requires a fixed basic waveform"
+            )
+        DG4202Source._v2_result_amplitude_offset(basic)
+
+    @staticmethod
+    def _v2_basic_command(
+        channel: int,
+        basic: BasicWaveFacet,
+        field_name: str,
+        raw_value: object,
+    ) -> tuple[str | None, BasicWaveFacet]:
+        if field_name == "frequency_hz":
+            value_hz = _finite_float(raw_value, field_name="frequency")
+            if value_hz <= 0:
+                raise DataError("frequency must be > 0")
+            if (
+                basic.frequency_hz.availability is Availability.VALUE
+                and DG4202Source._numeric_matches(basic.frequency_hz.value, value_hz)
+            ):
+                return None, basic
+            return (
+                f":SOUR{channel}:FREQ {value_hz:.12g}",
+                replace(basic, frequency_hz=Observed.value_of(value_hz)),
+            )
+        if field_name == "amplitude_vpp":
+            value_vpp = _finite_float(raw_value, field_name="amplitude")
+            if value_vpp <= 0:
+                raise DataError("amplitude must be > 0")
+            amplitude, _ = DG4202Source._v2_result_amplitude_offset(basic)
+            if DG4202Source._numeric_matches(amplitude.value, value_vpp):
+                return None, basic
+            return (
+                f":SOUR{channel}:VOLT {value_vpp:.12g}",
+                replace(
+                    basic,
+                    amplitude=Observed.value_of(
+                        SourceAmplitude(value_vpp, SourceAmplitudeUnit.VPP)
+                    ),
+                ),
+            )
+        if field_name == "offset_v":
+            value_v = _finite_float(raw_value, field_name="offset")
+            if (
+                basic.offset_v.availability is Availability.VALUE
+                and DG4202Source._numeric_matches(basic.offset_v.value, value_v)
+            ):
+                return None, basic
+            return (
+                f":SOUR{channel}:VOLT:OFFS {value_v:.12g}",
+                replace(basic, offset_v=Observed.value_of(value_v)),
+            )
+        if field_name == "square_duty_cycle_percent":
+            value_percent = _finite_float(raw_value, field_name="duty cycle percent")
+            if value_percent <= 0 or value_percent >= 100:
+                raise DataError("duty cycle percent must be > 0 and < 100")
+            if (
+                basic.waveform_kind.availability is not Availability.VALUE
+                or basic.waveform_kind.value is not SourceWaveformKind.SQUARE
+            ):
+                raise DataError("DG4000 Source V2 duty-cycle writes require the SQUARE function")
+            if (
+                basic.square_duty_cycle_percent.availability is Availability.VALUE
+                and DG4202Source._numeric_matches(
+                    basic.square_duty_cycle_percent.value,
+                    value_percent,
+                )
+            ):
+                return None, basic
+            return (
+                f":SOUR{channel}:FUNC:SQU:DCYC {value_percent:.12g}",
+                replace(
+                    basic,
+                    square_duty_cycle_percent=Observed.value_of(value_percent),
+                ),
+            )
+        assert field_name == "waveform_kind"
+        if not isinstance(raw_value, SourceWaveformKind):
+            raise DataError("DG4000 Source V2 waveform kind has an invalid type")
+        functions = {
+            SourceWaveformKind.SINE: "SIN",
+            SourceWaveformKind.SQUARE: "SQU",
+            SourceWaveformKind.RAMP: "RAMP",
+            SourceWaveformKind.PULSE: "PULS",
+            SourceWaveformKind.NOISE: "NOIS",
+            SourceWaveformKind.DC: "DC",
+        }
+        try:
+            function = functions[raw_value]
+        except KeyError as exc:
+            raise DataError(
+                "DG4000 Source V2 only configures sine, square, ramp, pulse, noise, and DC"
+            ) from exc
+        if (
+            basic.waveform_kind.availability is Availability.VALUE
+            and basic.waveform_kind.value is raw_value
+        ):
+            return None, basic
+        return (
+            f":SOUR{channel}:FUNC {function}",
+            replace(
+                basic,
+                waveform_kind=Observed.value_of(raw_value),
+                waveform_id=Observed.value_of(function.lower()),
+            ),
+        )
+
+    def _configure_source_basic_v2(
+        self,
+        request: SourceBasicConfigureRequest,
+        *,
+        output_enabled: bool,
+        live: bool,
+    ) -> SourceBasicConfigureResult | SourceBasicLiveConfigureResult:
+        if not isinstance(request, SourceBasicConfigureRequest):
+            raise DataError("DG4000 Source V2 basic request has an invalid type")
+        _validate_channel(request.channel)
+        field_name, raw_value = self._v2_basic_set_field(request)
+        if live and field_name not in {"frequency_hz", "amplitude_vpp"}:
+            raise DataError(
+                "DG4000 Source V2 live basic configuration supports frequency or amplitude only"
+            )
+        with self._io_lock:
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            allow_sine_exit = (
+                field_name == "waveform_kind" and raw_value is SourceWaveformKind.SINE
+            )
+            self._v2_validate_basic_preflight(
+                basic,
+                output,
+                output_enabled=output_enabled,
+                allow_harmonic_sine_exit=allow_sine_exit,
+                allow_arbitrary_sine_exit=(allow_sine_exit and self.allow_arbitrary_sine_exit),
+            )
+            command, updated = self._v2_basic_command(
+                request.channel,
+                basic,
+                field_name,
+                raw_value,
+            )
+            try:
+                if command is not None:
+                    self._write(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                raise
+            self._v2_preflight_snapshots[request.channel] = (updated, output)
+            if live:
+                return SourceBasicLiveConfigureResult(
+                    channel=request.channel,
+                    basic=updated,
+                    output_enabled=True,
+                )
+            return SourceBasicConfigureResult(
+                channel=request.channel,
+                basic=updated,
+                output_enabled=False,
+            )
+
+    def configure_source_basic_v2(
+        self,
+        request: SourceBasicConfigureRequest,
+    ) -> SourceBasicConfigureResult:
+        result = self._configure_source_basic_v2(
+            request,
+            output_enabled=False,
+            live=False,
+        )
+        assert isinstance(result, SourceBasicConfigureResult)
+        return result
+
+    def configure_source_basic_live_v2(
+        self,
+        request: SourceBasicConfigureRequest,
+    ) -> SourceBasicLiveConfigureResult:
+        result = self._configure_source_basic_v2(
+            request,
+            output_enabled=True,
+            live=True,
+        )
+        assert isinstance(result, SourceBasicLiveConfigureResult)
+        return result
+
+    def set_source_output_v2(
+        self,
+        request: SourceOutputRequest,
+    ) -> SourceOutputResult:
+        if not isinstance(request, SourceOutputRequest):
+            raise DataError("DG4000 Source V2 output request has an invalid type")
+        _validate_channel(request.channel)
+        with self._io_lock:
+            self._ensure_v2_write_identity()
+            if not request.enabled:
+                # Core may enter this safe-state path after the main write
+                # invalidated the preflight cache.  OFF is deliberately
+                # executable from the already-proven session identity alone.
+                try:
+                    self._write(f":OUTP{request.channel} OFF")
+                except _AmbiguousWriteError:
+                    self._configuration_writes_blocked = True
+                    self._v2_preflight_snapshots.clear()
+                    raise
+                cached = self._v2_preflight_snapshots.get(request.channel)
+                if cached is not None:
+                    basic, output = cached
+                    self._v2_preflight_snapshots[request.channel] = (
+                        basic,
+                        replace(output, enabled=Observed.value_of(False)),
+                    )
+                return SourceOutputResult(channel=request.channel, enabled=False)
+
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            if request.enabled:
+                self._ensure_configuration_write_allowed()
+                amplitude, offset_v = self._v2_result_amplitude_offset(basic)
+                command = (
+                    None
+                    if output.enabled.availability is Availability.VALUE
+                    and output.enabled.value is True
+                    else f":OUTP{request.channel} ON"
+                )
+            try:
+                if command is not None:
+                    self._write(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                raise
+            updated_output = replace(output, enabled=Observed.value_of(request.enabled))
+            self._v2_preflight_snapshots[request.channel] = (basic, updated_output)
+            assert amplitude is not None and offset_v is not None
+            return SourceOutputResult(
+                channel=request.channel,
+                enabled=True,
+                final_amplitude=amplitude,
+                final_offset_v=offset_v,
+            )
+
+    def replace_source_arbitrary_volatile_v2(
+        self,
+        request: SourceArbitraryVolatileReplaceRequest,
+        payload: bytes,
+    ) -> SourceArbitraryVolatileReplaceResult:
+        _validate_channel(request.channel)
+        command = _build_volatile_dac14_command(request, payload)
+        with self._io_lock:
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            if (
+                output.enabled.availability is not Availability.VALUE
+                or output.enabled.value is not False
+            ):
+                raise DataError("DG4000 Source V2 volatile replace requires output OFF")
+            if (
+                basic.frequency_mode.availability is not Availability.VALUE
+                or basic.frequency_mode.value is not SourceFrequencyMode.FIXED
+            ):
+                raise DataError(
+                    "DG4000 Source V2 volatile replace requires fixed-frequency mode"
+                )
+            try:
+                self._write_bytes(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                raise
+            self._v2_preflight_snapshots[request.channel] = (
+                replace(
+                    basic,
+                    waveform_kind=Observed.value_of(SourceWaveformKind.ARBITRARY),
+                    waveform_id=Observed.value_of("user"),
+                ),
+                output,
+            )
+            return SourceArbitraryVolatileReplaceResult(
+                channel=request.channel,
+                payload_sha256=request.payload_sha256,
+                payload_size_bytes=request.payload_size_bytes,
+                point_count=request.point_count,
+                selected_waveform_id="user",
+                write_completed=True,
+                content_readback_verified=False,
+                previous_content_restorable=False,
+            )
+
+    def replace_source_arbitrary_workspace_volatile_v2(
+        self,
+        request: SourceArbitraryWorkspaceVolatileReplaceRequest,
+        payload: bytes,
+    ) -> SourceArbitraryWorkspaceVolatileReplaceResult:
+        command = _build_volatile_dac14_command(request, payload)
+        with self._io_lock:
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            snapshots = self._v2_preflight_snapshots
+            if tuple(sorted(snapshots)) != (1, 2) or any(
+                output.enabled.availability is not Availability.VALUE
+                or output.enabled.value is not False
+                for _, output in snapshots.values()
+            ):
+                raise DataError(
+                    "DG4000 Source V2 volatile workspace replace requires both outputs OFF"
+                )
+            try:
+                self._write_bytes(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                raise
+            # The command has no channel selector.  Do not turn a cached
+            # channel state into a claim about which channel selected USER.
+            self._v2_preflight_snapshots.clear()
+            return SourceArbitraryWorkspaceVolatileReplaceResult(
+                workspace_id="volatile",
+                payload_sha256=request.payload_sha256,
+                payload_size_bytes=request.payload_size_bytes,
+                point_count=request.point_count,
+                write_completed=True,
+                content_readback_verified=False,
+                previous_content_restorable=False,
+            )
+
+    @staticmethod
+    def _v2_configured_sweep_facet(
+        request: SourceSweepConfigureRequest,
+    ) -> SweepFacet:
+        trigger_source = request.trigger_source
+        return SweepFacet(
+            enabled=Observed.value_of(True),
+            start_hz=Observed.value_of(request.start_hz),
+            stop_hz=Observed.value_of(request.stop_hz),
+            spacing=Observed.value_of(request.spacing),
+            steps=Observed.value_of(request.steps),
+            sweep_time_s=Observed.value_of(request.sweep_time_s),
+            start_hold_s=Observed.value_of(0.0),
+            stop_hold_s=Observed.value_of(0.0),
+            return_time_s=Observed.value_of(0.0),
+            trigger=Observed.value_of(
+                SourceTriggerState(
+                    source=Observed.value_of(trigger_source),
+                    slope=Observed.value_of(SourceTriggerSlope.POSITIVE),
+                    output=Observed.value_of(SourceTriggerOutput.OFF),
+                )
+            ),
+            marker=Observed.value_of(
+                SourceSweepMarker(
+                    enabled=Observed.value_of(False),
+                    frequency_hz=Observed.missing(
+                        Availability.NOT_QUERIED,
+                        SourceReasonCode.NOT_REQUESTED,
+                    ),
+                )
+            ),
+        )
+
+    @staticmethod
+    def _v2_sweep_program_message(request: SourceSweepConfigureRequest) -> str:
+        spacing = {
+            SourceSweepSpacing.LINEAR: "LIN",
+            SourceSweepSpacing.LOGARITHMIC: "LOG",
+            SourceSweepSpacing.STEP: "STE",
+        }[request.spacing]
+        trigger_source = {
+            SourceTriggerSource.INTERNAL: "INT",
+            SourceTriggerSource.MANUAL: "MAN",
+        }[request.trigger_source]
+        channel = request.channel
+        return ";".join(
+            (
+                f":SOUR{channel}:FREQ:STAR {request.start_hz:.12g}",
+                f":SOUR{channel}:FREQ:STOP {request.stop_hz:.12g}",
+                f":SOUR{channel}:SWE:SPAC {spacing}",
+                f":SOUR{channel}:SWE:STEP {request.steps}",
+                f":SOUR{channel}:SWE:TIME {request.sweep_time_s:.12g}",
+                f":SOUR{channel}:SWE:HTIM:STAR 0",
+                f":SOUR{channel}:SWE:HTIM:STOP 0",
+                f":SOUR{channel}:SWE:RTIM 0",
+                f":SOUR{channel}:SWE:TRIG:SOUR {trigger_source}",
+                f":SOUR{channel}:SWE:TRIG:SLOP POS",
+                f":SOUR{channel}:SWE:TRIG:TRIGOUT OFF",
+                f":SOUR{channel}:MARK:STAT OFF",
+                f":SOUR{channel}:SWE:STAT ON",
+            )
+        )
+
+    def _v2_require_sweep_side_effects_already_off(self, channel: int) -> None:
+        try:
+            modulation, burst = self._v2_sweep_side_effect_preflight[channel]
+        except KeyError as exc:
+            raise DataError(
+                "DG4000 Source V2 Sweep configuration requires verified inactive "
+                "modulation and burst state"
+            ) from exc
+        for name, facet in (("modulation", modulation), ("burst", burst)):
+            if facet.enabled.availability is not Availability.VALUE or facet.enabled.value is not False:
+                raise DataError(
+                    "DG4000 Source V2 Sweep configuration requires inactive "
+                    f"{name} state"
+                )
+
+    def configure_source_sweep_v2(
+        self,
+        request: SourceSweepConfigureRequest,
+    ) -> SourceSweepConfigureResult:
+        if not isinstance(request, SourceSweepConfigureRequest):
+            raise DataError("DG4000 Source V2 Sweep request has an invalid type")
+        _validate_channel(request.channel)
+        with self._io_lock:
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            if (
+                output.enabled.availability is not Availability.VALUE
+                or output.enabled.value is not False
+            ):
+                raise DataError("DG4000 Source V2 Sweep configuration requires output OFF")
+            self._v2_result_amplitude_offset(basic)
+            self._v2_require_sweep_side_effects_already_off(request.channel)
+            updated_basic = replace(
+                basic,
+                frequency_mode=Observed.value_of(SourceFrequencyMode.SWEEP),
+            )
+            updated_sweep = self._v2_configured_sweep_facet(request)
+            try:
+                self._write(self._v2_sweep_program_message(request))
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                self._v2_sweep_preflight_snapshots.clear()
+                self._v2_sweep_side_effect_preflight.clear()
+                raise
+            self._v2_preflight_snapshots[request.channel] = (updated_basic, output)
+            self._v2_sweep_preflight_snapshots[request.channel] = updated_sweep
+            return SourceSweepConfigureResult(
+                channel=request.channel,
+                basic=updated_basic,
+                sweep=updated_sweep,
+                output_enabled=False,
+            )
+
+    def fire_source_sweep_v2(self, request: SourceFireRequest) -> SourceFireResult:
+        if not isinstance(request, SourceFireRequest):
+            raise DataError("DG4000 Source V2 Sweep fire request has an invalid type")
+        _validate_channel(request.channel)
+        with self._io_lock:
+            basic, output = self._v2_preflight_snapshot(request.channel)
+            try:
+                sweep = self._v2_sweep_preflight_snapshots[request.channel]
+            except KeyError as exc:
+                raise DataError(
+                    "DG4000 Source V2 Sweep fire requires a fresh configured Sweep readback"
+                ) from exc
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            if (
+                basic.frequency_mode.availability is not Availability.VALUE
+                or basic.frequency_mode.value is not SourceFrequencyMode.SWEEP
+            ):
+                raise DataError("DG4000 Source V2 Sweep fire requires sweep frequency mode")
+            if output.enabled.availability is not Availability.VALUE or output.enabled.value is not True:
+                raise DataError("DG4000 Source V2 Sweep fire requires output ON")
+            if (
+                sweep.trigger.availability is not Availability.VALUE
+                or not isinstance(sweep.trigger.value, SourceTriggerState)
+                or sweep.trigger.value.source.availability is not Availability.VALUE
+                or sweep.trigger.value.source.value is not SourceTriggerSource.MANUAL
+            ):
+                raise DataError("DG4000 Source V2 Sweep fire requires manual trigger source")
+            try:
+                self._write(f":SOUR{request.channel}:SWE:TRIG")
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_preflight_snapshots.clear()
+                self._v2_sweep_preflight_snapshots.clear()
+                self._v2_sweep_side_effect_preflight.clear()
+                raise
+            return SourceFireResult(channel=request.channel)
+
+    @staticmethod
+    def _v2_counter_patch_field(
+        request: SourceCounterConfigureRequest,
+    ) -> tuple[SourceCounterConfigurationField, object]:
+        if not isinstance(request, SourceCounterConfigureRequest):
+            raise DataError("DG4000 Source V2 Counter request has an invalid type")
+        fields = tuple(
+            (field, patch_value.value)
+            for field, patch_value in (
+                (SourceCounterConfigurationField.COUPLING, request.patch.coupling),
+                (SourceCounterConfigurationField.IMPEDANCE_OHM, request.patch.impedance_ohm),
+                (SourceCounterConfigurationField.ATTENUATION, request.patch.attenuation),
+                (SourceCounterConfigurationField.TRIGGER_LEVEL_V, request.patch.trigger_level_v),
+                (
+                    SourceCounterConfigurationField.STATISTICS_ENABLED,
+                    request.patch.statistics_enabled,
+                ),
+            )
+            if patch_value.action is PatchAction.SET
+        )
+        if len(fields) != 1:  # pragma: no cover - the Core model enforces this.
+            raise DataError("DG4000 Source V2 Counter requires one SET field")
+        return fields[0]
+
+    @staticmethod
+    def _v2_counter_configuration_command(
+        state: SourceCounterInputState,
+        request: SourceCounterConfigureRequest,
+    ) -> tuple[str | None, SourceCounterInputState]:
+        field, raw_value = DG4202Source._v2_counter_patch_field(request)
+
+        def current(observed: Observed[object], label: str) -> object:
+            if observed.availability is not Availability.VALUE:
+                raise DataError(f"DG4000 Source V2 Counter requires readable {label}")
+            return observed.value
+
+        if field is SourceCounterConfigurationField.COUPLING:
+            if raw_value not in {SourceInputCoupling.AC, SourceInputCoupling.DC}:
+                raise DataError("DG4000 Source V2 Counter coupling must be AC or DC")
+            if current(state.coupling, "coupling") is raw_value:
+                return None, state
+            token = "AC" if raw_value is SourceInputCoupling.AC else "DC"
+            return f":COUN:COUP {token}", replace(
+                state,
+                coupling=Observed.value_of(raw_value),
+            )
+        if field is SourceCounterConfigurationField.IMPEDANCE_OHM:
+            value = _finite_float(raw_value, field_name="counter impedance")
+            if value not in {50.0, 1_000_000.0}:
+                raise DataError("DG4000 Source V2 Counter impedance must be 50 or 1000000 ohms")
+            if current(state.impedance_ohm, "impedance") == value:
+                return None, state
+            return (":COUN:IMP 50" if value == 50.0 else ":COUN:IMP 1M"), replace(
+                state,
+                impedance_ohm=Observed.value_of(value),
+            )
+        if field is SourceCounterConfigurationField.ATTENUATION:
+            if isinstance(raw_value, bool) or not isinstance(raw_value, int) or raw_value not in {1, 10}:
+                raise DataError("DG4000 Source V2 Counter attenuation must be 1X or 10X")
+            if current(state.attenuation, "attenuation") == raw_value:
+                return None, state
+            return f":COUN:ATT {raw_value}X", replace(
+                state,
+                attenuation=Observed.value_of(raw_value),
+            )
+        if field is SourceCounterConfigurationField.TRIGGER_LEVEL_V:
+            value = _finite_float(raw_value, field_name="counter trigger level")
+            if not -2.5 <= value <= 2.5:
+                raise DataError("DG4000 Source V2 Counter trigger level must be from -2.5 to 2.5 V")
+            if current(state.trigger_level_v, "trigger level") == value:
+                return None, state
+            return f":COUN:LEVE {value:.12g}", replace(
+                state,
+                trigger_level_v=Observed.value_of(value),
+            )
+        assert field is SourceCounterConfigurationField.STATISTICS_ENABLED
+        if not isinstance(raw_value, bool):
+            raise DataError("DG4000 Source V2 Counter statistics state must be bool")
+        if current(state.statistics_enabled, "statistics state") is raw_value:
+            return None, state
+        return f":COUN:STATI:STAT {'ON' if raw_value else 'OFF'}", replace(
+            state,
+            statistics_enabled=Observed.value_of(raw_value),
+        )
+
+    def configure_source_counter_v2(
+        self,
+        request: SourceCounterConfigureRequest,
+    ) -> SourceCounterConfigureResult:
+        if not isinstance(request, SourceCounterConfigureRequest):
+            raise DataError("DG4000 Source V2 Counter request has an invalid type")
+        with self._io_lock:
+            state = self._v2_counter_preflight_snapshot(request.input_id)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            command, updated = self._v2_counter_configuration_command(state, request)
+            try:
+                if command is not None:
+                    self._write(command)
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_counter_preflight_snapshots.clear()
+                raise
+            self._v2_counter_preflight_snapshots[request.input_id] = updated
+            return SourceCounterConfigureResult(request.input_id, updated)
+
+    def set_source_counter_enabled_v2(
+        self,
+        request: SourceCounterEnableRequest,
+    ) -> SourceCounterEnableResult:
+        if not isinstance(request, SourceCounterEnableRequest):
+            raise DataError("DG4000 Source V2 Counter enable request has an invalid type")
+        with self._io_lock:
+            state = self._v2_counter_preflight_snapshot(request.input_id)
+            self._ensure_v2_write_identity()
+            self._ensure_configuration_write_allowed()
+            if state.enabled.availability is not Availability.VALUE:
+                raise DataError("DG4000 Source V2 Counter requires readable enabled state")
+            try:
+                if state.enabled.value is not request.enabled:
+                    self._write(f":COUN {'ON' if request.enabled else 'OFF'}")
+            except _AmbiguousWriteError:
+                self._configuration_writes_blocked = True
+                self._v2_counter_preflight_snapshots.clear()
+                raise
+            measurements = (
+                Observed.missing(
+                    Availability.NOT_QUERIED,
+                    SourceReasonCode.NOT_REQUESTED,
+                )
+                if request.enabled
+                else Observed.missing(
+                    Availability.NOT_APPLICABLE,
+                    SourceReasonCode.INACTIVE_BY_ANCHOR,
+                )
+            )
+            self._v2_counter_preflight_snapshots[request.input_id] = replace(
+                state,
+                enabled=Observed.value_of(request.enabled),
+                measurements=measurements,
+            )
+            return SourceCounterEnableResult(request.input_id, request.enabled)
+
+    def measure_source_counter_v2(
+        self,
+        request: SourceCounterMeasureRequest,
+    ) -> SourceCounterMeasureResult:
+        if not isinstance(request, SourceCounterMeasureRequest):
+            raise DataError("DG4000 Source V2 Counter measure request has an invalid type")
+        with self._io_lock:
+            state = self._v2_counter_preflight_snapshot(request.input_id)
+            if state.enabled.availability is not Availability.VALUE or state.enabled.value is not True:
+                raise DataError("DG4000 Source V2 Counter measure requires Counter enabled")
+            measurement = _parse_counter_measurement(self.transport.query(":COUN:MEAS?"))
+            measurements = tuple(
+                sorted(
+                    (
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.FREQUENCY_HZ,
+                            measurement.frequency_hz,
+                        ),
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.PERIOD_S,
+                            measurement.period_s,
+                        ),
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.DUTY_PERCENT,
+                            measurement.duty_cycle_percent,
+                        ),
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+                            measurement.positive_width_s,
+                        ),
+                        SourceCounterMeasurementV2(
+                            SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+                            measurement.negative_width_s,
+                        ),
+                    ),
+                    key=lambda item: item.kind.value,
+                )
+            )
+            return SourceCounterMeasureResult(request.input_id, measurements)
+
+    @staticmethod
+    def _v2_sweep_facet(profile: SourceSweepProfile) -> SweepFacet:
+        return SweepFacet(
+            enabled=Observed.value_of(profile.enabled),
+            start_hz=Observed.value_of(profile.start_hz),
+            stop_hz=Observed.value_of(profile.stop_hz),
+            spacing=Observed.value_of(
+                {
+                    "LINEAR": SourceSweepSpacing.LINEAR,
+                    "LOGARITHMIC": SourceSweepSpacing.LOGARITHMIC,
+                    "STEP": SourceSweepSpacing.STEP,
+                }[profile.spacing]
+            ),
+            steps=Observed.value_of(profile.steps),
+            sweep_time_s=Observed.value_of(profile.sweep_time_s),
+            start_hold_s=Observed.value_of(profile.start_hold_s),
+            stop_hold_s=Observed.value_of(profile.stop_hold_s),
+            return_time_s=Observed.value_of(profile.return_time_s),
+            trigger=Observed.value_of(
+                SourceTriggerState(
+                    source=Observed.value_of(
+                        {
+                            "INTERNAL": SourceTriggerSource.INTERNAL,
+                            "EXTERNAL": SourceTriggerSource.EXTERNAL,
+                            "MANUAL": SourceTriggerSource.MANUAL,
+                        }[profile.trigger_source]
+                    ),
+                    slope=Observed.value_of(
+                        {
+                            "POSITIVE": SourceTriggerSlope.POSITIVE,
+                            "NEGATIVE": SourceTriggerSlope.NEGATIVE,
+                        }[profile.trigger_slope]
+                    ),
+                    output=Observed.value_of(
+                        {
+                            "OFF": SourceTriggerOutput.OFF,
+                            "POSITIVE": SourceTriggerOutput.POSITIVE,
+                            "NEGATIVE": SourceTriggerOutput.NEGATIVE,
+                        }[profile.trigger_out]
+                    ),
+                )
+            ),
+            marker=Observed.value_of(
+                SourceSweepMarker(
+                    enabled=Observed.value_of(profile.marker_enabled),
+                    frequency_hz=Observed.value_of(profile.marker_frequency_hz),
+                )
+            ),
+        )
+
+    def _v2_pulse_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> PulseFacet:
+        hold = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:PULS:HOLD?"),
+            field_name="pulse hold mode",
+            aliases={"DUTY": "DUTY", "WIDT": "WIDTH", "WIDTH": "WIDTH"},
+        )
+        width_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:WIDT?"),
+            field_name="pulse width",
+        )
+        duty = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:DCYC?"),
+            field_name="pulse duty cycle",
+        )
+        delay_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:DEL?"),
+            field_name="pulse delay",
+        )
+        leading_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:TRAN?"),
+            field_name="pulse leading transition",
+        )
+        trailing_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:PULS:TRAN:TRA?"),
+            field_name="pulse trailing transition",
+        )
+        try:
+            return PulseFacet(
+                hold_basis=Observed.value_of(
+                    SourcePulseHoldBasis.DUTY
+                    if hold == "DUTY"
+                    else SourcePulseHoldBasis.WIDTH
+                ),
+                width_s=Observed.value_of(width_s),
+                duty_cycle_percent=Observed.value_of(duty),
+                delay_s=Observed.value_of(delay_s),
+                leading_transition_s=Observed.value_of(leading_s),
+                trailing_transition_s=Observed.value_of(trailing_s),
+            )
+        except ValueError as exc:
+            raise DataError(f"inconsistent DG4000 pulse profile: {exc}") from exc
+
+    def _v2_burst_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> tuple[BurstFacet, int]:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":SOUR{channel}:BURS:STAT?"),
+                field_name="burst state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        if not enabled:
+            missing = Observed.missing(
+                Availability.NOT_APPLICABLE,
+                SourceReasonCode.INACTIVE_BY_ANCHOR,
+            )
+            return (
+                BurstFacet(
+                    enabled=Observed.value_of(False),
+                    mode=missing,
+                    cycles=missing,
+                    phase_deg=missing,
+                    internal_period_s=missing,
+                    delay_s=missing,
+                    gate_polarity=missing,
+                    trigger=missing,
+                ),
+                1,
+            )
+
+        mode = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:MODE?"),
+            field_name="burst mode",
+            aliases={
+                "TRIG": "TRIGGERED",
+                "TRIGGERED": "TRIGGERED",
+                "GAT": "GATED",
+                "GATED": "GATED",
+                "INF": "INFINITY",
+                "INFINITY": "INFINITY",
+            },
+        )
+        cycles = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:BURS:NCYC?"),
+            field_name="burst cycles",
+        )
+        if not cycles.is_integer():
+            raise DataError("burst cycles response must be an integer")
+        phase_deg = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:BURS:PHAS?"),
+            field_name="burst phase",
+        )
+        internal_period_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:BURS:INT:PER?"),
+            field_name="burst internal period",
+        )
+        delay_s = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:BURS:TDEL?"),
+            field_name="burst delay",
+        )
+        gate_polarity = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:GATE:POL?"),
+            field_name="burst gate polarity",
+            aliases={
+                "NORM": "NORMAL",
+                "NORMAL": "NORMAL",
+                "INV": "INVERTED",
+                "INVERTED": "INVERTED",
+            },
+        )
+        trigger_source = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:TRIG:SOUR?"),
+            field_name="burst trigger source",
+            aliases=_SWEEP_TRIGGER_SOURCE_ALIASES,
+        )
+        trigger_slope = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:TRIG:SLOP?"),
+            field_name="burst trigger slope",
+            aliases=_EDGE_ALIASES,
+        )
+        trigger_output = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:BURS:TRIG:TRIGOUT?"),
+            field_name="burst trigger output",
+            aliases=_TRIGGER_OUT_ALIASES,
+        )
+        try:
+            return (
+                BurstFacet(
+                    enabled=Observed.value_of(True),
+                    mode=Observed.value_of(
+                        {
+                            "TRIGGERED": SourceBurstMode.TRIGGERED,
+                            "GATED": SourceBurstMode.GATED,
+                            "INFINITY": SourceBurstMode.INFINITY,
+                        }[mode]
+                    ),
+                    cycles=Observed.value_of(int(cycles)),
+                    phase_deg=Observed.value_of(phase_deg),
+                    internal_period_s=Observed.value_of(internal_period_s),
+                    delay_s=Observed.value_of(delay_s),
+                    gate_polarity=Observed.value_of(
+                        SourceGatePolarity.NORMAL
+                        if gate_polarity == "NORMAL"
+                        else SourceGatePolarity.INVERTED
+                    ),
+                    trigger=Observed.value_of(
+                        SourceTriggerState(
+                            source=Observed.value_of(
+                                {
+                                    "INTERNAL": SourceTriggerSource.INTERNAL,
+                                    "EXTERNAL": SourceTriggerSource.EXTERNAL,
+                                    "MANUAL": SourceTriggerSource.MANUAL,
+                                }[trigger_source]
+                            ),
+                            slope=Observed.value_of(
+                                {
+                                    "POSITIVE": SourceTriggerSlope.POSITIVE,
+                                    "NEGATIVE": SourceTriggerSlope.NEGATIVE,
+                                }[trigger_slope]
+                            ),
+                            output=Observed.value_of(
+                                {
+                                    "OFF": SourceTriggerOutput.OFF,
+                                    "POSITIVE": SourceTriggerOutput.POSITIVE,
+                                    "NEGATIVE": SourceTriggerOutput.NEGATIVE,
+                                }[trigger_output]
+                            ),
+                        )
+                    ),
+                ),
+                10,
+            )
+        except ValueError as exc:
+            raise DataError(f"inconsistent DG4000 burst profile: {exc}") from exc
+
+    def _v2_harmonic_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> HarmonicFacet:
+        configured_order = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:HARM:ORDER?"),
+            field_name="harmonic configured order",
+        )
+        maximum_order = _finite_float(
+            self._v2_query(plan, f":SOUR{channel}:HARM:ORDER? MAX"),
+            field_name="harmonic maximum order",
+        )
+        if not configured_order.is_integer() or not maximum_order.is_integer():
+            raise DataError("harmonic order responses must be integers")
+        harmonic_type = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:HARM:TYPE?"),
+            field_name="harmonic type",
+            aliases={name: name for name in ("ALL", "EVEN", "ODD", "USER")},
+        )
+        not_queried = Observed.missing(
+            Availability.NOT_QUERIED,
+            SourceReasonCode.NOT_REQUESTED,
+        )
+        preset = (
+            Observed.value_of(
+                {
+                    "ALL": SourceHarmonicPreset.ALL,
+                    "EVEN": SourceHarmonicPreset.EVEN,
+                    "ODD": SourceHarmonicPreset.ODD,
+                }[harmonic_type]
+            )
+            if harmonic_type != "USER"
+            else not_queried
+        )
+        try:
+            return HarmonicFacet(
+                enabled=Observed.value_of(True),
+                completeness=Observed.value_of(HarmonicCompleteness.PARTIAL),
+                maximum_supported_order=Observed.value_of(int(maximum_order)),
+                components=not_queried,
+                configured_order=Observed.value_of(int(configured_order)),
+                preset=preset,
+            )
+        except ValueError as exc:
+            raise DataError(f"inconsistent DG4000 harmonic profile: {exc}") from exc
+
+    @staticmethod
+    def _v2_counter_facet(
+        input_id: str,
+        readback: _CounterReadback,
+    ) -> SourceCounterInputState:
+        if readback.measurement is None:
+            measurements = Observed.missing(
+                (
+                    Availability.UNAVAILABLE
+                    if readback.measurement_unavailable
+                    else Availability.NOT_APPLICABLE
+                ),
+                (
+                    SourceReasonCode.RESPONSE_INVALID_VALUE
+                    if readback.measurement_unavailable
+                    else SourceReasonCode.INACTIVE_BY_ANCHOR
+                ),
+            )
+        else:
+            measurement = readback.measurement
+            measurements = Observed.value_of(
+                tuple(
+                    sorted(
+                        (
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.FREQUENCY_HZ,
+                                measurement.frequency_hz,
+                            ),
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.PERIOD_S,
+                                measurement.period_s,
+                            ),
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.DUTY_PERCENT,
+                                measurement.duty_cycle_percent,
+                            ),
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+                                measurement.positive_width_s,
+                            ),
+                            SourceCounterMeasurementV2(
+                                SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+                                measurement.negative_width_s,
+                            ),
+                        ),
+                        key=lambda item: item.kind.value,
+                    )
+                )
+            )
+        unsupported = Observed.missing(
+            Availability.UNSUPPORTED,
+            SourceReasonCode.DESCRIPTOR_UNSUPPORTED,
+        )
+        return SourceCounterInputState(
+            input_id=input_id,
+            enabled=Observed.value_of(readback.enabled),
+            measurements=measurements,
+            coupling=Observed.value_of(
+                SourceInputCoupling.AC
+                if readback.coupling == "AC"
+                else SourceInputCoupling.DC
+            ),
+            impedance_ohm=Observed.value_of(readback.impedance_ohm),
+            attenuation=Observed.value_of(readback.attenuation),
+            gate_time_s=unsupported,
+            trigger_level_v=Observed.value_of(readback.trigger_level_v),
+            statistics_enabled=Observed.value_of(readback.statistics_enabled),
+        )
+
+    @staticmethod
+    def _v2_arbitrary_facet(basic: BasicWaveFacet) -> ArbitraryFacet:
+        not_queried = Observed.missing(
+            Availability.NOT_QUERIED,
+            SourceReasonCode.NOT_REQUESTED,
+        )
+        return ArbitraryFacet(
+            selected_waveform_id=basic.waveform_id,
+            playback_mode=not_queried,
+            playback_frequency_hz=basic.frequency_hz,
+            sample_rate_hz=not_queried,
+            point_count=not_queried,
+            storage_digest=not_queried,
+        )
+
+    def _v2_modulation_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> ModulationFacet:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":SOUR{channel}:MOD:STAT?"),
+                field_name="modulation state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        modulation_type = _normalize_enum(
+            self._v2_query(plan, f":SOUR{channel}:MOD:TYPE?"),
+            field_name="modulation type",
+            aliases=_MODULATION_TYPE_ALIASES,
+        )
+        not_queried = Observed.missing(
+            Availability.NOT_QUERIED,
+            SourceReasonCode.NOT_REQUESTED,
+        )
+        return ModulationFacet(
+            enabled=Observed.value_of(enabled),
+            kind=Observed.value_of(
+                {
+                    "AM": SourceModulationKind.AM,
+                    "ASK": SourceModulationKind.ASK,
+                    "FM": SourceModulationKind.FM,
+                    "FSK": SourceModulationKind.FSK,
+                    "PM": SourceModulationKind.PM,
+                    "PSK": SourceModulationKind.PSK,
+                    "PWM": SourceModulationKind.PWM,
+                }.get(modulation_type, SourceModulationKind.OTHER)
+            ),
+            source=not_queried,
+            parameters=not_queried,
+            internal_frequency_hz=not_queried,
+            internal_waveform_kind=not_queried,
+        )
+
+    def _v2_coupling_facet(
+        self,
+        plan: SourceSemanticQueryPlan,
+    ) -> SourceCouplingState:
+        states = _parse_coupling_states(self._v2_query(plan, ":COUP?"))
+        reference_channel = int(
+            _normalize_enum(
+                self._v2_query(plan, ":COUP:CHANNEL:BASE?"),
+                field_name="coupling base channel",
+                aliases={"CH1": "1", "CH2": "2"},
+            )
+        )
+        parameter_specs = (
+            (
+                SourceCouplingDimension.AMPLITUDE,
+                SourceCouplingParameterKind.AMPLITUDE_DEVIATION_VPP,
+                ":COUP:AMPL:DEV?",
+                20.0,
+            ),
+            (
+                SourceCouplingDimension.FREQUENCY,
+                SourceCouplingParameterKind.FREQUENCY_DEVIATION_HZ,
+                ":COUP:FREQ:DEV?",
+                160e6,
+            ),
+            (
+                SourceCouplingDimension.PHASE,
+                SourceCouplingParameterKind.PHASE_DEVIATION_DEG,
+                ":COUP:PHAS:DEV?",
+                360.0,
+            ),
+        )
+        dimensions = []
+        for dimension, kind, command, maximum in parameter_specs:
+            value = _finite_float(
+                self._v2_query(plan, command),
+                field_name=f"{dimension.value} coupling deviation",
+            )
+            if not 0 <= value <= maximum:
+                raise DataError(
+                    f"{dimension.value} coupling deviation response must be from 0 to {maximum:g}"
+                )
+            dimensions.append(
+                SourceCouplingDimensionState(
+                    dimension=dimension,
+                    enabled=Observed.value_of(states[dimension]),
+                    parameter=Observed.value_of(SourceCouplingParameter(kind, value)),
+                )
+            )
+        return SourceCouplingState(
+            feature=SourceFeature.COUPLING,
+            channels=(1, 2),
+            enabled=Observed.value_of(any(states.values())),
+            reference_channel=Observed.value_of(reference_channel),
+            dimensions=tuple(dimensions),
+        )
+
+    def _v2_sync_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> SourceSyncState:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":OUTP{channel}:SYNC?"),
+                field_name="sync state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        polarity = _normalize_enum(
+            self._v2_query(plan, f":OUTP{channel}:SYNC:POL?"),
+            field_name="sync polarity",
+            aliases=_EDGE_ALIASES,
+        )
+        return SourceSyncState(
+            enabled=Observed.value_of(enabled),
+            polarity=Observed.value_of(
+                SourceSyncPolarity.POSITIVE
+                if polarity == "POSITIVE"
+                else SourceSyncPolarity.NEGATIVE
+            ),
+            source_channel=Observed.missing(
+                Availability.NOT_QUERIED,
+                SourceReasonCode.NOT_REQUESTED,
+            ),
+        )
+
+    def _v2_noise_overlay_facet(
+        self,
+        channel: int,
+        plan: SourceSemanticQueryPlan,
+    ) -> NoiseOverlayFacet:
+        enabled = (
+            _normalize_enum(
+                self._v2_query(plan, f":OUTP{channel}:NOIS?"),
+                field_name="noise overlay state",
+                aliases=_STATE_ALIASES,
+            )
+            == "ON"
+        )
+        scale_percent = _finite_float(
+            self._v2_query(plan, f":OUTP{channel}:NOIS:SCAL?"),
+            field_name="noise overlay scale",
+        )
+        if not 0 <= scale_percent <= 50:
+            raise DataError("noise overlay scale response must be from 0 to 50 percent")
+        return NoiseOverlayFacet(
+            enabled=Observed.value_of(enabled),
+            scales=Observed.value_of(
+                (
+                    SourceNoiseOverlayScale(
+                        SourceNoiseOverlayScaleKind.PERCENT,
+                        scale_percent,
+                    ),
+                )
+            ),
+        )
+
+    @staticmethod
+    def _validate_v2_query_plan(plan: SourceSemanticQueryPlan) -> None:
+        if not isinstance(plan, SourceSemanticQueryPlan):
+            raise DataError("DG4000 Source V2 query plan has an invalid type")
+        if plan.contract_version != SOURCE_CONTRACT_VERSION:
+            raise DataError("DG4000 Source V2 query plan has an unsupported version")
+        if SourceQueryEffect.PURE_READ not in plan.allowed_effects:
+            raise DataError("DG4000 Source V2 query plan does not permit pure reads")
+        if time.monotonic() > plan.deadline_monotonic:
+            raise DataError("DG4000 Source V2 query plan deadline has expired")
+        if sum(item.max_queries for item in plan.items) > plan.max_queries:
+            raise DataError(
+                "DG4000 Source V2 query plan exceeds its declared total query budget"
+            )
+
+        phase_fields: dict[
+            SourceQueryPhase,
+            dict[SourceFieldId, set[int | str | tuple[int, ...] | None]],
+        ] = {}
+        for item in plan.items:
+            if item.effect is not SourceQueryEffect.PURE_READ:
+                raise DataError("DG4000 Source V2 snapshots only support pure reads")
+            if len(item.fields) != 1:
+                raise DataError("DG4000 Source V2 query items must contain one field")
+            field_ref = item.fields[0]
+            if field_ref.field is SourceFieldId.IDENTITY:
+                if field_ref.target.scope.value != "instrument":
+                    raise DataError("DG4000 Source V2 identity must be instrument scoped")
+                target = None
+            elif field_ref.field is SourceFieldId.COUNTER:
+                if field_ref.target.scope.value != "input":
+                    raise DataError("DG4000 Source V2 counter must be input scoped")
+                target = field_ref.target.input_id
+                if target != "counter":
+                    raise DataError("DG4000 Source V2 counter input is unsupported")
+                if item.phase is not SourceQueryPhase.FACET:
+                    raise DataError("DG4000 Source V2 counter must be a facet query")
+            elif field_ref.field is SourceFieldId.COUPLING:
+                if field_ref.target.scope.value != "channel_set":
+                    raise DataError("DG4000 Source V2 coupling must be channel-set scoped")
+                target = field_ref.target.channels
+                if target != (1, 2):
+                    raise DataError("DG4000 Source V2 coupling channel set is unsupported")
+                if item.phase is not SourceQueryPhase.FACET:
+                    raise DataError("DG4000 Source V2 coupling must be a facet query")
+            elif field_ref.field in {
+                SourceFieldId.ARBITRARY_SELECTION,
+                SourceFieldId.BASIC,
+                SourceFieldId.BURST,
+                SourceFieldId.HARMONICS,
+                SourceFieldId.MODULATION,
+                SourceFieldId.NOISE_OVERLAY,
+                SourceFieldId.OUTPUT,
+                SourceFieldId.PULSE,
+                SourceFieldId.SWEEP,
+                SourceFieldId.SYNC,
+            }:
+                if field_ref.target.scope.value != "channel":
+                    raise DataError("DG4000 Source V2 channel facets must be channel scoped")
+                target = field_ref.target.channel
+                _validate_channel(target)
+                if (
+                    field_ref.field
+                    in {
+                        SourceFieldId.BURST,
+                        SourceFieldId.HARMONICS,
+                        SourceFieldId.ARBITRARY_SELECTION,
+                        SourceFieldId.PULSE,
+                        SourceFieldId.SWEEP,
+                    }
+                    and item.phase is not SourceQueryPhase.FACET
+                ):
+                    raise DataError("DG4000 Source V2 optional field must be a facet query")
+                if (
+                    field_ref.field is SourceFieldId.MODULATION
+                    and item.phase is not SourceQueryPhase.FACET
+                ):
+                    raise DataError("DG4000 Source V2 modulation must be a facet query")
+                if (
+                    field_ref.field is SourceFieldId.NOISE_OVERLAY
+                    and item.phase is not SourceQueryPhase.FACET
+                ):
+                    raise DataError("DG4000 Source V2 noise overlay must be a facet query")
+                if (
+                    field_ref.field is SourceFieldId.SYNC
+                    and item.phase is not SourceQueryPhase.FACET
+                ):
+                    raise DataError("DG4000 Source V2 sync must be a facet query")
+            else:
+                raise DataError("DG4000 Source V2 query plan requests an unsupported field")
+            targets = phase_fields.setdefault(item.phase, {}).setdefault(
+                field_ref.field,
+                set(),
+            )
+            if target in targets:
+                raise DataError("DG4000 Source V2 query plan repeats a field target")
+            targets.add(target)
+
+        if not set(phase_fields) <= {
+            SourceQueryPhase.ANCHOR_BEFORE,
+            SourceQueryPhase.FACET,
+            SourceQueryPhase.ANCHOR_AFTER,
+        } or not {
+            SourceQueryPhase.ANCHOR_BEFORE,
+            SourceQueryPhase.ANCHOR_AFTER,
+        } <= set(phase_fields):
+            raise DataError("DG4000 Source V2 query plan contains an unsupported phase")
+        before = phase_fields[SourceQueryPhase.ANCHOR_BEFORE]
+        after = phase_fields[SourceQueryPhase.ANCHOR_AFTER]
+        if before != after:
+            raise DataError("DG4000 Source V2 query plan requires matching anchors")
+        if before.get(SourceFieldId.IDENTITY) != {None}:
+            raise DataError("DG4000 Source V2 query plan requires one identity anchor")
+        channels = before.get(SourceFieldId.BASIC, set())
+        if not channels or before.get(SourceFieldId.OUTPUT, set()) != channels:
+            raise DataError(
+                "DG4000 Source V2 output snapshots require matching basic anchors"
+            )
+        sweep_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.SWEEP,
+            set(),
+        )
+        if not sweep_channels <= channels:
+            raise DataError("DG4000 Source V2 sweep requires matching basic anchors")
+        arbitrary_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.ARBITRARY_SELECTION,
+            set(),
+        )
+        if not arbitrary_channels <= channels:
+            raise DataError("DG4000 Source V2 arbitrary requires matching basic anchors")
+        pulse_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.PULSE,
+            set(),
+        )
+        if not pulse_channels <= channels:
+            raise DataError("DG4000 Source V2 pulse requires matching basic anchors")
+        burst_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.BURST,
+            set(),
+        )
+        if not burst_channels <= channels:
+            raise DataError("DG4000 Source V2 burst requires matching basic anchors")
+        harmonic_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.HARMONICS,
+            set(),
+        )
+        if not harmonic_channels <= channels:
+            raise DataError("DG4000 Source V2 harmonics require matching basic anchors")
+        modulation_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.MODULATION,
+            set(),
+        )
+        if not modulation_channels <= channels:
+            raise DataError("DG4000 Source V2 modulation requires matching basic anchors")
+        noise_overlay_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.NOISE_OVERLAY,
+            set(),
+        )
+        if not noise_overlay_channels <= channels:
+            raise DataError("DG4000 Source V2 noise overlay requires matching basic anchors")
+        sync_channels = phase_fields.get(SourceQueryPhase.FACET, {}).get(
+            SourceFieldId.SYNC,
+            set(),
+        )
+        if not sync_channels <= channels:
+            raise DataError("DG4000 Source V2 sync requires matching basic anchors")
+
+    def execute_source_query_plan_v2(
+        self,
+        plan: SourceSemanticQueryPlan,
+    ) -> SourceQueryExecutionRecord:
+        """Execute a Core-owned Source V2 snapshot plan without writes."""
+
+        self._validate_v2_query_plan(plan)
+        with self._io_lock:
+            # A failed or partial query plan must never authorize a later write
+            # with a stale snapshot from an earlier transaction.
+            self._v2_preflight_snapshots.clear()
+            self._v2_counter_preflight_snapshots.clear()
+            self._v2_sweep_preflight_snapshots.clear()
+            self._v2_sweep_side_effect_preflight.clear()
+
+            def plan_query(command: str) -> str:
+                return self._v2_query(plan, command)
+
+            records: list[SourceProtocolQueryRecord] = []
+            total_queries = 0
+            before_basic: dict[int, BasicWaveFacet] = {}
+            latest_basic: dict[int, BasicWaveFacet] = {}
+            latest_output: dict[int, OutputFacet] = {}
+            latest_burst: dict[int, BurstFacet] = {}
+            latest_counter: dict[str, SourceCounterInputState] = {}
+            latest_modulation: dict[int, ModulationFacet] = {}
+            latest_sweep: dict[int, SweepFacet] = {}
+            for item in plan.items:
+                field_ref = item.fields[0]
+                channel = field_ref.target.channel
+                if field_ref.field is SourceFieldId.IDENTITY:
+                    identity = _parse_identity(self._v2_query(plan, "*IDN?"))
+                    self._identity = identity
+                    value = SourceRuntimeIdentity(
+                        manufacturer=identity[0],
+                        model=identity[1],
+                        firmware_id=identity[3],
+                    )
+                    query_count = 1
+                elif field_ref.field is SourceFieldId.BASIC:
+                    assert channel is not None
+                    value = self._v2_basic_facet(channel, plan)
+                    latest_basic[channel] = value
+                    if item.phase is SourceQueryPhase.ANCHOR_BEFORE:
+                        before_basic[channel] = value
+                    query_count = 8
+                elif field_ref.field is SourceFieldId.ARBITRARY_SELECTION:
+                    assert channel is not None
+                    basic = before_basic.get(channel)
+                    if (
+                        basic is None
+                        or basic.waveform_kind.value is not SourceWaveformKind.ARBITRARY
+                    ):
+                        records.append(
+                            SourceProtocolQueryRecord(
+                                item_id=item.item_id,
+                                effect=item.effect,
+                                outcome=SourceQueryItemOutcome.SKIPPED,
+                                query_count=0,
+                                reason_code=SourceReasonCode.INACTIVE_BY_ANCHOR,
+                            )
+                        )
+                        continue
+                    value = self._v2_arbitrary_facet(basic)
+                    query_count = 0
+                elif field_ref.field is SourceFieldId.OUTPUT:
+                    assert channel is not None
+                    value = self._v2_output_facet(channel, plan)
+                    latest_output[channel] = value
+                    query_count = 1
+                elif field_ref.field is SourceFieldId.BURST:
+                    assert channel is not None
+                    value, query_count = self._v2_burst_facet(channel, plan)
+                    latest_burst[channel] = value
+                elif field_ref.field is SourceFieldId.COUNTER:
+                    input_id = field_ref.target.input_id
+                    assert input_id is not None
+                    value = self._v2_counter_facet(
+                        input_id,
+                        self._read_counter(
+                            query=plan_query,
+                            tolerate_invalid_measurement=True,
+                        ),
+                    )
+                    latest_counter[input_id] = value
+                    query_count = 11 if value.enabled.value else 10
+                elif field_ref.field is SourceFieldId.COUPLING:
+                    value = self._v2_coupling_facet(plan)
+                    query_count = 5
+                elif field_ref.field is SourceFieldId.HARMONICS:
+                    assert channel is not None
+                    basic = before_basic.get(channel)
+                    if (
+                        basic is None
+                        or basic.waveform_kind.value is not SourceWaveformKind.OTHER
+                    ):
+                        records.append(
+                            SourceProtocolQueryRecord(
+                                item_id=item.item_id,
+                                effect=item.effect,
+                                outcome=SourceQueryItemOutcome.SKIPPED,
+                                query_count=0,
+                                reason_code=SourceReasonCode.INACTIVE_BY_ANCHOR,
+                            )
+                        )
+                        continue
+                    value = self._v2_harmonic_facet(channel, plan)
+                    query_count = 3
+                elif field_ref.field is SourceFieldId.MODULATION:
+                    assert channel is not None
+                    value = self._v2_modulation_facet(channel, plan)
+                    latest_modulation[channel] = value
+                    query_count = 2
+                elif field_ref.field is SourceFieldId.NOISE_OVERLAY:
+                    assert channel is not None
+                    value = self._v2_noise_overlay_facet(channel, plan)
+                    query_count = 2
+                elif field_ref.field is SourceFieldId.SYNC:
+                    assert channel is not None
+                    value = self._v2_sync_facet(channel, plan)
+                    query_count = 2
+                elif field_ref.field is SourceFieldId.SWEEP:
+                    assert channel is not None
+                    basic = before_basic.get(channel)
+                    if (
+                        basic is None
+                        or basic.frequency_mode.value is not SourceFrequencyMode.SWEEP
+                    ):
+                        records.append(
+                            SourceProtocolQueryRecord(
+                                item_id=item.item_id,
+                                effect=item.effect,
+                                outcome=SourceQueryItemOutcome.SKIPPED,
+                                query_count=0,
+                                reason_code=SourceReasonCode.INACTIVE_BY_ANCHOR,
+                            )
+                        )
+                        continue
+                    value = self._v2_sweep_facet(
+                        self._get_sweep_profile(channel, query=plan_query)
+                    )
+                    latest_sweep[channel] = value
+                    query_count = 16
+                else:
+                    assert field_ref.field is SourceFieldId.PULSE
+                    assert channel is not None
+                    basic = before_basic.get(channel)
+                    if (
+                        basic is None
+                        or basic.waveform_kind.value is not SourceWaveformKind.PULSE
+                    ):
+                        records.append(
+                            SourceProtocolQueryRecord(
+                                item_id=item.item_id,
+                                effect=item.effect,
+                                outcome=SourceQueryItemOutcome.SKIPPED,
+                                query_count=0,
+                                reason_code=SourceReasonCode.INACTIVE_BY_ANCHOR,
+                            )
+                        )
+                        continue
+                    value = self._v2_pulse_facet(channel, plan)
+                    query_count = 6
+                if query_count > item.max_queries:
+                    raise DataError(
+                        "DG4000 Source V2 query plan under-declares a snapshot query"
+                    )
+                records.append(
+                    SourceProtocolQueryRecord(
+                        item_id=item.item_id,
+                        effect=item.effect,
+                        outcome=SourceQueryItemOutcome.OBSERVED,
+                        query_count=query_count,
+                        observations=(SourceTypedObservation(field_ref, value),),
+                    )
+                )
+                total_queries += query_count
+            if total_queries > plan.max_queries:
+                raise DataError("DG4000 Source V2 query plan exceeded its total query budget")
+            self._v2_preflight_snapshots = {
+                channel: (basic, latest_output[channel])
+                for channel, basic in latest_basic.items()
+                if channel in latest_output
+            }
+            self._v2_counter_preflight_snapshots = latest_counter
+            self._v2_sweep_preflight_snapshots = latest_sweep
+            self._v2_sweep_side_effect_preflight = {
+                channel: (latest_modulation[channel], latest_burst[channel])
+                for channel in latest_modulation.keys() & latest_burst.keys()
+            }
+            return SourceQueryExecutionRecord(
+                contract_version=SOURCE_CONTRACT_VERSION,
+                plan_id=plan.plan_id,
+                items=tuple(records),
+                query_count=total_queries,
+            )
 
     @staticmethod
     def _numeric_matches(actual: float | None, expected: float) -> bool:
@@ -632,67 +2618,99 @@ class DG4202Source:
             )
 
     def get_sweep_profile(self, channel: int) -> SourceSweepProfile:
+        return self._get_sweep_profile(channel, query=self.transport.query)
+
+    def _get_sweep_profile(
+        self,
+        channel: int,
+        *,
+        query: _Query,
+    ) -> SourceSweepProfile:
         _validate_channel(channel)
         with self._io_lock:
-            self._ensure_identity()
+            self._ensure_identity(query=query)
             enabled = self._query_state(
-                f":SOUR{channel}:SWE:STAT?", field_name="sweep state"
+                f":SOUR{channel}:SWE:STAT?",
+                field_name="sweep state",
+                query=query,
             )
             start_hz = self._query_finite_float(
-                f":SOUR{channel}:FREQ:STAR?", field_name="sweep start frequency"
+                f":SOUR{channel}:FREQ:STAR?",
+                field_name="sweep start frequency",
+                query=query,
             )
             stop_hz = self._query_finite_float(
-                f":SOUR{channel}:FREQ:STOP?", field_name="sweep stop frequency"
+                f":SOUR{channel}:FREQ:STOP?",
+                field_name="sweep stop frequency",
+                query=query,
             )
             center_hz = self._query_finite_float(
-                f":SOUR{channel}:FREQ:CENT?", field_name="sweep center frequency"
+                f":SOUR{channel}:FREQ:CENT?",
+                field_name="sweep center frequency",
+                query=query,
             )
             span_hz = self._query_finite_float(
-                f":SOUR{channel}:FREQ:SPAN?", field_name="sweep span"
+                f":SOUR{channel}:FREQ:SPAN?",
+                field_name="sweep span",
+                query=query,
             )
             spacing = _normalize_enum(
-                self.transport.query(f":SOUR{channel}:SWE:SPAC?"),
+                query(f":SOUR{channel}:SWE:SPAC?"),
                 field_name="sweep spacing",
                 aliases=_SWEEP_SPACING_ALIASES,
             )
             steps_raw = self._query_finite_float(
-                f":SOUR{channel}:SWE:STEP?", field_name="sweep steps"
+                f":SOUR{channel}:SWE:STEP?",
+                field_name="sweep steps",
+                query=query,
             )
             if not steps_raw.is_integer():
                 raise DataError("sweep steps response must be an integer")
             steps = int(steps_raw)
             sweep_time_s = self._query_finite_float(
-                f":SOUR{channel}:SWE:TIME?", field_name="sweep time"
+                f":SOUR{channel}:SWE:TIME?",
+                field_name="sweep time",
+                query=query,
             )
             start_hold_s = self._query_finite_float(
-                f":SOUR{channel}:SWE:HTIM:STAR?", field_name="sweep start hold"
+                f":SOUR{channel}:SWE:HTIM:STAR?",
+                field_name="sweep start hold",
+                query=query,
             )
             stop_hold_s = self._query_finite_float(
-                f":SOUR{channel}:SWE:HTIM:STOP?", field_name="sweep stop hold"
+                f":SOUR{channel}:SWE:HTIM:STOP?",
+                field_name="sweep stop hold",
+                query=query,
             )
             return_time_s = self._query_finite_float(
-                f":SOUR{channel}:SWE:RTIM?", field_name="sweep return time"
+                f":SOUR{channel}:SWE:RTIM?",
+                field_name="sweep return time",
+                query=query,
             )
             trigger_source = _normalize_enum(
-                self.transport.query(f":SOUR{channel}:SWE:TRIG:SOUR?"),
+                query(f":SOUR{channel}:SWE:TRIG:SOUR?"),
                 field_name="sweep trigger source",
                 aliases=_SWEEP_TRIGGER_SOURCE_ALIASES,
             )
             trigger_slope = _normalize_enum(
-                self.transport.query(f":SOUR{channel}:SWE:TRIG:SLOP?"),
+                query(f":SOUR{channel}:SWE:TRIG:SLOP?"),
                 field_name="sweep trigger slope",
                 aliases=_EDGE_ALIASES,
             )
             trigger_out = _normalize_enum(
-                self.transport.query(f":SOUR{channel}:SWE:TRIG:TRIGOUT?"),
+                query(f":SOUR{channel}:SWE:TRIG:TRIGOUT?"),
                 field_name="sweep trigger output",
                 aliases=_TRIGGER_OUT_ALIASES,
             )
             marker_enabled = self._query_state(
-                f":SOUR{channel}:MARK:STAT?", field_name="marker state"
+                f":SOUR{channel}:MARK:STAT?",
+                field_name="marker state",
+                query=query,
             )
             marker_frequency_hz = self._query_finite_float(
-                f":SOUR{channel}:MARK:FREQ?", field_name="marker frequency"
+                f":SOUR{channel}:MARK:FREQ?",
+                field_name="marker frequency",
+                query=query,
             )
             try:
                 return SourceSweepProfile(
@@ -718,65 +2736,112 @@ class DG4202Source:
                 raise DataError(f"inconsistent DG4000 sweep profile: {exc}") from exc
 
     def get_counter_profile(self) -> SourceCounterProfile:
+        return self._get_counter_profile(query=self.transport.query)
+
+    def _read_counter(
+        self,
+        *,
+        query: _Query,
+        tolerate_invalid_measurement: bool,
+    ) -> _CounterReadback:
         with self._io_lock:
-            self._ensure_identity()
-            enabled = self._query_state(":COUN?", field_name="counter state")
-            measurement = (
-                _parse_counter_measurement(self.transport.query(":COUN:MEAS?"))
-                if enabled
-                else None
+            self._ensure_identity(query=query)
+            enabled = self._query_state(
+                ":COUN?",
+                field_name="counter state",
+                query=query,
             )
+            measurement = None
+            measurement_unavailable = False
+            if enabled:
+                try:
+                    measurement = _parse_counter_measurement(query(":COUN:MEAS?"))
+                except DataError:
+                    if not tolerate_invalid_measurement:
+                        raise
+                    # A just-enabled Counter can report all-zero values while its
+                    # gate is settling.  Keep configuration readable so OFF
+                    # remains available, but do not fabricate a measurement.
+                    measurement_unavailable = True
             coupling = _normalize_enum(
-                self.transport.query(":COUN:COUP?"),
+                query(":COUN:COUP?"),
                 field_name="counter coupling",
                 aliases={"AC": "AC", "DC": "DC"},
             )
             impedance_ohm = _parse_counter_impedance(
-                self.transport.query(":COUN:IMP?")
+                query(":COUN:IMP?")
             )
             attenuation_text = _normalize_enum(
-                self.transport.query(":COUN:ATT?"),
+                query(":COUN:ATT?"),
                 field_name="counter attenuation",
                 aliases={"1": "1", "1X": "1", "10": "10", "10X": "10"},
             )
             gate_time = _normalize_enum(
-                self.transport.query(":COUN:GATE?"),
+                query(":COUN:GATE?"),
                 field_name="counter gate time",
                 aliases=_COUNTER_GATE_TIME_ALIASES,
             )
             high_frequency_rejection_enabled = self._query_state(
-                ":COUN:HF?", field_name="counter high-frequency rejection state"
+                ":COUN:HF?",
+                field_name="counter high-frequency rejection state",
+                query=query,
             )
             trigger_level_v = self._query_finite_float(
-                ":COUN:LEVE?", field_name="counter trigger level"
+                ":COUN:LEVE?",
+                field_name="counter trigger level",
+                query=query,
             )
             sensitivity_percent = self._query_finite_float(
-                ":COUN:SENS?", field_name="counter sensitivity"
+                ":COUN:SENS?",
+                field_name="counter sensitivity",
+                query=query,
             )
             statistics_enabled = self._query_state(
-                ":COUN:STATI:STAT?", field_name="counter statistics state"
+                ":COUN:STATI:STAT?",
+                field_name="counter statistics state",
+                query=query,
             )
             statistics_display = _normalize_enum(
-                self.transport.query(":COUN:STATI:DISP?"),
+                query(":COUN:STATI:DISP?"),
                 field_name="counter statistics display",
                 aliases=_COUNTER_STATISTICS_DISPLAY_ALIASES,
             )
-            try:
-                return SourceCounterProfile(
-                    enabled=enabled,
-                    measurement=measurement,
-                    coupling=coupling,
-                    impedance_ohm=impedance_ohm,
-                    attenuation=int(attenuation_text),
-                    gate_time=gate_time,
-                    high_frequency_rejection_enabled=high_frequency_rejection_enabled,
-                    trigger_level_v=trigger_level_v,
-                    sensitivity_percent=sensitivity_percent,
-                    statistics_enabled=statistics_enabled,
-                    statistics_display=statistics_display,
-                )
-            except ValueError as exc:
-                raise DataError(f"inconsistent DG4000 counter profile: {exc}") from exc
+            return _CounterReadback(
+                enabled=enabled,
+                measurement=measurement,
+                measurement_unavailable=measurement_unavailable,
+                coupling=coupling,
+                impedance_ohm=impedance_ohm,
+                attenuation=int(attenuation_text),
+                gate_time=gate_time,
+                high_frequency_rejection_enabled=high_frequency_rejection_enabled,
+                trigger_level_v=trigger_level_v,
+                sensitivity_percent=sensitivity_percent,
+                statistics_enabled=statistics_enabled,
+                statistics_display=statistics_display,
+            )
+
+    def _get_counter_profile(self, *, query: _Query) -> SourceCounterProfile:
+        readback = self._read_counter(
+            query=query,
+            tolerate_invalid_measurement=False,
+        )
+        try:
+            return SourceCounterProfile(
+                enabled=readback.enabled,
+                measurement=readback.measurement,
+                coupling=readback.coupling,
+                impedance_ohm=readback.impedance_ohm,
+                attenuation=readback.attenuation,
+                gate_time=readback.gate_time,
+                high_frequency_rejection_enabled=readback.high_frequency_rejection_enabled,
+                trigger_level_v=readback.trigger_level_v,
+                sensitivity_percent=readback.sensitivity_percent,
+                statistics_enabled=readback.statistics_enabled,
+                statistics_display=readback.statistics_display,
+            )
+        except ValueError as exc:
+            raise DataError(f"inconsistent DG4000 counter profile: {exc}") from exc
 
     def set_frequency(
         self,

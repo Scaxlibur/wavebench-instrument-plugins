@@ -11,7 +11,7 @@ import zlib
 import numpy as np
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
-from wavebench.instruments.models import (
+from wavebench.instruments import (
     ScopeChannelInputStateV2,
     ScopeCursorReadout,
     ScopeCursorReadoutV2,
@@ -29,8 +29,6 @@ from wavebench.instruments.models import (
     SCOPE_SNAPSHOT_V2_FIELD_ORDER,
     WaveformData,
     WaveformHeader,
-)
-from wavebench.instruments.scope_extensions import (
     ScopeAcquisitionCompletion,
     ScopeAcquisitionControlBaseline,
     ScopeAcquisitionControlSnapshot,
@@ -53,8 +51,7 @@ from wavebench.instruments.scope_extensions import (
     ScopeWaveformTransferRestoreResult,
     ScopeWaveformTransferStateSnapshot,
 )
-from wavebench.transport.base import InstrumentTransport
-from wavebench.transport.contracts import BinaryResponseFraming, ReplayPolicy
+from wavebench.transport import BinaryResponseFraming, InstrumentTransport, ReplayPolicy
 
 from .parsers import (
     MSO8104_ACQUISITION_STATUS_V2_READABLE_FIELDS,

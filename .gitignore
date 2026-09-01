@@ -1,5 +1,6 @@
 # Private project cockpits and local operator notes
 /tool-*/
+.codegraph/
 
 # Python environments and caches
 .venv/

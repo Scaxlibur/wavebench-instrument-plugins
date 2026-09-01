@@ -1110,7 +1110,7 @@ def _bounded_executor(
 ) -> tuple[BoundedWaveformExecutor, MSO8104Scope, InstrumentSessionState]:
     session_state = InstrumentSessionState(epoch_id="mso8104-bounded-test")
     guarded = GuardedAuditedTransport(transport, session_state=session_state)
-    guarded._mark_bounded_waveform_backend_verified()
+    guarded._mark_bounded_binary_backend_verified()
     scope = MSO8104Scope(
         transport=guarded,
         max_total_waveform_points=max_total_waveform_points,
@@ -1134,7 +1134,7 @@ def _capture_bounded_executor(
 ) -> tuple[BoundedWaveformExecutor, MSO8104Scope, InstrumentSessionState]:
     session_state = InstrumentSessionState(epoch_id="mso8104-capture-candidate-test")
     guarded = GuardedAuditedTransport(transport, session_state=session_state)
-    guarded._mark_bounded_waveform_backend_verified()
+    guarded._mark_bounded_binary_backend_verified()
     scope = MSO8104Scope(
         transport=guarded,
         trigger_poll_interval_s=0.0,
@@ -1260,7 +1260,7 @@ def test_bounded_capture_waits_before_recovery_verification() -> None:
     sleeps: list[float] = []
     session_state = InstrumentSessionState(epoch_id="mso8104-capture-settle-test")
     guarded = GuardedAuditedTransport(transport, session_state=session_state)
-    guarded._mark_bounded_waveform_backend_verified()
+    guarded._mark_bounded_binary_backend_verified()
     scope = MSO8104Scope(
         transport=guarded,
         trigger_poll_interval_s=0.0,
@@ -1296,7 +1296,7 @@ def test_bounded_capture_polls_recovery_synchronization_to_opc_ready() -> None:
     sleeps: list[float] = []
     session_state = InstrumentSessionState(epoch_id="mso8104-capture-opc-poll-test")
     guarded = GuardedAuditedTransport(transport, session_state=session_state)
-    guarded._mark_bounded_waveform_backend_verified()
+    guarded._mark_bounded_binary_backend_verified()
     scope = MSO8104Scope(
         transport=guarded,
         trigger_poll_interval_s=0.0,

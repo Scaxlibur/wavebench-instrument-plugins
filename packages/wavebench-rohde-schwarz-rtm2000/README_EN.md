@@ -9,12 +9,12 @@ RTM2032 as the current hardware baseline.
 
 - distribution: `wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID: `rohde-schwarz.rtm2032`
-- development baseline: WaveBench `0.8.7`
-- WaveBench: `>=0.8.7,<0.9`
+- development baseline: WaveBench `0.8.25`
+- WaveBench: `>=0.8.25,<0.9`
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-The plugin's 0.12.0 development line targets WaveBench `v0.8.7`, does not maintain a legacy-core
+The plugin's 0.13.0 development line targets WaveBench `v0.8.25`, does not maintain a legacy-core
 compatibility matrix, and does not automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
@@ -31,6 +31,9 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 - read-only K15 history timestamp tables for RTM2032 CH1/CH2;
 - read-only statistics for an explicitly preconfigured automatic-measurement slot;
 - read-only metadata/status for existing math, FFT, reference, and cursor state;
+- read-only Scope V2 surfaces for channel input state, B1-gated digital status, a strict five-field
+  identity snapshot, slot-1-to-4 measurement statistics without buffers, and three-field status for
+  an explicitly configured FFT;
 - a vendor-specific minimal controlled RTM2032 CH2 edge-trigger configuration loop;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
@@ -207,6 +210,20 @@ does not alter format, points, display, or thresholds, and does not consume the 
 FakeTransport acceptance. An RTM2032 read-only preflight passed the B1 and `CSV,0` gates, but D0
 was hidden and `DIGital0:DATA:POINts?` returned zero, so the driver stopped before `DATA?` and
 digital-payload hardware acceptance remains pending.
+
+Version 0.13.0 maps five existing read-only surfaces to the WaveBench 0.8.25 Scope V2 contracts.
+Channel input state derives coupling and termination only from `CHANnel<n>:COUPling?`, with numeric
+impedance explicitly unavailable. Digital status reuses the existing B1-gated queries and marks
+threshold scope and timing calibration unavailable. Snapshot V2 is fixed to five identity fields and
+two queries. Measurement statistics accepts only preconfigured slots 1-4, reads no buffer, and
+requires all five aggregates to be finite. FFT status exposes only average complete, RBW, and sample
+rate. These adapters add no SCPI writes and do not alter the V1 methods, host-side FFT analysis, or
+waveform-capture logic.
+Controlled read-only RTM2032 acceptance passed for CH1/CH2 input state, CH1/CH2 identity snapshots,
+and D0 digital status. Every related session was forced to `read_only`, with zero write requests and
+zero binary writes. Measurement-statistics and FFT V2 remain bounded by offline equivalence tests and
+their existing V1 hardware evidence; this run did not pretend to have fresh front-panel configuration
+confirmation by passing `configured=True` without evidence.
 
 ## Development checks
 

@@ -8,7 +8,7 @@
 
 指定手册的 1490 行转录中共有 1434 个命令索引条目，精确去重后为 1417 个命令模板（608 个带查询标记、809 个非查询形式）。进一步按大小写不敏感并去除排版空白后为 1416 个模板（607 个查询、809 个非查询）；最后一个差异来自重复/排版变体。这个数字仍包含参数化模板和少量 OCR 异常，因此只用于描述命令面规模，不作为功能完成率分母。
 
-当前外置插件公开 16 项 WaveBench capability。它是经过实机验收的模拟波形采集 MVP，并包含一组窄的只读状态/分析能力和一条受控平均采集事务，不是通用 RTM2000 远程控制层。
+当前外置插件公开 24 项 WaveBench capability，其中 5 项是 0.13.0 新增的只读 Scope V2 capability。它是经过实机验收的模拟波形采集 MVP，并包含一组窄的只读状态/分析能力和一条受控平均采集事务，不是通用 RTM2000 远程控制层。
 
 覆盖状态：
 
@@ -23,19 +23,19 @@
 
 | 功能域 | 手册命令面 | 当前覆盖 | 实机状态 | 主要缺口 | 建议 |
 |---|---|---|---|---|---|
-| 身份、同步与基本错误 | IEEE 488.2 公共命令，`SYSTem:ERRor:*` | `*IDN?`、`*OPT?`、非消费型 health snapshot、`*CLS`、`*OPC?` 等待、显式错误队列 | **实机通过** | 自检和完整事件寄存器 API 未暴露 | identity/options/health P1 已完成；EVENT 保持显式边界 |
+| 身份、同步与基本错误 | IEEE 488.2 公共命令，`SYSTem:ERRor:*` | `*IDN?`、`*OPT?`、非消费型 health snapshot、identity 五字段 `scope.snapshot_v2`、`*CLS`、`*OPC?` 等待、显式错误队列 | **实机通过**：CH1/CH2 Snapshot V2 只读验收通过 | 自检和完整事件寄存器 API 未暴露 | identity/options/health P1 已完成；EVENT 保持显式边界 |
 | Acquisition 控制 | 16 个模板：模式、平均、采样率、记录长度、插值、分段和可用点数 | 只读 available/count/sample-rate 及 average/segmented 状态；`SINGle` 单次采集；显式 `AUToscale`；受控 `scope.capture_average` | **只读状态实机通过；平均事务已实现、待独立实机验收** | 连续运行/停止、分段采集、写入率和插值仍缺失 | 保持 average 的显式 stopped 确认、回读恢复与锁存；**P2**：分段 plan |
-| 模拟通道配置 | 约 48 个模板：状态、耦合、量程、比例、偏置、位置、带宽、极性、skew、标签、过载、阈值 | RTM2032 CH1/CH2 类型化只读状态；既有状态开、比例、位置归零写路径 | **实机通过** | 无阈值读回；setter 没有通用快照与回滚 | 只读 P1 已完成；写入继续受高阻和恢复策略约束 |
+| 模拟通道配置 | 约 48 个模板：状态、耦合、量程、比例、偏置、位置、带宽、极性、skew、标签、过载、阈值 | RTM2032 CH1/CH2 类型化只读状态与 `scope.channel_input_state_v2`；V2 仅映射 coupling/termination，数值阻抗标记为 unavailable；既有状态开、比例、位置归零写路径 | **实机通过**：CH1/CH2 V2 输入状态只读验收通过 | 无阈值读回；setter 没有通用快照与回滚 | 只读 P1 已完成；写入继续受高阻和恢复策略约束 |
 | 模拟波形传输 | `CHANnel<m>:DATA*`、envelope、独立 X/Y 元数据 | REAL/LSBF、header + data、`DEF/MAX/DMAX`、一次 acquisition 后逐通道读取；类型化 X/Y 缩放、点数、量化位数和 values-per-sample 快照 | **实机通过** | 无 envelope、history/segment 选择或流式块 API；不承诺跨通道硬件同步 | 波形元数据已完成；**P2**：分段/history/envelope |
 | 时基、缩放与时间戳 | 12 个 timebase 模板、zoom、timestamp 导航 | 类型化 acquisition time/divisions/position/range/reference/scale/roll 只读状态；既有 `TIMebase:RANGe` 写入；K15 门控的严格 history timestamp table API | **基础时基实机通过；history timestamp 查询因仪器 timeout 阻塞** | 无 zoom；没有成功的 timestamp table 实机证据 | 保留严格 K15 gate，禁止隐式重试/清错；history 状态另行调查 |
 | 触发系统 | 约 159 个模板：A/B、edge、width、runt、rise time、pattern、TV、holdoff、外部和协议触发 | CH1/CH2 基础 edge-trigger 类型化只读快照；RTM2032 CH2 `EDGE/AUTO/POS/DC/level` 厂商专用受控 setter；单次采集沿用仪器当前触发设置 | **只读与 CH2 写入/恢复实机通过** | setter 仅接受健康、高阻、未过载 CH2 和当前量程内电平；无自动恢复 journal、其他 trigger 类型、B trigger 或 trigger out | P1 已完成；恢复责任保持显式，扩展写能力前另行设计事务模型 |
-| 自动测量与统计 | 20 个模板：测量槽、source/main、actual、峰值、均值、标准差、波形计数 | `scope.measurement_statistics`：仅查询调用方确认已配置的槽；可选 STOP 状态 buffer | **已配置槽实机通过**：CH2 frequency actual/average/min/max/stddev/count 均成功；未配置槽 timeout 保留为负向边界 | 未知槽仍必须在 I/O 前拒绝；STOP buffer 尚未实机验收 | 继续要求显式配置确认；buffer 还需 stopped 确认；该 API 不配置/复位槽位、不读错误队列 |
+| 自动测量与统计 | 20 个模板：测量槽、source/main、actual、峰值、均值、标准差、波形计数 | `scope.measurement_statistics` 与 `scope.measurement_statistics_v2`；V2 仅查询调用方确认已配置的 1–4 号槽，不支持 buffer，并要求完整有限聚合值 | **既有已配置槽实机通过；V2 适配器已离线验证**：CH2 frequency actual/average/min/max/stddev/count 均成功；未配置槽 timeout 保留为负向边界 | STOP buffer 尚未实机验收，且不属于 V2 profile | 继续要求显式配置确认；buffer 还需 stopped 确认；该 API 不配置/复位槽位、不读错误队列 |
 | 光标 | 约 27 个模板：X/Y 光标、delta、ratio、tracking、结果 | `scope.cursor_readout`：仅查询调用方确认已配置的 cursor | **Vertical delta 实机通过**；其他函数仅离线测试 | 无生产 cursor 配置/定位 API | 窄 readout 已完成；定位保持独立受控动作 |
-| 数学与 FFT | 约 51 个模板：表达式、math 波形、envelope、FFT window/span/RBW | `scope.math_metadata`、受门控的 `scope.fft_status`、既有状态的 `scope.reference_metadata` | **Math metadata 与 FFT status 实机通过**；reference 因仪器没有有效存储波形而阻塞 | 无 payload read、生产 expression 配置或 reference update/save/load | 保持状态配置分离，保护 reference 存储，主机 DSP 继续独立 |
+| 数学与 FFT | 约 51 个模板：表达式、math 波形、envelope、FFT window/span/RBW | `scope.math_metadata`、受门控的 `scope.fft_status`、仅提供 average complete/RBW/sample rate 的 `scope.fft_status_v2`，以及既有状态的 `scope.reference_metadata` | **既有 Math metadata 与 FFT status 实机通过；V2 适配器已离线验证**；reference 因仪器没有有效存储波形而阻塞 | 无 payload read、生产 expression 配置或 reference update/save/load | 保持状态配置分离，保护 reference 存储，主机 DSP 继续独立 |
 | Spectrum / spectrogram | 107 个模板：频谱波形、频率轴、RBW、marker、history、spectrogram | 未覆盖 | 无 | 完整频谱分析应用缺失 | **P3，选件门控**：先探测选件和 `SPECtrum[:STATe]`，再设计独立 capability |
 | Search | 约 119 个模板：edge/width/runt/pattern、结果和协议搜索 | 未覆盖 | 无 | 无搜索配置、结果列表或结果导航 | **P3**：依赖 history/trigger/protocol 模型成熟后再做 |
 | Mask test | 约 36 个模板：mask 数据、计数、动作、保存/加载 | 未覆盖 | 无 | 无 mask 生命周期、违规计数或 action 安全模型 | **P3，破坏性动作分离**：只读结果与保存/打印/脉冲动作必须分开 |
-| 数字通道 / MSO | 约 33 个模板：数字波形、阈值、技术类型、deskew、history | B1 门控的 `scope.digital_status`；`scope.digital_waveform` 在既有 ASCII 格式（手册 `ASC,0`，RTM2032 回读 `CSV,0`）下逐 Dn 只读并主机侧合并为 uint16 | **标量状态查询实机通过**：D0–D15、四组映射、重复读取和 CLI D0/D15 均通过；数字波形 FakeTransport 通过，实机只读预检通过 B1/格式门控后因 D0 未显示、点数为 0 在 `DATA?` 前终止 | 数字 waveform payload 尚未实机验收；无配置写入、history 或总线解码 API；未做数字探头电气验收 | 在停止采集的稳定记录上做零写入 payload/轴一致性实机验收；电气输入验收另行设计 |
+| 数字通道 / MSO | 约 33 个模板：数字波形、阈值、技术类型、deskew、history | B1 门控的 `scope.digital_status` 与 `scope.digital_status_v2`；V2 将 threshold scope 与 timing calibration 标记为 unavailable；`scope.digital_waveform` 在既有 ASCII 格式（手册 `ASC,0`，RTM2032 回读 `CSV,0`）下逐 Dn 只读并主机侧合并为 uint16 | **标量状态实机通过**：既有 D0–D15 与 CLI 验收保持有效，D0 V2 只读验收通过；数字波形 FakeTransport 通过，实机只读预检通过 B1/格式门控后因 D0 未显示、点数为 0 在 `DATA?` 前终止 | 数字 waveform payload 尚未实机验收；无配置写入、history 或总线解码 API；未做数字探头电气验收 | 在停止采集的稳定记录上做零写入 payload/轴一致性实机验收；电气输入验收另行设计 |
 | 串行/并行总线解码 | 约 249 个模板：I²C、SPI/SSPI、UART、CAN、LIN、I²S、ARINC、MIL-STD、并行总线及帧结果 | 未覆盖 | 无 | 无总线配置、帧列表、字段解析或 history | **P3，按选件拆包**；不要放进基础 scope capability |
 | 协议触发与协议搜索 | 触发和 search 内另有大量 CAN/LIN/I²C/SPI/UART/I²S/ARINC/MIL-STD 模板 | 未覆盖 | 无 | 依赖总线源、阈值、协议格式和选件探测 | **P3**：在总线只读解码之后实现 |
 | DVM 与频率计数器 | 6 个 DVM、3 个 counter 模板 | 未覆盖 | 无 | 无 source/type/result/status API | **P2，选件门控**：适合小型只读 capability |

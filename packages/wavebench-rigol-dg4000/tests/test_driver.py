@@ -1,20 +1,79 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from hashlib import sha256
+from pathlib import Path
 
 import pytest
 
-from wavebench.errors import DataError, InstrumentError
-from wavebench.instruments import DG4000ByteOrder, DG4000DacBlock
+from wavebench.config import (
+    AutoscaleConfig,
+    ConnectionConfig,
+    OutputConfig,
+    SafetyLimitsConfig,
+    ScopeConfig,
+    SourceConfig,
+    WaveBenchConfig,
+    WaveformConfig,
+)
+from wavebench.errors import ConfigError, DataError, InstrumentError
+from wavebench.instruments import (
+    Availability,
+    DG4000ByteOrder,
+    DG4000DacBlock,
+    Observed,
+    PatchAction,
+    PatchValue,
+    SourceArbitraryPlaybackMode,
+    SourceArbitraryVolatileReplaceRequest,
+    SourceArbitraryWorkspaceVolatileReplaceRequest,
+    SourceAmplitudeUnit,
+    SourceBasicConfigureRequest,
+    SourceCounterConfigurationPatch,
+    SourceCounterConfigureRequest,
+    SourceCounterEnableRequest,
+    SourceCounterMeasureRequest,
+    SourceCounterMeasurementKind,
+    SourceFireRequest,
+    SourceCouplingDimension,
+    SourceCouplingParameterKind,
+    SourceFieldId,
+    SourceFeature,
+    SourceFeatureDirection,
+    SourceFrequencyMode,
+    SourceInputCoupling,
+    SourceModulationKind,
+    SourceNoiseOverlayScaleKind,
+    SourceOutputRequest,
+    SourceReasonCode,
+    SourceSemanticQueryPlan,
+    SourceSweepConfigureRequest,
+    SourceSweepSpacing,
+    SourceSyncPolarity,
+    SourceTriggerSource,
+    SourceWaveformKind,
+)
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
+from wavebench.instruments.source_extension_capabilities import validate_source_descriptor
 from wavebench.logging import CommandLogger
+from wavebench.services.source_service import SourceService
+from wavebench.services.source_snapshot_v2 import (
+    build_source_snapshot,
+    build_source_snapshot_plan,
+    new_source_snapshot_context,
+)
+from wavebench.transport.guarded import GuardedAuditedTransport
+from wavebench.transport.session import InstrumentSessionState
 
-from wavebench_rigol_dg4000 import descriptor
+from wavebench_rigol_dg4000 import descriptor, descriptor_v2, descriptor_v2_workspace
 from wavebench_rigol_dg4000.driver import DG4202Source
 
 
 class FakeTransport:
+    resource = "fake-dg4202"
+
     def __init__(self, channel: int = 1, *, model: str = "DG4202") -> None:
         self.channel = channel
         self.model = model
@@ -47,11 +106,28 @@ class FakeTransport:
             "sync": "ON",
             "sync_polarity": "POS",
             "burst": "OFF",
+            "burst_mode": "TRIG",
+            "burst_cycles": 4,
+            "burst_phase": 10.0,
+            "burst_internal_period": 0.01,
+            "burst_delay": 0.0,
+            "burst_gate_polarity": "NORM",
+            "burst_trigger_source": "INT",
+            "burst_trigger_slope": "POS",
+            "burst_trigger_out": "OFF",
+            "harmonic_order": 8,
+            "harmonic_maximum_order": 16,
+            "harmonic_type": "ODD",
             "modulation": "OFF",
             "modulation_type": "AM",
             "marker": "OFF",
             "marker_frequency": 550.0,
             "pulse_hold": "DUTY",
+            "pulse_width": 0.0005,
+            "pulse_duty": 50.0,
+            "pulse_delay": 0.0,
+            "pulse_leading": 1.0e-6,
+            "pulse_trailing": 2.0e-6,
             "sweep_start": 100.0,
             "sweep_stop": 1000.0,
             "sweep_center": 550.0,
@@ -65,6 +141,7 @@ class FakeTransport:
             "sweep_trigger_source": "INT",
             "sweep_trigger_slope": "POS",
             "sweep_trigger_out": "OFF",
+            "sweep_fire_count": 0,
             "counter": "OFF",
             "counter_measurement": "1.000000E+03,1.000000E-03,4.000000E+01,4.000000E-04,6.000000E-04",
             "counter_coupling": "AC",
@@ -76,6 +153,11 @@ class FakeTransport:
             "counter_sensitivity": 50.0,
             "counter_statistics": "OFF",
             "counter_statistics_display": "DIGITAL",
+            "coupling": "FREQ:OFF,PHASE:OFF,AMPL:OFF",
+            "coupling_base": "CH1",
+            "coupling_amplitude_deviation": 0.5,
+            "coupling_frequency_deviation": 100.0,
+            "coupling_phase_deviation": 10.0,
         }
 
     def write(self, command: str) -> None:
@@ -88,12 +170,68 @@ class FakeTransport:
             raise InstrumentError(f"injected ambiguous write failure: {command}")
 
     def _apply_write(self, command: str) -> None:
+        for item in command.split(";"):
+            self._apply_write_item(item)
+
+    def _apply_write_item(self, command: str) -> None:
         prefix = f":SOUR{self.channel}"
-        if command.startswith(f"{prefix}:FREQ:MODE "):
+        if command.startswith(":COUN:COUP "):
+            self.state["counter_coupling"] = command.split()[-1]
+        elif command.startswith(":COUN:IMP "):
+            self.state["counter_impedance"] = command.split()[-1]
+        elif command.startswith(":COUN:ATT "):
+            self.state["counter_attenuation"] = command.split()[-1]
+        elif command.startswith(":COUN:LEVE "):
+            self.state["counter_level"] = float(command.split()[-1])
+        elif command.startswith(":COUN:STATI:STAT "):
+            self.state["counter_statistics"] = command.split()[-1]
+        elif command.startswith(":COUN "):
+            self.state["counter"] = command.split()[-1]
+        elif command.startswith(f"{prefix}:FREQ:MODE "):
             self.state["mode"] = command.split()[-1]
             self.state["swe"] = "OFF" if self.state["mode"] == "FIX" else "ON"
         elif command.startswith(f"{prefix}:FREQ "):
             self.state["freq"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:FREQ:STAR "):
+            self.state["sweep_start"] = float(command.split()[-1])
+            self.state["sweep_center"] = (
+                self.state["sweep_start"] + self.state["sweep_stop"]
+            ) / 2
+            self.state["sweep_span"] = self.state["sweep_stop"] - self.state["sweep_start"]
+        elif command.startswith(f"{prefix}:FREQ:STOP "):
+            self.state["sweep_stop"] = float(command.split()[-1])
+            self.state["sweep_center"] = (
+                self.state["sweep_start"] + self.state["sweep_stop"]
+            ) / 2
+            self.state["sweep_span"] = self.state["sweep_stop"] - self.state["sweep_start"]
+        elif command.startswith(f"{prefix}:SWE:SPAC "):
+            self.state["sweep_spacing"] = command.split()[-1]
+        elif command.startswith(f"{prefix}:SWE:STEP "):
+            self.state["sweep_steps"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:TIME "):
+            self.state["sweep_time"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:HTIM:STAR "):
+            self.state["sweep_start_hold"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:HTIM:STOP "):
+            self.state["sweep_stop_hold"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:RTIM "):
+            self.state["sweep_return_time"] = float(command.split()[-1])
+        elif command.startswith(f"{prefix}:SWE:TRIG:SOUR "):
+            self.state["sweep_trigger_source"] = command.split()[-1]
+        elif command.startswith(f"{prefix}:SWE:TRIG:SLOP "):
+            self.state["sweep_trigger_slope"] = command.split()[-1]
+        elif command.startswith(f"{prefix}:SWE:TRIG:TRIGOUT "):
+            self.state["sweep_trigger_out"] = command.split()[-1]
+        elif command == f"{prefix}:SWE:TRIG":
+            self.state["sweep_fire_count"] += 1
+        elif command.startswith(f"{prefix}:SWE:STAT "):
+            self.state["swe"] = command.split()[-1]
+            self.state["mode"] = "SWE" if self.state["swe"] == "ON" else "FIX"
+            if self.state["swe"] == "ON":
+                self.state["burst"] = "OFF"
+                self.state["modulation"] = "OFF"
+        elif command.startswith(f"{prefix}:MARK:STAT "):
+            self.state["marker"] = command.split()[-1]
         elif command.startswith(f":OUTP{self.channel} "):
             self.state["out"] = command.split()[-1]
         elif command.startswith(f"{prefix}:FUNC:SHAP "):
@@ -115,7 +253,7 @@ class FakeTransport:
             self.fail_byte_write = False
             raise InstrumentError("injected ambiguous binary write failure")
 
-    def query(self, command: str) -> str:
+    def query(self, command: str, **_ignored: object) -> str:
         self.queries.append(command)
         if command in self.fail_queries:
             raise InstrumentError(f"injected query failure: {command}")
@@ -146,11 +284,32 @@ class FakeTransport:
             f":OUTP{channel}:SYNC?": self.state["sync"],
             f":OUTP{channel}:SYNC:POL?": self.state["sync_polarity"],
             f":SOUR{channel}:BURS:STAT?": self.state["burst"],
+            f":SOUR{channel}:BURS:MODE?": self.state["burst_mode"],
+            f":SOUR{channel}:BURS:NCYC?": str(self.state["burst_cycles"]),
+            f":SOUR{channel}:BURS:PHAS?": str(self.state["burst_phase"]),
+            f":SOUR{channel}:BURS:INT:PER?": str(
+                self.state["burst_internal_period"]
+            ),
+            f":SOUR{channel}:BURS:TDEL?": str(self.state["burst_delay"]),
+            f":SOUR{channel}:BURS:GATE:POL?": self.state["burst_gate_polarity"],
+            f":SOUR{channel}:BURS:TRIG:SOUR?": self.state["burst_trigger_source"],
+            f":SOUR{channel}:BURS:TRIG:SLOP?": self.state["burst_trigger_slope"],
+            f":SOUR{channel}:BURS:TRIG:TRIGOUT?": self.state["burst_trigger_out"],
+            f":SOUR{channel}:HARM:ORDER?": str(self.state["harmonic_order"]),
+            f":SOUR{channel}:HARM:ORDER? MAX": str(
+                self.state["harmonic_maximum_order"]
+            ),
+            f":SOUR{channel}:HARM:TYPE?": self.state["harmonic_type"],
             f":SOUR{channel}:MOD:STAT?": self.state["modulation"],
             f":SOUR{channel}:MOD:TYPE?": self.state["modulation_type"],
             f":SOUR{channel}:MARK:STAT?": self.state["marker"],
             f":SOUR{channel}:MARK:FREQ?": str(self.state["marker_frequency"]),
             f":SOUR{channel}:PULS:HOLD?": self.state["pulse_hold"],
+            f":SOUR{channel}:PULS:WIDT?": str(self.state["pulse_width"]),
+            f":SOUR{channel}:PULS:DCYC?": str(self.state["pulse_duty"]),
+            f":SOUR{channel}:PULS:DEL?": str(self.state["pulse_delay"]),
+            f":SOUR{channel}:PULS:TRAN?": str(self.state["pulse_leading"]),
+            f":SOUR{channel}:PULS:TRAN:TRA?": str(self.state["pulse_trailing"]),
             f":SOUR{channel}:FREQ:STAR?": str(self.state["sweep_start"]),
             f":SOUR{channel}:FREQ:STOP?": str(self.state["sweep_stop"]),
             f":SOUR{channel}:FREQ:CENT?": str(self.state["sweep_center"]),
@@ -175,6 +334,11 @@ class FakeTransport:
             ":COUN:SENS?": str(self.state["counter_sensitivity"]),
             ":COUN:STATI:STAT?": self.state["counter_statistics"],
             ":COUN:STATI:DISP?": self.state["counter_statistics_display"],
+            ":COUP?": self.state["coupling"],
+            ":COUP:CHANNEL:BASE?": self.state["coupling_base"],
+            ":COUP:AMPL:DEV?": str(self.state["coupling_amplitude_deviation"]),
+            ":COUP:FREQ:DEV?": str(self.state["coupling_frequency_deviation"]),
+            ":COUP:PHAS:DEV?": str(self.state["coupling_phase_deviation"]),
             f":SOUR{channel}:FUNC:USER?": '"USER1"',
             f":SOUR{channel}:ARB:SRAT?": "1000000",
         }
@@ -187,6 +351,1531 @@ class FakeTransport:
         self.closed = True
 
 
+class DualChannelFakeTransport(FakeTransport):
+    def query(self, command: str, **kwargs: object) -> str:
+        translated = command.replace(":SOUR2", ":SOUR1").replace(":OUTP2", ":OUTP1")
+        response = super().query(translated, **kwargs)
+        self.queries[-1] = command
+        return response
+
+
+def _source_v2_plan(
+    *,
+    max_queries: int | None = None,
+    deadline_monotonic: float | None = None,
+) -> tuple[object, SourceSemanticQueryPlan]:
+    extensions = descriptor().source_extensions
+    assert extensions is not None
+    context = new_source_snapshot_context(
+        session_epoch="dg4000-source-v2-a0",
+        session_health_before="healthy",
+        descriptor_extensions=extensions,
+        timeout_ms=5_000,
+    )
+    plan = build_source_snapshot_plan(context)
+    if max_queries is not None:
+        plan = replace(plan, max_queries=max_queries)
+    if deadline_monotonic is not None:
+        plan = replace(plan, deadline_monotonic=deadline_monotonic)
+    return context, plan
+
+
+def _prime_v2_write_cache(
+    driver: DG4202Source,
+    *,
+    transport: FakeTransport | None = None,
+    channel: int = 1,
+) -> None:
+    if transport is not None:
+        transport.state["mode"] = "FIX"
+        transport.state["swe"] = "OFF"
+        transport.state["unit"] = "VPP"
+    _context, plan = _source_v2_plan()
+    driver.execute_source_query_plan_v2(plan)
+    assert channel in driver._v2_preflight_snapshots
+
+
+def _basic_v2_request(channel: int, **values: object) -> SourceBasicConfigureRequest:
+    from wavebench.instruments import PatchValue, SourceBasicPatch
+
+    fields = {
+        name: PatchValue(PatchAction.SET, value)
+        for name, value in values.items()
+    }
+    return SourceBasicConfigureRequest(channel=channel, patch=SourceBasicPatch(**fields))
+
+
+def _volatile_v2_request(payload: bytes) -> SourceArbitraryVolatileReplaceRequest:
+    return SourceArbitraryVolatileReplaceRequest(
+        channel=1,
+        payload_sha256="sha256:" + sha256(payload).hexdigest(),
+        payload_size_bytes=len(payload),
+        point_count=len(payload) // 2,
+    )
+
+
+def _workspace_volatile_v2_request(
+    payload: bytes,
+) -> SourceArbitraryWorkspaceVolatileReplaceRequest:
+    return SourceArbitraryWorkspaceVolatileReplaceRequest(
+        payload_sha256="sha256:" + sha256(payload).hexdigest(),
+        payload_size_bytes=len(payload),
+        point_count=len(payload) // 2,
+    )
+
+
+def _counter_v2_request(**values: object) -> SourceCounterConfigureRequest:
+    return SourceCounterConfigureRequest(
+        "counter",
+        SourceCounterConfigurationPatch(
+            **{
+                name: PatchValue(PatchAction.SET, value)
+                for name, value in values.items()
+            }
+        ),
+    )
+
+
+def _sweep_write_candidate_without_interlock_readback(feature: SourceFeature):
+    item = descriptor_v2()
+    assert item.source_extensions is not None
+    features = tuple(
+        replace(feature_capability, profile=replace(feature_capability.profile, inactive_readable=False))
+        if feature_capability.feature is feature
+        else feature_capability
+        for feature_capability in item.source_extensions.features
+    )
+    return replace(item, source_extensions=replace(item.source_extensions, features=features))
+
+
+def _sweep_v2_request(
+    *,
+    trigger_source: SourceTriggerSource = SourceTriggerSource.INTERNAL,
+) -> SourceSweepConfigureRequest:
+    return SourceSweepConfigureRequest(
+        channel=1,
+        start_hz=100.0,
+        stop_hz=1_000.0,
+        spacing=SourceSweepSpacing.LINEAR,
+        steps=101,
+        sweep_time_s=1.0,
+        trigger_source=trigger_source,
+    )
+
+
+def test_production_source_v2_basic_output_counter_satisfies_core_descriptor_gate() -> None:
+    item = descriptor()
+    driver = DG4202Source(DualChannelFakeTransport())
+
+    validate_source_descriptor(item, driver)
+    validate_declared_capabilities(item, driver)
+
+    assert "source.basic_configure_v2" in item.capabilities
+    assert "source.basic_live_configure_v2" in item.capabilities
+    assert "source.output_v2" in item.capabilities
+    assert "source.counter_configure_v2" in item.capabilities
+    assert "source.counter_enable_v2" in item.capabilities
+    assert "source.counter_measure_v2" in item.capabilities
+    assert "source.arbitrary_volatile_replace_v2" not in item.capabilities
+
+
+def test_opt_in_source_v2_descriptor_keeps_unroutable_volatile_arb_read_only() -> None:
+    candidate = descriptor_v2()
+    driver = DG4202Source(DualChannelFakeTransport())
+
+    validate_source_descriptor(candidate, driver)
+    validate_declared_capabilities(candidate, driver)
+
+    assert candidate.driver_id == "rigol.dg4202-v2"
+    assert candidate.aliases == ()
+    assert "source.arbitrary_upload" not in candidate.capabilities
+    assert "source.arbitrary_volatile_replace_v2" not in candidate.capabilities
+    assert "source.counter_configure_v2" in candidate.capabilities
+    assert "source.counter_enable_v2" in candidate.capabilities
+    assert "source.counter_measure_v2" in candidate.capabilities
+    assert "source.sweep_configure_v2" in candidate.capabilities
+    assert "source.sweep_fire_v2" in candidate.capabilities
+    assert "source.sweep_configure_v2" not in descriptor().capabilities
+    assert "source.sweep_fire_v2" not in descriptor().capabilities
+    assert candidate.source_extensions is not None
+    arbitrary_features = tuple(
+        feature
+        for feature in candidate.source_extensions.features
+        if feature.feature is SourceFeature.ARBITRARY
+    )
+    assert arbitrary_features
+    assert all(
+        feature.directions == (SourceFeatureDirection.READ,)
+        for feature in arbitrary_features
+    )
+    sweep_features = tuple(
+        feature
+        for feature in candidate.source_extensions.features
+        if feature.feature is SourceFeature.SWEEP
+    )
+    assert sweep_features
+    assert all(
+        feature.evidence_refs
+        == (
+            "dist-info:wavebench-source-conformance/dg4202-v2-sweep-configure-a4.json",
+            "dist-info:wavebench-source-conformance/dg4202-v2-sweep-fire-a4.json",
+        )
+        for feature in sweep_features
+    )
+    assert all(
+        not feature.evidence_refs
+        for feature in candidate.source_extensions.features
+        if feature.feature is not SourceFeature.SWEEP
+    )
+
+
+def test_opt_in_workspace_descriptor_is_separate_from_sweep_evidence() -> None:
+    candidate = descriptor_v2_workspace()
+    driver = DG4202Source(DualChannelFakeTransport())
+
+    validate_source_descriptor(candidate, driver)
+    validate_declared_capabilities(candidate, driver)
+
+    assert candidate.driver_id == "rigol.dg4202-v2-workspace"
+    assert candidate.capabilities == (
+        "source.idn",
+        "source.snapshot_v2",
+        "source.output_v2",
+        "source.arbitrary_workspace_volatile_replace_v2",
+    )
+    assert "source.arbitrary_upload" not in candidate.capabilities
+    assert "source.arbitrary_volatile_replace_v2" not in candidate.capabilities
+    assert "source.arbitrary_workspace_volatile_replace_v2" in candidate.capabilities
+    assert "source.sweep_configure_v2" not in candidate.capabilities
+    assert candidate.source_extensions is not None
+    workspace_features = tuple(
+        feature
+        for feature in candidate.source_extensions.features
+        if feature.feature is SourceFeature.ARBITRARY_WORKSPACE
+    )
+    assert len(workspace_features) == 1
+    assert workspace_features[0].scope.value == "instrument"
+    assert workspace_features[0].directions == (SourceFeatureDirection.CONFIGURE,)
+    assert all(
+        feature.directions == (SourceFeatureDirection.READ,)
+        for feature in candidate.source_extensions.features
+        if feature.feature in {SourceFeature.BASIC, SourceFeature.COUNTER}
+    )
+    assert all(
+        feature.directions
+        == (SourceFeatureDirection.DISABLE, SourceFeatureDirection.READ)
+        for feature in candidate.source_extensions.features
+        if feature.feature is SourceFeature.OUTPUT
+    )
+    assert all(not feature.evidence_refs for feature in candidate.source_extensions.features)
+
+
+@pytest.mark.parametrize("feature", (SourceFeature.BURST, SourceFeature.MODULATION))
+def test_sweep_source_v2_candidate_requires_declared_inactive_interlock_readback(
+    feature: SourceFeature,
+) -> None:
+    with pytest.raises(ConfigError, match=f"readable inactive {feature.value} state"):
+        validate_source_descriptor(_sweep_write_candidate_without_interlock_readback(feature))
+
+
+def _counter_core_service(
+    transport: DualChannelFakeTransport,
+) -> tuple[SourceService, DG4202Source]:
+    session_state = InstrumentSessionState(epoch_id="dg4202-counter-v2")
+    guarded = GuardedAuditedTransport(transport, session_state=session_state)
+    driver = DG4202Source(guarded)
+    config = WaveBenchConfig(
+        connection=ConnectionConfig("lan", "TCPIP::scope::INSTR", 1_000, 1_000),
+        scope=ScopeConfig("rtm2032", None, 1, False, True),
+        autoscale=AutoscaleConfig(True, True),
+        waveform=WaveformConfig("real", "lsbf", "DMAX"),
+        output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+        source_path=Path("wavebench.toml"),
+        source=SourceConfig(
+            "rigol.dg4202",
+            "TCPIP::source::INSTR",
+            1,
+            False,
+            True,
+            0,
+        ),
+        safety_limits=SafetyLimitsConfig(),
+    )
+    return (
+        SourceService(
+            config=config,
+            logger=CommandLogger(),
+            session=driver,
+            descriptor=descriptor(),
+            transport=guarded,
+            session_state=session_state,
+        ),
+        driver,
+    )
+
+
+def _sweep_core_service(
+    transport: DualChannelFakeTransport,
+) -> tuple[SourceService, DG4202Source]:
+    session_state = InstrumentSessionState(epoch_id="dg4202-sweep-v2")
+    guarded = GuardedAuditedTransport(transport, session_state=session_state)
+    driver = DG4202Source(guarded, allow_arbitrary_sine_exit=True)
+    config = WaveBenchConfig(
+        connection=ConnectionConfig("lan", "TCPIP::scope::INSTR", 1_000, 1_000),
+        scope=ScopeConfig("rtm2032", None, 1, False, True),
+        autoscale=AutoscaleConfig(True, True),
+        waveform=WaveformConfig("real", "lsbf", "DMAX"),
+        output=OutputConfig(Path("data/raw"), "timestamp_label", True, True, True, True, False),
+        source_path=Path("wavebench.toml"),
+        source=SourceConfig(
+            "rigol.dg4202-v2",
+            "TCPIP::source::INSTR",
+            1,
+            False,
+            True,
+            0,
+        ),
+        safety_limits=SafetyLimitsConfig(),
+    )
+    return (
+        SourceService(
+            config=config,
+            logger=CommandLogger(),
+            session=driver,
+            descriptor=descriptor_v2(),
+            transport=guarded,
+            session_state=session_state,
+        ),
+        driver,
+    )
+
+
+def test_source_v2_counter_candidate_routes_through_core_without_v1_or_extra_writes() -> None:
+    transport = DualChannelFakeTransport()
+    service, driver = _counter_core_service(transport)
+
+    configured, _ = service.configure_counter_v2(
+        _counter_v2_request(coupling=SourceInputCoupling.DC)
+    )
+    enabled, _ = service.set_counter_enabled_v2(SourceCounterEnableRequest("counter", True))
+    measured = service.measure_counter_v2(SourceCounterMeasureRequest("counter"))
+
+    assert configured.state.coupling.value is SourceInputCoupling.DC
+    assert enabled.enabled is True
+    assert len(measured.measurements) == 5
+    assert transport.writes == [":COUN:COUP DC", ":COUN ON"]
+    assert transport.byte_writes == []
+    assert driver._configuration_writes_blocked is False
+
+
+def test_source_v2_basic_and_output_writes_use_only_preflight_cache() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    basic = driver.configure_source_basic_v2(
+        _basic_v2_request(1, frequency_hz=1_000.0)
+    )
+    assert basic.output_enabled is False
+    assert basic.basic.frequency_hz.value == 1_000.0
+    assert transport.writes == [":SOUR1:FREQ 1000"]
+    assert transport.queries == queries_before
+
+    enabled = driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    assert enabled.enabled is True
+    assert enabled.final_amplitude is not None
+    assert enabled.final_amplitude.unit is SourceAmplitudeUnit.VPP
+    assert enabled.final_offset_v == 0.0
+    assert transport.writes[-1] == ":OUTP1 ON"
+    assert transport.queries == queries_before
+
+
+def test_source_v2_basic_write_requires_fresh_preflight_and_safe_fixed_state() -> None:
+    transport = FakeTransport()
+    driver = DG4202Source(transport)
+    request = _basic_v2_request(1, frequency_hz=1_000.0)
+
+    with pytest.raises(DataError, match="fresh source.snapshot_v2 preflight"):
+        driver.configure_source_basic_v2(request)
+    assert transport.writes == []
+
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    basic, output = driver._v2_preflight_snapshots[1]
+    driver._v2_preflight_snapshots[1] = (
+        basic,
+        replace(output, enabled=Observed.value_of(True)),
+    )
+    with pytest.raises(DataError, match="requires output OFF"):
+        driver.configure_source_basic_v2(request)
+    assert transport.writes == []
+
+    driver._v2_preflight_snapshots[1] = (
+        replace(basic, frequency_mode=Observed.value_of(SourceFrequencyMode.SWEEP)),
+        output,
+    )
+    with pytest.raises(DataError, match="requires fixed-frequency mode"):
+        driver.configure_source_basic_v2(request)
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("amplitude_vpp", 2.0, ":SOUR1:VOLT 2"),
+        ("offset_v", 0.25, ":SOUR1:VOLT:OFFS 0.25"),
+        ("square_duty_cycle_percent", 25.0, ":SOUR1:FUNC:SQU:DCYC 25"),
+        ("waveform_kind", SourceWaveformKind.RAMP, ":SOUR1:FUNC RAMP"),
+    ],
+)
+def test_source_v2_basic_write_maps_one_supported_field(
+    field: str,
+    value: object,
+    expected: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["mode"] = "FIX"
+    transport.state["swe"] = "OFF"
+    if field == "square_duty_cycle_percent":
+        transport.state["func"] = "SQU"
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+
+    result = driver.configure_source_basic_v2(_basic_v2_request(1, **{field: value}))
+
+    assert result.output_enabled is False
+    assert transport.writes == [expected]
+
+
+def test_source_v2_basic_sine_write_can_exit_verified_harmonic_waveform() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "HARMONIC", "swe": "OFF"})
+    service, _driver = _counter_core_service(transport)
+
+    result, _ = service.configure_basic_v2(
+        _basic_v2_request(1, waveform_kind=SourceWaveformKind.SINE)
+    )
+
+    assert result.basic.waveform_kind.value is SourceWaveformKind.SINE
+    assert transport.writes == [":SOUR1:FUNC SIN"]
+    assert transport.state["out"] == "OFF"
+
+
+def test_source_v2_basic_sine_write_can_exit_user_waveform_while_off() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "USER", "mode": "FIX", "swe": "OFF"})
+    service, _driver = _sweep_core_service(transport)
+
+    result, _ = service.configure_basic_v2(
+        _basic_v2_request(1, waveform_kind=SourceWaveformKind.SINE)
+    )
+
+    assert result.basic.waveform_kind.value is SourceWaveformKind.SINE
+    assert transport.writes == [":SOUR1:FUNC SIN"]
+    assert transport.state["out"] == "OFF"
+
+
+def test_source_v2_basic_user_waveform_rejects_non_exit_writes() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "USER", "mode": "FIX", "swe": "OFF"})
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+
+    with pytest.raises(DataError, match="requires a fixed basic waveform"):
+        driver.configure_source_basic_v2(_basic_v2_request(1, frequency_hz=1_000.0))
+
+    assert transport.writes == []
+
+
+def test_legacy_source_v2_basic_user_waveform_rejects_sine_exit() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "USER", "mode": "FIX", "swe": "OFF"})
+    service, _driver = _counter_core_service(transport)
+
+    with pytest.raises(DataError, match="requires a fixed basic waveform"):
+        service.configure_basic_v2(
+            _basic_v2_request(1, waveform_kind=SourceWaveformKind.SINE)
+        )
+
+    assert transport.writes == [":OUTP1 OFF"]
+
+
+def test_source_v2_live_frequency_is_one_write_and_never_cycles_output() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["mode"] = "FIX"
+    transport.state["swe"] = "OFF"
+    transport.state["out"] = "ON"
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+
+    result = driver.configure_source_basic_live_v2(
+        _basic_v2_request(1, frequency_hz=1_000.0)
+    )
+
+    assert result.output_enabled is True
+    assert transport.writes == [":SOUR1:FREQ 1000"]
+
+
+def test_source_v2_ambiguous_write_latches_and_invalidates_cache() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    transport.fail_write_commands.add(":SOUR1:FREQ 1000")
+
+    with pytest.raises(InstrumentError, match="write result is unknown"):
+        driver.configure_source_basic_v2(_basic_v2_request(1, frequency_hz=1_000.0))
+
+    assert driver._v2_preflight_snapshots == {}
+    assert driver.set_source_output_v2(
+        SourceOutputRequest(channel=1, enabled=False)
+    ).enabled is False
+    assert transport.writes[-1] == ":OUTP1 OFF"
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.configure_source_basic_v2(_basic_v2_request(1, frequency_hz=2_000.0))
+
+
+def test_source_v2_output_off_stays_available_after_write_latch() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    driver._configuration_writes_blocked = True
+
+    result = driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=False))
+
+    assert result.enabled is False
+    assert transport.writes == [":OUTP1 OFF"]
+
+
+def test_source_v2_volatile_replace_uses_one_binary_write_and_no_text_writes() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    payload = b"\x00\x00\xff\x3f"
+    request = _volatile_v2_request(payload)
+    queries_before = list(transport.queries)
+
+    result = driver.replace_source_arbitrary_volatile_v2(request, payload)
+
+    assert transport.byte_writes == [b":DATA:DAC VOLATILE,#14" + payload]
+    assert transport.writes == []
+    assert transport.queries == queries_before
+    assert result.selected_waveform_id == "user"
+    assert result.content_readback_verified is False
+    assert result.previous_content_restorable is False
+    basic, output = driver._v2_preflight_snapshots[1]
+    assert basic.waveform_kind.value is SourceWaveformKind.ARBITRARY
+    assert basic.waveform_id.value == "user"
+    assert output.enabled.value is False
+
+
+def test_source_v2_workspace_volatile_replace_uses_one_binary_write_without_channel_claim() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    payload = b"\x00\x00\xff\x3f"
+    request = _workspace_volatile_v2_request(payload)
+    queries_before = list(transport.queries)
+
+    result = driver.replace_source_arbitrary_workspace_volatile_v2(request, payload)
+
+    assert transport.byte_writes == [b":DATA:DAC VOLATILE,#14" + payload]
+    assert transport.writes == []
+    assert transport.queries == queries_before
+    assert result.workspace_id == "volatile"
+    assert result.content_readback_verified is False
+    assert result.previous_content_restorable is False
+    assert driver._v2_preflight_snapshots == {}
+
+
+def test_source_v2_workspace_volatile_replace_requires_both_outputs_off() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    basic, output = driver._v2_preflight_snapshots[2]
+    driver._v2_preflight_snapshots[2] = (
+        basic,
+        replace(output, enabled=Observed.value_of(True)),
+    )
+    payload = b"\x00\x00\xff\x3f"
+
+    with pytest.raises(DataError, match="both outputs OFF"):
+        driver.replace_source_arbitrary_workspace_volatile_v2(
+            _workspace_volatile_v2_request(payload),
+            payload,
+        )
+
+    assert transport.byte_writes == []
+    assert transport.writes == []
+
+
+def test_source_v2_workspace_volatile_replace_ambiguous_write_latches() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    transport.fail_byte_write = True
+    payload = b"\x00\x00\xff\x3f"
+
+    with pytest.raises(InstrumentError, match="volatile waveform may have changed"):
+        driver.replace_source_arbitrary_workspace_volatile_v2(
+            _workspace_volatile_v2_request(payload),
+            payload,
+        )
+
+    assert len(transport.byte_writes) == 1
+    assert driver._v2_preflight_snapshots == {}
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.replace_source_arbitrary_workspace_volatile_v2(
+            _workspace_volatile_v2_request(payload),
+            payload,
+        )
+
+
+@pytest.mark.parametrize(
+    ("payload", "volatile_request"),
+    (
+        (
+            b"\x00\x00\xff\x3f",
+            SourceArbitraryVolatileReplaceRequest(
+                1,
+                "sha256:" + "0" * 64,
+                4,
+                2,
+            ),
+        ),
+        (
+            b"\x00\x00\xff\x3f",
+            SourceArbitraryVolatileReplaceRequest(
+                1,
+                "sha256:" + sha256(b"\x00\x00\xff\x3f").hexdigest(),
+                4,
+                1,
+            ),
+        ),
+    ),
+)
+def test_source_v2_volatile_replace_rejects_invalid_payload_before_io(
+    payload: bytes,
+    volatile_request: SourceArbitraryVolatileReplaceRequest,
+) -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+
+    with pytest.raises(DataError, match="volatile replace"):
+        driver.replace_source_arbitrary_volatile_v2(volatile_request, payload)
+
+    assert transport.byte_writes == []
+    assert transport.writes == []
+    assert transport.queries == []
+
+
+def test_source_v2_volatile_replace_ambiguous_write_latches_and_keeps_off_recovery() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    transport.fail_byte_write = True
+    payload = b"\x00\x00\xff\x3f"
+
+    with pytest.raises(InstrumentError, match="volatile waveform may have changed"):
+        driver.replace_source_arbitrary_volatile_v2(_volatile_v2_request(payload), payload)
+
+    assert len(transport.byte_writes) == 1
+    assert driver._v2_preflight_snapshots == {}
+    assert driver.set_source_output_v2(
+        SourceOutputRequest(channel=1, enabled=False)
+    ).enabled is False
+    assert transport.writes == [":OUTP1 OFF"]
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.replace_source_arbitrary_volatile_v2(_volatile_v2_request(payload), payload)
+
+
+@pytest.mark.parametrize(
+    ("trigger_source", "expected_source"),
+    (
+        (SourceTriggerSource.INTERNAL, "INT"),
+        (SourceTriggerSource.MANUAL, "MAN"),
+    ),
+)
+def test_source_v2_sweep_configure_uses_one_compound_write_and_cached_readback(
+    trigger_source: SourceTriggerSource,
+    expected_source: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    result = driver.configure_source_sweep_v2(
+        _sweep_v2_request(trigger_source=trigger_source)
+    )
+
+    assert transport.queries == queries_before
+    assert len(transport.writes) == 1
+    assert transport.writes[0] == (
+        ":SOUR1:FREQ:STAR 100;:SOUR1:FREQ:STOP 1000;:SOUR1:SWE:SPAC LIN;"
+        ":SOUR1:SWE:STEP 101;:SOUR1:SWE:TIME 1;:SOUR1:SWE:HTIM:STAR 0;"
+        ":SOUR1:SWE:HTIM:STOP 0;:SOUR1:SWE:RTIM 0;"
+        f":SOUR1:SWE:TRIG:SOUR {expected_source};:SOUR1:SWE:TRIG:SLOP POS;"
+        ":SOUR1:SWE:TRIG:TRIGOUT OFF;:SOUR1:MARK:STAT OFF;:SOUR1:SWE:STAT ON"
+    )
+    assert result.output_enabled is False
+    assert result.basic.frequency_mode.value is SourceFrequencyMode.SWEEP
+    assert result.sweep.enabled.value is True
+    assert result.sweep.trigger.value.source.value is trigger_source
+
+
+def test_source_v2_sweep_configure_accepts_disabled_stale_marker_frequency() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["marker_frequency"] = 550.0
+    service, driver = _sweep_core_service(transport)
+
+    result, _ = service.configure_sweep_v2(
+        SourceSweepConfigureRequest(
+            channel=1,
+            start_hz=1_000.0,
+            stop_hz=2_000.0,
+            spacing=SourceSweepSpacing.LINEAR,
+            steps=101,
+            sweep_time_s=12.0,
+            trigger_source=SourceTriggerSource.MANUAL,
+        )
+    )
+
+    profile = driver.get_sweep_profile(1)
+    assert result.sweep.enabled.value is True
+    assert result.sweep.marker.value.enabled.value is False
+    assert profile.marker_enabled is False
+    assert profile.marker_frequency_hz == 550.0
+    assert driver._configuration_writes_blocked is False
+
+
+def test_source_v2_sweep_configure_requires_output_off_and_inactive_side_effects() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    basic, output = driver._v2_preflight_snapshots[1]
+    driver._v2_preflight_snapshots[1] = (basic, replace(output, enabled=Observed.value_of(True)))
+
+    with pytest.raises(DataError, match="requires output OFF"):
+        driver.configure_source_sweep_v2(_sweep_v2_request())
+
+    transport = DualChannelFakeTransport()
+    transport.state["modulation"] = "ON"
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(DataError, match="inactive modulation"):
+        driver.configure_source_sweep_v2(_sweep_v2_request())
+
+    assert transport.writes == []
+
+
+def test_source_v2_sweep_ambiguous_configure_latches_and_preserves_off_escape_hatch() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    command = driver._v2_sweep_program_message(_sweep_v2_request())
+    transport.fail_write_commands.add(command)
+
+    with pytest.raises(InstrumentError, match="write result is unknown"):
+        driver.configure_source_sweep_v2(_sweep_v2_request())
+
+    assert driver._v2_preflight_snapshots == {}
+    assert driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=False)).enabled is False
+    assert transport.writes[-1] == ":OUTP1 OFF"
+
+
+def test_source_v2_sweep_fire_is_one_channel_scoped_write_after_manual_configuration() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    driver.configure_source_sweep_v2(
+        _sweep_v2_request(trigger_source=SourceTriggerSource.MANUAL)
+    )
+    driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    queries_before = list(transport.queries)
+
+    result = driver.fire_source_sweep_v2(SourceFireRequest(channel=1))
+
+    assert result.channel == 1
+    assert transport.writes[-1] == ":SOUR1:SWE:TRIG"
+    assert transport.state["sweep_fire_count"] == 1
+    assert transport.queries == queries_before
+
+
+def test_source_v2_sweep_fire_rejects_internal_or_unknown_configuration_before_write() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    driver.configure_source_sweep_v2(_sweep_v2_request())
+    driver.set_source_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    writes_before = list(transport.writes)
+
+    with pytest.raises(DataError, match="manual trigger source"):
+        driver.fire_source_sweep_v2(SourceFireRequest(channel=1))
+
+    driver._v2_sweep_preflight_snapshots.clear()
+    with pytest.raises(DataError, match="fresh configured Sweep readback"):
+        driver.fire_source_sweep_v2(SourceFireRequest(channel=1))
+
+    assert transport.writes == writes_before
+
+
+def test_source_v2_sweep_candidate_routes_through_core_and_preserves_receipt() -> None:
+    transport = DualChannelFakeTransport()
+    service, driver = _sweep_core_service(transport)
+    configured, _ = service.configure_sweep_v2(
+        _sweep_v2_request(trigger_source=SourceTriggerSource.MANUAL)
+    )
+    assert configured.sweep.trigger.value.source.value is SourceTriggerSource.MANUAL
+
+    service.set_output_v2(SourceOutputRequest(channel=1, enabled=True))
+    fired, _ = service.fire_sweep_v2(SourceFireRequest(channel=1))
+
+    assert fired.channel == 1
+    assert transport.writes[-1] == ":SOUR1:SWE:TRIG"
+    assert driver._configuration_writes_blocked is False
+
+
+@pytest.mark.parametrize(
+    ("counter_request", "expected"),
+    (
+        (_counter_v2_request(coupling=SourceInputCoupling.DC), ":COUN:COUP DC"),
+        (_counter_v2_request(impedance_ohm=50.0), ":COUN:IMP 50"),
+        (_counter_v2_request(attenuation=10), ":COUN:ATT 10X"),
+        (_counter_v2_request(trigger_level_v=-2.5), ":COUN:LEVE -2.5"),
+        (_counter_v2_request(statistics_enabled=True), ":COUN:STATI:STAT ON"),
+    ),
+)
+def test_source_v2_counter_configuration_uses_one_cached_write(
+    counter_request: SourceCounterConfigureRequest,
+    expected: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    result = driver.configure_source_counter_v2(counter_request)
+
+    assert result.input_id == "counter"
+    assert transport.writes == [expected]
+    assert transport.queries == queries_before
+
+
+def test_source_v2_counter_enable_and_disable_do_not_change_configuration() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    assert driver.set_source_counter_enabled_v2(
+        SourceCounterEnableRequest("counter", True)
+    ).enabled is True
+    assert driver.set_source_counter_enabled_v2(
+        SourceCounterEnableRequest("counter", False)
+    ).enabled is False
+
+    assert transport.writes == [":COUN ON", ":COUN OFF"]
+    assert transport.queries == queries_before
+
+
+def test_source_v2_counter_measure_uses_only_documented_measure_query() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["counter"] = "ON"
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    result = driver.measure_source_counter_v2(SourceCounterMeasureRequest("counter"))
+
+    assert tuple(item.kind for item in result.measurements) == (
+        SourceCounterMeasurementKind.DUTY_PERCENT,
+        SourceCounterMeasurementKind.FREQUENCY_HZ,
+        SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+        SourceCounterMeasurementKind.PERIOD_S,
+        SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+    )
+    assert transport.writes == []
+    assert transport.queries == [*queries_before, ":COUN:MEAS?"]
+
+
+@pytest.mark.parametrize(
+    "counter_request",
+    (
+        _counter_v2_request(impedance_ohm=75.0),
+        _counter_v2_request(attenuation=2),
+        _counter_v2_request(trigger_level_v=2.51),
+    ),
+)
+def test_source_v2_counter_configuration_rejects_manual_out_of_range_values_before_write(
+    counter_request: SourceCounterConfigureRequest,
+) -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    with pytest.raises(DataError, match="Counter"):
+        driver.configure_source_counter_v2(counter_request)
+
+    assert transport.writes == []
+    assert transport.queries == queries_before
+
+
+def test_source_v2_counter_measure_refuses_disabled_cached_counter_before_io() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    queries_before = list(transport.queries)
+
+    with pytest.raises(DataError, match="requires Counter enabled"):
+        driver.measure_source_counter_v2(SourceCounterMeasureRequest("counter"))
+
+    assert transport.writes == []
+    assert transport.queries == queries_before
+
+
+def test_source_v2_counter_ambiguous_write_latches_only_counter_configuration() -> None:
+    transport = DualChannelFakeTransport()
+    driver = DG4202Source(transport)
+    _prime_v2_write_cache(driver, transport=transport)
+    transport.fail_write_commands.add(":COUN:COUP DC")
+
+    with pytest.raises(InstrumentError, match="write result is unknown"):
+        driver.configure_source_counter_v2(_counter_v2_request(coupling=SourceInputCoupling.DC))
+
+    assert driver._v2_counter_preflight_snapshots == {}
+    _prime_v2_write_cache(driver, transport=transport)
+    with pytest.raises(InstrumentError, match="writes are blocked"):
+        driver.configure_source_counter_v2(_counter_v2_request(coupling=SourceInputCoupling.DC))
+
+
+def test_source_v2_snapshot_reads_active_sweep_and_never_writes() -> None:
+    transport = DualChannelFakeTransport()
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 99
+    assert len(execution.items) == 28
+    assert len(transport.queries) == 99
+    assert transport.queries.count("*IDN?") == 2
+    assert ":SOUR1:FREQ:MODE?" not in transport.queries
+    assert ":SOUR2:FREQ:MODE?" not in transport.queries
+    assert all(command.endswith("?") for command in transport.queries)
+    assert transport.writes == []
+    assert transport.byte_writes == []
+    assert tuple(channel.channel for channel in snapshot.channels) == (1, 2)
+    assert snapshot.channels[0].sweep.availability is Availability.VALUE
+    assert snapshot.channels[0].sweep.value.start_hz.value == 100.0
+    assert snapshot.channels[0].modulation.value.enabled.value is False
+    assert snapshot.channels[0].modulation.value.kind.value is SourceModulationKind.AM
+    assert snapshot.channels[0].arbitrary.availability is Availability.NOT_APPLICABLE
+
+    observations = tuple(
+        observation
+        for record in execution.items
+        for observation in record.observations
+    )
+    basic = next(
+        item.value
+        for item in observations
+        if item.field.field is SourceFieldId.BASIC
+        and item.field.target.channel == 1
+    )
+    assert basic.waveform_kind.value is SourceWaveformKind.SINE
+    assert basic.frequency_mode.value is SourceFrequencyMode.SWEEP
+    assert basic.amplitude.value.unit is SourceAmplitudeUnit.VPP
+    output = next(
+        item.value
+        for item in observations
+        if item.field.field is SourceFieldId.OUTPUT
+        and item.field.target.channel == 2
+    )
+    assert output.enabled.value is False
+    assert output.display_load.availability is Availability.NOT_QUERIED
+    assert output.polarity.availability is Availability.NOT_QUERIED
+
+
+def test_source_v2_skips_inactive_sweep_without_extra_queries() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 67
+    assert len(transport.queries) == 67
+    assert all(
+        channel.sweep.availability is Availability.NOT_APPLICABLE
+        for channel in snapshot.channels
+    )
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_documented_pulse_facet_only_for_pulse_waveforms() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "PULSE", "swe": "OFF"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 79
+    assert len(transport.queries) == 79
+    assert all(channel.pulse.availability is Availability.VALUE for channel in snapshot.channels)
+    assert snapshot.channels[0].pulse.value.width_s.value == 0.0005
+    assert snapshot.channels[0].sweep.availability is Availability.NOT_APPLICABLE
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_full_burst_facet_only_when_burst_is_enabled() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"burst": "ON", "swe": "OFF"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 85
+    assert len(transport.queries) == 85
+    assert all(channel.burst.availability is Availability.VALUE for channel in snapshot.channels)
+    assert snapshot.channels[0].burst.value.enabled.value is True
+    assert snapshot.channels[0].burst.value.cycles.value == 4
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_partial_harmonic_facet_for_harmonic_waveforms() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": "HARMONIC", "swe": "OFF"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 73
+    assert len(transport.queries) == 73
+    assert all(
+        channel.harmonics.availability is Availability.VALUE
+        for channel in snapshot.channels
+    )
+    harmonics = snapshot.channels[0].harmonics.value
+    assert harmonics.enabled.value is True
+    assert harmonics.configured_order.value == 8
+    assert harmonics.maximum_supported_order.value == 16
+    assert harmonics.components.availability is Availability.NOT_QUERIED
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_counter_off_without_fabricating_gate_time() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 67
+    counter = snapshot.system.value.counters[0]
+    assert counter.input_id == "counter"
+    assert counter.enabled.value is False
+    assert counter.measurements.availability is Availability.NOT_APPLICABLE
+    assert counter.coupling.value is SourceInputCoupling.AC
+    assert counter.impedance_ohm.value == 1_000_000.0
+    assert counter.attenuation.value == 1
+    assert counter.gate_time_s.availability is Availability.UNSUPPORTED
+    assert counter.trigger_level_v.value == 0.0
+    assert counter.statistics_enabled.value is False
+    assert transport.queries.count(":COUN?") == 1
+    assert ":COUN:MEAS?" not in transport.queries
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_counter_on_measurement_tuple() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"swe": "OFF", "counter": "ON"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 68
+    counter = snapshot.system.value.counters[0]
+    assert counter.enabled.value is True
+    assert tuple(item.kind for item in counter.measurements.value) == (
+        SourceCounterMeasurementKind.DUTY_PERCENT,
+        SourceCounterMeasurementKind.FREQUENCY_HZ,
+        SourceCounterMeasurementKind.NEGATIVE_WIDTH_S,
+        SourceCounterMeasurementKind.PERIOD_S,
+        SourceCounterMeasurementKind.POSITIVE_WIDTH_S,
+    )
+    assert tuple(item.value for item in counter.measurements.value) == (
+        40.0,
+        1000.0,
+        0.0006,
+        0.001,
+        0.0004,
+    )
+    assert transport.queries.count(":COUN:MEAS?") == 1
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_counter_keeps_safe_disable_available_while_measurement_settles() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "counter": "ON",
+            "counter_measurement": "0,0,0,0,0",
+        }
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    counter = snapshot.system.value.counters[0]
+    assert counter.enabled.value is True
+    assert counter.measurements.availability is Availability.UNAVAILABLE
+    assert counter.measurements.reason_code is SourceReasonCode.RESPONSE_INVALID_VALUE
+    assert transport.queries.count(":COUN:MEAS?") == 1
+    assert transport.writes == []
+
+
+def test_source_v2_counter_invalid_measurement_still_allows_safe_disable() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "counter": "ON",
+            "counter_measurement": "0,0,0,0,0",
+        }
+    )
+    service, driver = _counter_core_service(transport)
+
+    disabled, _ = service.set_counter_enabled_v2(SourceCounterEnableRequest("counter", False))
+
+    assert disabled.enabled is False
+    assert transport.writes == [":COUN OFF"]
+    assert driver._configuration_writes_blocked is False
+
+
+def test_source_v2_reads_parameterized_coupling_as_one_channel_set() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "coupling": "FREQ:ON,PHASE:OFF,AMPL:ON",
+            "coupling_base": "CH2",
+            "coupling_amplitude_deviation": 0.75,
+            "coupling_frequency_deviation": 250.0,
+            "coupling_phase_deviation": 15.0,
+        }
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 67
+    coupling = snapshot.cross_channel.value.relations[0]
+    assert coupling.channels == (1, 2)
+    assert coupling.enabled.value is True
+    assert coupling.reference_channel.value == 2
+    assert tuple(item.dimension for item in coupling.dimensions) == (
+        SourceCouplingDimension.AMPLITUDE,
+        SourceCouplingDimension.FREQUENCY,
+        SourceCouplingDimension.PHASE,
+    )
+    assert tuple(item.enabled.value for item in coupling.dimensions) == (True, True, False)
+    assert tuple(item.parameter.value.kind for item in coupling.dimensions) == (
+        SourceCouplingParameterKind.AMPLITUDE_DEVIATION_VPP,
+        SourceCouplingParameterKind.FREQUENCY_DEVIATION_HZ,
+        SourceCouplingParameterKind.PHASE_DEVIATION_DEG,
+    )
+    assert tuple(item.parameter.value.value for item in coupling.dimensions) == (
+        0.75,
+        250.0,
+        15.0,
+    )
+    assert tuple(
+        command
+        for command in transport.queries
+        if command.startswith(":COUP")
+    ) == (
+        ":COUP?",
+        ":COUP:CHANNEL:BASE?",
+        ":COUP:AMPL:DEV?",
+        ":COUP:FREQ:DEV?",
+        ":COUP:PHAS:DEV?",
+    )
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    (
+        (":COUP?", "FREQ:OFF,PHASE:OFF", "must contain"),
+        (":COUP?", "FREQ:OFF,PHASE:OFF,FREQ:ON", "unique"),
+        (":COUP?", "FREQ:MAYBE,PHASE:OFF,AMPL:OFF", "frequency coupling state"),
+        (":COUP:CHANNEL:BASE?", "CH3", "coupling base channel"),
+        (":COUP:AMPL:DEV?", "nan", "amplitude coupling deviation"),
+        (":COUP:AMPL:DEV?", "21", "amplitude coupling deviation response"),
+        (":COUP:FREQ:DEV?", "-1", "frequency coupling deviation response"),
+        (":COUP:PHAS:DEV?", "361", "phase coupling deviation response"),
+    ),
+)
+def test_source_v2_rejects_invalid_coupling_readback_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    transport.query_overrides[command] = response
+    _context, plan = _source_v2_plan()
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_channel_sync_state_and_polarity_only() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "sync": "0",
+            "sync_polarity": "NEGATIVE",
+        }
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 67
+    assert all(channel.sync.value.enabled.value is False for channel in snapshot.channels)
+    assert all(
+        channel.sync.value.polarity.value is SourceSyncPolarity.NEGATIVE
+        for channel in snapshot.channels
+    )
+    assert all(
+        channel.sync.value.source_channel.availability is Availability.NOT_QUERIED
+        for channel in snapshot.channels
+    )
+    assert transport.queries.count(":OUTP1:SYNC?") == 1
+    assert transport.queries.count(":OUTP1:SYNC:POL?") == 1
+    assert transport.queries.count(":OUTP2:SYNC?") == 1
+    assert transport.queries.count(":OUTP2:SYNC:POL?") == 1
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    (
+        (":OUTP1:SYNC?", "MAYBE", "sync state"),
+        (":OUTP1:SYNC:POL?", "BOTH", "sync polarity"),
+    ),
+)
+def test_source_v2_rejects_invalid_sync_readback_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    transport.query_overrides[command] = response
+    _context, plan = _source_v2_plan()
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_reads_noise_overlay_without_changing_basic_waveform() -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {
+            "swe": "OFF",
+            "noise": "ON",
+            "noise_scale": 25.0,
+        }
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 67
+    assert all(
+        channel.basic.value.waveform_kind.value is SourceWaveformKind.SINE
+        for channel in snapshot.channels
+    )
+    assert all(
+        channel.noise_overlay.value.enabled.value is True
+        for channel in snapshot.channels
+    )
+    scales = snapshot.channels[0].noise_overlay.value.scales.value
+    assert len(scales) == 1
+    assert scales[0].kind is SourceNoiseOverlayScaleKind.PERCENT
+    assert scales[0].value == 25.0
+    assert transport.queries.count(":OUTP1:NOIS?") == 1
+    assert transport.queries.count(":OUTP1:NOIS:SCAL?") == 1
+    assert transport.queries.count(":OUTP2:NOIS?") == 1
+    assert transport.queries.count(":OUTP2:NOIS:SCAL?") == 1
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("command", "response", "message"),
+    (
+        (":OUTP1:NOIS?", "MAYBE", "noise overlay state"),
+        (":OUTP1:NOIS:SCAL?", "nan", "noise overlay scale"),
+        (":OUTP1:NOIS:SCAL?", "51", "noise overlay scale response"),
+    ),
+)
+def test_source_v2_rejects_invalid_noise_overlay_readback_without_writes(
+    command: str,
+    response: str,
+    message: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = "OFF"
+    transport.query_overrides[command] = response
+    _context, plan = _source_v2_plan()
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    (
+        ("AM", SourceModulationKind.AM),
+        ("ASK", SourceModulationKind.ASK),
+        ("FM", SourceModulationKind.FM),
+        ("FSK", SourceModulationKind.FSK),
+        ("PM", SourceModulationKind.PM),
+        ("PSK", SourceModulationKind.PSK),
+        ("PWM", SourceModulationKind.PWM),
+        ("BPSK", SourceModulationKind.OTHER),
+        ("QPSK", SourceModulationKind.OTHER),
+        ("3FSK", SourceModulationKind.OTHER),
+        ("4FSK", SourceModulationKind.OTHER),
+        ("OSK", SourceModulationKind.OTHER),
+    ),
+)
+def test_source_v2_reads_modulation_state_and_type_only(
+    response: str,
+    expected: SourceModulationKind,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update(
+        {"swe": "OFF", "modulation": "ON", "modulation_type": response}
+    )
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 67
+    assert all(channel.modulation.value.enabled.value is True for channel in snapshot.channels)
+    assert all(channel.modulation.value.kind.value is expected for channel in snapshot.channels)
+    modulation = snapshot.channels[0].modulation.value
+    assert modulation.source.availability is Availability.NOT_QUERIED
+    assert modulation.parameters.availability is Availability.NOT_QUERIED
+    assert modulation.internal_frequency_hz.availability is Availability.NOT_QUERIED
+    assert modulation.internal_waveform_kind.availability is Availability.NOT_QUERIED
+    assert transport.queries.count(":SOUR1:MOD:STAT?") == 1
+    assert transport.queries.count(":SOUR2:MOD:TYPE?") == 1
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize("waveform", ("USER", "ABSSINE"))
+def test_source_v2_reuses_basic_anchor_for_partial_arbitrary_read(
+    waveform: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state.update({"func": waveform, "swe": "OFF"})
+    context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+    snapshot = build_source_snapshot(
+        context=context,
+        plan=plan,
+        execution=execution,
+        session_health_after="healthy",
+    )
+
+    assert execution.query_count == 67
+    assert all(channel.arbitrary.availability is Availability.VALUE for channel in snapshot.channels)
+    arbitrary = snapshot.channels[0].arbitrary.value
+    assert arbitrary.selected_waveform_id.value == waveform.lower()
+    assert arbitrary.playback_frequency_hz.value == 5000.0
+    assert arbitrary.playback_mode.availability is Availability.NOT_QUERIED
+    assert arbitrary.sample_rate_hz.availability is Availability.NOT_QUERIED
+    assert arbitrary.point_count.availability is Availability.NOT_QUERIED
+    assert arbitrary.storage_digest.availability is Availability.NOT_QUERIED
+    assert ":SOUR1:FUNC:USER?" not in transport.queries
+    assert ":SOUR1:ARB:SRAT?" not in transport.queries
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_source_v2_accepts_documented_long_waveform_tokens_without_changing_v1() -> None:
+    transport = DualChannelFakeTransport()
+    transport.query_overrides[":SOUR1:FUNC?"] = "PULSE"
+    _context, plan = _source_v2_plan()
+
+    execution = DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    basics = tuple(
+        observation.value
+        for record in execution.items
+        for observation in record.observations
+        if observation.field.field is SourceFieldId.BASIC
+    )
+    assert all(item.waveform_kind.value is SourceWaveformKind.PULSE for item in basics)
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("plan", "message"),
+    (
+        (_source_v2_plan(max_queries=137)[1], "total query budget"),
+        (_source_v2_plan(deadline_monotonic=0.0)[1], "deadline has expired"),
+    ),
+)
+def test_source_v2_rejects_invalid_plan_before_io(
+    plan: SourceSemanticQueryPlan,
+    message: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+
+    with pytest.raises(DataError, match=message):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert transport.queries == []
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+@pytest.mark.parametrize(
+    ("sweep_state", "last_query", "blocked_query"),
+    (
+        ("OFF", ":COUN:COUP?", ":COUN:IMP?"),
+        ("ON", ":SOUR1:FREQ:STAR?", ":SOUR1:FREQ:STOP?"),
+    ),
+)
+def test_source_v2_deadline_stops_aggregate_reads_between_queries(
+    monkeypatch: pytest.MonkeyPatch,
+    sweep_state: str,
+    last_query: str,
+    blocked_query: str,
+) -> None:
+    transport = DualChannelFakeTransport()
+    transport.state["swe"] = sweep_state
+    _context, plan = _source_v2_plan(deadline_monotonic=100.0)
+
+    def monotonic() -> float:
+        return 101.0 if last_query in transport.queries else 99.0
+
+    monkeypatch.setattr("wavebench_rigol_dg4000.driver.time.monotonic", monotonic)
+
+    with pytest.raises(DataError, match="deadline has expired"):
+        DG4202Source(transport).execute_source_query_plan_v2(plan)
+
+    assert last_query in transport.queries
+    assert blocked_query not in transport.queries
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
 def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     item = descriptor()
 
@@ -194,8 +1883,124 @@ def test_descriptor_declares_canonical_source_contract_without_io() -> None:
     assert item.distribution == "wavebench-rigol-dg4000"
     assert item.aliases == ()
     assert item.kind == "source"
-    assert item.version == "0.6.0"
-    assert item.wavebench_min_version == "0.8.17"
+    assert item.version == "0.7.0"
+    assert item.wavebench_min_version == "0.8.25"
+    assert "source.snapshot_v2" in item.capabilities
+    assert "source.basic_configure_v2" in item.capabilities
+    assert "source.basic_live_configure_v2" in item.capabilities
+    assert "source.output_v2" in item.capabilities
+    assert item.source_extensions is not None
+    assert item.source_extensions.v1_route_migration_enabled is False
+    assert item.source_extensions.topology.input_ids == ("counter",)
+    assert item.source_extensions.query_contract.max_queries == 138
+    _context, plan = _source_v2_plan()
+    assert len(plan.items) == 28
+    assert sum(query.max_queries for query in plan.items) == 138
+    assert next(
+        query for query in plan.items if query.fields[0].field is SourceFieldId.COUNTER
+    ).target.input_id == "counter"
+    assert next(
+        query for query in plan.items if query.fields[0].field is SourceFieldId.COUPLING
+    ).target.channels == (1, 2)
+    arbitrary = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "arbitrary"
+        and feature.channels == (1,)
+    )
+    assert arbitrary.profile.playback_modes == (SourceArbitraryPlaybackMode.UNKNOWN,)
+    assert arbitrary.profile.selection_readable is True
+    assert arbitrary.profile.storage_metadata_readable is False
+    assert arbitrary.profile.sample_rate_readable is False
+    basic = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "basic" and feature.channels == (1,)
+    )
+    assert basic.directions == (SourceFeatureDirection.CONFIGURE, SourceFeatureDirection.READ)
+    assert basic.profile.live_frequency_configurable is True
+    assert basic.profile.live_amplitude_vpp_configurable is True
+    output = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "output" and feature.channels == (1,)
+    )
+    assert output.directions == (
+        SourceFeatureDirection.DISABLE,
+        SourceFeatureDirection.ENABLE,
+        SourceFeatureDirection.READ,
+    )
+    counter = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature is SourceFeature.COUNTER
+    )
+    assert counter.directions == (
+        SourceFeatureDirection.CONFIGURE,
+        SourceFeatureDirection.DISABLE,
+        SourceFeatureDirection.ENABLE,
+        SourceFeatureDirection.READ,
+    )
+    assert counter.profile.configuration_readable is True
+    assert counter.profile.enabled_configurable is True
+    assert counter.profile.readable_configuration_fields == counter.profile.configurable_fields
+    coupling = next(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "coupling"
+    )
+    assert coupling.channels == (1, 2)
+    assert coupling.profile.dimensions == tuple(SourceCouplingDimension)
+    assert coupling.profile.parameter_kinds == (
+        SourceCouplingParameterKind.AMPLITUDE_DEVIATION_VPP,
+        SourceCouplingParameterKind.FREQUENCY_DEVIATION_HZ,
+        SourceCouplingParameterKind.PHASE_DEVIATION_DEG,
+    )
+    assert coupling.profile.supported_channel_sets == ((1, 2),)
+    assert coupling.profile.global_state_readable is True
+    assert coupling.profile.reference_channel_readable is True
+    assert coupling.profile.relation_graph_readable is False
+    coupling_query = next(
+        facet
+        for facet in item.source_extensions.query_contract.facets
+        if facet.feature.value == "coupling"
+    )
+    assert coupling_query.fields == (SourceFieldId.COUPLING,)
+    assert coupling_query.max_queries == 5
+    sync = tuple(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "sync"
+    )
+    assert tuple(feature.channels for feature in sync) == ((1,), (2,))
+    assert all(feature.profile.enabled_readable is True for feature in sync)
+    assert all(feature.profile.polarity_readable is True for feature in sync)
+    assert all(feature.profile.source_channel_readable is False for feature in sync)
+    sync_query = next(
+        facet
+        for facet in item.source_extensions.query_contract.facets
+        if facet.feature.value == "sync"
+    )
+    assert sync_query.fields == (SourceFieldId.SYNC,)
+    assert sync_query.max_queries == 2
+    noise_overlay = tuple(
+        feature
+        for feature in item.source_extensions.features
+        if feature.feature.value == "noise_overlay"
+    )
+    assert tuple(feature.channels for feature in noise_overlay) == ((1,), (2,))
+    assert all(feature.profile.enabled_readable is True for feature in noise_overlay)
+    assert all(
+        feature.profile.scale_kinds == (SourceNoiseOverlayScaleKind.PERCENT,)
+        for feature in noise_overlay
+    )
+    noise_overlay_query = next(
+        facet
+        for facet in item.source_extensions.query_contract.facets
+        if facet.feature.value == "noise_overlay"
+    )
+    assert noise_overlay_query.fields == (SourceFieldId.NOISE_OVERLAY,)
+    assert noise_overlay_query.max_queries == 2
     assert "source.channel_profile" in item.capabilities
     assert "source.sweep_profile" in item.capabilities
     assert "source.counter_profile" in item.capabilities
@@ -451,7 +2256,6 @@ def test_sweep_profile_rejects_untrusted_responses_without_writes(
         (":SOUR1:SWE:STEP?", "1", "steps"),
         (":SOUR1:SWE:TIME?", "0", "sweep time"),
         (":SOUR1:SWE:HTIM:STAR?", "301", "start hold"),
-        (":SOUR1:MARK:FREQ?", "1001", "marker frequency"),
     ],
 )
 def test_sweep_profile_rejects_inconsistent_field_relationships(
@@ -463,6 +2267,18 @@ def test_sweep_profile_rejects_inconsistent_field_relationships(
     transport.query_overrides[command] = response
 
     with pytest.raises(DataError, match=message):
+        DG4202Source(transport).get_sweep_profile(1)
+
+    assert transport.writes == []
+    assert transport.byte_writes == []
+
+
+def test_sweep_profile_rejects_enabled_marker_outside_sweep_window() -> None:
+    transport = FakeTransport()
+    transport.state["marker"] = "ON"
+    transport.query_overrides[":SOUR1:MARK:FREQ?"] = "1001"
+
+    with pytest.raises(DataError, match="marker frequency"):
         DG4202Source(transport).get_sweep_profile(1)
 
     assert transport.writes == []
@@ -670,8 +2486,15 @@ def test_counter_profile_measurement_query_failure_never_writes() -> None:
     assert transport.byte_writes == []
 
 
-def test_factory_opens_exactly_one_core_transport_and_satisfies_capabilities() -> None:
-    item = descriptor()
+@pytest.mark.parametrize(
+    ("descriptor_factory", "allow_arbitrary_sine_exit"),
+    ((descriptor, False), (descriptor_v2, True)),
+)
+def test_factory_opens_exactly_one_core_transport_and_satisfies_capabilities(
+    descriptor_factory,
+    allow_arbitrary_sine_exit: bool,
+) -> None:
+    item = descriptor_factory()
     transport = FakeTransport()
     opened = 0
 
@@ -697,6 +2520,7 @@ def test_factory_opens_exactly_one_core_transport_and_satisfies_capabilities() -
 
     assert isinstance(driver, DG4202Source)
     assert driver.transport is transport
+    assert driver.allow_arbitrary_sine_exit is allow_arbitrary_sine_exit
     assert opened == 1
 
 

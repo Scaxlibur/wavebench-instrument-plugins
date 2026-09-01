@@ -6,7 +6,7 @@
 
 本文把 DG4000 编程手册的广阔命令面拆成 M0–M12。里程碑编号是风险顺序，不是命令数量或完成率；每一级只有在代码、失败路径、发行包和相应实机证据同时满足退出门后才算完成。
 
-当前版本：`wavebench-rigol-dg4000 0.6.0`。
+当前版本：`wavebench-rigol-dg4000 0.7.0`。
 
 | 里程碑 | 状态 | 范围 |
 |---|---|---|
@@ -17,15 +17,18 @@
 | M4 | **完成** | DAC14 任意波事务与外置插件实机复验 |
 | M5 | **完成** | Sweep 只读 profile |
 | M6 | **完成** | Counter 非破坏性只读 profile |
-| M7 | 未开始 | Sweep 受控事务与触发 |
-| M8 | 未开始 | Pulse/Burst/Marker 受控 profile |
-| M9 | 未开始 | 双通道 Coupling 原子事务 |
+| M7 | **完成（受限 opt-in）** | `rigol.dg4202-v2` 的 Sweep Source V2 configure/manual fire 已通过 DG4202 双通道 A4 实机门 |
+| M8 | **部分完成** | Pulse/Burst Source V2 只读 facet 已实现；Marker 与受控写未开始 |
+| M9 | **部分完成** | Coupling 只读 facet 与写事务候选设计完成；生产写入未开始 |
 | M10 | 未开始 | 基础调制 AM/FM/PM/PWM |
-| M11 | 未开始 | 高级调制、谐波和高级任意波格式 |
-| M12 | 未开始 | 型号/通道验收矩阵与发布收口 |
+| M11 | **部分完成** | 部分 Harmonic 只读 facet 已实现；逐阶分量、高级调制和任意波格式未开始 |
+| M12 | **部分完成** | Basic／Output／Counter 及受限 opt-in Sweep 的 wheel-bound conformance 已完成；其余高级能力仍待验收 |
 
-M0 完成不表示仪器功能增加。0.6.0 已完成 M1–M5 的 DG4202 CH1/CH2 实机退出门，
-并完成 M6 的全局 counter-OFF 实机退出门。
+M0 完成不表示仪器功能增加。`0.7.0` 保留 M1–M5 的 DG4202 CH1/CH2 实机退出门和
+M6 的全局 counter-OFF 实机退出门，并增加 Source V2 纯查询适配。只有当前
+OFF/SIN/FIX 状态、output-OFF Pulse/1 Vpp 状态，以及包含 Coupling、Sync、Noise Overlay、
+Counter、Modulation 和部分 ARB 的最终 67-query 快照完成新鲜 V2 实机读取；其余活跃 facet
+仍按各节证据边界处理。
 
 ## 2. 所有阶段共同规则
 
@@ -34,7 +37,7 @@ M0 完成不表示仪器功能增加。0.6.0 已完成 M1–M5 的 DG4202 CH1/CH
 - 枚举值必须显式白名单；不把未知值猜成 OFF、FIX、SIN 或默认单位。
 - 每个面向指定通道的 API 显式携带通道；CH1/CH2 不依赖前面板当前选择。
 - 所有 transport I/O 由同一个可重入锁串行化。快照、写入、回读、错误检查和恢复不可交织。
-- 写前快照必须完整成功；否则零写入。写后逐字段回读，不以“命令未抛异常”代表成功。
+- 写前快照必须完整成功；否则零写入。写后逐字段回读，不以「命令未抛异常」代表成功。
 - 首次写入超时、连接中断或其它无法判断命令是否到达仪器的情况属于歧义写入：不盲目重试，并锁存该 driver 的后续配置写。
 - 确定性失败可尝试保守恢复；恢复本身歧义、失败或无法回读时同样锁存。
 - 输出相关恢复先强制目标通道 OFF，恢复其余字段，全部成功后才按快照恢复原 output。恢复失败保持 OFF。
@@ -71,7 +74,7 @@ M0 完成不表示仪器功能增加。0.6.0 已完成 M1–M5 的 DG4202 CH1/CH
 退出证据：
 
 - package tests、Ruff、`wavebench plugin package check` 通过；
-- 实际 wheel 只有一个 `wavebench.instruments` entry point 并包含 MIT LICENSE；
+- 实际 wheel 恰有 `rigol.dg4202` 与 `rigol.dg4202-v2` 两个预期的 `wavebench.instruments` entry point，并包含 MIT LICENSE；
 - 实际 sdist 不含本地厂商资料。
 
 ## 5. M1 — 现有 API 严格收口
@@ -84,7 +87,7 @@ M0 完成不表示仪器功能增加。0.6.0 已完成 M1–M5 的 DG4202 CH1/CH
 
 - 写入口拒绝所有非有限频率、Vpp、offset、duty；只读状态也拒绝非有限回包，不返回含不可信字段的部分 `SourceStatus`；
 - output、function、unit、frequency mode、sweep state 使用严格枚举；
-- `*IDN?` 解析 manufacturer/model，区分“可只读识别”与“允许写入且已验收”的型号；
+- `*IDN?` 解析 manufacturer/model，区分「可只读识别」与「允许写入且已验收」的型号；
 - 聚合状态查询全有或全无；任一查询失败不得产生写入；
 - 统一 `check_errors_after_ops` 的实例默认语义，直接 driver 调用与 Service 调用一致；
 - 保留 `source.arbitrary_probe` 的 query-only 限制，并明确它会消费错误队列、候选 `-113` 不代表 capability。
@@ -162,7 +165,7 @@ profile 必须区分：
 - **只读上下文**：用于拒绝不安全操作，但当前不会自动恢复；
 - **不可恢复副作用**：例如 volatile USER 波形内容被覆盖。
 
-退出门：CH1/CH2 profile 全有或全无、有限数/枚举严格校验、无写入；README、artifact 和 run restore 不再使用“完整状态恢复”描述当前 basic restore。
+退出门：CH1/CH2 profile 全有或全无、有限数/枚举严格校验、无写入；README、artifact 和 run restore 不再使用「完整状态恢复」描述当前 basic restore。
 
 2026-07-27 证据：外置插件 `0.4.0` 在 DG4202 固件 `00.01.14` 的同一受控会话中读取
 CH1/CH2。transport 守卫禁止任何 text/binary write，最终完成 45 次 query、0 次 text
@@ -231,7 +234,7 @@ steps 和跨字段关系错误。恢复后，CH1/CH2 完整 channel profile 与 
 正式驱动固定使用 DG4202 固件 `00.01.14` 验证过的短路径，包括 `:COUN?`、
 `:COUN:LEVE?` 和 `:COUN:STATI:*`，不把其它缩写或长写形式的存在当作实机证据。
 
-默认拒绝 `COUNter:AUTO`、`STATIstics:CLEAr` 以及自动启用 counter。若 counter 当前为 OFF，返回状态并明确“无测量”，不偷偷打开输入。50 Ω 只作为回读值；未来写入必须有独立接线确认。
+默认拒绝 `COUNter:AUTO`、`STATIstics:CLEAr` 以及自动启用 counter。若 counter 当前为 OFF，返回状态并明确「无测量」，不偷偷打开输入。50 Ω 只作为回读值；未来写入必须有独立接线确认。
 
 退出门：未知/非有限回包 fail closed，重复查询不改变 counter/统计状态，真实 DG4202 记录零写入证据。
 
@@ -243,29 +246,152 @@ OFF 分支未查询 `MEASure?`，也未发送 enable、`AUTO` 或 statistics cle
 覆盖每个查询位置、未知枚举、非有限/越界配置，以及 counter-ON 五元组的字段数、有限性、
 frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无实机测量结论。
 
+## 10.1. Source V2 P1 迁移
+
+**状态：部分完成。** 当前 `0.7.0` 开发分支保留 `source.snapshot_v2`，并声明
+`source.basic_configure_v2`、`source.basic_live_configure_v2`、`source.output_v2`、
+`source.counter_configure_v2`、`source.counter_enable_v2` 与 `source.counter_measure_v2`。
+
+- Basic：CH1/CH2 function、frequency mode/value、带单位 amplitude、offset、phase 和 square duty；
+- Output：只读取 enabled，load/polarity 继续由 V1 `source.channel_profile` 提供；
+- Sweep：激活时复用 M5 严格 profile，未激活时返回 `inactive_by_anchor`；
+- Pulse：Pulse 波形激活时读取 hold、width/duty、delay 和双边沿；
+- Burst：始终读取 state，OFF 时其余字段不适用，ON 时读取完整模式、时序和 trigger；
+- Harmonic：只读取 enabled、configured/max order 与 preset，completeness 固定为 `PARTIAL`，
+  不读取或伪造逐阶 amplitude/phase。
+- Modulation 与 ARB：每通道读取 modulation state/type；ARB 只复用 Basic 锚点中的当前选择与频率，
+  不伪造 playback mode、sample rate、point count 或 digest。
+- Coupling：以 CH1/CH2 `CHANNEL_SET` 读取全局状态、基准通道及 amplitude/frequency/phase
+  三维 enabled 与 typed deviation。
+- Sync 与 Noise Overlay：每通道分别读取 enabled/polarity 和 enabled/percent scale。
+- Counter：OFF 时复用 M6 严格 profile 且不发送 measurement query；V2 额外允许单字段配置、
+  独立 enable/disable 与已启用后的五元组测量。
+- Basic P1：输出 OFF、FIX 和 fresh snapshot 后，每次只写一个 Basic field；接受
+  SIN/SQU/RAMP/PULS/NOIS/DC、frequency、Vpp、offset 或 square duty。
+- Live Basic P1：输出 ON、FIX 时每次只写一个 frequency 或 Vpp field，禁止 output cycle。
+- Output P1：ON/OFF 是独立 operation，各自有 preflight 和最终状态回读。
+
+最坏查询预算为 138。每个查询项均为 `PURE_READ`，identity、Basic 与 Output 在前后阶段
+复读；任何锚点漂移由 Core 标记，驱动不为快照发送 selector 或 write。
+
+DG descriptor 设置 `v1_route_migration_enabled=false`。因此既有 V1 `source.set-*`、
+`source.output`、离散频响、`arb-load` 与 basic restore 保持 V1 合同；只有显式 V2 CLI、
+run step 或 Service operation 调用 P1/Counter V2 adapter。独立 `rigol.dg4202-v2` entry point
+另声明受限的 Sweep configure/fire；volatile ARB、Burst、Coupling、Noise Overlay 和 Sync 仍不声明
+生产写 capability。
+
+2026-08-30 证据：DG4202 `00.01.14` 的 CH1/CH2 均为 OFF、SIN、1 kHz、5 Vpp、
+0 V offset、FIX、sweep OFF。公开 CLI 完成 40-query Source V2 快照，前后锚点一致，
+session health 前后均为 healthy。随后使用既有 V1 事务将两路临时设为 PULSE、1 Vpp，
+输出始终 OFF；第二次 V2 快照完成 52 queries，并返回两路 DUTY hold、500 µs width、
+50% duty、0 s delay 和 1.9531 µs 双边沿。最终新会话确认两路恢复为 OFF、SIN、1 kHz、
+5 Vpp、0 V offset、FIX。该证据接受 Pulse 活跃 facet；Sweep、Burst ON 和 Harmonic
+活跃态仍未验收，不使用 raw SCPI 临时激活。
+
+同日后续验收在旧的 `:COUP:CHAN:BASE?` 写法处得到一次 timeout。验收没有重试该查询，
+会话立即关闭；新会话复读确认两路状态未变。驱动改用手册完整关键字
+`:COUP:CHANNEL:BASE?` 后，DG 包全量 `213 passed`。最终只读快照完成 67 queries，
+前后锚点一致、session health 为 healthy；完整 harness 共 112 queries，所有 text/binary
+write request、transmitted、completed 和 instrument mutation 均为 0。Coupling 三维均为
+OFF、基准 CH1；两路 Sync 均为 ON/POSITIVE，Noise Overlay 均为 OFF/10%。最终两路保持
+OFF、SIN、1 kHz、5 Vpp、0 V offset、FIX，session 健康关闭；RTM2032 未被访问或采集。
+
+同日 P1 normal-path 验收使用当前 Core、DG 和 RTM 的隔离 wheel。CH1→RTM CH1 在输出 OFF
+下完成 RAMP/PULSE/NOISE/DC/SIN 的 V2 write/readback，随后以正弦分别完成 1 kHz/1 Vpp、
+live 2 kHz/1 Vpp、live 2 kHz/2 Vpp 的高阻采集。CH2→RTM CH2 完成 SQUARE/25% duty、
+1 kHz/1 Vpp 与同样两次 live 变更采集。每路最大 2 Vpp、每次只开启对应通道，所有
+capture quality/expect 门均通过。独立恢复 run 最终复读两路 OFF/SIN/1 kHz/5 Vpp/0 V/FIX/
+50% duty，RTM 两路均为 high-Z。未向在线仪器注入 timeout、二义写或 recovery-failure。
+
+## 10.2. Counter V2 生产写能力
+
+**状态：DG4202 已通过受控实机验收。** Core 与 descriptor 声明
+`source.counter_configure_v2`、`source.counter_enable_v2` 与 `source.counter_measure_v2`；
+Core 以同一 enable capability 覆盖独立的 `source.counter_disable_v2` operation。adapter 使用
+fresh Source V2 snapshot 的 Counter cache，MAIN 不查询、不调用 V1 setter。
+
+- 配置仅接受 coupling、50 Ω／1 MΩ impedance、1X／10X attenuation、-2.5 V 至 2.5 V trigger level 与
+  statistics enable。每次只写一个 `:COUN:*` 命令，正常完成后由 Core 独立回读。
+- enable/disable 仅写 `:COUN ON|OFF`，不附带配置、AUTO、gate 或 clear。measure 仅对已经由 fresh snapshot
+  证实为 ON 的 Counter 发送 `:COUN:MEAS?`。刚启用或无输入时的零值在 V2 snapshot 中标为不可用，
+  仍允许 disable；legacy profile 与 measure 仍严格拒绝无效五元组。
+- 2026-08-31 的安全夹具为 DG CH1→三通→RTM CH1 高阻与 DG Counter 输入。Counter 输入上限为
+  5 Vpp，实际信号为 1 kHz、1 Vpp。配置逐项回读后，Counter 测得 1000.011247 Hz，RTM capture/FFT
+  为 1000 Hz、1.0 Vpp；随后新会话确认 CH1 OFF、5 Vpp 配置、Counter OFF/AC。输出保持 OFF 的
+  Counter enable→disable 也通过。
+
+二义写会清 Counter cache 并锁定后续配置写；Core 不回滚配置、不自动 disable，而是将 session
+标记为保守失效。timeout、二义写与 recovery-failure 尚无上机故障注入结论。`AUTO`、gate、HF、
+sensitivity、statistics display 与 statistics clear 继续不属于 production capability。
+
+## 10.3. Coupling、Noise Overlay 与 Sync 写能力候选
+
+**状态：设计完成；未实现、未注册 capability。** 通用合同由 Core Source RFC 的 R8 候选章节
+定义；本节只记录 DG4202 的协议顺序和退出门，不把设计文档当作写授权。
+
+- Coupling 沿用 `source.coupling_configure_v2` 名称，但首次稳定版前把尚未发布的
+  `channels + enabled` 请求替换为完整 target：全局 enabled、基准通道和三维 enabled + typed
+  deviation。CH1/CH2 与 relation closure 内的主输出必须先为 OFF。DG 适配器的安全顺序为
+  Coupling 全关、写 base、写三个 deviation、逐维恢复状态；postcondition 和失败恢复都读取完整
+  Coupling，且不自动恢复主输出 ON。
+- Noise Overlay 候选为 `source.noise_overlay_configure_v2`，request 包含 channel、enabled 和
+  percent scale。目标主输出必须为 OFF；DG 正常顺序为先 scale、后 enabled。失败恢复保持主输出
+  OFF，先禁用 Noise，再恢复 scale，最后按 baseline 恢复 enabled。手册的 `0–50 %` 不提供确定性
+  峰值，因此 Noise Overlay 启用后不能绕过 Core 的 `noise_overlay_bound_missing` 输出门。
+- Sync 必须拆成 `source.sync_configure_v2` 与 `source.sync_output_v2`。前者只在 Sync 端口 OFF 时
+  配置 polarity；后者的 disable 是 decrease-only，enable 会在独立物理 Sync 连接器发出信号。
+  当前 Core 还没有 Sync port ID、逻辑通道到物理端口的绑定或电气上界，因此 DG descriptor 不得
+  声明任何 Sync 写 capability。port ID／binding／closure 完成后才能先评审配置与 disable；enable
+  还需要电气上界和 A5。失败恢复只保证 Sync 端口 OFF 和 polarity 回读，不自动恢复 Sync ON。
+
+三项写入都要求 fresh consistent snapshot、单次字段写入、独立 postcondition、完整 baseline 和
+有界恢复。任一结果未知不重试；session poisoned 时只关闭连接。Coupling 与 Noise 的后续实机门
+至少要求 A4，Sync enable 需要真实 Sync→scope 接线的 A5。当前 CH1→CH1、CH2→CH2 主输出接线
+不能替代 Sync 物理端口证据。
+
 ## 11. M7 — Sweep 受控事务
 
-**状态：未开始；P2。** 必须在 M2、M3、M5 后实施。
+**状态：完成，但仅作为独立 `rigol.dg4202-v2` opt-in driver 的受限 capability。** `rigol.dg4202`
+保持原 V1 Sweep 路由；这不是完整 V1 API 迁移。
 
 事务覆盖 start/stop 或 center/span、spacing/steps/time、marker、trigger source/slope/trigger-out 和 sweep state。手动 immediate trigger 或 `*TRG` 只作为已建立且回读确认的 sweep session 内的一次显式动作。
 
-退出门：完整 snapshot→write→readback→external measurement→OFF→restore；任何失败保持 output OFF；CH1/CH2 分开验收，禁止在没有负载/频率约束时开放通用 sweep。
+DG 候选将 start/stop、spacing、steps、time、hold/return、trigger slope/output、marker 和 Sweep state
+写成一次 compound write；manual fire 只发送 channel-scoped immediate trigger。手册规定启用 Sweep 会关闭
+Burst 与 Modulation，因此 Core 在该 driver 声明的动态闭包中于写前和写后都要求两项可读且为 OFF，不会替用户
+自动关闭、恢复或重新启用它们。
+
+2026-08-31 证据：CH1、CH2 分别在 output OFF 下配置线性 1–2 kHz、101 点、12 s、manual trigger、
+marker OFF 的 Sweep；随后只开启当前通道，在同一会话 fire，并完成三段高阻 RTM 外部采集。CH1 频率估计为约
+1202/1546/1872 Hz，CH2 为约 1265/1628/1982 Hz，最大采集为 1.016 Vpp。每个 run 在两路 output OFF
+后结束。已关闭 marker 保留的 550 Hz 陈旧频率不代表启用配置错误；启用 marker 时仍做窗口校验。
+
+退出门：完整 snapshot→write→readback→external measurement→OFF→独立恢复；任何失败保持 output OFF；CH1/CH2
+分别验收。`source.sweep_configure_v2`／`source.sweep_fire_v2` 的 conformance 仅绑定上述夹具与参数，不外推
+任意频率、幅度或时序。V2 操作不恢复 Sweep 状态，因此验收用单独 legacy 事务把两路恢复为 FIX/OFF 并由新会话确认。
+不实现 raw `*TRG`，也不替代 V1 Sweep 路由。
 
 ## 12. M8 — Pulse、Burst 与 Marker
 
-**状态：未开始；P2/P3。**
+**状态：Pulse/Burst 只读 facet 已实现；Marker 与受控写未开始，P2/P3。**
 
 - Pulse profile：hold mode、width/duty、delay、leading/trailing transition；
 - Burst profile：mode、cycles、phase、internal period、delay、gate polarity、trigger source/slope/trigger-out；
 - Marker 只在相关 sweep/burst profile 中开放，不做全局裸 setter。
 
-先只读，后事务写。输出与 trigger 必须显式分离；immediate trigger 不允许重试。退出门包括输出 OFF 失败收敛、边沿/占空比约束和示波器时域证据。
+只读阶段已完成离线精确命令与失败测试；Pulse 活跃 facet 已在两路 output OFF、1 Vpp
+状态下通过实机读取，Burst ON 仍未验收。后续事务写要求输出与 trigger 显式分离；
+immediate trigger 不允许重试。退出门包括输出 OFF 失败处理、边沿/占空比约束和示波器
+时域证据。
 
 ## 13. M9 — 双通道 Coupling 原子事务
 
-**状态：未开始；P3。**
+**状态：只读 facet 与候选事务设计完成；生产写入未开始，P3。**
 
-覆盖 `COUPling:STATe`、base channel，以及 amplitude/frequency/phase coupling state 和 deviation。一次操作影响两路，因此必须使用双通道快照、单一设备锁和双通道恢复；任一通道状态不可读则零写入。
+覆盖 `COUPling:STATe`、base channel，以及 amplitude/frequency/phase coupling state 和 deviation。
+只读实现与 DG4202 当前三维 OFF／基准 CH1 实机回读已经通过。后续一次写操作影响两路，因此
+必须使用完整 target、双通道 snapshot、单一设备锁、relation closure 和双通道恢复；任一通道、
+dimension 或 graph 状态不可读则零写入。
 
 退出门：CH1/CH2 均 OFF 配置并回读，随后低风险闭环；故障注入覆盖每条写和恢复；恢复失败时两路都保持 OFF 并锁存。
 
@@ -279,15 +405,29 @@ frequency/period、pulse-width/period 和 duty/width 关系；counter-ON 尚无�
 
 ## 15. M11 — 高级调制、谐波与高级任意波
 
-**状态：未开始；P3。**
+**状态：Harmonic 部分只读 facet 已实现；其余未开始，P3。**
 
 候选范围：ASK/FSK/PSK/BPSK/QPSK/3FSK/4FSK/OSK、harmonic order/type/user/amplitude/phase，以及与 DAC14 明确分离的 `TRACe:DATA:DAC16`、points/value/interpolate/load 查询。
 
-每个候选先经过手册/固件探针、独立数据契约和资源上限审计。DAC16 不能复用 `DG4000DacBlock` 冒充 DAC14；分包、字节序、最大点数、RAM/DDR 生命周期与回读语义必须先冻结。没有具体实验需求时可永久留在 backlog。
+当前 Harmonic 只读结果明确为 `PARTIAL`，不包含 USER mask 或逐阶 amplitude/phase。
+DG4000 没有独立 Harmonic state-off 命令。输出 OFF、FIX 且 Basic readback 明确为 `HARM`／`HARMONIC` 时，
+现有 Basic V2 Sine 写可作为明确的离开 Harmonic waveform 操作；它不声明 `source.harmonics_disable_v2`，也不把
+Basic waveform 变化伪装成只改 Harmonic state。DG4202 `00.01.14` 已在 CH1、output OFF、FIX 条件下完成一次
+受控的 active-Harmonic → Sine 写入与最终 readback。该结果没有示波器环回或外部测量，不覆盖 CH2、其它固件或
+逐阶参数保持，因此不是 A3/A4 conformance，也不改变现有 Basic manifest 的限制。其余候选仍需先经过手册/固件探针、独立数据契约和资源上限审计。DAC16 不能复用
+`DG4000DacBlock` 冒充 DAC14；分包、字节序、最大点数、RAM/DDR 生命周期与回读语义
+必须先冻结。没有具体实验需求时可永久留在 backlog。
+
+`rigol.dg4202-v2-workspace` 单独承载 `source.arbitrary_workspace_volatile_replace_v2`，仅保留 identity／snapshot
+和 OFF safety closure 所需的 `source.output_v2`：它只表示一个无通道 volatile DAC14 工作区，不替代已有通道型
+ARB 合同。Core 在写前确认 CH1/CH2 均 OFF，写后验证两路 OFF；失败时仅对仍可用的两路各最多尝试一次 OFF recovery。
+结果不标识 USER 属于哪一路，也不承诺内容读回或恢复。该 entry point
+与 `rigol.dg4202-v2` 分离，避免未验收工作区能力改变已绑定的 Sweep conformance 制品。实机验收前不
+附加 manifest，也不将其描述为通道定向上传。
 
 ## 16. M12 — 型号矩阵与发布收口
 
-**状态：未开始。**
+**状态：部分完成。**
 
 M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 
@@ -295,15 +435,30 @@ M12 不增加 raw SCPI 或高副作用维护命令。它收敛：
 - 外置插件与内建 fallback 的差异测试；
 - lifecycle、wheel/sdist、editable、升级/降级/卸载回退与公开安装文档；
 - 慢传输、query/write timeout、binary partial failure、并发、锁存后行为和 artifact 脱敏；
-- 版本兼容范围与变更日志，不把“某型号可识别”写成“该型号已验收”。
+- 版本兼容范围与变更日志，不把「某型号可识别」写成「该型号已验收」。
+
+当前 `0.7.0` wheel 已将 Basic、Output、Counter 和受限 opt-in Sweep 的 10 份 conformance manifest 放入
+自身 dist-info，并绑定各自 descriptor 与 wheel 的非 manifest 成员。该机制不提升 volatile ARB、Burst、
+Coupling、Noise Overlay、Sync 或 Harmonic 活跃态的证据等级。
 
 最终退出门要求所有公开写 capability 都有正常路径、失败矩阵、恢复/锁存证据和至少一个明确型号/通道的实机验收；其余命令保持未覆盖或默认拒绝。
 
 ## 17. 当前证据边界
 
-- 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门，以及 M6
-  全局 counter-OFF 零写入门。
+- 外置插件实机通过：DG4202 固件 `00.01.14` 的 M1–M5 CH1/CH2 实机门、M6
+  全局 counter-OFF 零写入门，以及 Counter V2 的配置、启停、测量和 RTM/FFT 交叉验收；`0.7.0` 的 52-query output-OFF Pulse 活跃快照和最终
+  67-query 全 facet 基线快照也已通过。P1 的 Basic／Live Basic／Output normal path 已在
+  CH1/CH2 高阻 RTM 闭环通过，恢复后两路均为 OFF/SIN/1 kHz/5 Vpp/0 V/FIX/50% duty。
+  最终只读 harness 为 112 queries、0 text/binary writes。
+- 受限 opt-in Sweep 实机通过：`rigol.dg4202-v2` 在 CH1 与 CH2 分别完成 output-OFF 配置、同会话 manual fire、
+  三段 RTM 高阻采集、两路 output OFF，并通过独立 legacy 事务和新会话恢复 FIX/OFF；该结论仅覆盖线性
+  1–2 kHz、101 点、12 s、1 Vpp、marker OFF 的夹具。
+- active Harmonic 的受控状态迁移观察：DG4202 `00.01.14` 的 CH1 在 output OFF、FIX 下由
+  `HARM`／`HARMONIC` 切换到 Sine，并完成最终 Basic／Output readback。未进行示波器环回或外部测量，未验证
+  参数保持，不覆盖 CH2 或其它固件，因此不提升 Source conformance 等级。
 - 历史证据仅保留来源区分，不再替代当前外置插件验收。
-- 尚未通过：M7–M12；M6 的 counter-ON 五元组仍只有离线解析证据。
+- 尚未通过：M8–M12 的其余受控写退出门；Coupling、Noise Overlay 与 Sync 只有写候选设计，
+  未声明生产 capability。Burst ON 与 Harmonic 活跃 V2 facet 仍没有完整的外置实机证据。P1/Counter
+  timeout、二义写和 recovery-failure 仍无上机 fault-injection 结论。
 
 状态升级必须同步更新中英文矩阵、里程碑、README、测试和真实构建产物检查。

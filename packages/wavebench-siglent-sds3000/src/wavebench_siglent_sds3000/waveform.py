@@ -7,7 +7,7 @@ import struct
 import numpy as np
 
 from wavebench.errors import DataError
-from wavebench.instruments.models import WaveformData, WaveformHeader
+from wavebench.instruments import WaveformData, WaveformHeader
 
 
 _LEGACY_DESCRIPTOR_LENGTHS = frozenset({344, 346})

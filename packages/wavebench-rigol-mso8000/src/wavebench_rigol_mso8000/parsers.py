@@ -5,7 +5,7 @@ import math
 import re
 
 from wavebench.errors import DataError
-from wavebench.instruments.models import ScopeChannelInputStateV2
+from wavebench.instruments import ScopeChannelInputStateV2
 
 
 @dataclass(frozen=True)

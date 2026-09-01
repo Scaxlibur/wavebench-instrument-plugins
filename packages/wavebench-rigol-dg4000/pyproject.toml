@@ -4,22 +4,27 @@ build-backend = "hatchling.build"
 
 [project]
 name = "wavebench-rigol-dg4000"
-version = "0.6.0"
+version = "0.7.0"
 description = "RIGOL DG4000 function and arbitrary waveform generator plugin for WaveBench"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["wavebench>=0.8.17,<0.9"]
+dependencies = ["wavebench>=0.8.25,<0.9"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0", "ruff>=0.8.0"]
 
 [project.entry-points."wavebench.instruments"]
 "rigol.dg4202" = "wavebench_rigol_dg4000:descriptor"
+"rigol.dg4202-v2" = "wavebench_rigol_dg4000:descriptor_v2"
+"rigol.dg4202-v2-workspace" = "wavebench_rigol_dg4000:descriptor_v2_workspace"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wavebench_rigol_dg4000"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"conformance" = "wavebench_rigol_dg4000-0.7.0.dist-info/wavebench-source-conformance"
 
 [tool.hatch.build.targets.sdist]
 exclude = ["/doc/vendor-local"]

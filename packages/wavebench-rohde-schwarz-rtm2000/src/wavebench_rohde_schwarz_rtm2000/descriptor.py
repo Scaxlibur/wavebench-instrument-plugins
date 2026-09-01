@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from wavebench.instruments.api import InstrumentDescriptor, OptionSpec
+from wavebench.instruments import InstrumentDescriptor, OptionSpec
+
+from .profiles import RTM2000_SCOPE_EXTENSIONS
 
 
 def _open_driver(context):
@@ -41,6 +43,11 @@ def descriptor() -> InstrumentDescriptor:
             "scope.fft_status",
             "scope.reference_metadata",
             "scope.cursor_readout",
+            "scope.channel_input_state_v2",
+            "scope.digital_status_v2",
+            "scope.snapshot_v2",
+            "scope.measurement_statistics_v2",
+            "scope.fft_status_v2",
         ),
         idn_patterns=("Rohde&Schwarz,RTM", "Rohde & Schwarz,RTM"),
         backends=(
@@ -61,12 +68,13 @@ def descriptor() -> InstrumentDescriptor:
         permissions=("instrument.io", "configured-resource-only"),
         factory=_open_driver,
         summary="Installable R&S RTM2000-series scope capture driver.",
-        wavebench_min_version="0.8.7",
+        wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rohde-schwarz-rtm2000",
-        version="0.12.0",
+        version="0.13.0",
         source="entry_point:rohde-schwarz.rtm2032",
         scope_coupling_policy="switchable-termination",
+        scope_extensions=RTM2000_SCOPE_EXTENSIONS,
         config_fields=(
             "connection.backend",
             "connection.resource",

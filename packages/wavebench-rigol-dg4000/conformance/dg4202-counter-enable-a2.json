@@ -1,0 +1,51 @@
+{
+  "schema": "wavebench.source.conformance.v1",
+  "manifest_id": "dg4202-counter-enable-a2",
+  "conformance_scheme": "wavebench.source.a0-a5.v1",
+  "claimed_level": "A2",
+  "capability": "source.counter_enable_v2",
+  "feature": "counter",
+  "direction": "enable",
+  "model": "DG4202",
+  "firmware_id": "00.01.14",
+  "option_ids": [],
+  "channels": [],
+  "core_version": "0.8.25",
+  "plugin_version": "0.7.0",
+  "wheel_sha256": "sha256:5eb021402156069ff367b4e1f8ea34dae963fcd9844bb1fa1ba6120ce872fe10",
+  "descriptor_digest": "sha256:2956d875216721d37a0a9ff12ecf79a4d6b6bb1669bbd7fa3c504f56999e35ae",
+  "source_contract_version": "wavebench.source.v2",
+  "fixture": {
+    "counter_input": "counter",
+    "resource": "redacted",
+    "source_channel": 1
+  },
+  "safety_limits": {
+    "maximum_input_vpp": 5.0,
+    "source_limit_vpp": 5.0
+  },
+  "budget": {
+    "admitted": true,
+    "output_state": "off"
+  },
+  "results": {
+    "disable_after_enable": true,
+    "postcondition_readback": true
+  },
+  "session_health": {
+    "after": "healthy",
+    "before": "healthy"
+  },
+  "final_state": {
+    "counter_state": "off",
+    "output_state": "off"
+  },
+  "coverage": [
+    "Counter enable and safe disable with independent readback"
+  ],
+  "limitations": [
+    "no timeout or ambiguous-write hardware evidence",
+    "no other firmware or model"
+  ],
+  "evidence_digest": "sha256:b8639e0202fad71670c70cc9ac4416c9edd2ffca3a53b3f0336baf8fc0a6e1c9"
+}
