@@ -1,25 +1,20 @@
+"""Production RTM2000 scope-focus contract and recovery tests."""
+
 from __future__ import annotations
 
 from dataclasses import replace
 
 import pytest
 
-from wavebench.errors import ConfigError, DataError, TransportIOError
-try:
-    from wavebench.instruments import (
-        ScopeFocusBaseline,
-        ScopeFocusChannelState,
-        ScopeFocusProfileV2,
-        ScopeFocusRequest,
-        ScopeFocusRestoreResult,
-        ScopeFocusState,
-        ScopeFocusVerticalScale,
-    )
-except ImportError:
-    pytest.skip(
-        "RTM2000 focus candidate tests require the WaveBench 0.8.26 development contract",
-        allow_module_level=True,
-    )
+from wavebench.errors import DataError, TransportIOError
+from wavebench.instruments import (
+    ScopeFocusBaseline,
+    ScopeFocusChannelState,
+    ScopeFocusRequest,
+    ScopeFocusRestoreResult,
+    ScopeFocusState,
+    ScopeFocusVerticalScale,
+)
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.services.scope_extension_service import ScopeExtensionService
 from wavebench.transport import (
@@ -32,6 +27,7 @@ from wavebench.transport import (
 from wavebench.transport.guarded import GuardedAuditedTransport
 from wavebench_rohde_schwarz_rtm2000 import descriptor as plugin_descriptor
 from wavebench_rohde_schwarz_rtm2000.driver import RTM2032Scope
+from wavebench_rohde_schwarz_rtm2000.profiles import RTM2000_FOCUS_PROFILE_V2
 
 
 _CAPABILITY = "scope.focus_configure_v2"
@@ -40,23 +36,7 @@ _RESTORE_ORDER = (
     "scope.channel_vertical",
     "scope.channel_display",
 )
-_PROFILE = ScopeFocusProfileV2(
-    analog_channels=(1, 2),
-    time_range_min_s=1e-9,
-    time_range_max_s=100.0,
-    time_range_abs_tolerance_s=1e-12,
-    vertical_scale_min_v_per_div=1e-3,
-    vertical_scale_max_v_per_div=10.0,
-    vertical_scale_abs_tolerance_v_per_div=1e-9,
-    vertical_range_abs_tolerance_v=1e-9,
-    time_position_abs_tolerance_s=1e-12,
-    position_abs_tolerance=1e-9,
-    offset_abs_tolerance_v=1e-9,
-    snapshot_max_steps=12,
-    configure_max_steps=17,
-    restore_max_steps=12,
-    verify_max_steps=12,
-)
+_PROFILE = RTM2000_FOCUS_PROFILE_V2
 
 
 class FocusTransport:
@@ -248,26 +228,12 @@ def _baseline(backend: FocusTransport) -> ScopeFocusBaseline:
     )
 
 
-def _candidate_descriptor():
-    production = plugin_descriptor()
-    assert production.scope_extensions is not None
-    return replace(
-        production,
-        capabilities=(*production.capabilities, _CAPABILITY),
-        wavebench_min_version="0.8.26",
-        scope_extensions=replace(
-            production.scope_extensions,
-            focus_profile_v2=_PROFILE,
-        ),
-    )
-
-
 def _service(
     backend: FocusTransport,
 ) -> tuple[ScopeExtensionService, GuardedAuditedTransport]:
     transport = GuardedAuditedTransport(backend)
     driver = RTM2032Scope(transport=transport)
-    descriptor = _candidate_descriptor()
+    descriptor = plugin_descriptor()
     validate_declared_capabilities(descriptor, driver)
     return (
         ScopeExtensionService(
@@ -280,28 +246,21 @@ def _service(
     )
 
 
-def test_production_descriptor_keeps_focus_candidate_disabled() -> None:
+def test_production_descriptor_exposes_focus_profile_without_io() -> None:
     descriptor = plugin_descriptor()
-    assert _CAPABILITY not in descriptor.capabilities
+    assert _CAPABILITY in descriptor.capabilities
+    assert descriptor.wavebench_min_version == "0.8.26"
     assert descriptor.scope_extensions is not None
-    assert descriptor.scope_extensions.focus_profile_v2 is None
+    assert descriptor.scope_extensions.focus_profile_v2 is _PROFILE
 
     backend = FocusTransport()
     transport = GuardedAuditedTransport(backend)
     driver = RTM2032Scope(transport=transport)
-    service = ScopeExtensionService(
-        driver=driver,
-        descriptor=descriptor,
-        session_state=transport.session_state,
-        connection_timeout_ms=1_000,
-    )
-
-    with pytest.raises(ConfigError, match="missing capabilities"):
-        service.configure_focus_v2(ScopeFocusRequest(channels=(1,)))
+    validate_declared_capabilities(descriptor, driver)
     assert backend.events == []
 
 
-def test_driver_candidate_queries_configures_and_restores_full_view() -> None:
+def test_driver_focus_queries_configures_and_restores_full_view() -> None:
     backend = FocusTransport()
     driver = RTM2032Scope(transport=backend)
     baseline = _baseline(backend)
@@ -357,7 +316,7 @@ def test_driver_candidate_queries_configures_and_restores_full_view() -> None:
     assert backend.matches_initial()
 
 
-def test_driver_candidate_rejects_invalid_inputs_before_io() -> None:
+def test_driver_focus_rejects_invalid_inputs_before_io() -> None:
     backend = FocusTransport()
     driver = RTM2032Scope(transport=backend)
     baseline = _baseline(backend)
@@ -369,7 +328,7 @@ def test_driver_candidate_rejects_invalid_inputs_before_io() -> None:
     assert backend.events == []
 
 
-def test_driver_candidate_rejects_malformed_off_channel_state_before_write() -> None:
+def test_driver_focus_rejects_malformed_off_channel_state_before_write() -> None:
     backend = FocusTransport(
         response_overrides={"CHANnel2:SCALe?": "UNAVAILABLE"},
     )
@@ -379,7 +338,7 @@ def test_driver_candidate_rejects_malformed_off_channel_state_before_write() -> 
     assert not [event for event in backend.events if event[0] == "write"]
 
 
-def test_core_service_candidate_verifies_change_and_noop() -> None:
+def test_core_service_focus_verifies_change_and_noop() -> None:
     backend = FocusTransport()
     service, transport = _service(backend)
     request = ScopeFocusRequest(
@@ -410,7 +369,7 @@ def test_core_service_candidate_verifies_change_and_noop() -> None:
     assert transport.audit_snapshot()["counters"]["write_requests"] == 0
 
 
-def test_core_service_candidate_restores_after_postcondition_mismatch() -> None:
+def test_core_service_focus_restores_after_postcondition_mismatch() -> None:
     backend = FocusTransport(ignore_scale_write=True)
     service, transport = _service(backend)
 
@@ -434,7 +393,7 @@ def test_core_service_candidate_restores_after_postcondition_mismatch() -> None:
 
 
 @pytest.mark.parametrize("fail_main_write_at", (1, 2, 3, 4))
-def test_core_service_candidate_restores_every_partial_main_failure(
+def test_core_service_focus_restores_every_partial_main_failure(
     fail_main_write_at: int,
 ) -> None:
     backend = FocusTransport(fail_main_write_at=fail_main_write_at)
@@ -458,7 +417,7 @@ def test_core_service_candidate_restores_every_partial_main_failure(
     assert audit["counters"]["write_completed"] == 12 + fail_main_write_at - 1
 
 
-def test_core_service_candidate_poisons_when_protected_position_cannot_restore() -> None:
+def test_core_service_focus_poisons_when_protected_position_cannot_restore() -> None:
     backend = FocusTransport(
         scale_changes_position=True,
         ignore_position_restore=True,

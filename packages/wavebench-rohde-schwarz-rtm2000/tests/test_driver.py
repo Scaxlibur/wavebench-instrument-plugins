@@ -60,6 +60,7 @@ from wavebench_rohde_schwarz_rtm2000.driver import (
 )
 from wavebench_rohde_schwarz_rtm2000.profiles import (
     RTM2000_FFT_STATUS_V2_READABLE_FIELDS,
+    RTM2000_FOCUS_PROFILE_V2,
     RTM2000_SCOPE_EXTENSIONS,
     RTM2000_SNAPSHOT_V2_READABLE_FIELDS,
 )
@@ -290,9 +291,9 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
     assert descriptor.validate_options({}) == {"long_waveform_timeout_ms": 300_000}
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.distribution == "wavebench-rohde-schwarz-rtm2000"
-    assert descriptor.version == "0.14.0"
-    assert descriptor.wavebench_min_version == "0.8.25"
-    assert len(descriptor.capabilities) == 25
+    assert descriptor.version == "0.15.0"
+    assert descriptor.wavebench_min_version == "0.8.26"
+    assert len(descriptor.capabilities) == 26
     assert {
         "scope.channel_display_configure_v2",
         "scope.channel_input_state_v2",
@@ -300,6 +301,7 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
         "scope.snapshot_v2",
         "scope.measurement_statistics_v2",
         "scope.fft_status_v2",
+        "scope.focus_configure_v2",
     } <= set(descriptor.capabilities)
     assert descriptor.scope_extensions is RTM2000_SCOPE_EXTENSIONS
     assert descriptor.scope_extensions.snapshot_profile_v2.readable_fields == (
@@ -321,6 +323,22 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
     assert descriptor.scope_extensions.channel_display_profile_v2.configure_max_steps == 2
     assert descriptor.scope_extensions.channel_display_profile_v2.restore_max_steps == 1
     assert descriptor.scope_extensions.channel_display_profile_v2.verify_max_steps == 1
+    assert descriptor.scope_extensions.focus_profile_v2 is RTM2000_FOCUS_PROFILE_V2
+    assert RTM2000_FOCUS_PROFILE_V2.analog_channels == (1, 2)
+    assert (
+        RTM2000_FOCUS_PROFILE_V2.time_range_min_s,
+        RTM2000_FOCUS_PROFILE_V2.time_range_max_s,
+    ) == (1e-9, 100.0)
+    assert (
+        RTM2000_FOCUS_PROFILE_V2.vertical_scale_min_v_per_div,
+        RTM2000_FOCUS_PROFILE_V2.vertical_scale_max_v_per_div,
+    ) == (1e-3, 10.0)
+    assert (
+        RTM2000_FOCUS_PROFILE_V2.snapshot_max_steps,
+        RTM2000_FOCUS_PROFILE_V2.configure_max_steps,
+        RTM2000_FOCUS_PROFILE_V2.restore_max_steps,
+        RTM2000_FOCUS_PROFILE_V2.verify_max_steps,
+    ) == (12, 17, 12, 12)
     assert driver.transport is transport
     assert driver.check_errors_after_ops is False
     assert transport_opens == 1
