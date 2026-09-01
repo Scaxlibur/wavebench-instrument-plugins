@@ -1,0 +1,25 @@
+# A4 Pulse 本地证据配置模板。
+#
+# 此文件只记录人工确认的安全事实，不得包含仪器资源、序列号、原始响应或波形。
+# 复制到被忽略的私有路径后，与独立的只读 RF 配置一起使用。
+#
+# 当前范围只配置 internal/single Pulse，并且固定以 Pulse OFF 收尾；不会开启 RF 输出、
+# 不会使用后面板 Pulse I/O，也不会触发 Pulse。它不是 RF 脉冲输出或 CH2 观测验收。
+
+[a4_pulse_evidence]
+# A4 Pulse 仅允许 DSG830 的 RF 主输出端口。
+port_id = "rf_out"
+
+# 保留为已人工核对的 RF 路径事实。A4 Pulse 不会打开 RF 输出，不能从这一字段推导输出授权。
+actual_termination_ohm = 50
+
+# 已确认时显式写入空列表；有选件时使用已排序、无重复的安全标识。
+installed_options = []
+
+# internal/single profile 的周期与高电平宽度，单位为秒。宽度必须小于周期，且必须满足设备的
+# 最小 10 ns off-time 约束。
+period_s = 0.001
+width_s = 0.0001
+
+# 仅接受 "normal" 或 "inverted"。
+polarity = "normal"

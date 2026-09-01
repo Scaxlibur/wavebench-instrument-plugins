@@ -1,0 +1,31 @@
+# Copy this file outside the repository and supply only the listed facts.
+# RF OUTPUT must be directly connected to RTM2032 CH2 with confirmed 50 ohm input.
+# The controlled RF level is fixed at -50 dBm; do not add amplifiers or attenuators.
+# Select exactly one profile by retaining either the FM table or the PM table below.
+
+[a4_fm_pm_modulated_output]
+port_id = "rf_out"
+actual_termination_ohm = 50
+installed_options = []
+frequency_hz = 1000000
+power_dbm = -50
+modulation_kind = "fm"
+frequency_deviation_hz = 20000
+internal_frequency_hz = 1000
+
+[scope_observation]
+ch2 = 2
+allow_ch2_50ohm = true
+points = "def"
+minimum_observable_vpp_v = 0.001
+
+# PM variant: replace only the A4 table above with this exact table.
+# [a4_fm_pm_modulated_output]
+# port_id = "rf_out"
+# actual_termination_ohm = 50
+# installed_options = []
+# frequency_hz = 1000000
+# power_dbm = -50
+# modulation_kind = "pm"
+# phase_deviation_rad = 1.25
+# internal_frequency_hz = 1000

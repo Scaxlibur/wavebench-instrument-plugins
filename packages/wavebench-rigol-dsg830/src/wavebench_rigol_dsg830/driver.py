@@ -1,0 +1,1049 @@
+"""RF-source driver with bounded M0--M4 mappings for the RIGOL DSG830.
+
+A1 hardware evidence authorizes the public ``rf_source.snapshot`` capability.
+``get_rf_snapshot()`` remains observational only: it performs the fixed query
+set and does not configure frequency or power, switch RF output, or control
+modulation, Pulse, Sweep, trigger, or arbitrary SCPI.
+
+``set_rf_output()``, ``configure_cw()``, ``configure_rf_modulation()``,
+``configure_rf_pulse()``, ``set_rf_pulse_output()``, and
+``configure_rf_sweep()`` are exposed only by their independently evidenced
+production capabilities.  The A5-0 ``get_rf_trigger_snapshot()`` mapping is
+query-only and remains absent from the production descriptor until a separate
+trigger-path evidence decision.  The bounded ``PULSE IN/OUT`` output mapping
+is production-declared only for its independently evidenced output direction;
+it does not describe the connector's input direction.
+"""
+
+from __future__ import annotations
+
+from decimal import Decimal
+from math import isfinite
+import re
+
+from wavebench.instruments.rf_source_extensions import (
+    RfAvailability,
+    RfCwRequest,
+    RfExternalGatePolarity,
+    RfExternalTriggerEdge,
+    RfModulationDisableRequest,
+    RfModulationKind,
+    RfModulationRequest,
+    RfModulationStateSnapshot,
+    RfModulationSnapshot,
+    RfModulationSource,
+    RfModulationState,
+    RfModulationWaveform,
+    RfObserved,
+    RfOutputRequest,
+    RfPortSnapshot,
+    RfProtectionStatus,
+    RfPulseConfigureRequest,
+    RfPulseMode,
+    RfPulseOutputDirection,
+    RfPulseOutputRequest,
+    RfPulseOutputSnapshot,
+    RfPulsePolarity,
+    RfPulseTriggerMode,
+    RfPulseSnapshot,
+    RfPulseSource,
+    RfPulseState,
+    RfReasonCode,
+    RfSourceSnapshot,
+    RfSweepConfigureRequest,
+    RfSweepDirection,
+    RfSweepMode,
+    RfSweepShape,
+    RfSweepSnapshot,
+    RfSweepSpacing,
+    RfSweepState,
+    RfSweepType,
+    RfSweepTriggerMode,
+    RfTriggerSnapshot,
+)
+
+
+_FREQUENCY_MIN_HZ = 9_000.0
+_FREQUENCY_MAX_HZ = 3_000_000_000.0
+_POWER_MIN_DBM = -110.0
+_POWER_MAX_DBM = 20.0
+_INTERNAL_MODULATION_FREQUENCY_MIN_HZ = 10.0
+_INTERNAL_MODULATION_FREQUENCY_MAX_HZ = 100_000.0
+_AM_DEPTH_MIN_PERCENT = 0.0
+_AM_DEPTH_MAX_PERCENT = 100.0
+_FM_DEVIATION_MIN_HZ = 0.1
+_FM_DEVIATION_MAX_HZ = 1_000_000.0
+_PM_DEVIATION_MIN_RAD = 0.0
+_PM_DEVIATION_MAX_RAD = 5.0
+_PULSE_PERIOD_MIN_S = 40e-9
+_PULSE_PERIOD_MAX_S = 170.0
+_PULSE_WIDTH_MIN_S = 10e-9
+_PULSE_WIDTH_MAX_S = _PULSE_PERIOD_MAX_S - _PULSE_WIDTH_MIN_S
+_PULSE_MINIMUM_OFF_TIME_S = 10e-9
+_PULSE_OUTPUT_INTERFACE_ID = "pulse_in_out"
+_PULSE_OUTPUT_LOW_LEVEL_V = 0.0
+_PULSE_OUTPUT_HIGH_LEVEL_V = 3.3
+_PULSE_OUTPUT_IMPEDANCE_OHM = 600.0
+_SWEEP_POINTS_MIN = 2
+_SWEEP_POINTS_MAX = 65_535
+_SWEEP_DWELL_MIN_S = 20e-3
+_SWEEP_DWELL_MAX_S = 100.0
+_NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?"
+_FREQUENCY_RESPONSE = re.compile(
+    rf"^(?P<value>{_NUMBER})(?P<unit>Hz|kHz|MHz|GHz)?$",
+    re.IGNORECASE,
+)
+_FREQUENCY_FRACTION_GROUP_RESPONSE = re.compile(
+    r"^(?P<leading>[+-]?\d+\.\d+)(?P<trailing>(?: \d+)+)(?P<unit>Hz|kHz|MHz|GHz)?$",
+    re.IGNORECASE,
+)
+_DECIMAL_RESPONSE = re.compile(rf"^{_NUMBER}$")
+_RAD_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})(?:rad)?$", re.IGNORECASE)
+_TIME_RESPONSE = re.compile(rf"^(?P<value>{_NUMBER})\s*(?P<unit>s|ms|us|ns)?$", re.IGNORECASE)
+_TIME_FRACTION_GROUP_RESPONSE = re.compile(
+    r"^(?P<leading>[+-]?\d+\.\d+)(?P<trailing>(?: \d+)+)(?P<unit>s|ms|us|ns)?$",
+    re.IGNORECASE,
+)
+_INTEGER_RESPONSE = re.compile(r"^\d+$")
+_IDN_VENDOR = "RIGOL TECHNOLOGIES"
+_IDN_MODEL = "DSG830"
+_A1_FIRMWARE_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+_SNAPSHOT_QUERIES = (
+    "*IDN?",
+    ":FREQ?",
+    ":LEV?",
+    ":OUTP?",
+    ":MOD:STAT?",
+    ":PULM:STAT?",
+    ":SWE:STAT?",
+    ":STAT:QUES:POW:COND?",
+)
+
+_TRIGGER_SNAPSHOT_QUERIES = (
+    ":PULM:TRIG:MODE?",
+    ":PULM:TRIG:EXT:SLOP?",
+    ":PULM:TRIG:EXT:GATE:POL?",
+    ":SWE:MODE?",
+    ":SWE:SWE:TRIG:TYPE?",
+    ":SWE:POIN:TRIG:TYPE?",
+)
+
+
+class DSG830RfSource:
+    """Strictly parse documented, read-only DSG830 snapshot queries."""
+
+    def __init__(self, *, transport) -> None:
+        self.transport = transport
+        self._a1_snapshot_firmware: str | None = None
+
+    def idn(self) -> str:
+        return self.transport.query("*IDN?")
+
+    def get_rf_snapshot(self) -> RfSourceSnapshot:
+        responses = {command: self.transport.query(command) for command in _SNAPSHOT_QUERIES}
+        self._a1_snapshot_firmware = _parse_idn(responses["*IDN?"])
+        return RfSourceSnapshot(
+            ports=(
+                RfPortSnapshot(
+                    port_id="rf_out",
+                    frequency_hz=RfObserved.value_of(
+                        _parse_frequency_hz(responses[":FREQ?"])
+                    ),
+                    power_dbm=RfObserved.value_of(_parse_power_dbm(responses[":LEV?"])),
+                    output_enabled=RfObserved.value_of(
+                        _parse_binary(responses[":OUTP?"], "RF output")
+                    ),
+                    modulation=RfObserved.value_of(
+                        _as_modulation_state(
+                            _parse_binary(responses[":MOD:STAT?"], "modulation state")
+                        )
+                    ),
+                    pulse=RfObserved.value_of(
+                        _as_pulse_state(
+                            _parse_binary(responses[":PULM:STAT?"], "pulse modulation state")
+                        )
+                    ),
+                    sweep=_parse_sweep_state(responses[":SWE:STAT?"]),
+                ),
+            ),
+            protection=_parse_protection_status(responses[":STAT:QUES:POW:COND?"]),
+        )
+
+    def get_rf_trigger_snapshot(self, port_id: str) -> RfTriggerSnapshot:
+        """Read logical trigger configuration without triggering or writing state.
+
+        The queried settings govern the named RF output's Pulse/Sweep behavior;
+        ``port_id`` is not treated as a physical trigger connector.  This
+        method sends only the documented query forms and is intentionally not
+        exposed by the DSG830 production descriptor.
+        """
+
+        _require_trigger_port(port_id)
+        responses = {
+            command: self.transport.query(command) for command in _TRIGGER_SNAPSHOT_QUERIES
+        }
+        return RfTriggerSnapshot(
+            port_id=port_id,
+            pulse_trigger_mode=_parse_pulse_trigger_mode(responses[":PULM:TRIG:MODE?"]),
+            pulse_external_trigger_edge=_parse_external_trigger_edge(
+                responses[":PULM:TRIG:EXT:SLOP?"]
+            ),
+            pulse_external_gate_polarity=_parse_external_gate_polarity(
+                responses[":PULM:TRIG:EXT:GATE:POL?"]
+            ),
+            sweep_mode=_parse_sweep_mode(responses[":SWE:MODE?"]),
+            sweep_period_trigger_mode=_parse_sweep_trigger_mode(
+                responses[":SWE:SWE:TRIG:TYPE?"]
+            ),
+            sweep_point_trigger_mode=_parse_sweep_trigger_mode(
+                responses[":SWE:POIN:TRIG:TYPE?"]
+            ),
+        )
+
+    def configure_cw(self, request: RfCwRequest) -> None:
+        """Send one documented CW setter for the single DSG830 RF port.
+
+        Core owns the OFF-only preflight and independent snapshot readback.
+        This method intentionally sends exactly one write and performs neither
+        retry nor RF-output recovery.
+        """
+
+        if not isinstance(request, RfCwRequest):
+            raise ValueError("DSG830 CW configuration requires RfCwRequest")
+        if request.port_id != "rf_out":
+            raise ValueError("DSG830 CW configuration requires port_id='rf_out'")
+        if request.frequency_hz is not None:
+            if not _FREQUENCY_MIN_HZ <= request.frequency_hz <= _FREQUENCY_MAX_HZ:
+                raise ValueError("DSG830 CW frequency is outside the documented range")
+            self.transport.write(f":FREQ {_format_scpi_real(request.frequency_hz)}Hz")
+            return
+        assert request.power_dbm is not None
+        if not _POWER_MIN_DBM <= request.power_dbm <= _POWER_MAX_DBM:
+            raise ValueError("DSG830 CW power is outside the documented range")
+        self.transport.write(f":LEV {_format_scpi_real(request.power_dbm)}dBm")
+
+    def get_rf_modulation_snapshot(
+        self,
+        port_id: str,
+        kind: RfModulationKind,
+    ) -> RfModulationSnapshot:
+        """Read one complete, internal-sine M3 modulation profile without writes."""
+
+        _require_modulation_target(port_id, kind)
+        prefix = _modulation_prefix(kind)
+        state = self.get_rf_modulation_state(port_id)
+        responses: dict[str, str] = {}
+        if kind in {RfModulationKind.FM, RfModulationKind.PM}:
+            responses[":FMPM:TYPE?"] = self.transport.query(":FMPM:TYPE?")
+        for suffix in ("SOUR?", "WAVE?", _modulation_value_query(kind), "FREQ?"):
+            command = f":{prefix}:{suffix}"
+            responses[command] = self.transport.query(command)
+
+        selected_fm_pm_kind = (
+            _parse_fm_pm_type(responses[":FMPM:TYPE?"])
+            if kind in {RfModulationKind.FM, RfModulationKind.PM}
+            else None
+        )
+        source = _parse_modulation_source(responses[f":{prefix}:SOUR?"])
+        waveform = _parse_modulation_waveform(responses[f":{prefix}:WAVE?"])
+        common = {
+            "port_id": port_id,
+            "kind": kind,
+            "source": source,
+            "waveform": waveform,
+            "internal_frequency_hz": _parse_modulation_frequency_hz(
+                responses[f":{prefix}:FREQ?"],
+                f"{kind.value} modulation frequency",
+            ),
+            "selected_fm_pm_kind": selected_fm_pm_kind,
+            "enabled_modes": state.enabled_modes,
+            "global_enabled": state.global_enabled,
+            "fault_codes": state.fault_codes,
+        }
+        if kind is RfModulationKind.AM:
+            return RfModulationSnapshot(
+                **common,
+                depth_percent=_parse_am_depth_percent(responses[":AM:DEPT?"]),
+            )
+        if kind is RfModulationKind.FM:
+            return RfModulationSnapshot(
+                **common,
+                frequency_deviation_hz=_parse_fm_deviation_hz(responses[":FM:DEV?"]),
+            )
+        return RfModulationSnapshot(
+            **common,
+            phase_deviation_rad=_parse_pm_deviation_rad(responses[":PM:DEV?"]),
+        )
+
+    def get_rf_modulation_state(self, port_id: str) -> RfModulationStateSnapshot:
+        """Read M3 mode/global/fault state without source-dependent profile queries."""
+
+        _require_modulation_port(port_id)
+        state_commands = (
+            ":MOD:STAT?",
+            ":AM:STAT?",
+            ":FM:STAT?",
+            ":PM:STAT?",
+            ":STAT:QUES:MOD:COND?",
+        )
+        responses = {command: self.transport.query(command) for command in state_commands}
+        enabled_modes = tuple(
+            mode
+            for mode, command in (
+                (RfModulationKind.AM, ":AM:STAT?"),
+                (RfModulationKind.FM, ":FM:STAT?"),
+                (RfModulationKind.PM, ":PM:STAT?"),
+            )
+            if _parse_binary(responses[command], f"{mode.value} modulation state")
+        )
+        return RfModulationStateSnapshot(
+            port_id=port_id,
+            enabled_modes=enabled_modes,
+            global_enabled=_parse_binary(
+                responses[":MOD:STAT?"],
+                "global modulation state",
+            ),
+            fault_codes=_parse_modulation_fault_codes(responses[":STAT:QUES:MOD:COND?"]),
+        )
+
+    def configure_rf_modulation(self, request: RfModulationRequest) -> None:
+        """Send one bounded internal-sine M3 configuration sequence without readback.
+
+        Core owns RF-OFF preflight and independent postcondition readback.  This
+        method sends the documented, mode-specific sequence exactly once and
+        never enables RF output, retries writes, or performs recovery.
+        """
+
+        if not isinstance(request, RfModulationRequest):
+            raise ValueError("DSG830 modulation configuration requires RfModulationRequest")
+        _require_modulation_target(request.port_id, request.kind)
+        _validate_modulation_request_range(request)
+        prefix = _modulation_prefix(request.kind)
+        if request.kind in {RfModulationKind.FM, RfModulationKind.PM}:
+            self.transport.write(f":FMPM:TYPE {request.kind.value.upper()}")
+        self.transport.write(f":{prefix}:SOUR INT")
+        self.transport.write(f":{prefix}:WAVE SINE")
+        self.transport.write(_modulation_value_write(request))
+        self.transport.write(
+            f":{prefix}:FREQ {_format_scpi_real(request.internal_frequency_hz)}Hz"
+        )
+        self.transport.write(f":{prefix}:STAT ON")
+        self.transport.write(":MOD:STAT ON")
+
+    def disable_rf_modulation(self, request: RfModulationDisableRequest) -> None:
+        """Send the fixed M3 mode/global disable sequence without readback.
+
+        Core owns the RF-OFF preflight and independent state-only readback.
+        This method only disables the explicitly requested mode and then the
+        global modulation switch; it never changes RF output or retries writes.
+        """
+
+        if not isinstance(request, RfModulationDisableRequest):
+            raise ValueError("DSG830 modulation disable requires RfModulationDisableRequest")
+        _require_modulation_target(request.port_id, request.kind)
+        prefix = _modulation_prefix(request.kind)
+        self.transport.write(f":{prefix}:STAT OFF")
+        self.transport.write(":MOD:STAT OFF")
+
+    def get_rf_pulse_snapshot(self, port_id: str) -> RfPulseSnapshot:
+        """Read the documented pulse profile without touching Pulse I/O or triggers."""
+
+        _require_pulse_port(port_id)
+        commands = (
+            ":PULM:SOUR?",
+            ":PULM:MODE?",
+            ":PULM:PER?",
+            ":PULM:WIDT?",
+            ":PULM:POL?",
+            ":PULM:STAT?",
+        )
+        responses = {command: self.transport.query(command) for command in commands}
+        return RfPulseSnapshot(
+            port_id=port_id,
+            source=_parse_pulse_source(responses[":PULM:SOUR?"]),
+            mode=_parse_pulse_mode(responses[":PULM:MODE?"]),
+            period_s=_parse_seconds(
+                responses[":PULM:PER?"],
+                "pulse period",
+                minimum_s=_PULSE_PERIOD_MIN_S,
+                maximum_s=_PULSE_PERIOD_MAX_S,
+            ),
+            width_s=_parse_seconds(
+                responses[":PULM:WIDT?"],
+                "pulse width",
+                minimum_s=_PULSE_WIDTH_MIN_S,
+                maximum_s=_PULSE_WIDTH_MAX_S,
+            ),
+            polarity=_parse_pulse_polarity(responses[":PULM:POL?"]),
+            state=_as_pulse_state(_parse_binary(responses[":PULM:STAT?"], "pulse state")),
+        )
+
+    def configure_rf_pulse(self, request: RfPulseConfigureRequest) -> None:
+        """Configure one disabled internal single-pulse profile without triggering.
+
+        Core owns RF-OFF preflight and independent profile readback. This
+        mapping never touches `:PULM:OUT`, trigger commands, or RF output, and
+        ends by explicitly keeping pulse modulation disabled.
+        """
+
+        if not isinstance(request, RfPulseConfigureRequest):
+            raise ValueError("DSG830 pulse configuration requires RfPulseConfigureRequest")
+        _require_pulse_port(request.port_id)
+        _validate_pulse_request_range(request)
+        polarity = {
+            RfPulsePolarity.NORMAL: "NORM",
+            RfPulsePolarity.INVERTED: "INV",
+        }[request.polarity]
+        self.transport.write(":PULM:SOUR INT")
+        self.transport.write(":PULM:MODE SING")
+        self.transport.write(f":PULM:PER {_format_scpi_real(request.period_s)}s")
+        self.transport.write(f":PULM:WIDT {_format_scpi_real(request.width_s)}s")
+        self.transport.write(f":PULM:POL {polarity}")
+        self.transport.write(":PULM:STAT OFF")
+
+    def get_rf_pulse_output_snapshot(
+        self,
+        port_id: str,
+        interface_id: str,
+    ) -> RfPulseOutputSnapshot:
+        """Read the bounded ``PULSE IN/OUT`` output state without writes.
+
+        The connector label does not declare an input mapping.  This method
+        reports only the independently bounded output direction and reads the
+        complete internal Pulse profile required by that output contract.
+        """
+
+        _require_pulse_output_target(port_id, interface_id)
+        pulse = self.get_rf_pulse_snapshot(port_id)
+        enabled = _parse_binary(
+            self.transport.query(":PULM:OUT:STAT?"),
+            "Pulse-output state",
+        )
+        return RfPulseOutputSnapshot(
+            port_id=port_id,
+            interface_id=interface_id,
+            direction=RfPulseOutputDirection.OUTPUT,
+            enabled=enabled,
+            low_level_v=_PULSE_OUTPUT_LOW_LEVEL_V,
+            high_level_v=_PULSE_OUTPUT_HIGH_LEVEL_V,
+            output_impedance_ohm=_PULSE_OUTPUT_IMPEDANCE_OHM,
+            source=pulse.source,
+            mode=pulse.mode,
+            period_s=pulse.period_s,
+            width_s=pulse.width_s,
+            polarity=pulse.polarity,
+            pulse_state=pulse.state,
+        )
+
+    def set_rf_pulse_output(self, request: RfPulseOutputRequest) -> None:
+        """Map one bounded physical Pulse-output request to one SCPI setter.
+
+        Core owns the fixed-profile and RF-OFF preflight, independent readback,
+        and uncertain-session handling.  The driver does not configure Pulse,
+        trigger settings, RF output, receiver settings, or electrical levels.
+        """
+
+        if not isinstance(request, RfPulseOutputRequest):
+            raise ValueError("DSG830 Pulse-output control requires RfPulseOutputRequest")
+        _require_pulse_output_target(request.port_id, request.interface_id)
+        self.transport.write(":PULM:OUT:STAT ON" if request.enabled else ":PULM:OUT:STAT OFF")
+
+    def get_rf_sweep_snapshot(self, port_id: str) -> RfSweepSnapshot:
+        """Read one Step Sweep profile without arming, firing, or triggering it."""
+
+        _require_sweep_port(port_id)
+        commands = (
+            ":SWE:TYPE?",
+            ":SWE:DIR?",
+            ":SWE:STEP:SHAP?",
+            ":SWE:STEP:SPAC?",
+            ":SWE:STEP:STAR:FREQ?",
+            ":SWE:STEP:STOP:FREQ?",
+            ":SWE:STEP:POIN?",
+            ":SWE:STEP:DWEL?",
+            ":SWE:STAT?",
+        )
+        responses = {command: self.transport.query(command) for command in commands}
+        return RfSweepSnapshot(
+            port_id=port_id,
+            sweep_type=_parse_sweep_type(responses[":SWE:TYPE?"]),
+            direction=_parse_sweep_direction(responses[":SWE:DIR?"]),
+            shape=_parse_sweep_shape(responses[":SWE:STEP:SHAP?"]),
+            spacing=_parse_sweep_spacing(responses[":SWE:STEP:SPAC?"]),
+            start_frequency_hz=_parse_frequency_response_hz(
+                responses[":SWE:STEP:STAR:FREQ?"],
+                "Sweep start frequency",
+                minimum_hz=_FREQUENCY_MIN_HZ,
+                maximum_hz=_FREQUENCY_MAX_HZ,
+            ),
+            stop_frequency_hz=_parse_frequency_response_hz(
+                responses[":SWE:STEP:STOP:FREQ?"],
+                "Sweep stop frequency",
+                minimum_hz=_FREQUENCY_MIN_HZ,
+                maximum_hz=_FREQUENCY_MAX_HZ,
+            ),
+            points=_parse_sweep_points(responses[":SWE:STEP:POIN?"]),
+            dwell_s=_parse_seconds(
+                responses[":SWE:STEP:DWEL?"],
+                "Sweep dwell",
+                minimum_s=_SWEEP_DWELL_MIN_S,
+                maximum_s=_SWEEP_DWELL_MAX_S,
+            ),
+            state=_parse_sweep_snapshot_state(responses[":SWE:STAT?"]),
+        )
+
+    def configure_rf_sweep(self, request: RfSweepConfigureRequest) -> None:
+        """Configure one disabled frequency-only Step Sweep without triggering.
+
+        Core owns the RF-OFF preflight and independent profile readback. This
+        mapping never selects Level Sweep, arms or fires Sweep, writes a
+        trigger setting, changes RF output, or issues ``:SWE:EXEC``.
+        """
+
+        if not isinstance(request, RfSweepConfigureRequest):
+            raise ValueError("DSG830 Sweep configuration requires RfSweepConfigureRequest")
+        _require_sweep_port(request.port_id)
+        _validate_sweep_request_range(request)
+        self.transport.write(":SWE:TYPE STEP")
+        self.transport.write(":SWE:DIR FWD")
+        self.transport.write(":SWE:STEP:SHAP RAMP")
+        self.transport.write(":SWE:STEP:SPAC LIN")
+        self.transport.write(
+            f":SWE:STEP:STAR:FREQ {_format_scpi_real(request.start_frequency_hz)}Hz"
+        )
+        self.transport.write(
+            f":SWE:STEP:STOP:FREQ {_format_scpi_real(request.stop_frequency_hz)}Hz"
+        )
+        self.transport.write(f":SWE:STEP:POIN {request.points}")
+        self.transport.write(f":SWE:STEP:DWEL {_format_scpi_real(request.dwell_s)}s")
+        self.transport.write(":SWE:STAT OFF")
+
+    def set_rf_output(self, request: RfOutputRequest) -> None:
+        """Map one offline M2 output request to one documented setter.
+
+        Core owns the safety preflight, independent readback, and bounded
+        OFF recovery. This driver sends one write only and never queries,
+        retries, or recovers on its own.
+        """
+
+        if not isinstance(request, RfOutputRequest):
+            raise ValueError("DSG830 RF output control requires RfOutputRequest")
+        if request.port_id != "rf_out":
+            raise ValueError("DSG830 RF output control requires port_id='rf_out'")
+        self.transport.write(":OUTP ON" if request.enabled else ":OUTP OFF")
+
+    def a1_snapshot_firmware(self) -> str | None:
+        """Return the safe firmware token from the current A1 snapshot query set.
+
+        This accessor performs no I/O. It is intentionally only consumed by the
+        local A1 evidence harness after a successful ``get_rf_snapshot()`` call.
+        """
+
+        return self._a1_snapshot_firmware
+
+    def close(self) -> None:
+        self.transport.close()
+
+
+# Compatibility alias for the seed's internal class name.  The descriptor
+# always constructs the RF-specific name above.
+DSG830Source = DSG830RfSource
+
+
+def _clean_response(response: object, label: str) -> str:
+    if not isinstance(response, str):
+        raise ValueError(f"DSG830 {label} response must be text")
+    value = response.strip()
+    if not value:
+        raise ValueError(f"DSG830 {label} response must not be empty")
+    return value
+
+
+def _parse_idn(response: object) -> str | None:
+    value = _clean_response(response, "identity")
+    fields = tuple(item.strip() for item in value.split(","))
+    if (
+        len(fields) != 4
+        or fields[0].upper() != _IDN_VENDOR
+        or fields[1].upper() != _IDN_MODEL
+        or not fields[2]
+        or not fields[3]
+    ):
+        raise ValueError("DSG830 identity response does not match the documented model")
+    firmware = fields[3]
+    return firmware if _A1_FIRMWARE_TOKEN.fullmatch(firmware) is not None else None
+
+
+def _parse_frequency_hz(response: object) -> float:
+    return _parse_frequency_response_hz(
+        response,
+        "frequency",
+        minimum_hz=_FREQUENCY_MIN_HZ,
+        maximum_hz=_FREQUENCY_MAX_HZ,
+    )
+
+
+def _parse_frequency_response_hz(
+    response: object,
+    label: str,
+    *,
+    minimum_hz: float,
+    maximum_hz: float,
+) -> float:
+    value = _clean_response(response, label)
+    match = _FREQUENCY_RESPONSE.fullmatch(value)
+    if match is None:
+        grouped = _FREQUENCY_FRACTION_GROUP_RESPONSE.fullmatch(value)
+        if grouped is not None:
+            normalized = (
+                grouped.group("leading")
+                + grouped.group("trailing").replace(" ", "")
+                + (grouped.group("unit") or "")
+            )
+            match = _FREQUENCY_RESPONSE.fullmatch(normalized)
+    if match is None:
+        raise ValueError(f"DSG830 {label} response has an invalid format")
+    frequency = _parse_finite(match.group("value"), label)
+    multiplier = {
+        None: 1.0,
+        "HZ": 1.0,
+        "KHZ": 1_000.0,
+        "MHZ": 1_000_000.0,
+        "GHZ": 1_000_000_000.0,
+    }[match.group("unit").upper() if match.group("unit") is not None else None]
+    frequency_hz = frequency * multiplier
+    if not minimum_hz <= frequency_hz <= maximum_hz:
+        raise ValueError(f"DSG830 {label} response is outside the documented range")
+    return frequency_hz
+
+
+def _parse_power_dbm(response: object) -> float:
+    value = _clean_response(response, "power")
+    if _DECIMAL_RESPONSE.fullmatch(value) is None:
+        raise ValueError("DSG830 power response has an invalid format")
+    power_dbm = _parse_finite(value, "power")
+    if not _POWER_MIN_DBM <= power_dbm <= _POWER_MAX_DBM:
+        raise ValueError("DSG830 power response is outside the documented range")
+    return power_dbm
+
+
+def _parse_modulation_frequency_hz(response: object, label: str) -> float:
+    return _parse_frequency_response_hz(
+        response,
+        label,
+        minimum_hz=_INTERNAL_MODULATION_FREQUENCY_MIN_HZ,
+        maximum_hz=_INTERNAL_MODULATION_FREQUENCY_MAX_HZ,
+    )
+
+
+def _parse_am_depth_percent(response: object) -> float:
+    return _parse_decimal_range(
+        response,
+        "AM modulation depth",
+        minimum=_AM_DEPTH_MIN_PERCENT,
+        maximum=_AM_DEPTH_MAX_PERCENT,
+    )
+
+
+def _parse_fm_deviation_hz(response: object) -> float:
+    return _parse_frequency_response_hz(
+        response,
+        "FM deviation",
+        minimum_hz=_FM_DEVIATION_MIN_HZ,
+        maximum_hz=_FM_DEVIATION_MAX_HZ,
+    )
+
+
+def _parse_pm_deviation_rad(response: object) -> float:
+    value = _clean_response(response, "PM deviation")
+    match = _RAD_RESPONSE.fullmatch(value)
+    if match is None:
+        raise ValueError("DSG830 PM deviation response has an invalid format")
+    deviation = _parse_finite(match.group("value"), "PM deviation")
+    if not _PM_DEVIATION_MIN_RAD <= deviation <= _PM_DEVIATION_MAX_RAD:
+        raise ValueError("DSG830 PM deviation response is outside the documented range")
+    return deviation
+
+
+def _parse_seconds(
+    response: object,
+    label: str,
+    *,
+    minimum_s: float,
+    maximum_s: float,
+) -> float:
+    value = _clean_response(response, label)
+    match = _TIME_RESPONSE.fullmatch(value)
+    if match is None:
+        grouped = _TIME_FRACTION_GROUP_RESPONSE.fullmatch(value)
+        if grouped is not None:
+            normalized = (
+                grouped.group("leading")
+                + grouped.group("trailing").replace(" ", "")
+                + (grouped.group("unit") or "")
+            )
+            match = _TIME_RESPONSE.fullmatch(normalized)
+    if match is None:
+        raise ValueError(f"DSG830 {label} response has an invalid format")
+    seconds = float(
+        Decimal(match.group("value"))
+        * {
+            None: Decimal("1"),
+            "S": Decimal("1"),
+            "MS": Decimal("1e-3"),
+            "US": Decimal("1e-6"),
+            "NS": Decimal("1e-9"),
+        }[match.group("unit").upper() if match.group("unit") is not None else None]
+    )
+    if not isfinite(seconds):
+        raise ValueError(f"DSG830 {label} response must be finite")
+    if not minimum_s <= seconds <= maximum_s:
+        raise ValueError(f"DSG830 {label} response is outside the documented range")
+    return seconds
+
+
+def _parse_decimal_range(
+    response: object,
+    label: str,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    value = _clean_response(response, label)
+    if _DECIMAL_RESPONSE.fullmatch(value) is None:
+        raise ValueError(f"DSG830 {label} response has an invalid format")
+    parsed = _parse_finite(value, label)
+    if not minimum <= parsed <= maximum:
+        raise ValueError(f"DSG830 {label} response is outside the documented range")
+    return parsed
+
+
+def _parse_modulation_source(response: object) -> RfModulationSource:
+    value = _clean_response(response, "modulation source").upper()
+    if value in {"INT", "INTERNAL"}:
+        return RfModulationSource.INTERNAL
+    if value in {"EXT", "EXTERNAL"}:
+        return RfModulationSource.EXTERNAL
+    raise ValueError("DSG830 modulation source response must be INT or EXT")
+
+
+def _parse_pulse_source(response: object) -> RfPulseSource:
+    value = _clean_response(response, "pulse source").upper()
+    if value in {"INT", "INTERNAL"}:
+        return RfPulseSource.INTERNAL
+    if value in {"EXT", "EXTERNAL"}:
+        return RfPulseSource.EXTERNAL
+    raise ValueError("DSG830 pulse source response must be INT or EXT")
+
+
+def _parse_pulse_mode(response: object) -> RfPulseMode:
+    value = _clean_response(response, "pulse mode").upper()
+    if value in {"SING", "SINGLE"}:
+        return RfPulseMode.SINGLE
+    if value == "TRAIN":
+        return RfPulseMode.TRAIN
+    raise ValueError("DSG830 pulse mode response must be SINGLE or TRAIN")
+
+
+def _parse_pulse_polarity(response: object) -> RfPulsePolarity:
+    value = _clean_response(response, "pulse polarity").upper()
+    if value in {"NORM", "NORMAL"}:
+        return RfPulsePolarity.NORMAL
+    if value in {"INV", "INVERSE"}:
+        return RfPulsePolarity.INVERTED
+    raise ValueError("DSG830 pulse polarity response must be NORMAL or INVERSE")
+
+
+def _parse_pulse_trigger_mode(response: object) -> RfPulseTriggerMode:
+    value = _clean_response(response, "pulse trigger mode").upper()
+    if value in {"AUTO", "AUTOMATIC"}:
+        return RfPulseTriggerMode.AUTOMATIC
+    if value == "BUS":
+        return RfPulseTriggerMode.BUS
+    if value in {"EXT", "EXTERNAL"}:
+        return RfPulseTriggerMode.EXTERNAL
+    if value in {"EGAT", "EGATE", "EXTERNAL_GATE"}:
+        return RfPulseTriggerMode.EXTERNAL_GATE
+    if value == "KEY":
+        return RfPulseTriggerMode.KEY
+    raise ValueError("DSG830 pulse trigger mode response has an unsupported value")
+
+
+def _parse_external_trigger_edge(response: object) -> RfExternalTriggerEdge:
+    value = _clean_response(response, "external trigger edge").upper()
+    if value in {"POS", "POSITIVE"}:
+        return RfExternalTriggerEdge.POSITIVE
+    if value in {"NEG", "NEGATIVE"}:
+        return RfExternalTriggerEdge.NEGATIVE
+    raise ValueError("DSG830 external trigger edge response has an unsupported value")
+
+
+def _parse_external_gate_polarity(response: object) -> RfExternalGatePolarity:
+    value = _clean_response(response, "external gate polarity").upper()
+    if value in {"NORM", "NORMAL"}:
+        return RfExternalGatePolarity.NORMAL
+    if value in {"INV", "INVERSE", "INVERTED"}:
+        return RfExternalGatePolarity.INVERTED
+    raise ValueError("DSG830 external gate polarity response has an unsupported value")
+
+
+def _parse_sweep_type(response: object) -> RfSweepType:
+    value = _clean_response(response, "Sweep type").upper()
+    if value == "STEP":
+        return RfSweepType.STEP
+    raise ValueError("DSG830 Sweep type response must be STEP")
+
+
+def _parse_sweep_direction(response: object) -> RfSweepDirection:
+    value = _clean_response(response, "Sweep direction").upper()
+    if value in {"FWD", "FORWARD"}:
+        return RfSweepDirection.FORWARD
+    raise ValueError("DSG830 Sweep direction response must be FWD")
+
+
+def _parse_sweep_shape(response: object) -> RfSweepShape:
+    value = _clean_response(response, "Sweep shape").upper()
+    if value == "RAMP":
+        return RfSweepShape.RAMP
+    raise ValueError("DSG830 Sweep shape response must be RAMP")
+
+
+def _parse_sweep_spacing(response: object) -> RfSweepSpacing:
+    value = _clean_response(response, "Sweep spacing").upper()
+    if value in {"LIN", "LINEAR"}:
+        return RfSweepSpacing.LINEAR
+    raise ValueError("DSG830 Sweep spacing response must be LIN")
+
+
+def _parse_sweep_mode(response: object) -> RfSweepMode:
+    value = _clean_response(response, "Sweep mode").upper()
+    if value in {"CONT", "CONTINUE", "CONTINUOUS"}:
+        return RfSweepMode.CONTINUOUS
+    if value in {"SING", "SINGLE"}:
+        return RfSweepMode.SINGLE
+    raise ValueError("DSG830 Sweep mode response has an unsupported value")
+
+
+def _parse_sweep_trigger_mode(response: object) -> RfSweepTriggerMode:
+    value = _clean_response(response, "Sweep trigger mode").upper()
+    if value in {"AUTO", "AUTOMATIC"}:
+        return RfSweepTriggerMode.AUTOMATIC
+    if value == "BUS":
+        return RfSweepTriggerMode.BUS
+    if value in {"EXT", "EXTERNAL"}:
+        return RfSweepTriggerMode.EXTERNAL
+    if value == "KEY":
+        return RfSweepTriggerMode.KEY
+    raise ValueError("DSG830 Sweep trigger mode response has an unsupported value")
+
+
+def _parse_sweep_points(response: object) -> int:
+    value = _clean_response(response, "Sweep points")
+    if _INTEGER_RESPONSE.fullmatch(value) is None:
+        raise ValueError("DSG830 Sweep points response must be an integer")
+    points = int(value)
+    if not _SWEEP_POINTS_MIN <= points <= _SWEEP_POINTS_MAX:
+        raise ValueError("DSG830 Sweep points response is outside the documented range")
+    return points
+
+
+def _parse_modulation_waveform(response: object) -> RfModulationWaveform:
+    value = _clean_response(response, "modulation waveform").upper()
+    if value == "SINE":
+        return RfModulationWaveform.SINE
+    if value in {"SQUA", "SQUARE"}:
+        return RfModulationWaveform.SQUARE
+    raise ValueError("DSG830 modulation waveform response must be SINE or SQUA")
+
+
+def _parse_fm_pm_type(response: object) -> RfModulationKind:
+    value = _clean_response(response, "FM/PM type").upper()
+    if value == "FM":
+        return RfModulationKind.FM
+    if value == "PM":
+        return RfModulationKind.PM
+    raise ValueError("DSG830 FM/PM type response must be FM or PM")
+
+
+def _parse_modulation_fault_codes(response: object) -> tuple[str, ...]:
+    value = _clean_response(response, "modulation condition")
+    if _INTEGER_RESPONSE.fullmatch(value) is None:
+        raise ValueError("DSG830 modulation condition response must be an integer")
+    condition = int(value)
+    if not 0 <= condition <= 1:
+        raise ValueError("DSG830 modulation condition response is outside the documented range")
+    return ("am_overmodulation",) if condition else ()
+
+
+def _require_modulation_target(port_id: object, kind: object) -> None:
+    _require_modulation_port(port_id)
+    if not isinstance(kind, RfModulationKind):
+        raise ValueError("DSG830 modulation configuration requires a supported modulation kind")
+
+
+def _require_modulation_port(port_id: object) -> None:
+    if port_id != "rf_out":
+        raise ValueError("DSG830 modulation configuration requires port_id='rf_out'")
+
+
+def _require_pulse_port(port_id: object) -> None:
+    if port_id != "rf_out":
+        raise ValueError("DSG830 pulse configuration requires port_id='rf_out'")
+
+
+def _require_pulse_output_target(port_id: object, interface_id: object) -> None:
+    _require_pulse_port(port_id)
+    if interface_id != _PULSE_OUTPUT_INTERFACE_ID:
+        raise ValueError(
+            "DSG830 Pulse-output control requires interface_id='pulse_in_out'"
+        )
+
+
+def _require_sweep_port(port_id: object) -> None:
+    if port_id != "rf_out":
+        raise ValueError("DSG830 Sweep configuration requires port_id='rf_out'")
+
+
+def _require_trigger_port(port_id: object) -> None:
+    if port_id != "rf_out":
+        raise ValueError("DSG830 trigger configuration requires port_id='rf_out'")
+
+
+def _modulation_prefix(kind: RfModulationKind) -> str:
+    return {
+        RfModulationKind.AM: "AM",
+        RfModulationKind.FM: "FM",
+        RfModulationKind.PM: "PM",
+    }[kind]
+
+
+def _modulation_value_query(kind: RfModulationKind) -> str:
+    return {
+        RfModulationKind.AM: "DEPT?",
+        RfModulationKind.FM: "DEV?",
+        RfModulationKind.PM: "DEV?",
+    }[kind]
+
+
+def _modulation_value_write(request: RfModulationRequest) -> str:
+    prefix = _modulation_prefix(request.kind)
+    if request.kind is RfModulationKind.AM:
+        return f":{prefix}:DEPT {_format_scpi_real(request.value)}"
+    if request.kind is RfModulationKind.FM:
+        return f":{prefix}:DEV {_format_scpi_real(request.value)}Hz"
+    return f":{prefix}:DEV {_format_scpi_real(request.value)}rad"
+
+
+def _validate_modulation_request_range(request: RfModulationRequest) -> None:
+    if not (
+        _INTERNAL_MODULATION_FREQUENCY_MIN_HZ
+        <= request.internal_frequency_hz
+        <= _INTERNAL_MODULATION_FREQUENCY_MAX_HZ
+    ):
+        raise ValueError("DSG830 modulation frequency is outside the documented range")
+    minimum, maximum = {
+        RfModulationKind.AM: (_AM_DEPTH_MIN_PERCENT, _AM_DEPTH_MAX_PERCENT),
+        RfModulationKind.FM: (_FM_DEVIATION_MIN_HZ, _FM_DEVIATION_MAX_HZ),
+        RfModulationKind.PM: (_PM_DEVIATION_MIN_RAD, _PM_DEVIATION_MAX_RAD),
+    }[request.kind]
+    if not minimum <= request.value <= maximum:
+        raise ValueError("DSG830 modulation value is outside the documented range")
+
+
+def _validate_pulse_request_range(request: RfPulseConfigureRequest) -> None:
+    if not _PULSE_PERIOD_MIN_S <= request.period_s <= _PULSE_PERIOD_MAX_S:
+        raise ValueError("DSG830 pulse period is outside the documented range")
+    if not _PULSE_WIDTH_MIN_S <= request.width_s <= _PULSE_WIDTH_MAX_S:
+        raise ValueError("DSG830 pulse width is outside the documented range")
+    if request.width_s > request.period_s - _PULSE_MINIMUM_OFF_TIME_S:
+        raise ValueError("DSG830 pulse width violates the documented minimum off time")
+
+
+def _validate_sweep_request_range(request: RfSweepConfigureRequest) -> None:
+    if not _FREQUENCY_MIN_HZ <= request.start_frequency_hz <= _FREQUENCY_MAX_HZ:
+        raise ValueError("DSG830 Sweep start frequency is outside the documented range")
+    if not _FREQUENCY_MIN_HZ <= request.stop_frequency_hz <= _FREQUENCY_MAX_HZ:
+        raise ValueError("DSG830 Sweep stop frequency is outside the documented range")
+    if not _SWEEP_POINTS_MIN <= request.points <= _SWEEP_POINTS_MAX:
+        raise ValueError("DSG830 Sweep points is outside the documented range")
+    if not _SWEEP_DWELL_MIN_S <= request.dwell_s <= _SWEEP_DWELL_MAX_S:
+        raise ValueError("DSG830 Sweep dwell is outside the documented range")
+
+
+def _parse_binary(response: object, label: str) -> bool:
+    value = _clean_response(response, label)
+    if value == "0":
+        return False
+    if value == "1":
+        return True
+    raise ValueError(f"DSG830 {label} response must be 0 or 1")
+
+
+def _parse_sweep_state(response: object) -> RfObserved[RfSweepState]:
+    value = _clean_response(response, "sweep state").upper().replace(" ", "")
+    if value == "OFF":
+        return RfObserved.value_of(RfSweepState.DISABLED)
+    if value in {
+        "FREQ",
+        "FREQUENCY",
+        "LEV",
+        "LEVEL",
+        "LEV,FREQ",
+        "LEVEL,FREQUENCY",
+        "LEV,FREQUENCY",
+        "LEVEL,FREQ",
+    }:
+        return RfObserved.value_of(RfSweepState.ENABLED)
+    return RfObserved.missing(RfAvailability.UNKNOWN, RfReasonCode.RESPONSE_INVALID_VALUE)
+
+
+def _parse_sweep_snapshot_state(response: object) -> RfSweepState:
+    observed = _parse_sweep_state(response)
+    if observed.availability is RfAvailability.VALUE and isinstance(observed.value, RfSweepState):
+        return observed.value
+    raise ValueError("DSG830 Sweep state response has an invalid value")
+
+
+def _parse_protection_status(response: object) -> RfObserved[RfProtectionStatus]:
+    value = _clean_response(response, "power protection condition")
+    if _INTEGER_RESPONSE.fullmatch(value) is None:
+        raise ValueError("DSG830 power protection condition response must be an integer")
+    condition = int(value)
+    if not 0 <= condition <= 32_767:
+        raise ValueError("DSG830 power protection condition response is outside the documented range")
+    if condition & ~0b111:
+        return RfObserved.missing(RfAvailability.UNKNOWN, RfReasonCode.RESPONSE_INVALID_VALUE)
+    active_codes = tuple(
+        code
+        for bit, code in (
+            (0b100, "alc_heater_detector_30min"),
+            (0b001, "alc_unlocked"),
+            (0b010, "output_power_protection"),
+        )
+        if condition & bit
+    )
+    return RfObserved.value_of(RfProtectionStatus(active_codes=active_codes))
+
+
+def _parse_finite(value: str, label: str) -> float:
+    parsed = float(value)
+    if not isfinite(parsed):
+        raise ValueError(f"DSG830 {label} response must be finite")
+    return parsed
+
+
+def _format_scpi_real(value: float) -> str:
+    """Format a finite SCPI real without locale or non-finite spellings."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
+        raise ValueError("DSG830 SCPI real value must be finite")
+    return format(value, ".12g")
+
+
+def _as_modulation_state(enabled: bool) -> RfModulationState:
+    return RfModulationState.ENABLED if enabled else RfModulationState.DISABLED
+
+
+def _as_pulse_state(enabled: bool) -> RfPulseState:
+    return RfPulseState.ENABLED if enabled else RfPulseState.DISABLED

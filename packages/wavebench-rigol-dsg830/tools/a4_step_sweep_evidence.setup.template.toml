@@ -1,0 +1,24 @@
+# A4 Step Sweep 本地证据配置模板。
+#
+# 此文件只记录人工确认的安全事实，不得包含仪器资源、序列号、原始响应或波形。
+# 复制到被忽略的私有路径后，与独立的只读 RF 配置一起使用。
+#
+# 当前范围只配置 frequency-only Step Sweep，并且固定以 Sweep OFF 收尾；不会打开
+# RF 输出、不会 arm 或 fire Sweep、不会发送 trigger 或 :SWE:EXEC，也不会读取示波器。
+
+[a4_step_sweep_evidence]
+# A4 Step Sweep 仅允许 DSG830 的 RF 主输出端口。
+port_id = "rf_out"
+
+# 保留为已人工核对的 RF 路径事实。A4 Step Sweep 不会打开 RF 输出，不能从这一字段推导输出授权。
+actual_termination_ohm = 50
+
+# 已确认时显式写入空列表；有选件时使用已排序、无重复的安全标识。
+installed_options = []
+
+# 仅配置由 `STEP`／`FWD`／`RAMP`／`LIN` 固定的 frequency-only profile。
+# 起止频率单位为 Hz；points 必须在 2–65535；dwell_s 单位为秒，范围为 20 ms–100 s。
+start_frequency_hz = 1000000
+stop_frequency_hz = 2000000
+points = 11
+dwell_s = 0.02
