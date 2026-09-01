@@ -48,6 +48,7 @@ def descriptor() -> InstrumentDescriptor:
             "scope.snapshot_v2",
             "scope.measurement_statistics_v2",
             "scope.fft_status_v2",
+            "scope.channel_display_configure_v2",
         ),
         idn_patterns=("Rohde&Schwarz,RTM", "Rohde & Schwarz,RTM"),
         backends=(
@@ -71,7 +72,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.25",
         wavebench_max_version="0.9.0",
         distribution="wavebench-rohde-schwarz-rtm2000",
-        version="0.13.0",
+        version="0.14.0",
         source="entry_point:rohde-schwarz.rtm2032",
         scope_coupling_policy="switchable-termination",
         scope_extensions=RTM2000_SCOPE_EXTENSIONS,

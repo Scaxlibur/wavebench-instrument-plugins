@@ -57,7 +57,7 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
         capture_output=True,
         check=True,
     )
-    wheel = next(wheelhouse.glob("wavebench_rohde_schwarz_rtm2000-0.13.0-*.whl"))
+    wheel = next(wheelhouse.glob("wavebench_rohde_schwarz_rtm2000-0.14.0-*.whl"))
 
     with ZipFile(wheel) as archive:
         names = archive.namelist()
@@ -71,7 +71,7 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
     ]
 
     assert distribution.metadata["License-Expression"] == "MIT"
-    assert distribution.version == "0.13.0"
+    assert distribution.version == "0.14.0"
     assert [(item.name, item.value) for item in entry_points] == [
         (
             "rohde-schwarz.rtm2032",

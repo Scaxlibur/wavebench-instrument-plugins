@@ -13,7 +13,7 @@
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件的 0.13.0 开发线对齐 WaveBench `v0.8.25`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.14.0 开发线对齐 WaveBench `v0.8.25`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -31,6 +31,7 @@
 - 现有 math、FFT、reference、cursor 状态的只读 metadata/readout；
 - Scope V2 只读接口：通道输入状态、B1 门控的数字状态、严格的 identity 五字段 snapshot、
   仅支持 1–4 号槽且不含 buffer 的测量统计，以及已配置 FFT 的三字段状态；
+- RTM2032 CH1/CH2 的 `scope.channel_display_configure_v2`：Core 负责 typed baseline、写后回读、失败恢复和独立恢复验证，插件只执行单通道 `STATE?` 与 `STATE ON/OFF`；
 - RTM2032 CH2 edge trigger 的厂商专用最小受控配置闭环；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
@@ -188,6 +189,14 @@ RTM2032 的 CH1/CH2 输入状态、CH1/CH2 identity snapshot 和 D0 数字状态
 相关会话全部强制为 `read_only`，write request 与 binary write 均为 0。测量统计与 FFT V2
 仍以离线等价测试和既有 V1 实机证据为边界；由于没有新鲜的前面板配置确认，本轮未冒充
 `configured=True` 重跑。
+
+0.14.0 新增 `scope.channel_display_configure_v2`。descriptor profile 将可写模拟通道严格限定为
+CH1/CH2，预算对应一次 baseline query、一次 setter write 与 Core fresh readback，以及失败时的一次
+restore write 与一次独立 verify query。插件不自行重试、不扩大到时基或垂直档位，也不另建一套
+恢复状态机。RTM2032 固件 `06.010` 的受控验收在 DG4202 双输出关闭、CH1/CH2 均为 `DCL`
+高阻且无过载的前提下，将 CH2 从 `ON` 切到 `OFF` 并独立读回，再通过 Core 从 `OFF` 恢复到
+`ON`。恢复事务只有一次已完成文本写入，write outcome unknown 与 binary write 均为 0，session
+保持 healthy；最终零写完整 snapshot 确认 CH1/CH2 均回到 `ON`、`DCL`、无过载。
 
 ## 开发验证
 

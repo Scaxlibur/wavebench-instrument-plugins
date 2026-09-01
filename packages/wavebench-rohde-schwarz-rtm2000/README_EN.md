@@ -14,7 +14,7 @@ RTM2032 as the current hardware baseline.
 - Python: `>=3.11`
 - default transport backend: core-provided `rsinstrument-socket`
 
-The plugin's 0.13.0 development line targets WaveBench `v0.8.25`, does not maintain a legacy-core
+The plugin's 0.14.0 development line targets WaveBench `v0.8.25`, does not maintain a legacy-core
 compatibility matrix, and does not automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rohde-schwarz.rtm2032` selects
 the external implementation. The short alias `rtm2032` always selects the built-in fallback.
 Removing the plugin restores the built-in implementation for the canonical ID as well.
@@ -34,6 +34,9 @@ Removing the plugin restores the built-in implementation for the canonical ID as
 - read-only Scope V2 surfaces for channel input state, B1-gated digital status, a strict five-field
   identity snapshot, slot-1-to-4 measurement statistics without buffers, and three-field status for
   an explicitly configured FFT;
+- `scope.channel_display_configure_v2` for RTM2032 CH1/CH2: core owns the typed baseline,
+  post-write readback, failure restoration, and independent restoration verification, while the
+  plugin performs only the selected channel's `STATE?` and `STATE ON/OFF` operations;
 - a vendor-specific minimal controlled RTM2032 CH2 edge-trigger configuration loop;
 - current-waveform fetch and single acquisition;
 - one acquisition followed by multi-channel waveform reads;
@@ -224,6 +227,17 @@ and D0 digital status. Every related session was forced to `read_only`, with zer
 zero binary writes. Measurement-statistics and FFT V2 remain bounded by offline equivalence tests and
 their existing V1 hardware evidence; this run did not pretend to have fresh front-panel configuration
 confirmation by passing `configured=True` without evidence.
+
+Version 0.14.0 adds `scope.channel_display_configure_v2`. The descriptor profile limits writable
+analog channels to CH1/CH2 and budgets one baseline query, one setter write plus core fresh readback,
+and, on failure, one restoration write plus one independent verification query. The plugin neither
+retries nor expands the operation to timebase or vertical settings, and it does not duplicate core's
+recovery state machine. Controlled RTM2032 firmware `06.010` acceptance ran with both DG4202 outputs
+off and both scope channels high-impedance `DCL` and not overloaded. It changed CH2 from `ON` to
+`OFF`, confirmed that state independently, then used core to restore `OFF` to `ON`. The restoration
+transaction recorded one completed text write, zero unknown write outcomes, zero binary writes, and
+a healthy session. A final zero-write full snapshot confirmed CH1/CH2 both restored to `ON`, `DCL`,
+and not overloaded.
 
 ## Development checks
 

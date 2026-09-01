@@ -19,6 +19,10 @@ from wavebench.instruments import (
     ScopeAverageCaptureResult,
     ScopeAverageConfiguration,
     ScopeAnalogChannelSnapshot,
+    ScopeChannelDisplayBaseline,
+    ScopeChannelDisplayRequest,
+    ScopeChannelDisplayRestoreResult,
+    ScopeChannelDisplayState,
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
     ScopeDigitalChannelStatus,
@@ -550,6 +554,52 @@ class RTM2032Scope:
             termination=termination,
             impedance_ohm=None,
             unavailable_fields=("impedance_ohm",),
+        )
+
+    @_serialized_io
+    def get_channel_display_state_v2(self, channel: int) -> ScopeChannelDisplayState:
+        _validate_rtm2032_channel(channel)
+        command = f"CHANnel{channel}:STATE?"
+        return ScopeChannelDisplayState(
+            channel=channel,
+            enabled=_parse_bool(
+                self.transport.query(command),
+                command=command,
+            ),
+        )
+
+    @_serialized_io
+    def configure_channel_display_v2(
+        self,
+        request: ScopeChannelDisplayRequest,
+        *,
+        baseline: ScopeChannelDisplayBaseline,
+    ) -> None:
+        if not isinstance(request, ScopeChannelDisplayRequest):
+            raise TypeError("RTM2032 channel display request has an invalid type")
+        if not isinstance(baseline, ScopeChannelDisplayBaseline):
+            raise TypeError("RTM2032 channel display baseline has an invalid type")
+        _validate_rtm2032_channel(request.channel)
+        if baseline.snapshot.channel != request.channel:
+            raise ValueError("RTM2032 channel display baseline uses a different channel")
+        state = "ON" if request.enabled else "OFF"
+        self.transport.write(f"CHANnel{request.channel}:STATE {state}")
+
+    @_serialized_io
+    def restore_channel_display_v2(
+        self,
+        baseline: ScopeChannelDisplayBaseline,
+    ) -> ScopeChannelDisplayRestoreResult:
+        if not isinstance(baseline, ScopeChannelDisplayBaseline):
+            raise TypeError("RTM2032 channel display baseline has an invalid type")
+        channel = baseline.snapshot.channel
+        _validate_rtm2032_channel(channel)
+        state = "ON" if baseline.snapshot.enabled else "OFF"
+        self.transport.write(f"CHANnel{channel}:STATE {state}")
+        return ScopeChannelDisplayRestoreResult(
+            status="completed",
+            attempted_fields=baseline.restore_order,
+            restored_fields=baseline.restore_order,
         )
 
     @_serialized_io

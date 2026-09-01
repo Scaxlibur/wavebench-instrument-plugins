@@ -8,7 +8,7 @@
 
 指定手册的 1490 行转录中共有 1434 个命令索引条目，精确去重后为 1417 个命令模板（608 个带查询标记、809 个非查询形式）。进一步按大小写不敏感并去除排版空白后为 1416 个模板（607 个查询、809 个非查询）；最后一个差异来自重复/排版变体。这个数字仍包含参数化模板和少量 OCR 异常，因此只用于描述命令面规模，不作为功能完成率分母。
 
-当前外置插件公开 24 项 WaveBench capability，其中 5 项是 0.13.0 新增的只读 Scope V2 capability。它是经过实机验收的模拟波形采集 MVP，并包含一组窄的只读状态/分析能力和一条受控平均采集事务，不是通用 RTM2000 远程控制层。
+当前外置插件公开 25 项 WaveBench capability，其中 5 项是 0.13.0 新增的只读 Scope V2 capability，1 项是 0.14.0 新增的受控通道显示能力。它是经过实机验收的模拟波形采集 MVP，并包含一组窄的只读状态/分析能力、受控通道显示能力和一条受控平均采集事务，不是通用 RTM2000 远程控制层。
 
 覆盖状态：
 
@@ -25,7 +25,7 @@
 |---|---|---|---|---|---|
 | 身份、同步与基本错误 | IEEE 488.2 公共命令，`SYSTem:ERRor:*` | `*IDN?`、`*OPT?`、非消费型 health snapshot、identity 五字段 `scope.snapshot_v2`、`*CLS`、`*OPC?` 等待、显式错误队列 | **实机通过**：CH1/CH2 Snapshot V2 只读验收通过 | 自检和完整事件寄存器 API 未暴露 | identity/options/health P1 已完成；EVENT 保持显式边界 |
 | Acquisition 控制 | 16 个模板：模式、平均、采样率、记录长度、插值、分段和可用点数 | 只读 available/count/sample-rate 及 average/segmented 状态；`SINGle` 单次采集；显式 `AUToscale`；受控 `scope.capture_average` | **只读状态实机通过；平均事务已实现、待独立实机验收** | 连续运行/停止、分段采集、写入率和插值仍缺失 | 保持 average 的显式 stopped 确认、回读恢复与锁存；**P2**：分段 plan |
-| 模拟通道配置 | 约 48 个模板：状态、耦合、量程、比例、偏置、位置、带宽、极性、skew、标签、过载、阈值 | RTM2032 CH1/CH2 类型化只读状态与 `scope.channel_input_state_v2`；V2 仅映射 coupling/termination，数值阻抗标记为 unavailable；既有状态开、比例、位置归零写路径 | **实机通过**：CH1/CH2 V2 输入状态只读验收通过 | 无阈值读回；setter 没有通用快照与回滚 | 只读 P1 已完成；写入继续受高阻和恢复策略约束 |
+| 模拟通道配置 | 约 48 个模板：状态、耦合、量程、比例、偏置、位置、带宽、极性、skew、标签、过载、阈值 | RTM2032 CH1/CH2 类型化只读状态与 `scope.channel_input_state_v2`；V2 仅映射 coupling/termination，数值阻抗标记为 unavailable；`scope.channel_display_configure_v2` 提供单通道 baseline、写后回读、失败恢复与恢复验证 | **实机通过**：CH1/CH2 V2 输入状态只读验收，以及 CH2 `ON→OFF→ON` 显示切换/恢复闭环通过 | 无阈值读回；比例、位置等其他 setter 没有同等事务合同 | 通道显示 P1 已完成；其他写入继续受高阻和恢复策略约束 |
 | 模拟波形传输 | `CHANnel<m>:DATA*`、envelope、独立 X/Y 元数据 | REAL/LSBF、header + data、`DEF/MAX/DMAX`、一次 acquisition 后逐通道读取；类型化 X/Y 缩放、点数、量化位数和 values-per-sample 快照 | **实机通过** | 无 envelope、history/segment 选择或流式块 API；不承诺跨通道硬件同步 | 波形元数据已完成；**P2**：分段/history/envelope |
 | 时基、缩放与时间戳 | 12 个 timebase 模板、zoom、timestamp 导航 | 类型化 acquisition time/divisions/position/range/reference/scale/roll 只读状态；既有 `TIMebase:RANGe` 写入；K15 门控的严格 history timestamp table API | **基础时基实机通过；history timestamp 查询因仪器 timeout 阻塞** | 无 zoom；没有成功的 timestamp table 实机证据 | 保留严格 K15 gate，禁止隐式重试/清错；history 状态另行调查 |
 | 触发系统 | 约 159 个模板：A/B、edge、width、runt、rise time、pattern、TV、holdoff、外部和协议触发 | CH1/CH2 基础 edge-trigger 类型化只读快照；RTM2032 CH2 `EDGE/AUTO/POS/DC/level` 厂商专用受控 setter；单次采集沿用仪器当前触发设置 | **只读与 CH2 写入/恢复实机通过** | setter 仅接受健康、高阻、未过载 CH2 和当前量程内电平；无自动恢复 journal、其他 trigger 类型、B trigger 或 trigger out | P1 已完成；恢复责任保持显式，扩展写能力前另行设计事务模型 |
@@ -41,7 +41,7 @@
 | DVM 与频率计数器 | 6 个 DVM、3 个 counter 模板 | 未覆盖 | 无 | 无 source/type/result/status API | **P2，选件门控**：适合小型只读 capability |
 | Probe 元数据与设置 | 约 18 个模板：探头身份、衰减、带宽、阻抗、偏置、模式 | RTM2032 CH1/CH2 衰减、带宽、电容、阻抗、名称、类型只读快照 | **实机通过** | 无探头 ID 字段、DC offset、mode 或安全限值联动 | 基础 P1 已完成；ID 与安全联动后续补充，写入延后 |
 | Reference curve | 约 19 个模板：source/save/load/state、缩放和数据 | 已有存储波形的只读 `scope.reference_metadata` | **已实现；因 reference 存储为空而实机阻塞**（`DATA:HEADer?` 为零点，后续 metadata 查询 timeout） | 若不覆盖内部 reference 就没有安全测试夹具；无 payload 或状态管理 | 等待用户创建 reference；不得仅为制造验收证据调用 `UPDATE`、save 或 load |
-| 显示与截图 | 24 个 display 模板和 8 个 hardcopy 模板 | PNG、颜色方案、菜单开关 | **实机通过** | 无 grid、palette、persistence、XY、virtual screen、页面/打印设置 | 截图已满足 MVP；其余 **P3** |
+| 显示与截图 | 24 个 display 模板和 8 个 hardcopy 模板 | CH1/CH2 `scope.channel_display_configure_v2`；PNG、颜色方案、菜单开关 | **实机通过**：CH2 切换、回读、恢复、回读及最终零写完整 snapshot 通过 | 无 grid、palette、persistence、XY、virtual screen、页面/打印设置 | 通道显示与截图满足 MVP；其余 **P3** |
 | 仪器文件系统与导出 | 16 个 `MMEMory` 模板；波形、测量、搜索和 power 导出 | 未覆盖；WaveBench 仅保存主机侧 artifact | 无 | 仪器盘目录、复制/删除、仪器侧 CSV/报告导出均缺失 | **默认不做**；若实现需独立文件系统权限和路径沙箱 |
 | Setup 快照与恢复 | `SYSTem:SET`、`MMEMory:STORE/LOAD:STATE` | 生产驱动未暴露；验收工具使用 setup blob 恢复 | **验收路径通过** | SocketIO 对 setup blob 写入曾部分生效；可靠恢复依赖受控 VXI-11 分片 | 保持 **验收工具限定**，不要伪装成普通 setter |
 | 状态寄存器与健康监控 | operation/questionable/status byte、overload/mask/limit 状态 | 不消费 EVENT/错误队列的 health snapshot；通道 overload 只读 | **实机通过** | 无 mask/limit 聚合或事件寄存器 API | 基础 P1 已完成；EVENT 保持显式、消费型边界 |
@@ -115,5 +115,5 @@ HCOPy:LANGuage  HCOPy:COLor:SCHeme  HCOPy:MENU  HCOPy:DATA?
 
 - 手册侧：本地保存的 RTM2000 编程手册命令索引，仅用于内部审计，不进入发行包。
 - 实现侧：`driver.py` 和 `descriptor.py` 的当前外置插件实现，以及 WaveBench 内建 fallback 和 ScopeService。
-- 实机侧：RTM2032 `DEF/MAX/DMAX`、双通道单次采集、autoscale、coupling、截图、重复采集、恢复、已配置槽测量统计、math/FFT metadata、vertical cursor readout，以及 B1 门控的 D0–D15 数字通道标量状态查询受控证据；本轮也保留 history timestamp timeout 与空 reference 存储的负向证据。
+- 实机侧：RTM2032 `DEF/MAX/DMAX`、双通道单次采集、autoscale、coupling、CH2 显示切换/恢复、截图、重复采集、恢复、已配置槽测量统计、math/FFT metadata、vertical cursor readout，以及 B1 门控的 D0–D15 数字通道标量状态查询受控证据；本轮也保留 history timestamp timeout 与空 reference 存储的负向证据。
 - 只有明确的受控探测与状态恢复检查才能标为实机通过；不会仅因代码存在而升级状态。
