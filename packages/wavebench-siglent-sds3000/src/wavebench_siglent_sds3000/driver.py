@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 import re
 from threading import RLock
-from typing import Callable, Iterator
+from typing import TYPE_CHECKING, Callable, Iterator
 
 from wavebench.errors import (
     DataError,
@@ -17,6 +17,14 @@ from wavebench.errors import (
 )
 from wavebench.instruments import WaveformData
 from wavebench.transport import InstrumentTransport, ReplayPolicy
+
+if TYPE_CHECKING:
+    from wavebench.instruments import (
+        ScopeChannelDisplayBaseline,
+        ScopeChannelDisplayRequest,
+        ScopeChannelDisplayRestoreResult,
+        ScopeChannelDisplayState,
+    )
 
 from .waveform import decode_waveform_data, parse_waveform_descriptor
 
@@ -139,6 +147,67 @@ class SDS3000Scope:
             return _COUPLING_MAP[value]
         except KeyError as exc:
             raise DataError(f"invalid C{channel}:CPL? response") from exc
+
+    def get_channel_display_state_v2(self, channel: int) -> ScopeChannelDisplayState:
+        from wavebench.instruments import ScopeChannelDisplayState
+
+        self._validate_channel(channel)
+        with self._io_lock:
+            self._require_identity()
+            state = self._parse_trace_state(
+                self.transport.query(
+                    f"C{channel}:TRA?",
+                    replay=ReplayPolicy.NO_REPLAY,
+                ),
+                channel=channel,
+            )
+            return ScopeChannelDisplayState(channel=channel, enabled=state == "ON")
+
+    def configure_channel_display_v2(
+        self,
+        request: ScopeChannelDisplayRequest,
+        *,
+        baseline: ScopeChannelDisplayBaseline,
+    ) -> None:
+        from wavebench.instruments import (
+            ScopeChannelDisplayBaseline,
+            ScopeChannelDisplayRequest,
+        )
+
+        if not isinstance(request, ScopeChannelDisplayRequest):
+            raise TypeError("SDS3054 channel display request has an invalid type")
+        if not isinstance(baseline, ScopeChannelDisplayBaseline):
+            raise TypeError("SDS3054 channel display baseline has an invalid type")
+        self._validate_channel(request.channel)
+        if baseline.snapshot.channel != request.channel:
+            raise ValueError("SDS3054 channel display baseline uses a different channel")
+        with self._io_lock:
+            self._require_identity()
+            state = "ON" if request.enabled else "OFF"
+            self.transport.write(f"C{request.channel}:TRA {state}")
+
+    def restore_channel_display_v2(
+        self,
+        baseline: ScopeChannelDisplayBaseline,
+    ) -> ScopeChannelDisplayRestoreResult:
+        from wavebench.instruments import (
+            ScopeChannelDisplayBaseline,
+            ScopeChannelDisplayRestoreResult,
+        )
+
+        if not isinstance(baseline, ScopeChannelDisplayBaseline):
+            raise TypeError("SDS3054 channel display baseline has an invalid type")
+        channel = baseline.snapshot.channel
+        self._validate_channel(channel)
+        with self._io_lock:
+            self._require_identity()
+            state = "ON" if baseline.snapshot.enabled else "OFF"
+            self.transport.write(f"C{channel}:TRA {state}")
+        return ScopeChannelDisplayRestoreResult(
+            status="completed",
+            attempted_fields=baseline.restore_order,
+            restored_fields=baseline.restore_order,
+        )
 
     @staticmethod
     def _parse_register(response: str, *, register: str, maximum: int) -> int:
