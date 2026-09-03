@@ -2,118 +2,86 @@
 
 [English](SDS800X_HD_COVERAGE_MATRIX_EN.md)
 
-## 目的与证据边界
+本页将 SIGLENT SDS 系列编程手册 `CN11G` 的功能域映射到外置
+`wavebench-siglent-sds800x-hd` 插件当前公开的 WaveBench capability。当前包版本、依赖和
+入口点以 [包元数据](../pyproject.toml)为准，型号、resource scheme、配置字段和 capability 以
+[production descriptor](../src/wavebench_siglent_sds800x_hd/descriptor.py) 为准，截图和采集控制
+边界以 [profiles](../src/wavebench_siglent_sds800x_hd/profiles.py) 为准，精确 SCPI 与事务行为以
+[driver](../src/wavebench_siglent_sds800x_hd/driver.py) 为准。
 
-本矩阵将 SIGLENT《SDS 系列数字示波器编程手册》`CN11G` 与 WaveBench
-`siglent.sds800x-hd` 外置插件对照。它用于区分手册声明、离线实现和实机验收，不把通用
-SDS 命令自动视为 SDS800X HD 的可用能力。
+[功能覆盖开发路线](SDS800X_HD_COVERAGE_MILESTONES.md)记录阶段状态和后续退出门；
+[实机验收记录](SDS800X_HD_HARDWARE_ACCEPTANCE.md)与
+[Scope R1.3 conformance](SDS800X_HD_R13_CONFORMANCE.md)保存特定设备、固件、transport 和
+步骤的证据。这些页面用于追溯，不会独立增加当前 capability。
 
-本地手册因转换工具限制拆为三个目录，正文合计三个 `full.md`。原始转换内容保存在
-`doc/vendor-local/`，由 Git 和 sdist 排除。手册支持表将 SDS800X HD 的最低固件列为
-`1.1.3.1`，但没有逐条标注每个系列支持的命令；型号和固件仍需通过目标仪器确认。
+## 范围
 
-当前证据标签：
+`CN11G` 是多个 SDS 系列共用的编程手册，没有逐条标注每个命令适用的系列。通用手册命令
+不能自动视为 SDS800X HD 能力。本地转录只用于内部审计，位于 Git 忽略且不进入 sdist 的
+`doc/vendor-local/`。
 
-- **实机已验收**：当前外置插件、目标 SDS800X HD 实机和受控测试证据同时存在。
-- **已实现 / 离线验证**：该功能已有 driver 和 FakeTransport 测试，但尚无对应实机证据。
-- **手册已审计**：命令格式和返回语义已核对，但尚未公开 capability。
-- **插件采用待验收**：核心接口已经提供，但本插件的正式 driver、profile 或实机证据尚未完成。
-- **实机阻塞**：离线代码不足以证明响应 framing、状态迁移或硬件差异。
-- **默认拒绝**：命令会修改全局状态、写仪器存储或缺少可靠恢复边界。
+本矩阵只回答「production descriptor 当前公开什么」以及「公开行为的边界是什么」。Core
+增加公共合同、Python 方法存在、离线测试或一次实机成功，都不能替代 descriptor 声明。
 
-核心 `0.8.23` 已实现 Scope R1.3 公共合同。核心完成不表示 SDS800X HD 自动获得新能力；正式
-driver、descriptor profile、backend/resource 和实机恢复证据仍须分别验收。
+## 功能覆盖
 
-## 当前覆盖
+| 功能域 | 手册命令面 | 当前公开 capability | 当前边界 |
+|---|---|---|---|
+| 身份 | `*IDN?` | `scope.idn` | 严格解析四字段 identity，并按 descriptor 登记型号验证通道数。未知厂商、型号或格式会失败。 |
+| 模拟通道 coupling | `:CHANnel<n>:COUPling?` | `scope.channel_coupling` | 只接受 `AC`、`DC` 或 `GND`；具体通道上限由 identity 型号决定。该系列输入阻抗策略为固定高阻。 |
+| 输入阻抗写入 | 共用手册中的 `ONEMeg`、`FIFTy` | 未声明 | 不把其他 SDS 系列的 `FIFTy` setter 外推到本系列。 |
+| 错误队列 | `CN11G` 未记录可靠 query | 未声明 | 不猜测 `SYSTem:ERRor?`，也不返回伪造的空列表；波形操作要求 `check_errors=false`。 |
+| 已停止记录读取 | waveform source、range、format、preamble、data | `scope.fetch_waveform` | 只接受 `points="dmax"` 和 `check_errors=false`；要求 acquisition 为 Stop、Sequence 为 OFF，并在读取后恢复 transfer state。 |
+| 单／多通道采集 | trigger mode／run／stop／status、waveform | `scope.capture_waveform`、`scope.capture_waveforms` | 先配置全部目标通道，只执行一次 SINGLE，再逐通道读取；不使用 `*OPC?` 作为触发完成证据。 |
+| 测量统计 | mode、slot、type、statistics、history | `scope.measurement_statistics` | 只读取已启用的 Advanced measurement slot；不配置、启用或清空统计。Buffer 只在调用方请求时读取。 |
+| Screenshot | `:PRINt? PNG,NORMal`／`INVerted` | `scope.screenshot_profile`、`scope.screenshot_v2` | 只接受 profile 中的 color／inverted variant，使用 MESSAGE framing，在内存中校验 PNG，不修改持久显示状态。 |
+| Acquisition run state | `:TRIGger:STATus?` | `scope.acquisition_run_state` | 将厂商 token 映射为公共运行状态；acquisition count 只作诊断，不能单独证明完成。 |
+| Acquisition control | trigger mode、run、stop、single | `scope.acquisition_control` | 连续模式只支持 `auto`／`normal`；SINGLE 使用 `configure_then_arm`，失败 cleanup 和恢复顺序由 profile 定义。 |
+| Autoset | `:AUToset` | 未声明 | 会同时改变 trigger、vertical 和 timebase，且当前没有完整恢复合同，默认拒绝。 |
+| Math／FFT | function、operator、source、scale、span | 未声明对应扩展能力 | 频率轴、ready、RBW、sample rate 和 payload 尚无完整公共合同。 |
+| Typed trace | source、metadata、data | 未声明 | 当前长记录与 Core typed trace 点数上限之间尚未形成可声明的完整 profile。 |
+| Snapshot、测量配置、digital、Sequence／history | 共用 SDS 子系统 | 未声明 | 需要逐项核对型号、选件、可读字段和恢复语义，不能创建假完整模型。 |
+| Reset、系统设置与仪器文件 | `*RST`、system、save／recall、image save | 未声明 | 会改变全局、网络或持久状态，默认不进入基础驱动。 |
 
-| 功能域 | 手册命令面 | WaveBench 映射 | 当前状态 | 边界与下一步 |
-|---|---|---|---|---|
-| 身份 | `*IDN?` | `scope.idn` | **SDS804X HD 实机已验收** | 四字段、厂商、型号、14 字符 ASCII 序列号和固件格式通过；其他型号待补 |
-| 模拟通道耦合 | `:CHANnel<n>:COUPling?`，返回 `AC`、`DC` 或 `GND` | `scope.channel_coupling` | **SDS804X HD 实机已验收** | CH1–CH4 均返回 DC；二通道型号和其他 coupling 状态待补 |
-| 输入阻抗 | 通用手册列出 `ONEMeg`、`FIFTy` | 无独立 capability | **默认拒绝** | SDS800X HD 专属产品资料说明固定 `1 MΩ`；不得把通用 `FIFTy` setter 外推到本系列 |
-| 错误队列 | CN11G 未记录错误队列命令 | `scope.errors` | **设备协议阻塞** | 核心接口已经存在；本系列没有可依赖命令，不猜测 `SYSTem:ERRor?`，也不返回伪造的空列表 |
-| 波形读取 | `SOURce`、`STARt`、`INTerval`、`POINt`、`MAXPoint?`、`WIDTh`、`BYTeorder`、`PREamble?`、`DATA?` | `scope.fetch_waveform` | **SDS804X HD 多块实机已验收** | Stop、sequence OFF、CH1/CH2 `DMAX`、WORD/LSB、数值和成功/异常恢复通过；`10M` 记录按 `5M + 5M` 两块读取通过，USB 待补 |
-| Sequence 门禁 | `:ACQuire:SEQuence?` | `scope.fetch_waveform` 的前置条件 | **SDS804X HD 实机已验收** | `NORMAL` 触发模式下建立 Stop + sequence ON；driver 在任何 waveform 写入和 binary query 前拒绝 |
-| 测量统计 | `:MEASure:MODE?`、`ADVanced:P<n>?`、`TYPE?`、`STATistics?`、`SHIStory?` | `scope.measurement_statistics` | **SDS804X HD 实机已验收** | 只读既有槽位；P3 `PKPK` 的 6 项统计和停止态 5 项历史通过，driver 零写入 |
-| 单次与多通道采集 | `TRIGger:MODE`、`RUN`、`STOP`、`STATus?`、`ACQuire:NUMACq?` | `scope.capture_waveform`、`scope.capture_waveforms` | **SDS804X HD 实机已验收** | SINGLE 模式回读、Stop 轮询和采集计数通过；CH1/CH2 只执行一次 acquisition，不依赖 `*OPC?` |
-| 触发运行状态 | `:TRIGger:STATus?` 返回 `Arm`、`Ready`、`Auto`、`Trig'd`、`Stop` 或 `Roll` | `scope.acquisition_run_state`、`scope.acquisition_control` | **SDS804X HD 实机已验收** | AUTO/NORMAL start、STOP、SINGLE 状态迁移通过；SINGLE 和 start 注入失败后 baseline 恢复与 fresh readback 均为 `verified` |
-| 截图 | `:PRINt? PNG,NORMal` 或反色格式 | `scope.screenshot_profile`、`scope.screenshot_v2` | **SDS804X HD 实机已验收** | 真实 PyVISA MESSAGE EOM 通过；普通/反色均为 `1024×600` PNG，IEND 后精确一个 `0A`；注入应用层失败后下一查询仍同步 |
-| Autoset | `:AUToset` | `scope.autoscale` | **默认拒绝** | 同时修改触发、垂直和水平设置；没有错误队列和恢复闭环 |
-| 采集状态 | `ACQuire:TYPE?`、`SEQuence?`、`NUMACq?` 等 | `scope.acquisition_run_state` | **SDS804X HD 实机已验收** | 旧 `ScopeAcquisitionStatus` 仍不匹配；count 只作诊断，完成证明使用状态迁移；实机确认切换 SINGLE 将非零 count 复位为 `0` |
-| Math / FFT | `FUNCtion<n>`、`OPERation?`、`SOURce?`、FFT scale/span 等 | 现有 metadata/status；频谱读取待后续 trace 扩展 | **后续核心接口待设计** | 实机 F1–F4 均为 OFF；当前没有可证明的通用 FFT ready/RBW 数据，也不能把频率轴塞入模拟波形模型 |
-| Snapshot、测量配置、数字与历史 | 多个通用 SDS 子系统 | 对应可选 Scope capability | **未覆盖** | 逐能力核对型号、选件、公共模型和恢复语义后再拆分 |
-| Reset、系统和仪器文件系统 | `*RST`、系统设置、保存/调用、图片保存等 | 无基础 capability | **默认拒绝** | 可能改变全局状态、网络或持久存储，不纳入基础驱动 |
+## Waveform 行为
 
-## 已确认的波形协议边界
+`fetch_waveform()` 在任何 waveform 写入前验证 `points="dmax"`、`check_errors=false`、目标通道、
+`TRIGger:STATus? = Stop` 和 `ACQuire:SEQuence? = OFF`。随后保存
+`SOURCE/START/INTERVAL/POINT/WIDTH/BYTEorder`，并为本次读取配置目标 source、`WORD`、LSB、
+`START 0`、`INTERVAL 1` 和 `POINT 0`。
 
-`PREamble?` 返回 definite-length binary block，其 descriptor 固定部分为 346 bytes；sequence
-数据可能在其后附加时间戳。当前纯解析器只支持非 sequence 模拟通道，因此要求核心去除
-IEEE block envelope 后的 payload 恰好为 346 bytes，并显式拒绝附加时间戳，而不是静默
-丢弃。`DATA?` 同样使用带声明长度的 binary block；核心 transport 按声明长度取 payload，
-插件不能对二进制数据使用 `rstrip()`。
+`PREamble?` 必须是 Core 去除 IEEE binary-block envelope 后恰好 346 bytes 的 descriptor；附加
+Sequence timestamp 或无法确定的 descriptor byte order 会失败。Driver 验证 source、sample
+width、byte order、点数与 data byte count，再查询 `MAXPoint?` 决定每块上限并读取完整记录。
+成功、协议错误或 transport 异常后都会尝试恢复原 transfer state；恢复失败不会掩盖已有主异常。
 
-SDS804X HD 固件 `4.8.12.1.1.6.5` 的实机 preamble 进一步确认：非 sequence 记录返回
-`read_frames=0`、`sum_frames=1`、`segment=-1`。手册示例使用的 `segment=1` 形式也保留；
-其他帧组合继续拒绝。该固件的 WORD preamble 实测为 `100000` 点、`200000` bytes、
-`50.000000584 ns` sample interval，和解析公式一致。补充长记录验收又确认 `10000000` 点、
-`MAXPoint=5000000` 时按 `START 0` 和 `START 5000000` 完成两块读取。
-
-首版模拟波形换算使用手册字段：
+模拟波形换算使用：
 
 ```text
 vdiv = vertical_scale_raw * probe
 offset = vertical_offset_raw * probe
 voltage = raw_code * (vdiv / code_per_div) - offset
-```
-
-在 `STARt 0`、`INTerval 1` 下，时间轴为：
-
-```text
 x[i] = horizontal_delay - timebase * 10 / 2 + i * sample_interval
 ```
 
-8-bit 样本按有符号整数解释；ADC 位数大于 8 时使用 `WORD`，明确设置 LSB，并按有符号
-16-bit 解码。手册说明高分辨率数据左对齐、低位补零；首版不自行右移。单片上限必须查询
-`MAXPoint?`，不能硬编码手册示例值。
+8-bit 样本按有符号整数解释；更高 ADC 位数使用 `WORD`、LSB 和有符号 16-bit 解码。高分辨率
+样本按手册保持左对齐，driver 不自行右移。`DEF` 和 `MAX` 在仪器 I/O 前失败，不发送手册未定义
+的点数关键字。
 
-公开的读取事务只接受 WaveBench `DMAX`。CN11G 第 385 页将 `WAVeform:POINt` 参数定义为
-整数 NR1，没有 `DEF/MAX/DMAX` 仪器关键字；driver 使用厂商波形重构示例中的 `POINT 0`
-选择完整记录。`DEF` 和 `MAX` 在任何 I/O 前拒绝，不能为了表面兼容发送无文档依据的命令。
+## Screenshot 与 acquisition profile
 
-事务先确认 `TRIGger:STATus? = Stop` 和 `ACQuire:SEQuence? = OFF`，再完整保存
-`SOURCE/START/INTERVAL/POINT/WIDTH/BYTEorder`。读取期间固定 `WORD`、LSB、`START 0` 和
-`INTERVAL 1`，由 preamble 给出总点数，由 `MAXPoint?` 给出单片点数。成功、协议错误或
-transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖已有主异常。该流程不发送
-`RUN`、`SINGLE` 或 `STOP`，只读取已经停止的记录。
-
-## 与 WaveBench 核心的接口约束
-
-- driver 只通过 `DriverContext.open_transport()` 获取核心 transport，并负责幂等关闭。
-- capability 只在对应公共方法完整实现后声明；运行时的「方法可调用」校验不替代签名和语义测试。
-- `fetch_waveform(channel, points="dmax", check_errors=True)` 必须返回核心
-  `WaveformData` 和 `WaveformHeader`，不得在插件内复制同名模型。
-- CN11G 没有错误队列，使用 waveform 时必须显式配置 `scope.check_errors=false`；直接调用
-  driver 且 `check_errors=True` 时在任何 I/O 前失败。
-- 当前 `points` 只支持 `DMAX`；公共签名仍保持
-  `fetch_waveform(channel, points="dmax", check_errors=True)`，不伪造 `DEF/MAX` 映射。
-- 多通道 capture 必须先配置全部通道，只触发一次 acquisition，再逐通道读取；不得逐通道重新触发。
-- capture 使用 `DriverContext.opc_timeout_ms` 作为状态轮询 deadline，但不调用 `query_opc()`；
-  `*OPC?` 不作为物理触发完成证据。
-- 截图、独立采集运行控制、类型化 trace source 和三态错误检查已由核心 `0.8.23` 的
-  [Scope R1.3 公共合同](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)
-  提供。本插件已完成 screenshot 与 acquisition control 采用；typed trace 和 error drain 仍未声明。
-
-## 开发顺序
-
-1. M1：严格身份解析和只读 `scope.channel_coupling`，完成离线测试。
-2. M2：346-byte preamble、数据换算和已停止模拟记录的 `scope.fetch_waveform` 已完成离线
-   事务测试；M3 已补齐真实硬件证据。
-3. M3：已在一台 SDS804X HD 上完成 TCPIP WORD/LSB 读取、CH1/CH2 数值、transfer 恢复、
-   `10M` 真实多块读取和 sequence ON 安全拒绝；USB 路径和其他型号仍待补。
-4. M4：SINGLE、Stop 轮询、采集计数和一次 CH1/CH2 acquisition 已完成实机验收；capture capability 已公开。
-5. 截图和独立采集控制已完成核心 `0.8.23` 采用与实机验收。typed trace 继续保持关闭；math/FFT 等待后续 trace 扩展合同。数字通道、sequence/history、Autoset 和其他写能力分别立项，不经 raw SCPI 绕过门禁。
+- Screenshot profile 只声明 color 和 inverted 两种 PNG 请求，使用 MESSAGE framing，限制
+  response／operation payload，并要求规范 PNG 后只有 `0A` content trailing。它不捕获、修改或恢复
+  持久显示字段。
+- Acquisition control profile 只声明 `auto` 和 `normal` 连续模式；SINGLE 先配置再 arm，模式切换
+  会重置 acquisition count。失败恢复依次处理 acquisition 与 trigger，最终重新确认 Stop。
+- 精确 payload 上限、步骤预算和 profile 语义以
+  [profiles.py](../src/wavebench_siglent_sds800x_hd/profiles.py) 为准，不在本文复制第二份数值表。
 
 ## 当前直接使用的 SCPI
+
+以下列表按当前 driver 汇总，用于定位协议域；[driver.py](../src/wavebench_siglent_sds800x_hd/driver.py)
+仍是完整事实源。
 
 ```text
 *IDN?
@@ -147,4 +115,11 @@ transport 异常后均尝试恢复全部 transfer 状态；恢复失败不覆盖
 :WAVeform:DATA?
 ```
 
-命令出现在矩阵中不等于已经由 descriptor 声明或由真实仪器验证。
+## 相关来源
+
+- [Production descriptor](../src/wavebench_siglent_sds800x_hd/descriptor.py)
+- [Descriptor profiles](../src/wavebench_siglent_sds800x_hd/profiles.py)
+- [Driver implementation](../src/wavebench_siglent_sds800x_hd/driver.py)
+- [功能覆盖开发路线](SDS800X_HD_COVERAGE_MILESTONES.md)
+- [实机验收记录](SDS800X_HD_HARDWARE_ACCEPTANCE.md)
+- [Scope R1.3 conformance](SDS800X_HD_R13_CONFORMANCE.md)

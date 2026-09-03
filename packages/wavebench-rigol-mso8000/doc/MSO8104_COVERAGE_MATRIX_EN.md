@@ -2,45 +2,85 @@
 
 [中文](MSO8104_COVERAGE_MATRIX.md)
 
-See [MSO8104 Coverage Milestones](MSO8104_COVERAGE_MILESTONES_EN.md) for sequencing and safety rules. A command listed here is neither an implementation claim nor hardware evidence.
+This page maps MSO8000 programming-guide domains to the WaveBench capabilities currently exposed
+by the external `wavebench-rigol-mso8000` plugin. The [package metadata](../pyproject.toml) is
+authoritative for version, dependencies, and entry point; the
+[production descriptor](../src/wavebench_rigol_mso8000/descriptor.py) for model, capabilities,
+binary profiles, and request limits; and the [driver](../src/wavebench_rigol_mso8000/driver.py) for
+exact SCPI, parsing, and restoration behavior.
 
-The audited source is RIGOL MSO8000 Programming Guide `PGA26006-1110`, which covers MSO8064, MSO8104, and MSO8204 and frequently uses MSO8204 examples. This plugin initially names only MSO8104.
+The [controlled hardware acceptance record](MSO8104_HARDWARE_ACCEPTANCE_EN.md) retains device,
+firmware, transport, test conditions, exact results, and unaccepted scope. The
+[coverage milestones](MSO8104_COVERAGE_MILESTONES_EN.md) retain development order and historical
+decisions. Those records support traceability and do not independently add a current capability.
 
-| Domain | Manual surface | WaveBench contract | Plan and boundary |
-| --- | --- | --- | --- |
-| Identity | `*IDN?` | `scope.idn` | Hardware complete for MSO8104 firmware `00.02.02` over LAN/PyVISA; no model or firmware extrapolation |
-| Error queue | `:SYSTem:ERRor[:NEXT]?` | `scope.error_drain_v1` | Hardware verified for restricted empty queue | Every consumed read is explicitly `NO_REPLAY`; the driver strictly parses `<integer>,"<message>"` and only `0,"No error"` terminates. Public bounded capture completed an empty drain before and after returning 1000 samples; nonzero records and overflow have offline fault-injection evidence only. Legacy `scope.errors` remains undeclared |
-| Input safety | channel coupling and impedance queries | `scope.channel_coupling`, `scope.channel_input_state_v2` | Hardware complete: the legacy route retains core high-impedance tokens, while V2 separately returns coupling, termination, and impedance. CH1/CH2 V2 both returned `dc + high_z + 1 MΩ`; the core rejects 50 ohms, GND, or unknown states by default |
-| Autoscale | system autoscale enable and autoscale command | `scope.autoscale` | Hardware verified for fixed `3 s` settle | Preflight system enable; acknowledge vertical/timebase/trigger mutation without restoration. For MSO8104, `wait_opc=true` does not query `*OPC?`: it writes once, waits a fixed `3 s`, and treats that as operation completion; write or wait failure latches the domain. A controlled CH1 `1 Vpp / 1 kHz` probe then used public bounded fetch and returned 1,000 samples with amplitude evidence; final state was both source outputs OFF, scope STOP, and CH1/CH2 high impedance. This policy does not prove the internal algorithm, visible effect, or restoration; `wait_opc=false` has no hardware-completion acceptance |
-| Complete snapshot | channel, timebase, probe, waveform, trigger, and partial health | `scope.snapshot` | RFC and skip; mandatory fields are unavailable and `*STB?` clears state; see RFC-0005 |
-| Snapshot V2 | `*IDN?` and 13 `:SYSTem:OPTion:STATus? <type>` queries | `scope.snapshot_v2` | Hardware verified for restricted identity/licensed options | Fourteen fixed text queries read identity and every manual-defined licensed-option status in one call; an empty options tuple exists only if all 13 explicitly prove not installed. All 55 health, channel, timebase, probe, waveform, and trigger fields are unavailable in stable order; no status register, error queue, trigger, waveform, or binary read occurs |
-| Existing acquisition configuration | type, averages, depth, rate, run/stop/single | fetch/capture preconditions | M4 offline complete; preserve current settings, and do not expose unrestricted setters |
-| Acquisition status (legacy) | averages and trigger status | `scope.acquisition_status` | RFC and skip; the legacy model requires average completion and segmented status, while trigger STOP is not average completion; see RFC-0006 |
-| Acquisition status V2 | `:ACQuire:TYPE?`, `:ACQuire:SRATe?`, `:ACQuire:MDEPth?`, and `:ACQuire:AVERages?` in AVER mode | `scope.acquisition_status_v2` | Hardware verified for restricted NORM | Three fixed pure queries, with a fourth configured-count read only in AVER mode. Current response was `NORM + 500 kSa/s + 10 kpts`; average is not applicable in NORM, and run state/segmented status are unavailable. Controlled setting probes for `AVERages`, `AVER`, and PEAK/NORM controls all read back `NORM`, so the AVER branch has no reachable-hardware evidence. STOP, OPC, and configured count never imply completion |
-| Acquisition run state | `:TRIGger:STATus?` | `scope.acquisition_run_state` | Hardware verified for restricted observation | One text query: STOP→stopped, WAIT→waiting, RUN/AUTO→acquiring, and TD→unknown. Hardware moved from AUTO through STOP, then observed WAIT after NORMAL/RUN, and finally STOP; state observation does not prove SINGLE completion |
-| Acquisition control | `:RUN`, `:STOP`, `:SINGle`, `:TRIGger:SWEep?`, and `:ACQuire:TYPE?` | `scope.acquisition_control` | Hardware verified for the restricted procedure | `start(normal)`, `stop`, and completion-style SINGLE are declared. After SINGLE, the driver reads back `SING`; terminal first `STOP` uses the restricted terminal proof, while `WAIT`/`TD → STOP` uses the state-transition proof. `*OPC?` is not completion evidence; capture uses it only to synchronize recovery writes |
-| Average capture transaction | global acquisition type and average count | `scope.capture_average_v2` | Skip after failed hardware prerequisite | The current Core has the V2 contract, but the stopped/high-impedance 1 Vpp-square probe synchronized `:ACQuire:TYPE AVERages`, `AVER`, and PEAK/NORM control writes and always read back `NORM`; the error queue returned `0,"No error"`. The device cannot currently enter average mode remotely. The manual also lacks an average-complete bit; STOP, OPC, and preamble count cannot replace completion proof; see RFC-0006 |
-| Current waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | Hardware complete for limited `DEF`: exact `LF` trailing, `1,000` bytes, and one binary query pass on hardware, and core completes restore/fresh verification. Under the recorded `1 kHz / 1 Vpp / 0 V` source condition, CH1 returned `1.05713 Vpp / 1000 Hz` and CH2 returned `1.0705 Vpp / 999.167 Hz` |
-| Deep waveform | MAX/RAW and chunk ranges | `scope.fetch_waveform` | Hardware complete for restricted stopped-state MAX/DMAX | The one bounded profile limits each response to `250,000` bytes, an operation to `4,000,000` bytes, and binary I/O to 16 queries. MAX/DMAX first require observed STOP, then read memory depth and narrow points to the minimum of memory depth, the runtime total-point limit, and 16 chunks; they never send RUN/STOP/SINGLE. With both sources OFF, CH1/CH2 high impedance, `10 kpts` current memory depth, and `20 kpts / 2.5 kpts chunks`, both MAX and DMAX returned `10,000` samples on both channels and completed five-field restore/fresh verification. Running-state MAX, other depths, throughput, and timeout remain unverified |
-| Single and multi-channel capture | SINGLE, trigger status, and per-source waveform | `scope.capture_waveform`, `scope.capture_waveforms` | Hardware verified for bounded `DEF + BYTE` capture | Capture accepts only an already-stopped MAIN-timebase `DEF + BYTE` baseline and requires `WAIT`/`TD → STOP`; first STOP is not waveform-freshness evidence. Controlled single- and multi-channel capture each returned `1,000` samples per channel. The multi-channel call sent one SINGLE and read two binary payloads. Core restored and freshly verified 13 acquisition, trigger, timebase, display/vertical, and transfer fields; other lengths, settings, channel sets, and transports remain unverified |
-| Math waveform metadata | MATH display and waveform MATH source/NORM/BYTE/preamble | `scope.math_metadata` | Hardware verified for restricted MATH1: with displayed MATH1, MAIN, both sources OFF, and scope STOP/high impedance, the public call returned 1,000 points, finite axes, and eight-bit BYTE metadata with final six-field transfer restoration verification. It read no data and does not prove math content, axis semantics for other operators/slots, or FFT accuracy |
-| Cursor readout | cursor mode, type, source, unit, value, and delta queries | `scope.cursor_readout`, `scope.cursor_readout_v2` | Hardware verified for restricted `MAN + TIME` and `TRAC` | Legacy keeps only its same-source manual subset. V2 uses global addressing: manual `TIME/AMPL` retains the existing path, while tracking accepts only `MAIN/ROLL` and `CHAN1`-`CHAN4`. Hardware `MAN + TIME + CHAN1/CHAN1` returned finite X A/B, `ΔX`, and `1/ΔX` values in seconds and Hz; `TRAC + CHAN2/CHAN2` returned finite X/Y/delta values with Y in `V`. Tracking uses at most 13 pure-text queries and does not move cursors. Math, XY, measurement, `NONE`, LA, and unknown or unequal vertical units fail closed; it does not read `ΔY` for unknown/unequal units, and accuracy remains unverified |
-| Screenshot | `:SAVE:IMAGe:TYPE?`, `:SAVE:IMAGe:DATA?` | `scope.screenshot_profile`, `scope.screenshot_v2` | Hardware verified for restricted BMP24-to-PNG conversion | Only `png/device/device`: read and require PNG first, then make one `DEFINITE_BLOCK` read. The profile adopts an `8,388,608`-byte response/operation ceiling, exact `LF` trailing, zero resynchronization, and no changed/restored state. It does not use `:DISPlay:DATA?`, write TYPE/INVert/COLor/menu, or create instrument files. Recorded firmware returned uncompressed BMP24, which the driver strictly validates and converts in memory to PNG. The public call returned a `1024 × 600`, `47,584`-byte PNG with empty error drains before/after and a healthy session. Visual/pixel accuracy, other screen states, and maximum payload remain unverified. See RFC-0003 |
-| Digital status (legacy) | hardware-module and LA status queries | `scope.digital_status` | RFC and skip; the legacy model requires activity, technology, hysteresis, and other fields the device cannot query; see RFC-0004 |
-| Digital status V2 | `:SYSTem:MODules?`, `:LA:DIGital:DISPlay?`, `:LA:DIGital:LABel?`, `:LA:POD<n>:THReshold?`, `:LA:TCALibrate?`, and `:LA:SIZE?` | `scope.digital_status_v2` | Hardware verified for restricted D0/D8 static state | Each call first reads the LA module bit; an absent module returns only `shared.module_present=false` and sends no `:LA:*?` query. With LA present, six fixed text queries return display, label, POD range and `1.4 V` threshold, `0 s` timing calibration, and `MEDIUM` size for D0/D8. Position, label-enabled, activity, technology, and hysteresis stay unavailable; the operation neither reads waveform data nor infers logic activity or encoding |
-| Digital waveform | D0-D15 waveform source and data | `scope.digital_waveform` | Manual-evidence gap and skip; the bitset model is suitable, but BYTE/WORD logic codes are undefined and WORD byte order is unclear |
-| Measurement statistics | `:MEASure:STATistic:ITEM? <type>,<item>,<source...>` | `scope.measurement_statistics_v2` | Hardware complete for restricted `VPP,CHAN1/CHAN2`: explicit item/source only, six pure reads for CURRENT, AVERages, DEViation, MINimum, MAXimum, and CNT, and `include_buffer=True` rejected. Both controlled VPP reads returned complete numeric results with `CNT=1000`; no statistics configuration, reset, or display write occurs. The legacy slot route remains undeclared; other item/source, dual-source/digital-source semantics, and statistics accuracy remain unverified |
-| FFT status | `:MATH<n>:OPERator?` and `:MATH<n>:FFT:*?` | `scope.fft_status_v2` | Hardware verified for restricted MATH1 | First require `OPERator? == FFT`, then read source, window, vertical unit, and start/stop frequency in six pure queries. Front-panel MATH1 returned `FFT + CHAN1 + HANN + VRMS + 0–1 MHz`; source CH1/CH2 were OFF, `consistent`, and `healthy` before and after. Average completion, RBW, and FFT sample rate are always unavailable and never inferred from global sample rate, frequency range, or points. This is not FFT accuracy evidence; the legacy route remains undeclared |
-| Reference metadata | source, vertical display, and label settings | `scope.reference_metadata` | Vendor-evidence gap and skip; REF is not a waveform source, so axes, points, and Y resolution are unavailable |
-| History timestamps | record enable/start/play/current/frame count | `scope.history_timestamps` | Vendor-evidence gap and skip; no per-frame relative or calendar timestamp exists |
-| DVM and counter | DVM/counter families | no suitable scope capability | RFC and skip |
-| AWG | source families | unresolved shared-resource multi-kind contract | RFC and skip |
-| Protocol, mask, search, record | option-heavy application families | no base contract | RFC and skip |
-| Reset, network, option install, files, calibration | system/storage families | none | Default deny |
+## Scope
 
-## Waveform contract
+The audited source is RIGOL MSO8000 Programming Guide `PGA26006-1110`. It covers MSO8064,
+MSO8104, and MSO8204 and frequently uses MSO8204 examples; the production descriptor registers
+only MSO8104. Manual commands and parameters for other models therefore do not automatically apply
+to this plugin.
 
-BYTE conversion uses the ten-field preamble and these equations:
+This matrix answers what the production descriptor currently exposes and the boundaries of that
+public behavior. A manual command, Python method, completed milestone, or one successful hardware
+run cannot replace a descriptor declaration.
+
+## Functional coverage
+
+| Domain | Manual surface | Current public capability | Current boundary |
+|---|---|---|---|
+| Identity | `*IDN?` | `scope.idn` | Matches only the MSO8104 identity pattern registered by the descriptor; no model or firmware extrapolation. |
+| Error queue | `:SYSTem:ERRor[:NEXT]?` | `scope.error_drain_v1` | Consuming reads are `NO_REPLAY`; records are parsed strictly and terminate on zero error. Legacy `scope.errors` is not declared. |
+| Input safety | coupling, termination, impedance queries | `scope.channel_coupling`, `scope.channel_input_state_v2` | Legacy returns the Core high-impedance token; V2 separates coupling, termination, and impedance. Unknown combinations fail closed. |
+| Autoscale | system autoscale enable and autoscale command | `scope.autoscale` | Mutates vertical, timebase, and trigger state without promising restoration. Failure latches the relevant write path. |
+| Complete legacy snapshot | channel, timebase, probe, waveform, trigger, health | Not declared | The device cannot reliably supply every required field in the public model. |
+| Snapshot V2 | identity and licensed-option status | `scope.snapshot_v2` | Reads only fields declared by the descriptor profile; remaining health, channel, timebase, probe, waveform, and trigger fields are unavailable. |
+| Existing acquisition configuration | type, averages, depth, rate, run/stop/single | Used as fetch/capture preconditions | No arbitrary acquisition-configuration setter is public. |
+| Legacy acquisition status | averages and trigger status | Not declared | The legacy contract requires average-completion and segmented state that the device cannot reliably prove. |
+| Acquisition status V2 | type, sample rate, memory depth, AVER count | `scope.acquisition_status_v2` | Returns only readable or conditionally applicable profile fields. STOP, OPC, and configured count never imply completion. |
+| Acquisition run state | `:TRIGger:STATus?` | `scope.acquisition_run_state` | Maps stopped/waiting/acquiring/unknown; observing state does not prove SINGLE completion. |
+| Acquisition control | `:RUN`, `:STOP`, `:SINGle`, status queries | `scope.acquisition_control` | Exposes only `start(normal)`, `stop`, and completion-style SINGLE. Writes are not blindly retried, and `*OPC?` alone is not completion proof. |
+| Average capture | global acquisition type and average count | Not declared | The current plugin cannot reliably enter average mode and prove completion. |
+| Current-screen waveform | NORM/BYTE/preamble/data | `scope.fetch_waveform` | Supports bounded `DEF` reads; payload, axes, and converted samples must be complete and finite. |
+| Deep waveform | MAX/RAW and chunks | `scope.fetch_waveform` | Reads MAX/DMAX only after observed stopped state and within descriptor limits for points, response size, operation size, and query count. |
+| Single/multi-channel capture | SINGLE, trigger status, per-source waveform | `scope.capture_waveform`, `scope.capture_waveforms` | Supports the declared MAIN/`DEF + BYTE` baseline. Multi-channel capture triggers once, then reads each channel. Restore fields and budgets come from the descriptor. |
+| Math metadata | MATH display and waveform preamble | `scope.math_metadata` | Reads metadata, not math data, and makes no claim about calculation content or accuracy. |
+| Cursor readout | mode, type, source, unit, value, delta | `scope.cursor_readout`, `scope.cursor_readout_v2` | Legacy retains a narrow manual same-source subset. V2 accepts only profile-supported addressing, sources, and unit combinations and never moves cursors. |
+| Screenshot | image type and binary data | `scope.screenshot_profile`, `scope.screenshot_v2` | Accepts only the descriptor's `png/device/device` request. Returned data is strictly validated and converted in memory; no device file or display setting is changed. |
+| Legacy digital status | module and LA status | Not declared | The device cannot provide every required legacy-model field. |
+| Digital status V2 | module, display, label, threshold, timing calibration, size | `scope.digital_status_v2` | Checks the LA module first and sends no LA query when absent. Returns static state only and does not infer activity or waveform encoding. |
+| Digital waveform | D0-D15 source and data | Not declared | BYTE/WORD logic codes and WORD byte order lack a sufficient public contract. |
+| Measurement statistics | `:MEASure:STATistic:ITEM?` | `scope.measurement_statistics_v2` | Requires explicit item/source, does not support buffer, and never changes configuration, clears statistics, or writes display state. |
+| FFT status | MATH operator and FFT queries | `scope.fft_status_v2` | Requires FFT operator first and returns only declared profile fields. Average completion, RBW, and FFT sample rate are not inferred. |
+| Reference metadata | source, vertical scale/offset, label | Not declared | Current manual/device interfaces cannot fully express axes, points, and Y resolution. |
+| History timestamps | record state, frame, timestamp | Not declared | Frame numbers cannot substitute for per-frame relative or calendar timestamps. |
+| DVM, counter, AWG | corresponding vendor families | Not declared | Current Scope contracts or shared-resource models are insufficient; raw SCPI does not bypass them. |
+| Protocol, mask, search, record | option-heavy application families | Not declared | Require independent option, restoration, and result models. |
+| Reset, network, option install, files, calibration | system and storage families | Not declared | High-side-effect maintenance operations are denied in ordinary experiment workflows. |
+
+## Binary-profile boundaries
+
+Exact response/operation budgets, query limits, trailing bytes, restoration order, and screenshot
+variants are defined by `ScopeDescriptorExtensions` in the
+[production descriptor](../src/wavebench_rigol_mso8000/descriptor.py). This document does not
+maintain a second numeric table.
+
+- `fetch`, `capture_single`, and `capture_multiple` use independent waveform operation profiles.
+- `capture_multiple` triggers one acquisition and then reads multiple channels; it never retriggers
+  per channel.
+- Screenshot uses `DEFINITE_BLOCK` framing and changes no image type, menu, color, or device file.
+- `tcpip`, `usb`, and `gpib` resource schemes describe routing contracts, not hardware acceptance
+  for every connection type.
+
+## Waveform conversion contract
+
+BYTE waveforms use the manual's ten-field preamble:
+
+```text
+format,type,points,count,xincrement,xorigin,xreference,yincrement,yorigin,yreference
+```
+
+The driver creates public `WaveformData` with:
 
 ```text
 voltage = (raw - y_origin - y_reference) * y_increment
@@ -48,8 +88,13 @@ x_start = x_origin - x_reference * x_increment
 x_stop  = x_start + (points - 1) * x_increment
 ```
 
-The driver requires exact payload length, finite axes, and finite converted samples. The core transport owns IEEE/TMC block decoding.
+Payload length must exactly match the point count, and axes and converted samples must be finite.
+Core transport owns IEEE/TMC block framing; the plugin does not parse `#N<length>` twice.
 
-## Explicitly unverified
+## Related sources
 
-USB/GPIB behavior, nonzero error records, error-queue ordering and overflow, X/Y conversion and measurement accuracy beyond the recorded `DEF + LF` `1 kHz / 1 Vpp / 0 V` condition, running-state MAX and MAX/DMAX chunking/throughput at other memory depths, capture lengths/settings/channel sets/transports beyond the controlled `DEF + BYTE` procedure, screenshot visual/pixel accuracy, other screen states, maximum payload, and non-BMP24 responses, WORD byte order, Snapshot V2 health/channel/timebase/probe/waveform/trigger fields, logic-probe behavior, electrical threshold accuracy, logic activity, digital-waveform encoding, and all other measurement accuracy remain unverified. In source-OFF probes, `*OPC?` succeeded before a later WAIT state, so it is not acquisition-completion evidence.
+- [Production descriptor](../src/wavebench_rigol_mso8000/descriptor.py)
+- [Driver implementation](../src/wavebench_rigol_mso8000/driver.py)
+- [Controlled hardware acceptance and unaccepted scope](MSO8104_HARDWARE_ACCEPTANCE_EN.md)
+- [Development milestones and historical decisions](MSO8104_COVERAGE_MILESTONES_EN.md)
+- [Related RFCs](rfcs/README.md) (Chinese)

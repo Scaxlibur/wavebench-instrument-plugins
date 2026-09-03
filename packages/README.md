@@ -2,29 +2,35 @@
 
 [English](README_EN.md)
 
-该目录用于放置独立的 WaveBench 仪器插件源码包。当前正式包包括五个预装驱动的可选外置发行版、M3 query-only 的 `wavebench-shengpu-sp3000a`、已完成 Source V2 C3 候选审计的 `wavebench-siglent-sdg2000x`、已采用 WaveBench `0.8.24` transport/session P0 的 `wavebench-siglent-sds3000`、已完成 SDS804X HD 波形、PNG 截图和独立采集控制验收的 `wavebench-siglent-sds800x-hd` `0.6.0`，以及面向 MSO8104 的 `wavebench-rigol-mso8000` `0.9.0`。后者已完成有界 waveform/capture、截图 V2、采集控制和光标读数的受控验收。后续仍按仪器或紧密相关系列逐包维护，不以移除预装驱动为目标，也不在这里冻结第二套 manifest、安装器或 catalog 协议。
+`packages/` 保存本仓库维护的独立 WaveBench 插件 distribution。每个子目录对应一台仪器或一个紧密相关的型号系列。
 
-`wavebench-rigol-dsg830` `0.2.0` 已进入仓库开发环境，完成 `rf_source` M0、A1、A2、A3、A4 Pulse 与 A4 Step Sweep，并要求 Core `>=0.8.25,<0.9`；production descriptor 声明 `rf_source.idn`、`rf_source.snapshot`、OFF-only `rf_source.cw_configure`、受 safety 限制的 `rf_source.output`、`rf_source.pulse_configure` 和保持 Sweep disabled 的 `rf_source.sweep_configure`。调制、trigger、Sweep execute／fire、Level Sweep 与 list 仍由独立证据门控。
+## 查询插件
 
-这些包分别声明各自的 WaveBench `0.8.x` 最低版本；SDS800X HD `0.6.0` 要求 `wavebench>=0.8.23,<0.9`，SDG2000X `0.8.2`、SDS3000 与 MSO8000 要求 `wavebench>=0.8.24,<0.9`。MSO8000 依赖的当前 Core API 尚未独立发布，不能据此宣称兼容性 wheel 已发布。它们不能与 `v0.7.0` 配套运行，也不会把未来 `0.9` 自动视为兼容版本。
+[生成式插件目录](../doc/reference/plugin-catalog.md)列出所有 distribution、driver ID、登记型号、WaveBench 兼容范围和 production descriptor 已声明的 capability。该页面由包内元数据生成，不在本页重复维护状态表。
 
-每个正式包至少应具备：
+[插件验收与历史证据](../doc/evidence/README.md)统一导航各包的手册审计、里程碑、RFC、conformance
+和实机验收记录，但不替代当前插件目录或 production descriptor。
 
-- 独立的 `pyproject.toml` 与版本；
-- `wavebench.instruments` entry point；
+进入具体包的 README，可以继续查看：
+
+- 适用型号与连接方式；
+- 最小配置和只读起步示例；
+- 型号特有的安全边界与限制；
+- 当前 Reference、历史验收证据和厂商资料入口。
+
+## 包合同
+
+每个正式包至少包含：
+
+- 独立的 `pyproject.toml`、元数据版本和 `wavebench.instruments` entry point；
 - canonical driver ID 和明确的 WaveBench 兼容范围；
-- 不访问真实仪器的单元测试；
-- 中英双语的用户可见说明；
+- production descriptor 及不访问真实仪器的离线测试；
+- 中英文用户入口；
 - 独立可打包的 MIT 许可证文件和 SPDX 包元数据；
-- 不含真实设备资源、凭据、原始波形或私有实验记录。
+- 不含真实设备资源、凭据、原始波形或私有实验记录的公开内容。
 
-## 新增仪器系列
+一个 distribution 可以声明多个有明确用途的 driver entry point。未进入 production descriptor 的 capability 不得由 README、里程碑或验收记录提前声明为当前能力。
 
-- [`wavebench-rigol-mso8000`](wavebench-rigol-mso8000/README.md)：RIGOL MSO8104 混合信号示波器，canonical ID `rigol.mso8104`；有界 waveform/capture、截图 V2、采集控制、状态和光标读数已在记录的型号、固件与 LAN/PyVISA 条件下完成受控验收。
-- [`wavebench-rigol-dsg830`](wavebench-rigol-dsg830/README.md)：RIGOL DSG830 射频信号发生器，canonical ID `rigol.dsg830`；`0.2.0` 完成 `rf_source` M0、A1、A2、A3、A4 Pulse 与 A4 Step Sweep，production descriptor 声明 `rf_source.idn`、`rf_source.snapshot`、OFF-only `rf_source.cw_configure`、受 safety 限制的 `rf_source.output`、`rf_source.pulse_configure` 和保持 Sweep disabled 的 `rf_source.sweep_configure`。未开放边界见包内[里程碑](wavebench-rigol-dsg830/doc/DSG830_COVERAGE_MILESTONES.md)。
-- [`wavebench-shengpu-sp3000a`](wavebench-shengpu-sp3000a/README.md)：Shengpu SP30120 扫频仪插件，保留最小 query-only descriptor 和经认证的 RF-OFF 控制。
-- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README.md)：早期 SIGLENT SDS3000 系列插件，当前严格支持 SDS3054 固件 `8.4.1`；身份、错误寄存器、通道耦合、波形读取和单/双通道采集已实现。
-- [`wavebench-siglent-sdg2000x`](wavebench-siglent-sdg2000x/README.md)：SIGLENT SDG2000X 函数／任意波形发生器，已完成 Source V2 候选包审计。
-- [`wavebench-siglent-sds800x-hd`](wavebench-siglent-sds800x-hd/README.md)：SIGLENT SDS800X HD 系列示波器，已完成波形、PNG 截图和独立采集控制验收。
+## 新增插件
 
-这些包均提供独立 `pyproject.toml` 和唯一 entry point，进入仓库级开发环境。尚未完成的 capability 不会提前声明。
+新增插件前应阅读 WaveBench Core 的[插件开发指南](https://github.com/Scaxlibur/wavebench/blob/master/docs/development/plugin-development.md)和[仪器驱动指南](https://github.com/Scaxlibur/wavebench/blob/master/docs/development/instrument-drivers.md)。本仓库的 editable 安装、检查和测试方式见[开发环境说明](../doc/DEVELOPMENT.md)。

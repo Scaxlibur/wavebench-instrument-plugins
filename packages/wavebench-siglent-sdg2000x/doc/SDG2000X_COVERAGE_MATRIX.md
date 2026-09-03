@@ -1,84 +1,74 @@
-# SDG2000X 功能覆盖矩阵
+# SDG2000X 当前能力 Reference
 
 [English](SDG2000X_COVERAGE_MATRIX_EN.md)
 
-## 当前结论
+本页说明 `siglent.sdg2000x` production descriptor 当前声明的 capability、适用范围和失败边界。包元数据版本为 `0.8.2`；该值表示仓库内的源码合同，不依赖独立的 PyPI、Git tag 或 GitHub Release 状态。
 
-版本 `0.8.2` 声明 12 项 capability：既有的身份、状态、五项基础写能力和任意波只读探测，以及
-`source.snapshot_v2`、`source.basic_configure_v2`、`source.output_v2` 和 `source.harmonics_disable_v2`。前 8 项已有 `SDG2122X`
-核心消费路径实机证据；新增 4 项均有 A0 离线合同。对精确的 `SDG2122X`／`2.01.01.39R7T2` 目标，已完成 V2 快照的
-A1，以及 Basic、Output 和 Harmonic 关闭正常路径的有限 A2。Basic 已在确认的高阻 CH1→CH1、CH2→CH2 接线下完成
-双通道 A3 工作点波形验收；该证据不外推到其它型号、固件、频率／幅度范围、功能字段或故障恢复。
-其中 Harmonic 关闭仅对 `SDG2122X` 固件 `2.01.01.39R7T2` 适用。三个登记型号的
-V1 capability 仍按共同手册合同和离线型号矩阵放行。
+## Synopsis
 
-Source V2 的 C3 核心实现、候选 wheel manifest 和候选包审计已完成；稳定核心、最终发行物与正式发布签核仍待完成，详见 [C3 候选发布审计](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)。
+| 项目 | 当前值 |
+| --- | --- |
+| Distribution | `wavebench-siglent-sdg2000x` |
+| Driver ID | `siglent.sdg2000x` |
+| 登记型号 | `SDG2042X`、`SDG2082X`、`SDG2122X` |
+| WaveBench | `>=0.8.24,<0.9` |
+| Python | `>=3.11` |
+| Backend | `pyvisa` |
+| 配置字段 | `source.resource`、`source.driver`、`safety_limits.max_source_vpp` |
 
-高级命令域已完成尽可能全面的分域协议/A4 验收，但核心缺少无损状态模型时继续不声明写 capability，也不提供 raw SCPI。历史覆盖率数字只对应版本 `0.8.0`；新增 Source V2 代码的当前覆盖率以本次离线测试报告为准，不用旧数字替代验证。代码覆盖不替代未接外部端口和未持有型号的物理证据。
+Source V2 topology 包含 CH1 和 CH2。快照 query contract 为 pure read，预算上限 `44` 次 query，timeout 为 `5000 ms`。
 
-## 覆盖状态
+## 当前 capability
 
-| 命令域 | WaveBench capability | 当前状态 | 放行条件 |
-| --- | --- | --- | --- |
-| 仪器身份 | `source.idn` | `SDG2122X` / `2.01.01.39R7T2` 实机通过；其它登记型号按共同协议放行 | 新型号或协议变体仍需脱敏证据 |
-| 系统错误队列 | 无 | 未开放 | 确认查询命令、空队列语义和是否为消费型读取 |
-| 通道基础状态 | `source.status` | SDG2122X 多轮只读稳定；CH1/CH2 均完成频率、Vpp、均值和最终独立零写审计 | 新固件响应变体需单独验收 |
-| Source V2 快照 | `source.snapshot_v2` | A0 完成：CH1/CH2 纯读取 anchor/facet/anchor、38 查询 Sine fixture、0 写入，声明上限为 44；A1：精确目标实机双通道 38 查询、0 写入，快照一致且 session healthy | 其它型号、固件或响应变体单独验收 |
-| Source V2 基础配置 | `source.basic_configure_v2` | A0 完成：CH1/CH2 的 Sine/Square/Ramp/Pulse 单字段 Basic MAIN 写入、核心回读与一次 OFF 恢复；`offset_v` 暂在写前拒绝。有限 A2：精确目标在输出 OFF 时对 CH1/CH2 各完成一次 1 Vpp 单字段写入及独立回读。A3：确认高阻 CH1→CH1、CH2→CH2 接线下，CH1/CH2 的 Sine/Square/Ramp/Pulse 均在 2 kHz／2 Vpp 工作点完成 scope capture；两次方波均确认 25% 占空比 | 其它型号、固件、频率／幅度范围、负载和实机拒绝／故障恢复不作声明；`offset_v` 继续不开放写入 |
-| Source V2 输出 | `source.output_v2` | A0 完成：CH1/CH2 独立 ON/OFF、单写 MAIN、核心回读、可读不匹配时一次 OFF 恢复；独立端口可同时 ON。有限 A2：精确目标的 CH1、CH2 分别完成 ON 与 OFF 及独立回读，最终均 OFF | 不声明实机同时 ON、故障恢复或其它型号／固件结果 |
-| 输出控制 | `source.output` | 三个型号通过离线合同；SDG2122X CH1/CH2 通过核心 Service ON→A4→OFF，未知写结果为 0 | 其它型号 A4 仅在有样机时补充 |
-| 固定波频率 | `source.set_frequency` | SDG2122X CH1/CH2 均覆盖 OFF 写入和 ON 状态实时写入；按型号/函数边界离线全覆盖 | 其它型号 A4 仅在有样机时补充 |
-| 固定波幅度 | `source.set_amplitude_vpp` | SDG2122X CH1/CH2 均覆盖 OFF 与 ON 实时写入；2 mVpp–10 Vpp、偏置包络和漂移分支 100% 覆盖 | 其它型号 A4 仅在有样机时补充 |
-| 固定波函数 | `source.set_function` | Sine/Square/Ramp 在 CH1/CH2 经核心闭环；Pulse 在 CH2 闭环；Noise/DC 只允许 OFF 配置 | Noise/DC 等待可复用安全模型 |
-| 方波占空比 | `source.set_square_duty_cycle` | CH2 20%/80% 实测 0.200/0.800；最终 CH1 30%、CH2 70% 实测 0.287/0.6949 | 高频频率相关钳位仍由严格回读 fail closed |
-| Pulse 参数 | 无损 capability 暂缺 | SDG2122X 25%/65% 占空比、20/40 µs 边沿通过 A4；DLY 仅 A3 | Source V2 支持未知 hold 后再声明；补独立延迟参考 |
-| 谐波 | `source.harmonics_disable_v2`，仅 `SDG2122X` / `2.01.01.39R7T2` | A0：在 Sine、目标输出 OFF 时，已关闭为零写入，已开启仅发送一条 `HARMSTATE,OFF`，并由核心独立回读 Harmonic 与输出。A1／有限 A2：精确目标的 Harmonic facet 可读，CH1 完成一次关闭写入并独立回读 Harmonic OFF／输出 OFF；SDG2122X H2–H16 槽位、H2/H3 幅度、H2 相位和 ALL/EVEN/ODD 仍是旧 A4 证据 | Harmonic 配置／启用继续等待更完整的 Source V2 模型；不外推到其它型号或固件 |
-| 调制 | 无损 capability 暂缺 | SDG2122X 内部 AM/DSB-AM/FM/PM/PWM/ASK/FSK/PSK 均通过协议与 A4 波形 | Source V2 支持关闭态缺省与厂商范围后再声明；外部源需接线 |
-| Sweep | 无损 capability 暂缺 | SDG2122X LINE/LOG/STEP、UP/DOWN/UP_DOWN 与 INT/MAN 通过协议和 A4 波形；EXT 仅回读 | Source V2 支持字段缺省后再声明；补外部触发线 |
-| Burst | 无损 capability 暂缺 | 有限 INT/MAN 通过周期数/重复周期 A4；`TRDUCH` CH2→双路通过；EXT/Gate 仅回读；INF 未形成连续载波 | 补外部触发/门控接线；Source V2 采用判别联合 |
-| Noise / DC / TARB | 无损 capability 暂缺 | Noise 与 -1/0/+1 V DC 通过 A4；20 MHz 下限钳位 A3；TARB 1 MSa/s 非平坦输出通过；Noise Add 在样机上稳定保持 OFF | 使用非周期 amplitude facet；Noise Add 需其它固件复核 |
-| 任意波形 | `source.arbitrary_probe` | 双通道核心零写探测通过；内置目录 199/199 选择、回读与 A4；TARB 另有 A4 | 上传、删除和用户目录继续默认拒绝 |
-| Combine | 无损 capability 暂缺 | CH1←CH2 与 CH2←CH1 双向异频 A4；源通道输出继电器无需开启 | 建模参与通道、最坏包络和互斥状态后再声明 |
-| 相位模式 / Invert | 无损 capability 暂缺 | `EQPHASE` 后差 0.27°；CH1/CH2 反相约 179.9°；实机 token 为 `PHASE-LOCKED` | 拆分单字段 polarity/phase facet 后再声明 |
-| 跟踪 / 耦合 / 复制 | 无损 capability 暂缺 | TRACE、F/P/A ratio/deviation、CH1→CH2 PACP 均有 A4；反向 PACP 有 A3 | Source V2 表达条件字段、动作和跨通道事务 |
-| Sync / Counter / 时钟 / Cascade | 无 | 18 查询零写轮次通过；Sync 与 Counter OFF、ROSC INT、Cascade OFF；未接端口不宣称 A4 | 补 Sync、Counter、外部参考和第二台源的专用接线 |
-| 代码路径 | 不适用 | V1 历史版本为 348 项测试、620/620 statements、244/244 branches；本次新增 V2 A0 测试单独执行 | 运行当前插件测试与覆盖率报告；不以空断言刷数值 |
+| Capability | 精确范围与行为 |
+| --- | --- |
+| `source.idn` | 读取并匹配 SDG2000X 系列身份。 |
+| `source.status` | 读取指定通道的基础波形、频率、幅度、偏置和输出状态。 |
+| `source.set_frequency` | 设置固定波频率；检查型号与当前波形边界。Sweep 自动切回 FIX 只允许在输出 OFF 时发生。 |
+| `source.set_function` | 设置有界周期波；Sine、Square、Ramp 和 Pulse 可以按合同切换，Noise／DC 只允许在输出 OFF 时配置。 |
+| `source.set_amplitude_vpp` | 设置 `2 mVpp–10 Vpp`；幅度与偏置包络必须保持在 `±10 V` 内。 |
+| `source.set_square_duty_cycle` | 仅适用于 FIX 模式 Square；频率相关钳位或 readback 不匹配时关闭失败。 |
+| `source.output` | 读取、开启或关闭通道输出；开启前要求 FIX、可读的 Vpp／Offset、已知复合模式关闭和 `max_source_vpp` 检查。 |
+| `source.arbitrary_probe` | 只读探测任意波状态；不上传、删除或覆盖波形。 |
+| `source.snapshot_v2` | 对 CH1／CH2 执行 anchor／facet／anchor 纯读取；包含 identity、Basic、Output 和按激活条件读取的 Harmonics facet。 |
+| `source.basic_configure_v2` | 对 CH1／CH2 的 Sine、Square、Ramp、Pulse 执行单字段 Basic MAIN 配置；支持 fixed frequency、Vpp 和 Square duty，`offset_v` 当前不开放写入。 |
+| `source.output_v2` | 独立读取、开启或关闭 CH1／CH2；每次 MAIN 只写目标字段，随后由 Core 独立读取快照。 |
+| `source.harmonics_disable_v2` | 仅适用于 `SDG2122X`／`2.01.01.39R7T2`、Sine 和目标输出 OFF；只读取或关闭 Harmonic，不配置或开启。 |
 
-## 默认拒绝项
+## Source V2 的型号与固件限制
 
-- 不发送 `*RST` 或其它全局预置命令。
-- 面向用户的输出开启只能经 `source.output` 或 `source.output_v2` 的核心 operation contract 执行；高级实机脚本不是公共 raw 接口。
-- 不提供 raw SCPI 入口。
-- 不上传、不删除、不覆盖用户任意波或状态文件。
-- 不为覆盖率切换外部参考、保护、Counter、Cascade 或未知负载的辅助输出。
-- 不把产品页列出的功能直接等同于已实现 capability。
+Basic 和 Output feature 的 descriptor applicability 没有附加型号或固件限制，适用于登记型号的运行时合同。当前受控实机证据主要来自 `SDG2122X` 固件 `2.01.01.39R7T2`；该证据不会替代 descriptor，也不会自动证明其它型号、固件和物理工作点。
 
-## 事实源
+Harmonic feature 具有显式限制：
 
-- [SIGLENT SDG2000X 产品页](https://www.siglent.com/in/products-overview/sdg2000x/)
-- [SIGLENT Waveform Generator 文档下载页](https://siglentna.com/resources/documents/waveform-generators/)
-- 本地编程手册：`doc/vendor-local/SDG_Series_Programming_Guide_E05C.pdf`，修订号 `PG02_E05C`
-- [协议审计](SDG2000X_PROTOCOL_AUDIT.md)
-- [只读实机验收](SDG2000X_READONLY_ACCEPTANCE.md)
-- [输出控制实机验收](SDG2000X_OUTPUT_ACCEPTANCE.md)
-- [频率写入实机验收](SDG2000X_FREQUENCY_ACCEPTANCE.md)
-- [基础写入实机验收](SDG2000X_BASIC_WRITE_ACCEPTANCE.md)
-- [Source V2 A0 离线适配记录](SDG2000X_SOURCE_V2_A0.md)
-- [Source V2 A1／A2 实机验收](SDG2000X_SOURCE_V2_A1_A2_ACCEPTANCE.md)
-- [Source V2 A3 实机波形验收](SDG2000X_SOURCE_V2_A3_ACCEPTANCE.md)
-- [Source V2 C3 发布审计准备](SDG2000X_SOURCE_V2_RELEASE_AUDIT.md)
-- [谐波协议与频谱验收](SDG2000X_HARMONIC_ACCEPTANCE.md)
-- [调制协议与波形验收](SDG2000X_MODULATION_ACCEPTANCE.md)
-- [Sweep 协议与波形验收](SDG2000X_SWEEP_ACCEPTANCE.md)
-- [Burst 协议与波形验收](SDG2000X_BURST_ACCEPTANCE.md)
-- [Pulse 协议与波形验收](SDG2000X_PULSE_ACCEPTANCE.md)
-- [任意波只读探测验收](SDG2000X_ARBITRARY_PROBE_ACCEPTANCE.md)
-- [内置任意波全目录验收](SDG2000X_BUILTIN_ARB_ACCEPTANCE.md)
-- [公共 Source 接口双通道验收](SDG2000X_PUBLIC_DUAL_CHANNEL_ACCEPTANCE.md)
-- [特殊波形协议与实机验收](SDG2000X_SPECIAL_WAVEFORM_ACCEPTANCE.md)
-- [双通道波形合成验收](SDG2000X_COMBINE_ACCEPTANCE.md)
-- [相位模式、等相位与反相验收](SDG2000X_PHASE_INVERT_ACCEPTANCE.md)
-- [通道跟踪、耦合、复制与双通道触发验收](SDG2000X_CHANNEL_INTERACTION_ACCEPTANCE.md)
-- [辅助与全局状态只读验收](SDG2000X_AUXILIARY_READONLY_ACCEPTANCE.md)
-- [Source V2 通用 RFC](RFC_SOURCE_V2_CAPABILITY_STATE_SAFETY.md)
-- 当前 descriptor、driver 和 fake transport 测试
+- 型号必须是 `SDG2122X`；
+- 固件必须是 `2.01.01.39R7T2`；
+- 目标通道必须为 Sine，且输出为 OFF；
+- 已关闭时不发送 MAIN 写入；已开启时只发送一条 `HARMSTATE,OFF`；
+- Core 随后独立回读 Harmonic 与输出状态。
+
+Harmonic profile 可读取 2–16 次谐波和绝对 Vpp／相对 dB 幅度，但当前公共写方向只有 `DISABLE`。
+
+## Side effects 与失败行为
+
+- descriptor 导入不访问仪器；factory 只打开已配置的 transport。
+- `read_only` session 只允许读取，Core 在写入前拒绝不匹配的 access。
+- V1 与 V2 写操作都必须满足目标通道、波形、输出、安全上限和 readback 合同。
+- V2 Basic 和 Output 的目标配置各只写一次；写后异常会尝试输出 OFF，并锁止当前 session 的后续配置写入。
+- Source V2 不把 Noise／DC 的 `STDEV` 或标称值伪装成 Vpp；无法无损表达时保留 V1 的安全路径。
+- 不通过历史 harness 或 raw SCPI 绕过当前 descriptor。
+
+## 当前不支持
+
+production descriptor 不声明错误队列、调制、Sweep、Burst、Pulse 参数、任意波上传／删除、Combine、相位／Invert、跟踪／耦合／复制、Sync、Counter、外部参考、Cascade 或 raw SCPI capability。
+
+部分命令域具有受控实机证据，但在 Core 缺少无损模型或 descriptor 未声明 capability 时，仍属于 unavailable。证据用于追溯，不是第二份当前能力表。
+
+## Sources
+
+- [包元数据](../pyproject.toml)
+- [Production descriptor](../src/wavebench_siglent_sdg2000x/descriptor.py)
+- [Driver implementation](../src/wavebench_siglent_sdg2000x/driver.py)
+- [Driver tests](../tests/test_driver.py)
+- [Wheel 与 descriptor tests](../tests/test_wheel.py)
+- [开发记录与实机证据入口](README.md)

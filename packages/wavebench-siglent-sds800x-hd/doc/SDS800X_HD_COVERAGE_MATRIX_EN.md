@@ -2,126 +2,92 @@
 
 [中文](SDS800X_HD_COVERAGE_MATRIX.md)
 
-## Purpose and evidence boundary
+This page maps SIGLENT SDS Series Programming Guide `CN11G` domains to the WaveBench capabilities
+currently exposed by the external `wavebench-siglent-sds800x-hd` plugin. The
+[package metadata](../pyproject.toml) is authoritative for version, dependencies, and entry point;
+the [production descriptor](../src/wavebench_siglent_sds800x_hd/descriptor.py) for models, resource
+schemes, configuration fields, and capabilities; [profiles](../src/wavebench_siglent_sds800x_hd/profiles.py)
+for screenshot and acquisition-control boundaries; and the
+[driver](../src/wavebench_siglent_sds800x_hd/driver.py) for exact SCPI and transaction behavior.
 
-This matrix compares the SIGLENT SDS Series Digital Oscilloscope Programming Guide,
-revision `CN11G`, with the external WaveBench `siglent.sds800x-hd` plugin. It separates
-manual claims, offline implementation, and hardware acceptance. A command in the shared SDS
-manual is not automatically treated as an SDS800X HD capability.
+The [feature-coverage development roadmap](SDS800X_HD_COVERAGE_MILESTONES_EN.md) records stage
+status and future exit gates. The [hardware acceptance record](SDS800X_HD_HARDWARE_ACCEPTANCE_EN.md)
+and [Scope R1.3 conformance](SDS800X_HD_R13_CONFORMANCE.md) retain evidence for particular devices,
+firmware, transports, and procedures. Those records support traceability and do not independently
+add a current capability.
 
-The local conversion is split across three directories because of converter limits. Their three
-`full.md` files remain under `doc/vendor-local/`, excluded from Git and the sdist. The manual's
-support table gives `1.1.3.1` as the minimum SDS800X HD firmware, but it does not mark every
-command by supported family. Model and firmware behavior therefore still require target-hardware
-confirmation.
+## Scope
 
-Evidence labels used here:
+`CN11G` is shared across multiple SDS families and does not annotate every command by applicable
+series. A command in the shared manual is not automatically an SDS800X HD capability. The local
+transcription is for internal audit only and lives under the Git-ignored, sdist-excluded
+`doc/vendor-local/` directory.
 
-- **Hardware accepted**: current external-plugin code, a target SDS800X HD, and controlled evidence all exist.
-- **Implemented / offline verified**: driver and FakeTransport tests exist for that item, without corresponding hardware evidence.
-- **Manual reviewed**: command and response semantics were reviewed, but no capability is exposed yet.
-- **Plugin adoption pending**: the core contract exists, but the production driver, profile, or hardware evidence is incomplete.
-- **Hardware blocked**: offline code cannot establish response framing, state transitions, or hardware-specific behavior.
-- **Rejected by default**: the operation changes global state, writes instrument storage, or lacks a reliable restore boundary.
+This matrix answers what the production descriptor currently exposes and the boundaries of that
+behavior. A new Core contract, Python method, offline test, or one successful hardware run cannot
+replace a descriptor declaration.
 
-WaveBench `0.8.23` implements the public Scope R1.3 contract. Core implementation does not grant
-the SDS800X HD new capabilities automatically; the production driver, descriptor profile,
-backend/resource behavior, and hardware restoration evidence still require separate acceptance.
+## Functional coverage
 
-## Current coverage
+| Domain | Manual surface | Current public capability | Current boundary |
+|---|---|---|---|
+| Identity | `*IDN?` | `scope.idn` | Strictly parses four identity fields and uses the descriptor model to validate channel count. Unknown manufacturer, model, or format fails. |
+| Analog-channel coupling | `:CHANnel<n>:COUPling?` | `scope.channel_coupling` | Accepts only `AC`, `DC`, or `GND`; identity determines the channel limit. The family policy is fixed high impedance. |
+| Input-termination writes | Shared-manual `ONEMeg`, `FIFTy` | Not declared | The `FIFTy` setter for other SDS families is not projected onto this family. |
+| Error queue | No reliable query in `CN11G` | Not declared | Does not guess `SYSTem:ERRor?` or fabricate an empty list. Waveform operations require `check_errors=false`. |
+| Stopped-record read | waveform source, range, format, preamble, data | `scope.fetch_waveform` | Accepts only `points="dmax"` and `check_errors=false`; requires acquisition Stop and Sequence OFF and restores transfer state after reading. |
+| Single/multi-channel capture | trigger mode/run/stop/status, waveform | `scope.capture_waveform`, `scope.capture_waveforms` | Configures all target channels, performs one SINGLE, then reads each channel. `*OPC?` is not trigger-completion evidence. |
+| Measurement statistics | mode, slot, type, statistics, history | `scope.measurement_statistics` | Reads an enabled Advanced measurement slot only; never configures, enables, or clears statistics. Buffer is read only when requested. |
+| Screenshot | `:PRINt? PNG,NORMal`/`INVerted` | `scope.screenshot_profile`, `scope.screenshot_v2` | Accepts only profile color/inverted variants, uses MESSAGE framing, validates PNG in memory, and changes no persistent display state. |
+| Acquisition run state | `:TRIGger:STATus?` | `scope.acquisition_run_state` | Maps vendor tokens to public state. Acquisition count is diagnostic and cannot prove completion by itself. |
+| Acquisition control | trigger mode, run, stop, single | `scope.acquisition_control` | Continuous mode supports `auto`/`normal` only. SINGLE uses `configure_then_arm`; failure cleanup and restoration order come from the profile. |
+| Autoset | `:AUToset` | Not declared | Mutates trigger, vertical, and timebase without a complete restoration contract; denied by default. |
+| Math/FFT | function, operator, source, scale, span | No corresponding extension capability declared | Frequency axis, ready state, RBW, sample rate, and payload lack a complete public contract. |
+| Typed trace | source, metadata, data | Not declared | Supported long records and the Core typed-trace point limit do not yet form a complete declarable profile. |
+| Snapshot, measurement configuration, digital, Sequence/history | Shared SDS subsystems | Not declared | Each needs model/option, readable-field, and restoration review; no falsely complete model is exposed. |
+| Reset, system setup, instrument files | `*RST`, system, save/recall, image save | Not declared | Mutates global, network, or persistent state and stays outside the base driver. |
 
-| Domain | Manual surface | WaveBench mapping | Status | Boundary and next step |
-|---|---|---|---|---|
-| Identity | `*IDN?` | `scope.idn` | **SDS804X HD hardware accepted** | Four fields, manufacturer, model, 14-character ASCII serial, and firmware format passed; other models remain pending |
-| Analog-channel coupling | `:CHANnel<n>:COUPling?`, returning `AC`, `DC`, or `GND` | `scope.channel_coupling` | **SDS804X HD hardware accepted** | CH1–CH4 returned DC; two-channel models and other coupling states remain pending |
-| Input termination | Shared manual lists `ONEMeg` and `FIFTy` | No standalone capability | **Rejected by default** | SDS800X HD product material specifies fixed `1 MΩ`; do not project the shared `FIFTy` setter onto this family |
-| Error queue | CN11G documents no error-queue query | `scope.errors` | **Device-protocol blocked** | The core interface exists, but this family has no dependable command; do not guess `SYSTem:ERRor?` or return a fabricated empty list |
-| Waveform read | `SOURce`, `STARt`, `INTerval`, `POINt`, `MAXPoint?`, `WIDTh`, `BYTeorder`, `PREamble?`, and `DATA?` | `scope.fetch_waveform` | **SDS804X HD multi-chunk hardware accepted** | Stop, sequence OFF, CH1/CH2 `DMAX`, WORD/LSB, numeric results, and success/failure restoration passed; a `10M` record passed as `5M + 5M`, while USB remains pending |
-| Sequence gate | `:ACQuire:SEQuence?` | `scope.fetch_waveform` precondition | **SDS804X HD hardware accepted** | Established Stop + sequence ON in `NORMAL` trigger mode; the driver rejected before any waveform write or binary query |
-| Measurement statistics | `:MEASure:MODE?`, `ADVanced:P<n>?`, `TYPE?`, `STATistics?`, and `SHIStory?` | `scope.measurement_statistics` | **SDS804X HD hardware accepted** | Query-only access to an existing slot; all six P3 `PKPK` fields and five stopped-history values passed with no driver writes |
-| Single and multichannel capture | `TRIGger:MODE`, `RUN`, `STOP`, `STATus?`, and `ACQuire:NUMACq?` | `scope.capture_waveform`, `scope.capture_waveforms` | **SDS804X HD hardware accepted** | SINGLE query-back, Stop polling, and acquisition count passed; CH1/CH2 use one acquisition without `*OPC?` |
-| Trigger run state | `:TRIGger:STATus?` returns `Arm`, `Ready`, `Auto`, `Trig'd`, `Stop`, or `Roll` | `scope.acquisition_run_state`, `scope.acquisition_control` | **SDS804X HD hardware accepted** | AUTO/NORMAL start, STOP, and SINGLE state-transition paths passed; injected SINGLE and start failures both restored the baseline and produced a `verified` fresh readback |
-| Screenshot | `:PRINt? PNG,NORMal` or inverted form | `scope.screenshot_profile`, `scope.screenshot_v2` | **SDS804X HD hardware accepted** | Real PyVISA MESSAGE EOM passed; normal and inverted output were both `1024×600` PNGs with exactly one `0A` byte after IEND; the next query stayed synchronized after an injected application-layer failure |
-| Autoset | `:AUToset` | `scope.autoscale` | **Rejected by default** | Changes trigger, vertical, and horizontal state without an error queue or restore loop |
-| Acquisition status | `ACQuire:TYPE?`, `SEQuence?`, `NUMACq?`, and related queries | `scope.acquisition_run_state` | **SDS804X HD hardware accepted** | Legacy `ScopeAcquisitionStatus` remains unsuitable; count stays diagnostic and completion uses a state transition. Hardware confirmed that selecting SINGLE reset a nonzero count to `0` |
-| Math / FFT | `FUNCtion<n>`, `OPERation?`, `SOURce?`, FFT scale/span, and related queries | Existing metadata/status; spectrum fetch requires a later trace extension | **Later core contract required** | F1–F4 were all OFF; there is no proven generic FFT-ready/RBW result, and a frequency axis cannot be represented as an analog waveform |
-| Snapshot, measurement configuration, digital, and history | Shared SDS subsystems | Corresponding optional Scope capabilities | **Not covered** | Review each capability for model, option, public-model, and restore semantics |
-| Reset, system, and instrument filesystem | `*RST`, system settings, save/recall, image save, and related commands | No baseline capability | **Rejected by default** | May alter global state, networking, or persistent storage |
+## Waveform behavior
 
-## Confirmed waveform-protocol boundary
+Before any waveform write, `fetch_waveform()` validates `points="dmax"`, `check_errors=false`, the
+target channel, `TRIGger:STATus? = Stop`, and `ACQuire:SEQuence? = OFF`. It then saves
+`SOURCE/START/INTERVAL/POINT/WIDTH/BYTEorder` and configures the target source, `WORD`, LSB,
+`START 0`, `INTERVAL 1`, and `POINT 0` for this read.
 
-`PREamble?` returns a definite-length binary block. Its fixed descriptor portion is 346 bytes, and
-sequence data may append timestamps. The current pure parser supports only non-sequence analog
-channels, so it requires exactly 346 bytes after the core removes the IEEE block envelope and
-explicitly rejects timestamp appendices instead of discarding them. `DATA?` also uses a declared-
-length block; the core transport extracts its payload, and the plugin must never apply `rstrip()`
-to binary data.
+`PREamble?` must contain exactly the 346-byte descriptor after Core removes the IEEE binary-block
+envelope. An appended Sequence timestamp or ambiguous descriptor byte order fails. The driver
+checks source, sample width, byte order, points, and data-byte count, then queries `MAXPoint?` for
+the chunk limit and reads the complete record. Success, protocol failure, and transport failure all
+attempt to restore the original transfer state; restoration failure does not hide a primary error.
 
-On the SDS804X HD with firmware `4.8.12.1.1.6.5`, a real preamble confirmed the non-sequence
-signature `read_frames=0`, `sum_frames=1`, `segment=-1`. The manual's `segment=1` form remains
-accepted; other frame combinations are still rejected. The same WORD preamble reported `100000`
-points, `200000` bytes, and a `50.000000584 ns` sample interval, consistent with the parser. A
-supplementary long-record run confirmed two chunks at `START 0` and `START 5000000` for
-`10000000` points with `MAXPoint=5000000`.
-
-The first analog conversion uses these documented fields:
+Analog conversion uses:
 
 ```text
 vdiv = vertical_scale_raw * probe
 offset = vertical_offset_raw * probe
 voltage = raw_code * (vdiv / code_per_div) - offset
-```
-
-With `STARt 0` and `INTerval 1`, the time axis is:
-
-```text
 x[i] = horizontal_delay - timebase * 10 / 2 + i * sample_interval
 ```
 
-Eight-bit samples are signed integers. ADC widths above eight bits use `WORD`, explicit LSB order,
-and signed 16-bit decoding. The manual describes higher-resolution samples as left-aligned with
-zero-filled low bits; the first version does not shift them. The driver must query `MAXPoint?`
-instead of hard-coding the example limit.
+Eight-bit samples are signed integers. Wider ADC samples use `WORD`, LSB, and signed 16-bit
+decoding. Higher-resolution samples remain left-aligned as documented; the driver does not shift
+them. `DEF` and `MAX` fail before instrument I/O rather than sending undocumented point keywords.
 
-The exposed transaction accepts only WaveBench `DMAX`. Page 385 of CN11G defines the
-`WAVeform:POINt` argument as an integer NR1 and provides no `DEF/MAX/DMAX` instrument keywords;
-the driver uses `POINT 0` from the vendor waveform-reconstruction example to select the full
-record. `DEF` and `MAX` fail before any I/O rather than sending undocumented commands.
+## Screenshot and acquisition profiles
 
-The transaction first requires `TRIGger:STATus? = Stop` and `ACQuire:SEQuence? = OFF`, then saves
-`SOURCE/START/INTERVAL/POINT/WIDTH/BYTEorder`. It fixes `WORD`, LSB, `START 0`, and `INTERVAL 1`,
-uses the preamble for total points, and uses `MAXPoint?` for the per-query limit. It attempts to
-restore all transfer state after success, protocol failure, or transport failure; restoration
-failure does not hide an existing primary exception. The path sends no `RUN`, `SINGLE`, or `STOP`
-and reads only an already-stopped record.
-
-## WaveBench core constraints
-
-- The driver obtains a core transport only through `DriverContext.open_transport()` and owns idempotent cleanup.
-- A capability is declared only after its public method is complete; runtime callability checks do not replace signature and semantic tests.
-- `fetch_waveform(channel, points="dmax", check_errors=True)` returns the core `WaveformData` and `WaveformHeader` models rather than plugin-local copies.
-- CN11G provides no error queue, so waveform use must explicitly set `scope.check_errors=false`; a direct driver call with `check_errors=True` fails before any I/O.
-- The current `points` implementation supports only `DMAX`. The public signature remains `fetch_waveform(channel, points="dmax", check_errors=True)` without inventing `DEF/MAX` mappings.
-- Multichannel capture configures every channel, performs one acquisition, and then reads each channel. It must not retrigger per channel.
-- Capture uses `DriverContext.opc_timeout_ms` as its status-polling deadline and does not call
-  `query_opc()`; `*OPC?` is not treated as physical-trigger completion evidence.
-- Screenshot, standalone acquisition control, typed trace sources, and three-state error checking
-  are public in the WaveBench `0.8.23`
-  [Scope R1.3 contract](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md).
-  This plugin has completed screenshot and acquisition-control adoption; typed trace and error drain remain undeclared.
-
-## Development order
-
-1. M1: strict identity parsing and read-only `scope.channel_coupling`, with offline tests.
-2. M2: the 346-byte preamble, data conversion, and stopped analog-record `scope.fetch_waveform` transaction have offline coverage; M3 supplied the hardware evidence.
-3. M3: TCPIP WORD/LSB readout, CH1/CH2 numeric checks, transfer-state restoration, a real `10M` multi-chunk read, and safe sequence-ON rejection are complete on one SDS804X HD; USB and additional models remain pending.
-4. M4: SINGLE, Stop polling, acquisition count, and one CH1/CH2 acquisition are hardware accepted; capture capabilities are exposed.
-5. Screenshot and standalone acquisition control now have core `0.8.23` adoption and hardware
-   acceptance. Typed trace remains disabled, and math/FFT remains in a later trace-extension
-   contract. Track digital channels, sequence/history, Autoset, and other writes separately; do not
-   bypass gates with raw SCPI.
+- The screenshot profile declares color and inverted PNG requests only, uses MESSAGE framing,
+  bounds response/operation payload, and requires one `0A` content-trailing byte after canonical
+  PNG. It captures, changes, and restores no persistent display fields.
+- The acquisition-control profile declares `auto` and `normal` continuous modes only. SINGLE
+  configures then arms, and a mode change resets acquisition count. Failure restoration handles
+  acquisition then trigger and finally reconfirms Stop.
+- Exact payload limits, step budgets, and profile semantics remain canonical in
+  [profiles.py](../src/wavebench_siglent_sds800x_hd/profiles.py), not a second numeric table here.
 
 ## SCPI used directly today
+
+This list indexes protocol domains from the current driver. The complete source remains
+[driver.py](../src/wavebench_siglent_sds800x_hd/driver.py).
 
 ```text
 *IDN?
@@ -155,4 +121,11 @@ and reads only an already-stopped record.
 :WAVeform:DATA?
 ```
 
-A command appearing in this matrix is not necessarily declared by the descriptor or verified on hardware.
+## Related sources
+
+- [Production descriptor](../src/wavebench_siglent_sds800x_hd/descriptor.py)
+- [Descriptor profiles](../src/wavebench_siglent_sds800x_hd/profiles.py)
+- [Driver implementation](../src/wavebench_siglent_sds800x_hd/driver.py)
+- [Feature-coverage development roadmap](SDS800X_HD_COVERAGE_MILESTONES_EN.md)
+- [Hardware acceptance record](SDS800X_HD_HARDWARE_ACCEPTANCE_EN.md)
+- [Scope R1.3 conformance](SDS800X_HD_R13_CONFORMANCE.md) (Chinese)

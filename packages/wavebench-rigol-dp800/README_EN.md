@@ -5,31 +5,23 @@
 An executable WaveBench instrument plugin for the RIGOL DP800 family, with DP832/DP832A
 as the current public compatibility scope.
 
-## Identity and development baseline
+## Start here
 
-- distribution: `wavebench-rigol-dp800`
-- canonical driver ID: `rigol.dp800`
-- development baseline: WaveBench `a3e13fd`
-- WaveBench: `>=0.8,<0.9`
-- Python: `>=3.11`
-- transport backend: `pyvisa`
+- [Find the current version, compatibility range, models, and capabilities](../../doc/reference/plugin-catalog-en.md)
+- [Read the current feature-coverage matrix](doc/DP800_COVERAGE_MATRIX_EN.md)
+- [Review development milestones and hardware evidence](doc/DP800_COVERAGE_MILESTONES_EN.md)
+- [Install and manage WaveBench plugins](https://github.com/Scaxlibur/wavebench/blob/master/docs/how-to/manage-plugins.md)
 
-This plugin targets the WaveBench `v0.8.0` release. It does not maintain a legacy-core
-compatibility matrix, run with `v0.7.0`, or automatically claim compatibility with a future `0.9` core. When installed, the explicit canonical ID `rigol.dp800` selects the external
-implementation. The short alias `dp800` always selects WaveBench's built-in fallback. Removing the
-plugin restores the built-in implementation for the canonical ID as well.
+## Current boundary
 
-## Capabilities
+Set `rigol.dp800` to select this external implementation; the short `dp800` alias always selects the
+Core fallback. The implementation covers identity and error queues, channel state and measurements,
+voltage/current limits, explicit output control, and OVP/OCP. The production descriptor and coverage
+matrix are authoritative for exact capabilities, model scope, and protocol limits.
 
-- `*IDN?` and error queue;
-- channel setpoints, output state, CV/CC mode, and voltage/current/power measurements;
-- voltage and current-limit settings;
-- explicit output control;
-- OVP/OCP thresholds, enable states, and trip states.
-
-The plugin owns DP800 SCPI, parsing, and readback. WaveBench core retains safety limits, protection
-relationships, pre-output checks, services, run plans, and experiment-level state restoration.
-Failed writes are not retried blindly.
+The plugin owns DP800 vendor SCPI, parsing, and readback. Core owns safety limits, relationships
+between setpoints and protection thresholds, pre-output checks, services, run plans, and experiment-
+level restoration.
 
 ## Configuration example
 
@@ -53,54 +45,16 @@ settle_ms_after_output = 500
 The example uses an RFC 5737 documentation address. Offline tests do not scan resources, connect to
 instruments, or send real SCPI.
 
-## Acceptance status
+## Safety boundary
 
-Version 0.3.0 completes M2 transactional hardening for the existing write paths. All transport I/O
-on one driver instance shares a reentrant lock. `APPLy`, output, and OVP/OCP writes snapshot prior
-state, verify each step, and attempt conservative recovery on failure. An ambiguous write, unverifiable
-recovery, or new trip latches later configuration writes off for that instance. Output failures converge
-to OFF, protection recovery never sends `CLEAR`, and readback comparisons use half-LSB tolerances from
-the DP832/DP832A manual resolutions.
-On 2026-07-27, DP832A CH1 passed a distinct-target normal readback/restore cycle, an unloaded ON-to-OFF
-cycle, and controlled fault injection for an ambiguous first output write, failures on the second and
-third protection writes, an `APPLy` readback mismatch, and an ambiguous `APPLy` restoration. A separate
-session verified final state after every case. This evidence covers DP832A protocol and recovery semantics
-only; it does not establish other-model compatibility, loaded transient behavior, or measurement accuracy.
+Descriptor import performs no instrument I/O. Default tests do not scan resources, connect to an
+instrument, or send real SCPI. Writes are not retried blindly. An ambiguous write, unverifiable
+recovery, or new trip latches later configuration writes off for the current instance. Output
+failure attempts to remain OFF, and protection recovery never sends `CLEAR`.
 
-Version 0.2.0 completes M1 read-path hardening: the first channel access identifies a supported
-model and channel count through `*IDN?`; `APPLy?`, `MEASure:ALL?`, and OVP/OCP thresholds reject
-non-finite values; output, mode, protection-enable, and trip responses use strict enums; and any
-query failure fails an aggregate snapshot as a whole. On 2026-07-27, all three DP832A channels
-passed a 31-query, zero-write hardware gate with all outputs left OFF. This evidence is not
-extrapolated to other models and does not establish measurement accuracy. The driver recognizes
-channel counts for DP811/821/831/832 and A-models and fails closed, but public compatibility is not
-expanded to DP811/821/831 until the corresponding write paths are accepted per model.
+Never commit real addresses, serial numbers, setpoint snapshots, measurements, or command logs.
 
-Version 0.1.0 completed controlled DP832A LAN acceptance with a real wheel on 2026-07-24. Managed
-installation, healthy/load checks, canonical-versus-short-alias routing, three-channel read-only
-status and protection snapshots, conservative CH1 voltage/current-limit writes, OVP/OCP write and
-readback, unloaded output ON/OFF, removal fallback, and reinstallation all passed. All three channels
-were snapshotted before mutation; a separate session then confirmed exact restoration, all outputs
-OFF, and an empty error queue. The acceptance did not modify the real `wavebench.toml` or commit real
-addresses, serial numbers, snapshots, measurements, or command logs.
+## Development and license
 
-See the [DP800 programming-manual coverage matrix](doc/DP800_COVERAGE_MATRIX_EN.md) for the manual
-command domains, public API mapping, evidence levels, uncovered areas, and commands denied by
-default. The [DP800 command coverage development milestones](doc/DP800_COVERAGE_MILESTONES_EN.md)
-define each stage's exact commands, safety boundary, and acceptance gate.
-
-## Development checks
-
-```bash
-python -m pytest -q packages/wavebench-rigol-dp800/tests
-python -m ruff check packages/wavebench-rigol-dp800
-python -m wavebench plugin package check packages/wavebench-rigol-dp800
-```
-
-Do not commit real addresses, serial numbers, setpoint snapshots, measurements, or command logs.
-This package is licensed under the [MIT License](LICENSE).
-
-## Origin
-
-Version 0.1.0 was migrated from the built-in DP800 protocol implementation at WaveBench `a3e13fd`.
-Only the vendor driver, descriptor, entry point, and FakeTransport tests moved into this package.
+Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for source
+work and offline checks. This plugin is licensed under the [MIT License](LICENSE).

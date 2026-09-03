@@ -10,25 +10,21 @@
 - `Accepted`：主仓库已经冻结合同；
 - `Superseded`：已由后续方案取代。
 
-## 当前 RFC
+## 当前合同
 
-- [WaveBench scope 通用扩展接口 RFC](WaveBench_scope通用扩展接口RFC.md)：插件侧
-  `R1.3` 评审存档。核心 `0.8.23` 已接受并实现公共合同；当前规范以
-  [核心 RFC](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC.md)
-  和[核心实施说明](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)
-  为准。
-- [R1.3 Acceptance Addendum A1](WaveBench_scope通用扩展接口RFC-R1.3-acceptance-addendum.md)：
-  插件侧验收门存档。核心离线 A1 已通过；每个插件仍需按 capability 单独完成实现、conformance
-  和实机验收。
+scope 通用扩展合同已经由 WaveBench Core 接受。当前内容只在 Core 维护：
 
-## 后续文档拆分
+- [Accepted RFC](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC.md)
+- [Accepted R1.3 A1](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC-R1.3-acceptance-addendum.md)
+- [核心实施说明](https://github.com/Scaxlibur/wavebench/blob/master/docs/project/rfcs/WaveBench_scope通用扩展接口RFC_核心实施说明.md)
 
-总 RFC 暂作单一规范事实源，避免把同一合同复制到多份文件后变得不一致。核心同意分拆后，按以下依赖拆出四份子 RFC：
+核心接受合同不等于具体插件已经通过 capability 实现、conformance 或实机验收。当前插件声明
+仍以各包的 production descriptor 为准。
 
-1. `binary-screenshot`：依赖 OperationSpec、phase authorization 和 artifact；包含 binary framing、budget、screenshot profile、恢复。
-2. `acquisition`：依赖 OperationSpec 和共享恢复接口；包含 control profile、SINGLE、continuous、recovery。
-3. `trace`：依赖 binary transfer 字段闭包和 source/axis 模型；包含 analog、digital、reference、spectrum。
-4. `error-policy`：依赖非嵌套 phase authorization 和 artifact；包含 `scope.error_drain_v1` 与旧 `scope.errors` 迁移。
+## 插件侧历史记录
 
-Acceptance Addendum A1 是核心采用的验收索引，不构成并行版本。核心合同完成不改变现有插件
-descriptor；只有完成插件自身验收后，才能声明对应 capability。
+- [R1.3 评审正文](../archive/rfcs/WaveBench_scope通用扩展接口RFC.md)：保留核心接受前的候选合同、证据和待决问题。
+- [R1.3 Acceptance Addendum A1](../archive/rfcs/WaveBench_scope通用扩展接口RFC-R1.3-acceptance-addendum.md)：保留公共注册前的原始验收门。
+
+新的跨仪器公共合同应在本目录收集插件证据，达到 `Proposed` 条件后提交 Core 评审。已经接受
+的合同不在插件仓库继续维护并行副本。

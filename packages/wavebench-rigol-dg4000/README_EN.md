@@ -2,263 +2,56 @@
 
 [中文](README.md)
 
-An executable WaveBench instrument plugin for the dual-channel RIGOL DG4202 and compatible DG4000 function/arbitrary waveform generators.
+A WaveBench instrument plugin for the dual-channel RIGOL DG4202 and compatible DG4000
+function/arbitrary waveform generators.
 
-## Identity and compatibility
+## Start here
 
-- Distribution: `wavebench-rigol-dg4000`
-- Canonical driver ID: `rigol.dg4202`
-- Opt-in advanced driver ID: `rigol.dg4202-v2`
-- Opt-in workspace driver ID: `rigol.dg4202-v2-workspace`
-- WaveBench: `>=0.8.25,<0.9`
-- Python: `>=3.11`
-- Transport backend: `pyvisa`
+- [Find the current version, entry points, models, and capabilities](../../doc/reference/plugin-catalog-en.md)
+- [Browse the DG4000 plugin documentation](doc/README_EN.md)
+- [Install and manage WaveBench plugins](https://github.com/Scaxlibur/wavebench/blob/master/docs/how-to/manage-plugins.md)
 
-This package uses the public `SourceChannelProfile` contract first available in WaveBench
-`v0.8.15`, the `SourceSweepProfile` contract added in `v0.8.16`, the `SourceCounterProfile`
-contract added in `v0.8.17`, and the Source V2 snapshot contract available in `v0.8.25`. It does
-not run with a core older than `v0.8.25` and does not automatically claim compatibility with a
-future `0.9` core.
+## Driver entries
 
-The plugin defines no aliases. After installation, the explicit canonical ID `rigol.dg4202` selects the external implementation, while the short `dg4202` alias always selects WaveBench's built-in fallback. Removing the plugin also restores the built-in canonical implementation.
+- `rigol.dg4202`: retains existing V1 routes and exposes the declared Source V2 Basic, Output, and Counter operations.
+- `rigol.dg4202-v2`: explicit opt-in entry for constrained Sweep configure/manual-fire operations.
+- `rigol.dg4202-v2-workspace`: explicit opt-in entry for unscoped volatile-ARB workspace replacement.
 
-## Capabilities and boundaries
+None of the entries declares an alias; the short `dg4202` alias always selects the Core fallback.
+The production descriptors and generated plugin catalog are authoritative for each entry's exact
+capabilities, profiles, version range, and conformance evidence references.
 
-The driver supports identity/error queries, CH1/CH2 state, strict read-only channel profiles for
-load, polarity, noise, sync, burst, modulation, marker, and pulse hold, strict read-only sweep
-profiles for the frequency window, spacing, timing, trigger, and marker, a strict read-only global
-counter profile for input configuration, statistics display, and conditional five-field
-measurements, fixed frequency, function, VPP amplitude, square duty cycle, explicit output control,
-query-only arbitrary-wave capability probes, and upload of validated DAC14 blocks through
-WaveBench's public `DG4000DacBlock` contract. `source.snapshot_v2` adds typed read-only Basic,
-output-enabled, Sweep, Pulse, Burst, partial Harmonic, Modulation state/type, partial ARB,
-Noise Overlay, and Sync facets for CH1/CH2, plus the global Counter and parameterized CH1/CH2
-Coupling state. The Harmonic facet does not claim per-order component readback.
+The implementation also covers strict read-only snapshots and profiles, fixed-wave configuration,
+output control, and validated DAC14 uploads. Core owns waveform-file loading, normalization,
+amplitude safety limits, services, run plans, state restoration, and artifacts.
 
-The current development branch also declares explicit Source V2 P1 write capabilities
-`source.basic_configure_v2`, `source.basic_live_configure_v2`, and `source.output_v2`, plus
-production Counter V2 capabilities `source.counter_configure_v2`, `source.counter_enable_v2`
-(which covers the separate disable operation), and `source.counter_measure_v2`.
+## Minimum configuration
 
-WaveBench core retains waveform-file loading, normalization, DAC14 encoding, amplitude safety limits, services, run plans, state restoration, and artifacts. Descriptor import performs no instrument I/O, and default tests use only a fake transport. Writes and uploads are not retried blindly.
+```toml
+[connection]
+backend = "lan"
+resource = "TCPIP::192.0.2.30::INSTR"
 
-The current `0.7.0` development branch adds Source V2 P1 and Counter V2 beside the read-only
-snapshot surface.
-`source.basic_configure_v2` requires target output OFF, FIX mode, and a fresh V2 snapshot, and
-changes exactly one Basic field per request. It currently accepts SIN/SQU/RAMP/PULS/NOIS/DC,
-frequency, Vpp, offset, or square duty. `source.basic_live_configure_v2` changes exactly one
-frequency or Vpp field while output remains ON in FIX mode, without output cycling.
-`source.output_v2` separately enables or disables one channel and the Core reads back its final
-state.
-Counter V2 changes exactly one of coupling, input impedance, attenuation, trigger level, or
-statistics enable per request. Enable/disable never configures input state or clears statistics;
-measure accepts only an already-enabled valid five-field result. A settling or no-input Counter
-measurement is unavailable in a V2 snapshot but does not block a safe disable; the legacy profile
-remains strict.
+[source]
+driver = "rigol.dg4202"
+model_hint = "DG4202"
+default_channel = 1
+check_errors = true
+```
 
-DG4000 has no independent Harmonic state-off command, so the descriptor does not declare
-`source.harmonics_disable_v2`. When output is OFF, frequency mode is FIX, and Basic readback is
-explicitly `HARM`/`HARMONIC`, a Sine `source.basic_configure_v2` request may leave that waveform.
-This is a Basic waveform change, not an alias for a state-only Harmonic disable, and it makes no
-claim about preserving per-order parameters. The volatile ARB adapter remains an offline candidate;
-its overlap with the V1 `arb-load` composite contract keeps it out of the V2 capability surface.
+The example uses an RFC 5737 documentation address. Advanced Sweep or volatile-workspace behavior
+requires explicit selection of the corresponding opt-in driver ID.
 
-A controlled DG4202 `00.01.14` observation confirmed one CH1, output-OFF, FIX `HARM`/`HARMONIC` to
-Sine Basic V2 transition with final readback. It had no oscilloscope loopback or external measurement,
-covers only CH1 and this firmware, makes no per-order-parameter preservation claim, and does not
-raise any conformance-manifest evidence level.
+## Safety boundary
 
-`rigol.dg4202-v2` is a separate opt-in entry point that retains the legacy driver's basic V2
-surface and adds only `source.sweep_configure_v2` and `source.sweep_fire_v2`. `TRACe:DATA:DAC VOLATILE` has no verified
-channel selector, so ARB remains read-only on that entry point and
-`source.arbitrary_volatile_replace_v2` is not declared. An OFF/FIX `USER` state on that entry point
-may leave through an explicit Basic V2 Sine request; that operation neither reads nor restores volatile
-USER content. The `rigol.dg4202` legacy V1 surface is unchanged.
+Descriptor import performs no instrument I/O. Default tests do not scan resources, connect to an
+instrument, or send real SCPI. Output control, arbitrary-wave uploads, and other writes are not
+retried blindly. Volatile USER/workspace content may be overwritten and cannot be promised restored.
+Never commit real resources, serial numbers, waveforms, screenshots, or command logs.
 
-`rigol.dg4202-v2-workspace` is a separate opt-in entry point. Apart from read-only identity/snapshot
-and `source.output_v2` for the OFF safety closure, it exposes only
-`source.arbitrary_workspace_volatile_replace_v2`; it exposes no V1 setters, Basic/Live Basic, or
-Counter write capability. It models `TRACe:DATA:DAC VOLATILE` as an instrument-wide unscoped volatile
-workspace: CH1 and CH2 must both be OFF before the write, and a failure makes at most one OFF-recovery
-attempt per still-usable output. It takes no channel argument, makes no claim about which channel
-selected USER, and neither reads nor restores overwritten content. DG4202 continues
-not to declare the channel-scoped `source.arbitrary_volatile_replace_v2` contract.
+## Development and license
 
-The opt-in Sweep evidence is deliberately narrow: output-OFF configuration of a linear 1–2 kHz,
-101-point, 12-second, manual-trigger Sweep, then same-session fire, three high-impedance RTM
-captures per channel, and output OFF. It does not generalize to arbitrary Sweep parameters and does
-not replace the legacy V1 Sweep route. The V2 operation leaves Sweep enabled; acceptance used a
-separate legacy transaction to return both channels to FIX/OFF.
-
-The DG descriptor explicitly sets `v1_route_migration_enabled=false`. Existing V1 `source.set-*`,
-`source.output`, discrete frequency-response, `arb-load`, and basic restore paths therefore remain
-V1. Only the explicit V2 CLI, run step, or Service operation uses the P1/Counter V2 adapter. This avoids
-silently replacing legacy DAC14 upload or restore transactions with incomplete Basic/Output V2
-composition.
-
-P1 preserves the V1 M1/M2/M4 transaction boundaries from `0.3.0`: all I/O shares one reentrant
-lock; fixed-wave writes use a pre-write snapshot, per-step readback, off-first recovery, and
-ambiguous-write latching; DAC14 upload is accepted only while the target channel is already OFF,
-in FIX mode, with sweep OFF. Overwriting the volatile USER waveform is reported as an irreversible
-side effect. The M3, M5, and M6 profiles are read-only contexts: they do not widen core basic
-restoration or promise restoration of load, polarity, noise, sync, burst, modulation, marker,
-pulse hold, a complete sweep/counter profile, or volatile USER contents. No result is extrapolated
-to another model, firmware, or unaccepted channel wiring.
-
-Future Coupling, Noise Overlay, and Sync writes currently have contract and recovery-order designs
-only; the descriptor still declares READ only. Coupling requires a complete dual-channel target and
-restore, Noise Overlay configuration cannot bypass an independent hard-peak budget, and Sync
-configuration must remain separate from enabling a physical Sync connector. Sync enable also
-requires a physical-port model and A5 wiring evidence.
-
-The [DG4000 coverage matrix](doc/DG4000_COVERAGE_MATRIX_EN.md) maps vendor command domains to
-current public APIs, offline/hardware evidence, and high-risk commands denied by default. The
-[DG4000 coverage milestones](doc/DG4000_COVERAGE_MILESTONES_EN.md) define staged exit gates and
-hardware-acceptance boundaries. The local vendor manual remains under ignored `doc/vendor-local/`
-and is excluded from releases.
-
-The current wheel carries ten Source conformance manifests bound to its non-manifest contents. They
-record the accepted Basic, Output, and Counter V2 scope for DG4202 firmware `00.01.14`, plus the
-restricted opt-in Sweep configure/manual-fire scope of `rigol.dg4202-v2`. Channel-scoped volatile
-ARB, active Harmonic candidates, and the unscoped workspace entry point remain outside conformance
-claims.
-
-The Chinese README contains an RFC 5737 documentation resource. Never commit real resources, serial numbers, captures, screenshots, or command logs.
-
-## License
-
-This plugin is licensed under the [MIT License](LICENSE).
-
-## Hardware acceptance boundary
-
-An earlier controlled loop used external `wavebench-rigol-dg4000` to drive DG4202 CH1 with a 1 kHz, 1 Vpp sine wave and external `wavebench-rigol-ds1000z` to capture DS1104Z Plus CH1. Scope CH1 used AC coupling with fixed high-impedance input. A 1200-point DEF waveform measured 1000.000 Hz and 1.008 Vpp in WaveBench. Both instruments had clear error queues before and after the run, and the original generator CH1 state was restored in a `finally` path and verified by readback.
-
-On 2026-07-27, current worktree behavior was reaccepted on DG4202 firmware `00.01.14`.
-M1 completed one strict CH1/CH2 profile with 24 queries and zero writes. M2 separately exercised
-OFF, temporary SQU/different fixed frequencies/0.8 Vpp/37% duty, explicit ON-to-OFF, off-first
-restore, and fresh-session field verification on both channels. Both channels ended at their
-original SIN, 1 kHz, 5 Vpp, 0 V offset, FIX, sweep OFF, output ON state.
-
-M3 used external plugin `0.4.0` to read complete CH1 and CH2 channel profiles in one controlled
-session. Transport guards turned any text or binary write into an immediate failure; acceptance
-completed 45 queries, zero text writes, and zero binary writes. Both channels reported
-high-impedance load, NORMAL polarity, noise OFF/10%, sync ON/POSITIVE, burst OFF, modulation
-OFF/AM, marker OFF, and pulse hold DUTY, with all basic and context fields returned. The gate did
-not read the error queue because consuming it would not be a side-effect-free observation.
-
-M4 separately uploaded a 64-point little-endian DAC14 triangle to CH1 and CH2 while output was
-OFF, read back USER/1 kHz/1 Vpp/0 V, verified clear error queues, and confirmed restoration in new
-sessions. CH1 then explicitly drove a 2 Vpp triangle into a high-impedance RTM2032. A 10,000-point
-capture measured 997.26 Hz and 2.16 Vpp; triangle-template RMSE was 0.0390 V, 49.2% of the
-sine-template RMSE. After restoration, the original sine measured 998.25 Hz and 5.12 Vpp. CH2 was
-then connected to the high-impedance RTM2032 CH2 input and completed an independent 1 kHz, 1 Vpp
-triangle loop: measured frequency was 999.75 Hz, Vpp was 1.12 V, normalized triangle-template RMSE
-was 0.09285, sine-template RMSE was 0.2196, and their ratio was 0.4229. The original DG4202 CH2
-state was restored and the error queue was clear; scope timebase, range, and trigger settings were
-unchanged across the gate. RTM2032 waveform fetch uses controlled transfer-format/point writes and
-is not a zero-write scope session. Both uploads overwrite volatile USER data, an acknowledged
-irreversible side effect. No real resource, serial number, raw waveform, or command log is stored.
-
-M5 used external plugin `0.5.0` for query-only sweep-profile acceptance on CH1 and CH2. Both
-channels initially had output ON, FIX mode, and sweep/burst/modulation/marker OFF. A controlled
-staging session first disabled output and separately established sweep OFF and sweep ON. For each
-state, a guarded read-only session read both channels three consecutive times. Each session issued
-104 queries, zero text writes, and zero binary writes, and all six profiles matched field by field
-within their preset state. The profile covers start/stop/center/span, linear/log/step spacing,
-steps, sweep/hold/return timing, trigger source/slope/out, and marker. Any failed query or invalid
-relationship rejects the whole profile. Staging and restoration writes were outside the two
-zero-write read sessions. After restoration, both complete channel profiles and sweep profiles
-matched their initial snapshots and the error queue was clear. No immediate trigger or `*TRG` was
-sent, and no sweep-write capability was created.
-
-M6 used external plugin `0.6.0` for non-destructive OFF-state acceptance of the DG4202's global
-counter. The counter was OFF before and after the gate, statistics stayed OFF, the display stayed
-DIGITAL, and three complete profiles matched field by field. The complete gate issued 39 queries,
-zero text writes, and zero binary writes, returning AC coupling, 1 megaohm, 1X attenuation, USER1
-gate time, HF rejection OFF, 0 V trigger level, and 50% sensitivity. The OFF state explicitly
-returned `measurement=None`; the driver sent no `MEASure?`, did not enable the counter, and sent
-neither `AUTO` nor `STATIstics:CLEAr`. Parsing and relationship validation for the counter-ON
-frequency/period/duty/positive-width/negative-width tuple has offline evidence only and is not part
-of this hardware conclusion.
-
-On 2026-08-30, external plugin `0.7.0` completed read-only Source V2 acceptance for the current
-instrument state. DG4202 firmware `00.01.14` reported CH1/CH2 OFF, SIN, 1 kHz, 5 Vpp, 0 V offset,
-FIX, and sweep OFF. `source.snapshot_v2` completed 40 pure queries with matching before/after
-anchors and healthy session state. Burst OFF was returned as a typed facet; Sweep, Pulse, and
-Harmonic were `inactive_by_anchor`. Existing V1 transactions then staged both channels at PULSE,
-1 Vpp, and output OFF. A second V2 snapshot completed 52 queries and returned DUTY hold, 500 us
-width, 50% duty, 0 s delay, and 1.9531 us leading/trailing transitions on both channels. A fresh
-final session confirmed both channels restored to OFF, SIN, 1 kHz, 5 Vpp, 0 V offset, and FIX.
-No waveform was emitted and RTM2032 was not captured. Active Sweep, Burst ON, and Harmonic remain
-outside this hardware evidence.
-
-A follow-up read-only gate on the same date added Counter, Modulation, partial ARB, Coupling, Sync,
-and Noise Overlay to one Source V2 snapshot. The first run timed out at the previous
-`:COUP:CHAN:BASE?` spelling; that session stopped immediately and closed, and both channels still
-read OFF, SIN, 1 kHz, 5 Vpp, 0 V offset, and FIX. The driver then used the manual's complete
-`:COUP:CHANNEL:BASE?` keyword and retained `213 passed` package tests. The accepted snapshot issued
-67 pure queries with matching anchors and healthy session state before and after. The complete
-harness issued 112 queries and recorded zero text/binary write requests, transmissions,
-completions, or instrument mutations. All three Coupling dimensions were OFF with CH1 as reference;
-both Sync outputs were ON/POSITIVE and both Noise Overlay states were OFF/10%. Final channel state
-was unchanged and the session closed healthy. RTM2032 was not accessed, triggered, or captured.
-
-The same date also completed normal-path P1 acceptance. With output OFF, CH1→RTM CH1 wrote and
-read back RAMP, PULSE, NOISE, DC, and SIN through V2 postconditions, then captured sine at
-1 kHz/1 Vpp, after a live frequency change to 2 kHz, and after a live Vpp change to 2 Vpp.
-CH2→RTM CH2 configured SQUARE/25% duty at 1 kHz/1 Vpp and completed the same live frequency and
-Vpp captures. Each channel emitted alone, no output exceeded 2 Vpp, and every capture quality and
-expectation gate passed. A separate restoration run independently read both channels as OFF, SIN,
-1 kHz, 5 Vpp, 0 V, FIX, and 50% duty; both RTM inputs remained high-Z. This evidence covers normal
-writes, postconditions, and final OFF only, not timeout, ambiguous-write, or recovery-failure fault
-injection on hardware.
-
-On 2026-08-31, Counter V2 completed an independent acceptance using a T connection from DG4202 CH1
-to RTM2032 CH1 and the DG Counter input. The Counter input limit was 5 Vpp; the emitted signal was
-only 1 kHz at 1 Vpp. The transaction wrote and read back 50 ohm/1 megaohm impedance, 1X/10X
-attenuation, trigger level, statistics, and AC/DC coupling one field at a time. Counter reported
-1000.011247 Hz while the RTM capture and FFT reported 1000 Hz at 1.0 Vpp. The final fresh-session
-readback confirmed CH1 OFF with its 5 Vpp configuration and Counter OFF/AC. A Counter enable→disable
-run with output held OFF also passed, proving an unavailable measurement cannot block safe disable.
-No timeout, ambiguous-write, or recovery-failure fault was injected into hardware.
-
-On the same date, `rigol.dg4202-v2` completed controlled Sweep acceptance. CH1 and CH2 were each
-configured while output was OFF for a linear 1–2 kHz, 101-point, 12-second manual-trigger Sweep
-with marker OFF. The selected channel was then enabled, fired in the same session, and captured
-three times through the high-impedance RTM input. CH1 frequency estimates were approximately
-1202/1546/1872 Hz and CH2 estimates approximately 1265/1628/1982 Hz; maximum captured Vpp was
-1.016. Each run ended with both outputs OFF. Since V2 does not restore Sweep state, a separate
-legacy transaction returned both channels to FIX/OFF and a fresh session verified the result. A
-disabled marker may retain a stale frequency as read-only device state; enabled markers remain
-range-checked against the Sweep window.
-
-## Development checks
-
-Run the package tests, Ruff, WaveBench package inspection, and a managed-install dry run from an
-environment containing WaveBench `v0.8.25` or newer within the declared `<0.9` range.
-
-Use the repository-level [editable development environment](../../doc/DEVELOPMENT_EN.md) for daily source work. Formal acceptance still uses a real wheel and a disposable virtual environment.
-
-## Provenance
-
-- `0.1.0` migrated the vendor-protocol portion of WaveBench's built-in DG4202 driver while leaving services and safety policy in core.
-- `0.2.0` adds the bilingual M0-M12 coverage plan and release-artifact leak prevention without expanding capabilities.
-- `0.3.0` delivers strict current-API validation, transactional fixed-wave writes, and fail-closed DAC14 handling. DG4202 `00.01.14` passes M1/M2 and the M4 CH1 hardware gate; M4 CH2 passes protocol/restoration only. No capability is added.
-- `0.4.0` requires WaveBench `>=0.8.15` and adds `source.channel_profile`. DG4202 `00.01.14`
-  passes the strict zero-write M3 gate and complete M4 hardware gate on CH1/CH2 without widening
-  automatic restoration or the capability surface.
-- `0.5.0` requires WaveBench `>=0.8.16` and adds `source.sweep_profile`. DG4202 `00.01.14`
-  passes three strict zero-write M5 rounds on CH1/CH2 in both sweep-OFF and sweep-ON preset states
-  without adding a sweep setter, trigger, or automatic-restoration field.
-- `0.6.0` requires WaveBench `>=0.8.17` and adds `source.counter_profile`. DG4202 `00.01.14`
-  passes three strict zero-write M6 rounds with the counter OFF, without automatically enabling
-  the counter, sending `AUTO`/statistics clear, or presenting offline-only counter-ON parsing as a
-  hardware result.
-- The `0.7.0` development branch requires WaveBench `>=0.8.25`, retains pure-query
-  `source.snapshot_v2`, and declares Basic/Live Basic/Output P1 plus Counter V2 capabilities.
-  `rigol.dg4202-v2` separately declares restricted Sweep configure/manual-fire as an opt-in driver;
-  it does not migrate V1 routes or expose volatile ARB. DG4202 `00.01.14` normal paths were accepted
-  on CH1 and CH2 through high-impedance RTM2032 captures and on Counter through the CH1 T connection;
-  the restricted Sweep path passed independent low-voltage high-impedance loops on both channels.
-  Burst, Coupling, Noise Overlay, and Sync write capabilities remain undeclared, and no hardware
-  fault-injection conclusion exists for recovery.
+The [plugin documentation](doc/README_EN.md) links the coverage matrix, milestones, conformance, and
+historical acceptance material. Use the repository-level
+[editable development environment](../../doc/DEVELOPMENT_EN.md) for source work. This plugin is
+licensed under the [MIT License](LICENSE).
