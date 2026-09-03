@@ -1,0 +1,7 @@
+interface:
+  display_name: "WaveBench Plugin Development"
+  short_description: "开发、验证、打包并安全验收 WaveBench 仪器插件生产代码"
+  default_prompt: "使用 $wavebench-plugin-development 按仓库合同开发或审查仪器插件，并运行与风险匹配的离线验证。"
+
+policy:
+  allow_implicit_invocation: true
