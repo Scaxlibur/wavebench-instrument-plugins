@@ -9,6 +9,7 @@ from numbers import Real
 import re
 from threading import RLock
 import time
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -19,6 +20,10 @@ from wavebench.instruments import (
     ScopeAverageCaptureResult,
     ScopeAverageConfiguration,
     ScopeAnalogChannelSnapshot,
+    ScopeChannelDisplayBaseline,
+    ScopeChannelDisplayRequest,
+    ScopeChannelDisplayRestoreResult,
+    ScopeChannelDisplayState,
     ScopeCursorReadout,
     ScopeDerivedWaveformMetadata,
     ScopeDigitalChannelStatus,
@@ -54,6 +59,14 @@ from .profiles import (
     RTM2000_SNAPSHOT_V2_READABLE_FIELDS,
     RTM2000_SNAPSHOT_V2_UNAVAILABLE_FIELDS,
 )
+
+if TYPE_CHECKING:
+    from wavebench.instruments import (
+        ScopeFocusBaseline,
+        ScopeFocusRequest,
+        ScopeFocusRestoreResult,
+        ScopeFocusState,
+    )
 
 
 _DECIMAL_INTEGER = re.compile(r"[+-]?[0-9]+")
@@ -550,6 +563,177 @@ class RTM2032Scope:
             termination=termination,
             impedance_ohm=None,
             unavailable_fields=("impedance_ohm",),
+        )
+
+    @_serialized_io
+    def get_channel_display_state_v2(self, channel: int) -> ScopeChannelDisplayState:
+        _validate_rtm2032_channel(channel)
+        command = f"CHANnel{channel}:STATE?"
+        return ScopeChannelDisplayState(
+            channel=channel,
+            enabled=_parse_bool(
+                self.transport.query(command),
+                command=command,
+            ),
+        )
+
+    @_serialized_io
+    def configure_channel_display_v2(
+        self,
+        request: ScopeChannelDisplayRequest,
+        *,
+        baseline: ScopeChannelDisplayBaseline,
+    ) -> None:
+        if not isinstance(request, ScopeChannelDisplayRequest):
+            raise TypeError("RTM2032 channel display request has an invalid type")
+        if not isinstance(baseline, ScopeChannelDisplayBaseline):
+            raise TypeError("RTM2032 channel display baseline has an invalid type")
+        _validate_rtm2032_channel(request.channel)
+        if baseline.snapshot.channel != request.channel:
+            raise ValueError("RTM2032 channel display baseline uses a different channel")
+        state = "ON" if request.enabled else "OFF"
+        self.transport.write(f"CHANnel{request.channel}:STATE {state}")
+
+    @_serialized_io
+    def restore_channel_display_v2(
+        self,
+        baseline: ScopeChannelDisplayBaseline,
+    ) -> ScopeChannelDisplayRestoreResult:
+        if not isinstance(baseline, ScopeChannelDisplayBaseline):
+            raise TypeError("RTM2032 channel display baseline has an invalid type")
+        channel = baseline.snapshot.channel
+        _validate_rtm2032_channel(channel)
+        state = "ON" if baseline.snapshot.enabled else "OFF"
+        self.transport.write(f"CHANnel{channel}:STATE {state}")
+        return ScopeChannelDisplayRestoreResult(
+            status="completed",
+            attempted_fields=baseline.restore_order,
+            restored_fields=baseline.restore_order,
+        )
+
+    @_serialized_io
+    def get_focus_state_v2(self) -> ScopeFocusState:
+        from wavebench.instruments import ScopeFocusChannelState, ScopeFocusState
+
+        time_range_s = _parse_positive_float(
+            self.transport.query("TIMebase:RANGE?"),
+            command="TIMebase:RANGE?",
+        )
+        time_position_s = _parse_finite_float(
+            self.transport.query("TIMebase:POSition?"),
+            command="TIMebase:POSition?",
+        )
+        channels = []
+        for channel in (1, 2):
+            prefix = f"CHANnel{channel}"
+            channels.append(
+                ScopeFocusChannelState(
+                    channel=channel,
+                    enabled=_parse_bool(
+                        self.transport.query(f"{prefix}:STATE?"),
+                        command=f"{prefix}:STATE?",
+                    ),
+                    range_v=_parse_positive_float(
+                        self.transport.query(f"{prefix}:RANGE?"),
+                        command=f"{prefix}:RANGE?",
+                    ),
+                    scale_v_per_div=_parse_positive_float(
+                        self.transport.query(f"{prefix}:SCALe?"),
+                        command=f"{prefix}:SCALe?",
+                    ),
+                    position=_parse_finite_float(
+                        self.transport.query(f"{prefix}:POSITION?"),
+                        command=f"{prefix}:POSITION?",
+                    ),
+                    offset_v=_parse_finite_float(
+                        self.transport.query(f"{prefix}:OFFSET?"),
+                        command=f"{prefix}:OFFSET?",
+                    ),
+                )
+            )
+        return ScopeFocusState(
+            time_range_s=time_range_s,
+            time_position_s=time_position_s,
+            channels=tuple(channels),
+        )
+
+    @_serialized_io
+    def configure_focus_v2(
+        self,
+        request: ScopeFocusRequest,
+        *,
+        baseline: ScopeFocusBaseline,
+    ) -> None:
+        from wavebench.instruments import ScopeFocusBaseline, ScopeFocusRequest
+
+        if not isinstance(request, ScopeFocusRequest):
+            raise TypeError("RTM2032 focus request has an invalid type")
+        if not isinstance(baseline, ScopeFocusBaseline):
+            raise TypeError("RTM2032 focus baseline has an invalid type")
+        if tuple(item.channel for item in baseline.snapshot.channels) != (1, 2):
+            raise ValueError("RTM2032 focus baseline must cover CH1 and CH2")
+        if baseline.restore_order != (
+            "scope.timebase",
+            "scope.channel_vertical",
+            "scope.channel_display",
+        ):
+            raise ValueError("RTM2032 focus baseline has an invalid restore order")
+        if not set(request.channels) <= {1, 2}:
+            raise ValueError("RTM2032 focus request must target CH1 and/or CH2")
+
+        if request.time_range_s is not None:
+            self.transport.write(f"TIMebase:RANGe {request.time_range_s:.12g}")
+        for item in request.vertical_scales:
+            self.transport.write(
+                f"CHANnel{item.channel}:SCALe {item.scale_v_per_div:.12g}"
+            )
+        before = {item.channel: item for item in baseline.snapshot.channels}
+        targets = set(request.channels)
+        for channel in (1, 2):
+            desired = True if channel in targets else (
+                False if request.hide_others else before[channel].enabled
+            )
+            if before[channel].enabled is not desired:
+                self.transport.write(
+                    f"CHANnel{channel}:STATE {'ON' if desired else 'OFF'}"
+                )
+
+    @_serialized_io
+    def restore_focus_v2(
+        self,
+        baseline: ScopeFocusBaseline,
+    ) -> ScopeFocusRestoreResult:
+        from wavebench.instruments import ScopeFocusBaseline, ScopeFocusRestoreResult
+
+        if not isinstance(baseline, ScopeFocusBaseline):
+            raise TypeError("RTM2032 focus baseline has an invalid type")
+        if tuple(item.channel for item in baseline.snapshot.channels) != (1, 2):
+            raise ValueError("RTM2032 focus baseline must cover CH1 and CH2")
+        expected_order = (
+            "scope.timebase",
+            "scope.channel_vertical",
+            "scope.channel_display",
+        )
+        if baseline.restore_order != expected_order:
+            raise ValueError("RTM2032 focus baseline has an invalid restore order")
+
+        snapshot = baseline.snapshot
+        self.transport.write(f"TIMebase:RANGe {snapshot.time_range_s:.12g}")
+        self.transport.write(f"TIMebase:POSition {snapshot.time_position_s:.12g}")
+        for item in snapshot.channels:
+            prefix = f"CHANnel{item.channel}"
+            self.transport.write(f"{prefix}:RANGe {item.range_v:.12g}")
+            self.transport.write(f"{prefix}:SCALe {item.scale_v_per_div:.12g}")
+            self.transport.write(f"{prefix}:POSition {item.position:.12g}")
+            self.transport.write(f"{prefix}:OFFSet {item.offset_v:.12g}")
+        for item in snapshot.channels:
+            self.transport.write(
+                f"CHANnel{item.channel}:STATE {'ON' if item.enabled else 'OFF'}"
+            )
+        return ScopeFocusRestoreResult(
+            status="completed",
+            attempted_fields=baseline.restore_order,
+            restored_fields=baseline.restore_order,
         )
 
     @_serialized_io

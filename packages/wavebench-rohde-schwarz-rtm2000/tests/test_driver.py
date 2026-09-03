@@ -6,6 +6,12 @@ import numpy as np
 import pytest
 
 from wavebench.errors import ConfigError, DataError, InstrumentError, OperationTimeout
+from wavebench.instruments import (
+    ScopeChannelDisplayBaseline,
+    ScopeChannelDisplayRequest,
+    ScopeChannelDisplayRestoreResult,
+    ScopeChannelDisplayState,
+)
 from wavebench.instruments.api import DriverContext
 from wavebench.instruments.capabilities import validate_declared_capabilities
 from wavebench.instruments.models import (
@@ -54,6 +60,7 @@ from wavebench_rohde_schwarz_rtm2000.driver import (
 )
 from wavebench_rohde_schwarz_rtm2000.profiles import (
     RTM2000_FFT_STATUS_V2_READABLE_FIELDS,
+    RTM2000_FOCUS_PROFILE_V2,
     RTM2000_SCOPE_EXTENSIONS,
     RTM2000_SNAPSHOT_V2_READABLE_FIELDS,
 )
@@ -284,15 +291,17 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
     assert descriptor.validate_options({}) == {"long_waveform_timeout_ms": 300_000}
     assert descriptor.scope_coupling_policy == "switchable-termination"
     assert descriptor.distribution == "wavebench-rohde-schwarz-rtm2000"
-    assert descriptor.version == "0.13.0"
-    assert descriptor.wavebench_min_version == "0.8.25"
-    assert len(descriptor.capabilities) == 24
+    assert descriptor.version == "0.15.0"
+    assert descriptor.wavebench_min_version == "0.8.26"
+    assert len(descriptor.capabilities) == 26
     assert {
+        "scope.channel_display_configure_v2",
         "scope.channel_input_state_v2",
         "scope.digital_status_v2",
         "scope.snapshot_v2",
         "scope.measurement_statistics_v2",
         "scope.fft_status_v2",
+        "scope.focus_configure_v2",
     } <= set(descriptor.capabilities)
     assert descriptor.scope_extensions is RTM2000_SCOPE_EXTENSIONS
     assert descriptor.scope_extensions.snapshot_profile_v2.readable_fields == (
@@ -306,6 +315,30 @@ def test_descriptor_and_factory_preserve_core_transport_boundary():
         RTM2000_FFT_STATUS_V2_READABLE_FIELDS
     )
     assert descriptor.scope_extensions.fft_status_profile_v2.max_queries == 3
+    assert descriptor.scope_extensions.channel_display_profile_v2.analog_channels == (
+        1,
+        2,
+    )
+    assert descriptor.scope_extensions.channel_display_profile_v2.snapshot_max_steps == 1
+    assert descriptor.scope_extensions.channel_display_profile_v2.configure_max_steps == 2
+    assert descriptor.scope_extensions.channel_display_profile_v2.restore_max_steps == 1
+    assert descriptor.scope_extensions.channel_display_profile_v2.verify_max_steps == 1
+    assert descriptor.scope_extensions.focus_profile_v2 is RTM2000_FOCUS_PROFILE_V2
+    assert RTM2000_FOCUS_PROFILE_V2.analog_channels == (1, 2)
+    assert (
+        RTM2000_FOCUS_PROFILE_V2.time_range_min_s,
+        RTM2000_FOCUS_PROFILE_V2.time_range_max_s,
+    ) == (1e-9, 100.0)
+    assert (
+        RTM2000_FOCUS_PROFILE_V2.vertical_scale_min_v_per_div,
+        RTM2000_FOCUS_PROFILE_V2.vertical_scale_max_v_per_div,
+    ) == (1e-3, 10.0)
+    assert (
+        RTM2000_FOCUS_PROFILE_V2.snapshot_max_steps,
+        RTM2000_FOCUS_PROFILE_V2.configure_max_steps,
+        RTM2000_FOCUS_PROFILE_V2.restore_max_steps,
+        RTM2000_FOCUS_PROFILE_V2.verify_max_steps,
+    ) == (12, 17, 12, 12)
     assert driver.transport is transport
     assert driver.check_errors_after_ops is False
     assert transport_opens == 1
@@ -1955,6 +1988,101 @@ def test_channel_input_state_v2_maps_portable_coupling_without_writes(
             unavailable_fields=("impedance_ohm",),
         )
     )
+    assert transport.queries == [command]
+    assert transport.writes == []
+
+
+def _channel_display_baseline(
+    channel: int,
+    *,
+    enabled: bool,
+) -> ScopeChannelDisplayBaseline:
+    return ScopeChannelDisplayBaseline(
+        context_id="context",
+        session_epoch="epoch",
+        baseline_nonce="nonce",
+        snapshot=ScopeChannelDisplayState(channel=channel, enabled=enabled),
+        restore_order=("scope.channel_display",),
+    )
+
+
+@pytest.mark.parametrize(
+    ("response", "enabled"),
+    [("1", True), ("ON", True), ("0", False), ("OFF", False)],
+)
+def test_channel_display_state_v2_is_typed_and_read_only(response, enabled):
+    command = "CHANnel2:STATE?"
+    transport = FakeTransport(responses={command: response})
+
+    assert RTM2032Scope(transport).get_channel_display_state_v2(2) == (
+        ScopeChannelDisplayState(channel=2, enabled=enabled)
+    )
+    assert transport.queries == [command]
+    assert transport.writes == []
+
+
+@pytest.mark.parametrize(("enabled", "token"), [(True, "ON"), (False, "OFF")])
+def test_channel_display_configure_v2_writes_requested_state(enabled, token):
+    transport = FakeTransport()
+    request = ScopeChannelDisplayRequest(channel=1, enabled=enabled)
+
+    assert RTM2032Scope(transport).configure_channel_display_v2(
+        request,
+        baseline=_channel_display_baseline(1, enabled=not enabled),
+    ) is None
+    assert transport.queries == []
+    assert transport.writes == [f"CHANnel1:STATE {token}"]
+
+
+@pytest.mark.parametrize(("enabled", "token"), [(True, "ON"), (False, "OFF")])
+def test_channel_display_restore_v2_replays_baseline(enabled, token):
+    transport = FakeTransport()
+    baseline = _channel_display_baseline(2, enabled=enabled)
+
+    result = RTM2032Scope(transport).restore_channel_display_v2(baseline)
+
+    assert result == ScopeChannelDisplayRestoreResult(
+        status="completed",
+        attempted_fields=("scope.channel_display",),
+        restored_fields=("scope.channel_display",),
+    )
+    result.validate_for(baseline)
+    assert transport.queries == []
+    assert transport.writes == [f"CHANnel2:STATE {token}"]
+
+
+def test_channel_display_v2_rejects_invalid_channel_and_baseline_before_io():
+    transport = FakeTransport()
+    driver = RTM2032Scope(transport)
+
+    with pytest.raises(DataError, match="RTM2032 channel must be 1 or 2"):
+        driver.get_channel_display_state_v2(3)
+    with pytest.raises(DataError, match="RTM2032 channel must be 1 or 2"):
+        driver.configure_channel_display_v2(
+            ScopeChannelDisplayRequest(channel=3, enabled=True),
+            baseline=_channel_display_baseline(3, enabled=False),
+        )
+    with pytest.raises(ValueError, match="baseline uses a different channel"):
+        driver.configure_channel_display_v2(
+            ScopeChannelDisplayRequest(channel=2, enabled=True),
+            baseline=_channel_display_baseline(1, enabled=False),
+        )
+    with pytest.raises(DataError, match="RTM2032 channel must be 1 or 2"):
+        driver.restore_channel_display_v2(
+            _channel_display_baseline(3, enabled=False)
+        )
+
+    assert transport.queries == []
+    assert transport.writes == []
+
+
+def test_channel_display_state_v2_rejects_malformed_response_without_writes():
+    command = "CHANnel1:STATE?"
+    transport = FakeTransport(responses={command: "MAYBE"})
+
+    with pytest.raises(DataError, match="invalid CHANnel1:STATE\\? response"):
+        RTM2032Scope(transport).get_channel_display_state_v2(1)
+
     assert transport.queries == [command]
     assert transport.writes == []
 
