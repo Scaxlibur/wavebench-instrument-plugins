@@ -22,7 +22,13 @@ python3 scripts/dev_env.py sync
 
 ## Metadata changes
 
-修改 `pyproject.toml`、entry point、Core dependency 或 descriptor 身份后：
+本仓各 distribution 独立版本，不使用整仓锁步版本。准备合并 `main` 时，先判断本次是否改变某个包的 wheel 内容或安装合同：
+
+- 需要提升该包版本：生产源码、descriptor、entry point、依赖、进入 METADATA 的包 README、运行时资源或 wheel-bound evidence 发生变化。
+- 不需要提升插件版本：只改测试、根文档、CI、仓库工具，或只改被 wheel／sdist 排除的本地厂商资料。
+- 只提升实际变化的包；修改 DP800 不得顺带提升未改动的 RTM2000 或其他插件。
+
+功能分支可以包含多个开发提交，只在准备合并时为每个受影响包提升一次。修改 `pyproject.toml`、entry point、Core dependency 或 descriptor 身份后：
 
 1. 核对 distribution、version、Core 版本门、entry point 与 descriptor 字段。
 2. 重新同步标准开发环境，避免旧 editable 状态伪造通过结果。
@@ -57,7 +63,7 @@ python scripts/generate_plugin_catalog.py --check
 
 ## Isolated lifecycle gate
 
-需要证明生产安装时，使用一次性虚拟环境和真实 wheel，验证：
+任何新增正式包或会改变正式 wheel 的改动，在合并前都必须使用一次性虚拟环境和真实 wheel，验证：
 
 1. 安装前的 Core 路由基线。
 2. wheel 安装成功且仅出现预期 entry point。
@@ -80,13 +86,10 @@ python scripts/generate_plugin_catalog.py --check
 
 这不是所有包的固定步骤；由当前包测试与 build 配置决定。
 
-## Release boundary
+## Main release boundary
 
-本仓没有统一 release 自动化。以下动作都不由「包验证完成」自动授权：
+本仓不以 Git tag、GitHub Release 或 PyPI 表示发布状态。插件变更合并到 `main` 即视为发布；因此分支或 PR 是 release candidate，合并前必须完成版本判断、真实发行物和隔离生命周期门禁。
 
-- 修改或创建 Git tag。
-- 创建 GitHub Release。
-- 上传 PyPI 或其他 registry。
-- push 分支、合并 PR 或发布构建产物。
+验证通过不会自动授权 push 或合并。用户没有明确要求时，只报告 `ready-to-merge`；只有变更实际进入 `main` 后才能报告 `released`。tag、Release 和外部 registry 可以另行使用，但不是本仓发布事实源，也不要求补建。
 
-交接时区分「源码合同通过」「wheel/sdist 通过」「隔离生命周期通过」和「已发布」。没有执行发布动作就不要给出发布成功结论。
+交接时按包列出旧版本、新版本、是否改变 wheel、源码合同、wheel／sdist 和隔离生命周期结果，并区分 `ready-to-merge` 与 `released`。

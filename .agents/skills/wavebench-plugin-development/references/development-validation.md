@@ -6,21 +6,23 @@
 
 开始修改前只读取与任务直接相关的材料：
 
-1. 受影响包的 `pyproject.toml`、production descriptor 和入口重导出。
-2. 即将修改的 driver、parser、profile 或工具，以及所有直接调用方。
-3. 聚焦测试、共享 fixture 和该包已有的 wheel／lifecycle 测试。
-4. 包 README 与 `doc/README*` 只用于找到型号边界和证据入口，不把其摘要当作源码合同。
-5. 涉及公共类型、capability 或恢复语义时，读取当前依赖范围对应的 WaveBench Core 模型与测试。
+1. 新驱动、新型号、新命令或新 capability 先读取项目原创的手册基线、协议审计和处置记录，再核对本地厂商原件的相关范围；普通 bug 修复只复核受影响命令。
+2. 受影响包的 `pyproject.toml`、production descriptor 和入口重导出。
+3. 即将修改的 driver、parser、profile 或工具，以及所有直接调用方。
+4. 聚焦测试、共享 fixture 和该包已有的 wheel／lifecycle 测试。
+5. 包 README 与 `doc/README*` 只用于找到型号边界和证据入口，不把其摘要当作源码合同。
+6. 涉及公共类型、capability 或恢复语义时，读取当前依赖范围对应的 WaveBench Core 模型与测试。
 
 不同仪器类型、厂商和包的实现并不统一。通道编号、单位、错误队列、二进制块、timeout、重试、状态恢复和多 entry point 行为都必须从当前包事实确认，不能从相邻包类推。
 
 ## Minimal implementation loop
 
-1. 用现有失败测试、复现或明确合同固定问题边界。
-2. 在所有调用路径共享的最小正确位置修改；不为单一实现新增抽象层。
-3. 用 FakeTransport 或当前包已有替身验证准确命令、顺序、解析、边界和失败行为。
-4. 先运行聚焦测试，再运行包级测试；只有共享代码或仓库级工具受影响时才扩大到全仓。
-5. 检查 descriptor、metadata、生成内容和公开摘要是否因行为变化而需要同步。
+1. 新协议先更新项目原创审计，固定手册依据、未知项、Core 映射和安全边界。
+2. 用现有失败测试、复现或明确合同固定问题边界。
+3. 在所有调用路径共享的最小正确位置修改；不为单一实现新增抽象层。
+4. 用 FakeTransport 或当前包已有替身验证准确命令、顺序、解析、边界和失败行为。
+5. 先运行聚焦测试，再运行包级测试；只有共享代码或仓库级工具受影响时才扩大到全仓。
+6. 检查 descriptor、metadata、生成内容、证据状态和公开摘要是否因行为变化而需要同步。
 
 不要为获得绿色测试而放宽生产限制、吞掉异常、增加盲目重试或让测试依赖实际实验室资源。
 
@@ -85,7 +87,7 @@ git diff --check
 
 ## Documentation boundary
 
-代码变更附带的短小 README 或 reference 同步属于本流程，但仍以源码事实为准。若主要任务变成文档盘点、拆分、迁移或中文页面重写，切换到 `$wavebench-docs`；不要让生产开发 Skill 承担文档信息架构。
+为具体新驱动或 capability 整理本地厂商资料、手册基线、协议审计和处置记录属于本开发流程，并且必须先于相应代码。代码变更附带的短小 README 或 Reference 同步也属于本流程，但仍以源码事实为准。若主要任务变成全仓文档盘点、拆分、迁移或页面重写，切换到 `$wavebench-docs`；不要让生产开发 Skill 承担文档信息架构。
 
 ## Completion report
 

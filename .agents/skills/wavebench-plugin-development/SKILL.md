@@ -3,16 +3,17 @@ name: wavebench-plugin-development
 description: >-
   Develop, review, package, and validate production instrument plugins in the
   wavebench-instrument-plugins monorepo. Use when work primarily changes a
-  plugin descriptor, driver, parser, profile, tests, entry point, build
-  metadata, package build or isolated lifecycle validation, conformance
-  manifest, hardware-evidence tooling, or repository-wide plugin development
-  scripts. Do not use for runtime plugin installation or removal without
-  repository changes, ordinary WaveBench operation, WaveBench Core
-  implementation, documentation-led work, or unrelated VISA/SCPI projects.
+  vendor-manual audit for a concrete driver, plugin descriptor, driver, parser,
+  profile, tests, entry point, build metadata, package build or isolated
+  lifecycle validation, conformance manifest, hardware-evidence tooling, or
+  repository-wide plugin development scripts. Do not use for runtime plugin
+  installation or removal without repository changes, ordinary WaveBench
+  operation, WaveBench Core implementation, documentation-led work, or
+  unrelated VISA/SCPI projects.
 license: MIT
 metadata:
   author: "WaveBench maintainers"
-  version: "1.0.0"
+  version: "1.1.0"
   project: "wavebench-instrument-plugins"
   specification: "https://agentskills.io/specification"
 ---
@@ -21,7 +22,7 @@ metadata:
 
 ## Core objective
 
-以可安装、可发现、可离线验证且不意外接触仪器的状态交付 WaveBench 生产插件。优先修改最小范围，并让包元数据、production descriptor、实现、测试与发行产物表达同一套事实。
+以可安装、可发现、可卸载、可离线验证且不意外接触仪器的状态交付 WaveBench 生产插件。新协议先完成本地手册整理和项目原创审计，再按 capability 做最小纵向切片，让包元数据、production descriptor、实现、测试与发行产物表达同一套事实。
 
 本流程面向 Codex 或兼容 Agent Skills 的宿主，仓库要求 Python 3.11+。验证使用已同步的 WaveBench 开发环境；实时仪器工作还需要明确授权、已确认接线和 Core 安全流程。
 
@@ -41,10 +42,11 @@ metadata:
 ## Start every task
 
 1. 用 `git rev-parse --show-toplevel` 确认位于 `wavebench-instrument-plugins` 根目录，并执行 `git status --short --branch`。保留无关用户改动，禁止隐式清理、reset 或覆盖。
-2. 将任务归为离线评审、离线代码修改、包与生命周期、只读实机证据或受控实机写入。默认只做离线工作。
-3. 读取受影响包的 `pyproject.toml`、production descriptor、实现入口和聚焦测试；涉及 Core 类型或语义时，再读取匹配版本的 Core 模型与测试。
-4. 若仓库有 `.codegraph/`，先用 CodeGraph 定位符号、调用方和测试，再完整读取即将修改的文件。
-5. 安装依赖、同步 `.venv`、构建发行产物或连接仪器前，说明影响范围、预期结果和停止条件。
+2. 将任务归为新驱动／新协议、离线评审、离线代码修改、包与生命周期、只读实机证据或受控实机写入。默认只做离线工作。
+3. 新驱动、新型号、新命令或新 capability 先检查本地厂商资料与项目原创审计；普通 bug 修复只复核受影响协议范围。随后读取包的 `pyproject.toml`、production descriptor、实现入口和聚焦测试。
+4. 涉及 Core 类型或语义时，先判断现有 kind、capability 和消费路径能否完整表达；不能表达时按跨仓合同流程处理，不在插件内复制公共接口。
+5. 若仓库有 `.codegraph/`，先用 CodeGraph 定位符号、调用方和测试，再完整读取即将修改的文件。
+6. 安装依赖、同步 `.venv`、构建发行产物、合并 `main` 或连接仪器前，说明影响范围、预期结果和停止条件。
 
 ## Risk classes
 
@@ -58,13 +60,17 @@ metadata:
 ## Non-negotiable contracts
 
 - 包内 `pyproject.toml` 与 production descriptor 是版本、entry point、兼容范围、型号和 capability 的权威来源。生成式目录只能读取并呈现这些事实。
+- 厂商手册原件和转换结果只放在被忽略且不进入 sdist 的 `doc/vendor-local/`；提交项目原创的手册基线、协议审计和 capability 处置，不提交或复制厂商原文。
+- Identity-first 是强制门禁：正式 descriptor 必须先声明 `<kind>.idn`。允许 manual-backed identity；实机证据单独记录，不能由手册推断为 hardware-verified。
 - entry point、`driver_id`、distribution、version 与 `source` 必须一致；一个包可以有多个用途明确的 production entry point，不能假定所有包只有一个。
 - descriptor 模块导入和 `descriptor()` 调用不得扫描资源、打开 transport、执行协议命令或读写文件。仪器 I/O 只能在 factory 通过 `DriverContext.open_transport()` 开始。
 - 方法存在、README、milestone、测试草案或历史证据都不能单独提升 production capability。声明前必须核对 Core 合同、生产实现、profile、安全语义和与风险匹配的验证。
+- 手册明确、Core 合同完整且离线测试通过的 capability 可以在尚无实机证据时声明，但必须明确标记 manual-backed／hardware-not-verified，不得声称物理效果、精度或固件行为已经验证。
 - 测试默认使用 FakeTransport 或等价离线替身。禁止用真实实验室地址、串口、序列号、凭据、原始波形、截图或命令日志填充跟踪文件或发行产物。
 - 不盲目重试写入、触发、采集或结果不明的操作。未知写入结果必须 fail closed，并由 latch、停止策略或上层恢复合同处理，同时覆盖测试。
 - 不假定所有包拥有相同的 conformance、恢复、wheel 内容或发布流程。先检查当前包已有合同和测试。
-- 本仓当前没有统一的发布流水线。包元数据描述可构建合同；tag、release、上传、push 或发布都需要单独请求和授权。
+- 各插件独立版本。只有 wheel 内容或安装合同发生变化的包才在合并前提升自身版本，其他包不联动。
+- 合并到 `main` 即视为本仓发布；不要求 Git tag、GitHub Release 或 PyPI。合并和 push 仍需要用户授权，验证通过不能自动扩大权限。
 
 ## Load only the relevant reference
 
@@ -72,13 +78,14 @@ metadata:
 
 | 任务 | 追加读取 |
 | --- | --- |
-| 新包、descriptor、entry point、兼容范围、capability | [repository-contract.md](references/repository-contract.md) |
-| driver、parser、profile、测试、修复、重构或代码评审 | [development-validation.md](references/development-validation.md) |
-| editable 环境、metadata、wheel、sdist、安装或卸载 | [packaging-and-lifecycle.md](references/packaging-and-lifecycle.md) |
-| conformance、实机 harness、证据升级、隐私或恢复 | [conformance-and-hardware-evidence.md](references/conformance-and-hardware-evidence.md) |
+| 从厂商手册准备新驱动、新型号／协议／capability，或处理 Core 缺口与全新仪器类型 | 先读 [instrument-driver-workflow.md](references/instrument-driver-workflow.md) |
+| 已进入正式包、descriptor、entry point、兼容范围或 capability 准入 | [repository-contract.md](references/repository-contract.md) |
+| 已开始 driver、parser、profile、测试、修复、重构或代码评审 | [development-validation.md](references/development-validation.md) |
+| 已进入 editable 环境、metadata、wheel、sdist、安装或卸载阶段 | [packaging-and-lifecycle.md](references/packaging-and-lifecycle.md) |
+| 已进入 conformance、实机 harness、证据升级、隐私或恢复阶段 | [conformance-and-hardware-evidence.md](references/conformance-and-hardware-evidence.md) |
 | Skill 本身的维护或触发回归 | [eval-prompts.md](references/eval-prompts.md) |
 
-Reference 只从本入口直接链接，保持一层目录。不要为普通 driver 修改预加载打包或实机章节。
+多阶段任务只加载当前阶段的 reference，通过退出门后再加载下一阶段；不能因为最终可能涉及打包或实机就预加载全部文件。Reference 只从本入口直接链接，保持一层目录。普通 driver 修改不预加载打包或实机章节，非 Skill 维护不读取 eval。
 
 ## Baseline validation
 

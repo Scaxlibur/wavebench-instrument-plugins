@@ -15,6 +15,7 @@ SKILL_NAME = "wavebench-plugin-development"
 MAX_BODY_LINES = 220
 MAX_BODY_TOKENS = 3500
 EXPECTED_REFERENCES = {
+    "instrument-driver-workflow.md",
     "repository-contract.md",
     "development-validation.md",
     "packaging-and-lifecycle.md",
