@@ -23,7 +23,7 @@ A1／有限 A2／Basic A3 证据，不把有限证据外推为任意型号或固
 | A2：正常 Basic／Output／Harmonic 关闭 | 同一目标上，CH1/CH2 各一次 1 Vpp Basic 写入与独立回读、各一次 Output ON/OFF，以及 CH1 一次 Harmonic 关闭均成功；最终两路 Harmonic OFF、输出 OFF，session healthy | 有限正常路径已完成；不等于完整 A2 |
 | A2：故障、拒绝和恢复 | 未人为诱发传输失败、未知写结果或写后回读不一致。首次 Basic 被既有 Harmonic 状态拒绝发生在 Basic 命令发送前；因 MAIN 已进入，核心完成一次 OFF recovery | 不作为实机故障注入或 Basic 成功证据；A0 覆盖对应注入分支 |
 | A3：Basic 示波器环回 | 在确认的高阻 CH1→CH1、CH2→CH2 接线下，CH1／CH2 的 Sine、Square、Ramp、Pulse 均于 2 kHz／2 Vpp 完成 scope capture；两次 Square 测得 25% 占空比，八次质量门均通过，最终两路输出 OFF | 精确工作点已完成；不外推 |
-| 稳定核心与发布物签核 | 当前候选 wheel binding 为 `sha256:767c46ff3978908b681982a964a23558974be1353469b0011d3112b9cec57d6e`；WaveBench `0.8.24` 仍是开发线，未执行 push、tag、发布或正式签核 | 待发布时完成 |
+| 稳定核心与发布物签核 | 当前候选 wheel binding 为 `sha256:8deea341124ff6ed04d31ebff565c656bb05bca35c848f16bb15c235f81eb312`；WaveBench `0.8.24` 仍是开发线，未执行 push、tag、发布或正式签核 | 待发布时完成 |
 
 8 份 manifest 按真实证据分别声明：Basic 配置 A3；Basic／Output／Harmonic 读取 A1；Output
 Enable／Disable A2；CH1 Harmonic Disable A2；CH2 Harmonic Disable A0。CH1 的实机关闭证据没有

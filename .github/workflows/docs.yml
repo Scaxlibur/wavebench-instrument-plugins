@@ -1,0 +1,42 @@
+name: Documentation
+
+on:
+  pull_request:
+    paths:
+      - "README.md"
+      - "doc/**"
+      - "packages/**"
+      - "scripts/audit_docs.py"
+      - "scripts/generate_plugin_catalog.py"
+      - "tests/test_docs_audit.py"
+      - "tests/test_plugin_catalog.py"
+      - ".github/workflows/docs.yml"
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "doc/**"
+      - "packages/**"
+      - "scripts/audit_docs.py"
+      - "scripts/generate_plugin_catalog.py"
+      - "tests/test_docs_audit.py"
+      - "tests/test_plugin_catalog.py"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install "pytest>=8"
+      - run: python scripts/generate_plugin_catalog.py --check
+      # Errors fail the pilot gate; known migration warnings remain visible.
+      - run: python scripts/audit_docs.py
+      - run: python -m pytest -q tests/test_docs_audit.py tests/test_plugin_catalog.py

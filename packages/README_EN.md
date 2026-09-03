@@ -2,29 +2,32 @@
 
 [中文](README.md)
 
-This directory contains independently packaged WaveBench instrument plugins. The maintained packages include five optional external editions of bundled drivers, the M3 query-only `wavebench-shengpu-sp3000a`, the Source V2 C3-audited `wavebench-siglent-sdg2000x`, `wavebench-siglent-sds3000` adopting WaveBench `0.8.24` transport/session P0, `wavebench-siglent-sds800x-hd` `0.6.0` with SDS804X HD acceptance for waveform transfer, PNG screenshots, and standalone acquisition control, and `wavebench-rigol-mso8000` `0.9.0` for MSO8104, with controlled acceptance for bounded waveform/capture, Screenshot V2, acquisition control, and cursor readout. Future packages should continue the one-instrument-or-family layout without treating bundled-driver removal as a goal or defining a second manifest, installer, or catalog protocol here.
+`packages/` contains the independently packaged WaveBench plugin distributions maintained in this repository. Each subdirectory targets one instrument or a closely related model family.
 
-`wavebench-rigol-dsg830` `0.2.0` participates in the repository development environment, completes `rf_source` M0, A1, A2, A3, A4 Pulse, and A4 Step Sweep, and requires Core `>=0.8.25,<0.9`. Its production descriptor declares `rf_source.idn`, `rf_source.snapshot`, OFF-only `rf_source.cw_configure`, safety-gated `rf_source.output`, `rf_source.pulse_configure`, and `rf_source.sweep_configure` that leaves Sweep disabled. Modulation, triggers, Sweep execution/fire, Level Sweep, and list control remain independently gated.
+## Find a plugin
 
-Each package declares its own WaveBench `0.8.x` minimum. SDS800X HD `0.6.0` requires `wavebench>=0.8.23,<0.9`, while SDG2000X `0.8.2`, SDS3000, and MSO8000 require `wavebench>=0.8.24,<0.9`. MSO8000 relies on current Core APIs that do not yet have an independent Core release, so it is not a compatibility-wheel release claim. These packages do not run with `v0.7.0` and do not automatically assume compatibility with a future `0.9` core.
+The generated [plugin catalog](../doc/reference/plugin-catalog-en.md) lists every distribution, driver ID, registered model, WaveBench compatibility range, and capability declared by the production descriptor. It is generated from package metadata, so this page does not maintain a second status table.
 
-Each maintained package should include:
+Each package README provides the next level of detail:
 
-- its own `pyproject.toml` and version;
-- a `wavebench.instruments` entry point;
-- a canonical driver ID and an explicit WaveBench compatibility range;
-- unit tests that do not access real instruments;
-- bilingual user-facing documentation;
+- applicable models and connection routes;
+- minimum configuration and a read-only starting example;
+- model-specific safety boundaries and restrictions;
+- links to current Reference, historical acceptance evidence, and vendor material.
+
+## Package contract
+
+Each maintained package includes:
+
+- its own `pyproject.toml`, metadata version, and `wavebench.instruments` entry point;
+- a canonical driver ID and explicit WaveBench compatibility range;
+- a production descriptor and offline tests that do not access real instruments;
+- Chinese and English user entry pages;
 - a package-local MIT license file and SPDX package metadata;
-- no real device resources, credentials, raw waveforms, or private experiment records.
+- public content without real device resources, credentials, raw waveforms, or private experiment records.
 
-## Additional instrument families
+One distribution may declare multiple driver entry points with distinct purposes. A README, milestone, or acceptance record must not present a capability as current before it enters the production descriptor.
 
-- [`wavebench-rigol-mso8000`](wavebench-rigol-mso8000/README_EN.md): the RIGOL MSO8104 mixed-signal oscilloscope, canonical ID `rigol.mso8104`; bounded waveform/capture, Screenshot V2, acquisition control, status, and cursor-readout paths have controlled acceptance under recorded model, firmware, and LAN/PyVISA conditions.
-- [`wavebench-rigol-dsg830`](wavebench-rigol-dsg830/README_EN.md): the RIGOL DSG830 RF signal generator, canonical ID `rigol.dsg830`; `0.2.0` completes `rf_source` M0, A1, A2, A3, A4 Pulse, and A4 Step Sweep. Its production descriptor declares `rf_source.idn`, `rf_source.snapshot`, OFF-only `rf_source.cw_configure`, safety-gated `rf_source.output`, `rf_source.pulse_configure`, and `rf_source.sweep_configure` that leaves Sweep disabled. Its [milestones](wavebench-rigol-dsg830/doc/DSG830_COVERAGE_MILESTONES_EN.md) define the remaining gates.
-- [`wavebench-shengpu-sp3000a`](wavebench-shengpu-sp3000a/README_EN.md): the Shengpu SP30120 sweep-analyzer plugin with a minimal query-only descriptor and certified RF-OFF controls.
-- [`wavebench-siglent-sds3000`](wavebench-siglent-sds3000/README_EN.md): the early SIGLENT SDS3000 plugin, strictly supporting SDS3054 firmware `8.4.1`; identity, error registers, coupling, waveform reads, and single/dual-channel capture are implemented.
-- [`wavebench-siglent-sdg2000x`](wavebench-siglent-sdg2000x/README_EN.md): the SIGLENT SDG2000X function/arbitrary waveform generator, with a completed Source V2 candidate-package audit.
-- [`wavebench-siglent-sds800x-hd`](wavebench-siglent-sds800x-hd/README_EN.md): the SIGLENT SDS800X HD oscilloscope family, with accepted waveform, PNG screenshot, and standalone acquisition-control paths.
+## Add a plugin
 
-These packages provide an independent `pyproject.toml` and one canonical entry point, so they participate in the repository development environment. Incomplete capabilities are not declared.
+Read the WaveBench Core [plugin development guide](https://github.com/Scaxlibur/wavebench/blob/master/docs/development/plugin-development.md) and [instrument driver guide](https://github.com/Scaxlibur/wavebench/blob/master/docs/development/instrument-drivers.md) before adding a package. The [development environment guide](../doc/DEVELOPMENT_EN.md) covers editable installation, checks, and tests for this repository.

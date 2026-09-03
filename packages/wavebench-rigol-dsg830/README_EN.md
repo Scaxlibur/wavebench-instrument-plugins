@@ -2,140 +2,19 @@
 
 [中文](README.md)
 
-This is a WaveBench executable instrument plugin for the RIGOL DSG830 RF signal generator. The
-DSG800 programming guide covers DSG830 and DSG815; this initial package registers DSG830 only.
+A WaveBench instrument plugin for the RIGOL DSG830 RF signal generator. The package registers the canonical driver ID `rigol.dsg830`, declares no aliases, and does not replace a bundled WaveBench driver.
 
-## Current status
+## Start here
 
-Version `0.2.0` completes the RF M0 read-only migration, M1 offline CW mapping, M2 offline output
-mapping, M3 internal-sine modulation mapping, the M3-MO bounded modulated-output contract, M4 Pulse plus the production frequency-only Step Sweep subset, and one bounded A5 Pulse Output route: its descriptor uses
-`kind="rf_source"`, declares one `rf_out` port with static limits and a 50-ohm dBm reference, and ships a
-strict snapshot parser plus one-write `:FREQ`/`:LEV`/`:OUTP ON|OFF` mappings, internal-sine AM/FM/PM
-configuration/readback mappings, internal/single Pulse timing/polarity mapping, a `:PULM:OUT:STAT` mapping, and a disabled Step Sweep profile mapping.
+- [Check current capabilities, profiles, and restrictions](doc/reference-en.md)
+- [Read development milestones and hardware evidence](doc/README_EN.md)
+- [Install and manage plugins with WaveBench Core](https://github.com/Scaxlibur/wavebench/blob/master/docs/how-to/manage-plugins.md)
 
-A1 read-only evidence, A2 controlled-output evidence, A3 CW-loopback evidence, A4 modulation/Pulse/Step Sweep evidence, fixed-profile A4-MO evidence, and one A5 Pulse Output route have completed and been reviewed.
-The production descriptor declares `rf_source.idn`, `rf_source.snapshot`, `rf_source.cw_configure`,
-`rf_source.output`, `rf_source.modulation_configure`, `rf_source.modulation_disable`, `rf_source.modulated_output_enable`, `rf_source.pulse_configure`, `rf_source.pulse_output`, and `rf_source.sweep_configure`. A `read_write` CW, modulation, Pulse, Pulse Output, or Step Sweep request requires its declared preflight; ordinary RF ON/OFF
-also requires complete per-port safety configuration, a fresh snapshot, and independent readback. Ordinary RF ON still requires modulation disabled. The example
-configuration remains `read_only` and does not enable writes by default.
+Package metadata and the production descriptor are authoritative for the current metadata version, compatibility range, and capabilities. The repository-level generated [plugin catalog](https://github.com/Scaxlibur/wavebench-instrument-plugins/blob/main/doc/reference/plugin-catalog-en.md) provides a checked summary.
 
-The local A2 controlled-output harness, regression tests, and resource-free setup template remain in the source
-checkout as regression protection for this acceptance protocol. The evidence confirms final RF OFF; after the
-production descriptor declares `rf_source.output`, the harness refuses reruns so a temporary descriptor cannot bypass
-the production capability. A2 itself does not authorize CW; the separate A3 evidence promotes it.
+## Read-only start
 
-The local A3 CW-loopback harness, regression tests, and resource-free setup template are also in the source checkout.
-They require initial RF OFF, independent readback for two OFF-only CW writes, one low-power RF ON/OFF, and a current
-CH2-buffer signal observation. CH2 only establishes visible signal; source readback remains the frequency and power
-evidence. Its completed, reviewed evidence separately promotes `rf_source.cw_configure`.
-
-The M3 driver implements offline state readback plus `get_rf_modulation_snapshot()`, `configure_rf_modulation()`, and
-`disable_rf_modulation()` mappings for internal Sine only: AM depth `0–100 %`, FM deviation `0.1 Hz–1 MHz`, PM
-deviation `0–5 rad`, and a `10 Hz–100 kHz` internal frequency for each mode. The production descriptor narrows this to the verified profile: AM `0–100 %`, FM `0.1 Hz–1 MHz`, PM exactly `1.25 rad`, and `10 Hz–100 kHz` internal frequency. Core requires RF OFF, all AM/FM/PM modes
-disabled, Pulse/Sweep disabled, and no active protection condition before a configuration write. The shared FM/PM
-selection is read separately: when all modes are disabled, a different inactive selection may be changed to the
-requested type, and postcondition then requires that target type, exactly the target mode, and the global modulation
-switch. `disable_rf_modulation()` only disables the requested mode and global modulation when RF is OFF and that mode is
-the only active one; it is not a reset and does not retry an uncertain write.
-
-The source checkout includes an A4 RF-OFF modulation-evidence harness, fake regressions, and a resource-free setup
-template. Each invocation validates one internal-Sine mode; after configuration readback, it disables that same mode and
-the final state must establish both RF output and modulation OFF. Explicit `--recover` only restores a known single
-active mode and writes a private recovery record. Explicit `--diagnose` retains the original `read_only` configuration,
-reads the initial/final RF snapshots and one requested profile, and requires a zero-write transport audit. A4 does not
-read CH2 or invoke RF-output control; recovery and diagnostic records are not new capability-promotion evidence. AM, FM,
-and PM RF-OFF sequences passed; PM is limited to `1.25 rad` in the production profile to match the strict readback evidence.
-
-M3-MO makes RF output with active modulation a separate `rf_source.modulated_output_enable` capability rather than
-relaxing ordinary `rf_source.output`. It accepts only an already-active, exactly read-back internal-Sine profile and
-requires RF OFF, Pulse/Sweep disabled, clear protection, complete per-port safety configuration, and a confirmed
-50-ohm actual termination; success performs exactly one RF ON. An uncertain write or readback never retries ON and may
-only use the existing one-shot guarded RF-OFF recovery. A4-MO completed controlled hardware acceptance for AM `50 %` at
-`1 kHz`, FM `20 kHz` deviation at `1 kHz`, and PM `1.25 rad` deviation at `1 kHz`, each with RF `1 MHz` at `-50 dBm`.
-CH2's current `DEF` buffer showed signal presence with an explicit 50-ohm declaration. The FM/PM records additionally
-use WaveBench waveform summary and FFT analysis for amplitude, carrier, and spectral-quality observations; they do not
-infer dBm, FM deviation, PM deviation, modulation accuracy, or spectral compliance. The scope neither reads nor controls
-CH1 or interprets LF OUTPUT as a modulation measurement. Final RF OFF, target/global modulation OFF, and healthy closure
-were independently verified. The production descriptor therefore declares AM `50 %`/`1 kHz`, FM `20 kHz`/`1 kHz`, and PM
-`1.25 rad`/`1 kHz`, all with maximum `-50 dBm`; callers must explicitly turn RF OFF and then use
-`rf_source.modulation_disable` for cleanup.
-
-The M4 Pulse subset is internal/single only. `configure_rf_pulse()` fixes source, mode, period, width, and polarity,
-then ends with `:PULM:STAT OFF`; it never invokes RF output, rear Pulse I/O, or trigger commands. The source checkout
-now includes `tools/a4_pulse_evidence.py`, fake regressions, and a resource-free setup template. Its `--execute` path
-allows one RF-OFF/Pulse-OFF configuration and independent readback, while `--diagnose` preserves `read_only` and has a
-zero-write audit. Neither path reads CH1/CH2. Controlled hardware validation has now passed for both normal and
-inverted polarity, with one RF-OFF/Pulse-OFF configuration, independent readback, and final-off verification per run;
-each successful path has 38 queries and 6 configuration writes. After evidence review,
-`rf_source.pulse_configure` is production-declared and the historical harness rejects reruns.
-
-The M4 frequency-only Step Sweep subset fixes `STEP`/`FWD`/`RAMP`/`LIN`. `get_rf_sweep_snapshot()` reads type,
-direction, shape, spacing, start/stop frequency, points, dwell, and state; `configure_rf_sweep()` writes only that
-profile and ends with `:SWE:STAT OFF`. It never writes `:SWE:EXEC`, any trigger, Level Sweep, list setup, RF output,
-or rear-panel I/O. Core requires RF output, modulation, Pulse, and Sweep OFF with no active protection before and
-after the write, then independently reads the complete profile. The source checkout includes
-`tools/a4_step_sweep_evidence.py` and a resource-free template, both covered by fake regressions and controlled hardware acceptance: `--diagnose` has
-25 queries and zero writes, while a successful explicit `--execute` path has 41 queries and 9 configuration writes.
-It does not read scope, invoke RF output, or arm/fire Sweep. Both paths passed, with an independent final confirmation that RF output, modulation, Pulse, and Sweep were disabled and no protection condition was active. The historical harness rejects reruns after the promotion.
-
-The A5-0 offline mapping adds `get_rf_trigger_snapshot()`, which strictly reads logical Pulse/Sweep trigger configuration through six fixed query forms. It sends no setter, `*TRG`, `:TRIG:PULS`, `:TRIG:SWE`, `:SWE:EXEC`, `:PULM:OUT`, or RF-output write. It is not a physical trigger/sync connector contract; `rf_out` only identifies the RF output whose behavior the settings govern.
-
-The bounded A5 physical acceptance covers exactly one route: DSG830 `PULSE IN/OUT` in the output direction to an RTM2032 `EXT TRIGGER INPUT`. `rf_source.pulse_output` only changes that output state. Its fixed profile is `0 V`/`3.3 V`, about `600 ohms`, internal/single/normal, period `1 ms`, width `100 us`; RF output, modulation, Pulse, and Sweep must remain off. The isolated harness uses the scope only for an external/normal/single/auto trigger sequence, so it creates neither an RTM driver API nor an RTM production capability. The successful record independently confirms final RF output and Pulse Output OFF. The existing Pulse profile and scope acquisition state are deliberately not restored. Electrical values follow the [DSG800A datasheet](https://www.rigol.com/dam/global/downloads/brochures/en/data-sheet/rf-signal-generators/DSG800A_datasheet_EN.pdf); the historical harness rejects reruns after promotion.
-
-The production descriptor declares no error queue, `rf_source.trigger_snapshot`, Pulse input, `TRIGGER IN`, trigger, Sweep execution/fire, sync/reference control, Level Sweep, list control, or arbitrary SCPI passthrough.
-`rf_source.cw_configure` covers only audited OFF-only single-field frequency/dBm writes on `rf_out`, and
-`rf_source.output` only audited `rf_out` ON/OFF. `rf_source.pulse_configure` covers only the verified RF-OFF
-internal/single profile and leaves Pulse OFF. `rf_source.pulse_output` covers only the fixed output profile of `pulse_in_out`. `rf_source.sweep_configure` covers only the verified fixed profile and leaves Sweep disabled.
-`rf_source.modulation_configure` covers only the verified RF-OFF internal-Sine profile, with PM exactly `1.25 rad`; `rf_source.modulation_disable` only closes one known active mode while RF is OFF; `rf_source.modulated_output_enable` covers AM `50 %` at `1 kHz`, FM `20 kHz` at `1 kHz`, and PM `1.25 rad` at `1 kHz`, all with maximum `-50 dBm`; ordinary `rf_source.output` ON still requires modulation disabled. Every other capability remains behind its A4–A5 evidence gate.
-
-## Development documentation
-
-- [DSG830 plugin documentation](doc/README_EN.md)
-- [DSG830 coverage milestones](doc/DSG830_COVERAGE_MILESTONES_EN.md)
-- [A2 local-evidence setup template](tools/a2_output_evidence.setup.template.toml)
-- [A3 local-evidence setup template](tools/a3_cw_evidence.setup.template.toml)
-- [A4 local-evidence setup template](tools/a4_modulation_evidence.setup.template.toml)
-- [A4-MO local-evidence setup template](tools/a4_modulated_output_evidence.setup.template.toml)
-- [A4-MO FM/PM local-evidence setup template](tools/a4_fm_pm_modulated_output_evidence.setup.template.toml)
-- [A4 Pulse local-evidence setup template](tools/a4_pulse_evidence.setup.template.toml)
-- [A4 Step Sweep local-evidence setup template](tools/a4_step_sweep_evidence.setup.template.toml)
-- [A5-0 trigger-configuration diagnostic setup template](tools/a5_trigger_snapshot_evidence.setup.template.toml)
-- [A5 Pulse Output local-evidence setup template](tools/a5_pulse_output_evidence.setup.template.toml)
-
-The milestone document distinguishes the current seed, offline contracts, and A1–A5 hardware evidence. A
-production descriptor capability is not promoted by seed code or fake-transport tests alone.
-
-## Identity and compatibility
-
-- Distribution: `wavebench-rigol-dsg830`
-- Canonical driver ID: `rigol.dsg830`
-- Registered model: `DSG830`
-- WaveBench: `>=0.8.25,<0.9`
-- Python: `>=3.11`
-- Transport backend: `pyvisa`
-- Manual-backed connection routes: USB and LAN
-
-The plugin declares no alias and does not replace a bundled WaveBench driver. Configure canonical ID
-`rigol.dsg830` explicitly.
-
-## Local programming guide
-
-Store vendor source material in the ignored [`doc/vendor-local/`](doc/vendor-local/README.md) directory.
-Recommended filenames:
-
-```text
-DSG800_ProgrammingGuide_EN.pdf
-DSG800_ProgrammingGuide_EN.md
-```
-
-The official source is [DSG800 ProgrammingGuide V1.0](https://www.rigol.com/intl/dam/global/downloads/brochures/en/program-guide/rf-signal-generators/DSG800_ProgrammingGuide_EN.pdf).
-The RIGOL download page records version `V1.0` and date `2019-09-30`. Its introduction states that the
-DSG800 series includes DSG830 and DSG815 and uses DSG830 as the default command example. Do not add the
-original PDF or converted copy to Git or a distribution.
-
-## Current configuration (read-only identity and status)
-
-This example uses an RFC 5737 documentation address and uses `read_only` access for identity and status queries:
+This configuration uses an RFC 5737 documentation address and allows identity and status queries only:
 
 ```toml
 [rf_source]
@@ -144,37 +23,20 @@ resource = "TCPIP::192.0.2.83::INSTR"
 access = "read_only"
 ```
 
-This `[rf_source]` configuration is for the production descriptor's `rf_source.idn` and `rf_source.snapshot`. It is outside the
-normal source Vpp, channel, and run-plan workflow. Future energy-related capabilities also require complete
-per-`port_id` safety configuration and a physical-termination declaration; the package never infers actual
-termination from a connector label.
+A `read_only` configuration performs no reset, RF-output transition, frequency or power write, modulation, Pulse, or Sweep configuration. See the [WaveBench Core configuration Reference](https://github.com/Scaxlibur/wavebench/blob/master/docs/reference/configuration.md) for exact generic fields and workflows.
 
 ## Safety boundary
 
-- Descriptor import does not create a transport, scan ports, or send SCPI.
+- Importing the descriptor creates no transport, scans no ports, and sends no SCPI.
 - The factory opens only the configured transport through `DriverContext`.
-- Default tests use fake transport only and never connect to hardware.
-- The snapshot path issues only `*IDN?`, `:FREQ?`, `:LEV?`, `:OUTP?`, `:MOD:STAT?`, `:PULM:STAT?`,
-  `:SWE:STAT?`, and `:STAT:QUES:POW:COND?`; A1 exposes this read-only path as a production capability.
-- Default tests use fake transport and never connect to hardware. A normal production `read_only` configuration does
-  not reset the device or change RF output, power, frequency, trigger, modulation, or sweep; A2/A3/A4/A4-MO/A5 evidence
-  separately opens only their bounded output, CW, modulation-cleanup, Pulse, Step Sweep, fixed-profile modulated-output,
-  and one Pulse Output operation, while ordinary writes still require explicit `read_write`, capability, and complete preflight.
-- Hardware testing requires separate authorization and a reviewed resource, firmware, terminator, RF-output
-  state, safety limit, and restoration procedure.
+- Writes require explicit `read_write` access plus the corresponding capability, device state, port safety limits, and readback.
+- The 50-ohm dBm reference for `rf_out` does not prove the actual termination; WaveBench does not infer a load from a connector name.
+- Rear-panel `PULSE IN/OUT` and the 50-ohm RF output are separate interfaces and must not share electrical assumptions.
+- Hardware tests require separate authorization and prior confirmation of the resource, firmware, termination, initial output state, safety limits, and recovery procedure.
 
-### Electrical boundary for controlled RF observation
+Default tests use fake transports and do not connect to real instruments. See the [current Reference](doc/reference-en.md) for the available write surface, fixed profiles, and explicit exclusions.
 
-- The current controlled wiring connects RF output directly to a confirmed 50-ohm CH2 scope input. LF output connects to high-impedance CH1 only as an independent supplementary observation path. Current DSG830 capabilities neither control LF output nor treat CH1 results as evidence of RF output, modulation, or trigger/sync behavior.
-- CH2 input voltage must remain below `5 V RMS`. On a direct 50-ohm path with no external amplifier, that limit is about `+26.99 dBm`; the descriptor's declared `+20 dBm` maximum is about `2.24 V RMS`. Completed controlled hardware evidence uses no more than `-40 dBm`, and the fixed A4-MO profile uses `-50 dBm`.
-- This conversion only checks electrical margin for a direct 50-ohm connection. It does not turn source dBm readback into a Vpp measurement and does not apply to wiring with an external amplifier, a different termination, or a differently rated instrument input. Such a change requires a new safety-limit and recovery review.
-
-### Electrical boundary for controlled Pulse Output
-
-- The verified wiring is only DSG830 `PULSE IN/OUT` output to RTM2032 `EXT TRIGGER INPUT`. The DSG830 profile is fixed at `0 V`/`3.3 V` and about `600 ohms`; this high-impedance trigger input is not the CH2 50-ohm RF path.
-- `rf_source.pulse_output` neither detects nor configures the receiver and does not infer success from receiver state. Any change to receiver, cabling, adapters, Pulse profile, or interface direction requires separate evidence.
-
-## Development verification
+## Development checks
 
 ```bash
 python -m pytest -q packages/wavebench-rigol-dsg830/tests
@@ -182,9 +44,8 @@ python -m ruff check packages/wavebench-rigol-dsg830
 python -m wavebench plugin package check packages/wavebench-rigol-dsg830
 ```
 
-Use the repository [editable development environment](../../doc/DEVELOPMENT_EN.md) for regular source
-development. Release acceptance still uses a real wheel and a disposable virtual environment.
+Use the repository-level [editable development environment](https://github.com/Scaxlibur/wavebench-instrument-plugins/blob/main/doc/DEVELOPMENT_EN.md) for ordinary source work.
 
 ## License
 
-This plugin is distributed under the [MIT License](LICENSE).
+This plugin uses the [MIT License](LICENSE).
