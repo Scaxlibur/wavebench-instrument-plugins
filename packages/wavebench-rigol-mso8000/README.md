@@ -15,8 +15,8 @@
 
 当前实现覆盖有界 waveform fetch／capture、非重放错误队列、coupling、autoscale、截图，以及
 受限的 math、统计、FFT、采集、数字状态、snapshot 和 cursor 接口。精确 capability、binary
-预算、profile、未支持项和实机范围以 production descriptor、[功能覆盖矩阵](doc/MSO8104_COVERAGE_MATRIX.md)
-及[验收记录](doc/MSO8104_HARDWARE_ACCEPTANCE.md)为准。
+预算和 profile 以 production descriptor 为准；[功能覆盖矩阵](doc/MSO8104_COVERAGE_MATRIX.md)
+说明当前行为与未支持项，[验收记录](doc/MSO8104_HARDWARE_ACCEPTANCE.md)限定已有实机证据的范围。
 
 平均采集不在当前 descriptor 中。`tcpip`、`usb` 和 `gpib` resource scheme 只表示手册与离线
 路由合同，不等于相应连接已经通过实机验收。

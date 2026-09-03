@@ -7,13 +7,13 @@
 
 ## 当前 Reference
 
-- [MSO8104 编程手册功能覆盖矩阵](MSO8104_COVERAGE_MATRIX.md)
+- [MSO8104 当前功能覆盖与行为边界](MSO8104_COVERAGE_MATRIX.md)
 - [仓库级插件目录](../../../doc/reference/plugin-catalog.md)
 
 ## 验收与历史证据
 
-- [MSO8104 受控实机验收记录](MSO8104_HARDWARE_ACCEPTANCE.md)
-- [MSO8104 功能覆盖里程碑](MSO8104_COVERAGE_MILESTONES.md)
+- [MSO8104 受控实机条件、结果与未验收范围](MSO8104_HARDWARE_ACCEPTANCE.md)
+- [MSO8104 开发里程碑与历史决策](MSO8104_COVERAGE_MILESTONES.md)
 - [0.9.0 开发与验收存档](archive/MSO8000_README_0.9.md)
 - [跨插件验收与历史证据索引](../../../doc/evidence/README.md)
 

@@ -15,9 +15,10 @@ production descriptor registers only the MSO8104.
 
 The implementation covers bounded waveform fetch/capture, non-replayed error draining, coupling,
 autoscale, screenshots, and constrained math, statistics, FFT, acquisition, digital-state, snapshot,
-and cursor interfaces. The production descriptor, [coverage matrix](doc/MSO8104_COVERAGE_MATRIX_EN.md),
-and [acceptance record](doc/MSO8104_HARDWARE_ACCEPTANCE_EN.md) are authoritative for exact capabilities,
-binary budgets, profiles, unsupported areas, and hardware scope.
+and cursor interfaces. The production descriptor is authoritative for exact capabilities, binary
+budgets, and profiles. The [coverage matrix](doc/MSO8104_COVERAGE_MATRIX_EN.md) explains current
+behavior and unsupported areas; the [acceptance record](doc/MSO8104_HARDWARE_ACCEPTANCE_EN.md)
+bounds the available hardware evidence.
 
 Average capture is not declared. The `tcpip`, `usb`, and `gpib` resource schemes represent manual-
 backed and offline routing contracts, not hardware acceptance for each connection type.

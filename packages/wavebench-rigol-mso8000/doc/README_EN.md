@@ -8,13 +8,13 @@ current version, model, compatibility range, and capabilities.
 
 ## Current Reference
 
-- [MSO8104 programming-guide coverage matrix](MSO8104_COVERAGE_MATRIX_EN.md)
+- [MSO8104 current coverage and behavior boundaries](MSO8104_COVERAGE_MATRIX_EN.md)
 - [Repository plugin catalog](../../../doc/reference/plugin-catalog-en.md)
 
 ## Acceptance and historical evidence
 
-- [MSO8104 controlled hardware acceptance](MSO8104_HARDWARE_ACCEPTANCE_EN.md)
-- [MSO8104 feature-coverage milestones](MSO8104_COVERAGE_MILESTONES_EN.md)
+- [MSO8104 controlled hardware conditions, results, and unaccepted scope](MSO8104_HARDWARE_ACCEPTANCE_EN.md)
+- [MSO8104 development milestones and historical decisions](MSO8104_COVERAGE_MILESTONES_EN.md)
 - [0.9.0 development and acceptance archive](archive/MSO8000_README_0.9_EN.md)
 - [Cross-plugin acceptance and historical evidence index](../../../doc/evidence/README_EN.md)
 
