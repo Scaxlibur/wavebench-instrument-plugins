@@ -3,7 +3,7 @@
 [English](DP800_COVERAGE_MATRIX_EN.md)
 
 本页将 DP800 编程手册的功能域映射到外置 `wavebench-rigol-dp800` 插件当前公开的
-WaveBench capability 和 SCPI 表面。当前包版本、依赖和入口点以[包元数据](../pyproject.toml)
+WaveBench capability 和 SCPI 表面。当前包版本、依赖和入口点以 [包元数据](../pyproject.toml)
 为准，型号、通道、配置字段和 capability 以
 [production descriptor](../src/wavebench_rigol_dp800/descriptor.py) 为准，精确命令、解析和
 事务行为以 [driver](../src/wavebench_rigol_dp800/driver.py) 为准。

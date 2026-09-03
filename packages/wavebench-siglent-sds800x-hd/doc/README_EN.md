@@ -8,8 +8,13 @@ authoritative for the current version, models, compatibility range, and capabili
 
 ## Current Reference
 
-- [Programming-guide coverage matrix](SDS800X_HD_COVERAGE_MATRIX_EN.md)
+- [Current coverage and behavior boundaries](SDS800X_HD_COVERAGE_MATRIX_EN.md)
 - [Repository plugin catalog](../../../doc/reference/plugin-catalog-en.md)
+
+## Development
+
+- [Feature-coverage development roadmap](SDS800X_HD_COVERAGE_MILESTONES_EN.md)
+- [Repository development environment](../../../doc/DEVELOPMENT_EN.md)
 
 ## Acceptance and conformance
 
@@ -20,9 +25,8 @@ authoritative for the current version, models, compatibility range, and capabili
 Acceptance and conformance pages preserve evidence for particular devices, versions, and points in
 time. They do not independently promote current capabilities.
 
-## Vendor material and development
+## Vendor material
 
 - [Local CN11G programming-guide storage rules](vendor-local/README.md)
 - [SIGLENT SDS800X HD product material](https://www.siglent.com/int/products-overview/sds800x-hd/)
-- [Repository development environment](../../../doc/DEVELOPMENT_EN.md)
 - [Return to the plugin landing page](../README_EN.md)

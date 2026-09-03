@@ -24,14 +24,15 @@ under the Git-ignored, wheel/sdist-excluded `doc/vendor-local/` directory.
 
 This matrix groups the manual into auditable functional domains instead of treating set/query
 variants, abbreviations, or transcription headings as a completion denominator. `rigol.dg4202`
-retains the legacy capabilities; `rigol.dg4202-v2` adds only the restricted Sweep capabilities
-declared by its descriptor. Neither is a general DG4000 SCPI shell.
+retains the legacy capabilities; `rigol.dg4202-v2` adds restricted Sweep; and
+`rigol.dg4202-v2-workspace` exposes only the Source V2 read/output-disable substrate plus one
+instrument-scoped volatile-ARB workspace replacement. None is a general DG4000 SCPI shell.
 
 ## Current public write entry points
 
 The DG descriptor sets `v1_route_migration_enabled=false`. V2 capabilities are called only through
-explicit V2 entry points and do not take over legacy V1 routes; Sweep is public only through
-`rigol.dg4202-v2`.
+explicit V2 entry points and do not take over legacy V1 routes. Sweep and the volatile workspace are
+exposed by separate opt-in descriptors.
 
 | Capability | Current entry point and boundary |
 |---|---|
@@ -40,11 +41,14 @@ explicit V2 entry points and do not take over legacy V1 routes; Sweep is public 
 | `source.output_v2` | CLI `source output-v2`; run `source.output_enable_v2` / `source.output_disable_v2`. Core applies V2 preflight and final-state readback independently to ON and OFF. |
 | `source.sweep_configure_v2` | `rigol.dg4202-v2` only; run `source.sweep_configure_v2`. Output must be OFF, the V2 snapshot fresh, and Burst/Modulation OFF. Configuration has independent readback. |
 | `source.sweep_fire_v2` | `rigol.dg4202-v2` only; run `source.sweep_fire_v2`. It requires a same-session configured Sweep, selected-channel output ON, and manual trigger. It is never blindly retried. |
+| `source.arbitrary_workspace_volatile_replace_v2` | `rigol.dg4202-v2-workspace` only. Requires fresh V2 snapshots for CH1/CH2 with both outputs OFF. `workspace_id` is `volatile`; the profile accepts 2–16,384 points and at most 32,768 payload bytes. The write has no channel selector, makes no claim that either channel selected USER, cannot read back or restore prior content, and latches configuration writes on an ambiguous result. |
 | Legacy V1 routes | `source.set-*`, `source.output`, discrete frequency response, `arb-load`, basic restore, and their existing artifacts retain V1 contracts. |
 
-The production descriptors expose no volatile-ARB, Burst, Coupling, Noise Overlay, or Sync write
-capability beyond these entries. See the [coverage milestones](DG4000_COVERAGE_MILESTONES_EN.md)
-for the accepted hardware scope and unpassed failure gates.
+The base and Sweep descriptors do not expose the workspace write. On the workspace descriptor,
+`source.output_v2` permits read/disable only. None of the three production descriptors exposes
+Burst, Coupling, Noise Overlay, or Sync writes. See the
+[coverage milestones](DG4000_COVERAGE_MILESTONES_EN.md) for accepted hardware scope and unpassed
+failure gates.
 
 ## Functional coverage
 
@@ -63,6 +67,7 @@ for the accepted hardware scope and unpassed failure gates.
 | Burst, Pulse, Marker, Harmonic | `BURSt:*`, `PULSe:*`, `MARKer:*`, `HARMonic:*` | Query-only facets in `source.snapshot_v2`; Harmonic is `PARTIAL` | Per-order Harmonic, Marker writes, and configure/trigger APIs are not public. Missing fields are not inferred from adjacent evidence. |
 | Modulation | `MOD:*` | `source.channel_profile` and `source.snapshot_v2` return state/type query-only | No mode-specific parameters or setters are public. State/type queries are not modulation-control capability. |
 | DAC14 arbitrary upload | `TRACe:DATA:DAC VOLATILE,<binary-block>` | `source.arbitrary_upload` | Accepts only validated little-endian `DG4000DacBlock`; target must be OFF, FIX, and Sweep OFF. Upload overwrites volatile USER data and cannot restore it. |
+| Source V2 volatile workspace | `TRACe:DATA:DAC VOLATILE,<binary-block>` | `source.arbitrary_workspace_volatile_replace_v2`, only on `rigol.dg4202-v2-workspace` | Instrument-scoped with no channel selector; both outputs must be OFF. It reports write completion and payload identity, does not verify content, and cannot restore the previous workspace. |
 | Arbitrary diagnostic queries | `FUNC?`, `FUNC:USER?`, candidate ARB/DATA queries | `source.arbitrary_probe` | Accepts question-mark candidates only and records the error queue. This is troubleshooting, not stable arbitrary-wave capability. |
 | Arbitrary editing, float, DAC16 | `TRACe:DATA`, `DAC16`, `POINts`, `VALue`, `LOAD?` | Not public | Formats, byte order, memory lifecycle, and readback have no public contract. |
 | Frequency counter | `COUNter:*` | `source.counter_profile`, `source.counter_configure_v2`, `source.counter_enable_v2`, `source.counter_measure_v2` | Configuration writes one field at a time; enable/disable is separate; measurement requires enabled state. Auto, gate, HF, sensitivity, display, and clear are not public. |

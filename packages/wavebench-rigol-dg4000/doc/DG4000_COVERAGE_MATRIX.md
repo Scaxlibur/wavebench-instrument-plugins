@@ -3,7 +3,7 @@
 [English](DG4000_COVERAGE_MATRIX_EN.md)
 
 本页将 DG4000 编程手册的功能域映射到外置 `wavebench-rigol-dg4000` 插件当前公开的
-WaveBench capability 和 SCPI 表面。当前包版本与入口点以[包元数据](../pyproject.toml)为准，
+WaveBench capability 和 SCPI 表面。当前包版本与入口点以 [包元数据](../pyproject.toml)为准，
 型号、capability 和操作方向以 [production descriptor](../src/wavebench_rigol_dg4000/descriptor.py)
 为准，精确命令与事务行为以 [driver](../src/wavebench_rigol_dg4000/driver.py) 为准。
 
@@ -18,13 +18,15 @@ WaveBench capability 和 SCPI 表面。当前包版本与入口点以[包元数�
 本地转录只用于内部审计，位于 Git 忽略且不进入 wheel／sdist 的 `doc/vendor-local/`。
 
 本矩阵按可审计的功能域说明覆盖情况，不以 set/query 变体、短写或转录标题计算完成率。
-`rigol.dg4202` 保留 legacy capability；`rigol.dg4202-v2` 只额外公开 descriptor 中声明的
-受限 Sweep 能力。两者都不是通用 DG4000 SCPI shell。
+`rigol.dg4202` 保留 legacy capability；`rigol.dg4202-v2` 额外公开受限 Sweep；
+`rigol.dg4202-v2-workspace` 只公开 Source V2 读取／输出关闭基础和一项仪器级 volatile ARB
+workspace 替换能力。三个入口都不是通用 DG4000 SCPI shell。
 
 ## 当前公开写入口
 
 DG descriptor 设置 `v1_route_migration_enabled=false`。V2 capability 只通过显式 V2
-入口调用，不接管 legacy V1 route；Sweep 只由 `rigol.dg4202-v2` 公开。
+入口调用，不接管 legacy V1 route；Sweep 和 volatile workspace 分别由两个独立 opt-in
+descriptor 公开。
 
 | Capability | 当前入口与边界 |
 |---|---|
@@ -33,10 +35,13 @@ DG descriptor 设置 `v1_route_migration_enabled=false`。V2 capability 只通�
 | `source.output_v2` | CLI `source output-v2`；run `source.output_enable_v2` / `source.output_disable_v2`。Core 分别对 ON 和 OFF 执行 V2 preflight 与最终状态回读。 |
 | `source.sweep_configure_v2` | 仅限 `rigol.dg4202-v2`；run `source.sweep_configure_v2`。输出必须 OFF，V2 snapshot 必须 fresh，Burst／Modulation 必须 OFF；配置后独立回读。 |
 | `source.sweep_fire_v2` | 仅限 `rigol.dg4202-v2`；run `source.sweep_fire_v2`。必须复用同一 session 中已配置的 Sweep，当前通道输出必须 ON，触发源必须为 manual；不得盲目重试。 |
+| `source.arbitrary_workspace_volatile_replace_v2` | 仅限 `rigol.dg4202-v2-workspace`。需要 CH1／CH2 的 fresh V2 snapshot 且两路输出均为 OFF；`workspace_id` 固定为 `volatile`，接受 2–16,384 点且 payload 不超过 32,768 bytes。写入没有 channel selector，不声明哪一路选择 USER，也不能回读或恢复此前内容；结果不明会锁停配置写入。 |
 | Legacy V1 route | `source.set-*`、`source.output`、离散频响、`arb-load`、basic restore 与现有 artifact 保持 V1 合同。 |
 
-除上述入口外，production descriptor 不公开 volatile ARB、Burst、Coupling、Noise Overlay
-或 Sync 写 capability。实机适用范围与尚未通过的故障门见[功能覆盖里程碑](DG4000_COVERAGE_MILESTONES.md)。
+基础和 Sweep descriptor 不公开 workspace 写入；workspace descriptor 的 `source.output_v2`
+只提供读取和关闭方向。三个 production descriptor 都不公开 Burst、Coupling、Noise Overlay
+或 Sync 写 capability。实机适用范围与尚未通过的故障门见
+[功能覆盖里程碑](DG4000_COVERAGE_MILESTONES.md)。
 
 ## 功能覆盖
 
@@ -55,6 +60,7 @@ DG descriptor 设置 `v1_route_migration_enabled=false`。V2 capability 只通�
 | Burst、Pulse、Marker、Harmonic | `BURSt:*`、`PULSe:*`、`MARKer:*`、`HARMonic:*` | `source.snapshot_v2` 提供只读 facet；Harmonic 为 `PARTIAL` | 不公开逐阶 Harmonic、Marker 写入或配置／触发 API；缺失字段不能由相邻证据补齐。 |
 | 调制 | `MOD:*` | `source.channel_profile` 与 `source.snapshot_v2` 只读返回 state／type | 不公开模式专属参数或 setter；state／type 查询不等于调制控制能力。 |
 | DAC14 任意波上传 | `TRACe:DATA:DAC VOLATILE,<binary-block>` | `source.arbitrary_upload` | 只接受校验后的 little-endian `DG4000DacBlock`；目标必须 OFF、FIX、Sweep OFF。上传覆盖 volatile USER 波表，无法恢复。 |
+| Source V2 volatile workspace | `TRACe:DATA:DAC VOLATILE,<binary-block>` | `source.arbitrary_workspace_volatile_replace_v2`，仅限 `rigol.dg4202-v2-workspace` | 仪器级、无 channel selector；两路输出必须 OFF。只返回写入完成与 payload identity，不验证内容，也不能恢复此前 workspace。 |
 | 任意波诊断查询 | `FUNC?`、`FUNC:USER?` 与候选 ARB／DATA query | `source.arbitrary_probe` | 只接受问号结尾的候选并记录错误队列；这是排障入口，不是稳定任意波 capability。 |
 | 任意波编辑、float 与 DAC16 | `TRACe:DATA`、`DAC16`、`POINts`、`VALue`、`LOAD?` | 未公开 | 格式、字节序、内存生命周期和回读语义尚无公开合同。 |
 | 频率计 | `COUNter:*` | `source.counter_profile`、`source.counter_configure_v2`、`source.counter_enable_v2`、`source.counter_measure_v2` | 配置每次只写一个字段；enable／disable 独立；只有启用后才测量。Auto、gate、HF、sensitivity、display、clear 未公开。 |

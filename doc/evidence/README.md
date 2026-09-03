@@ -5,7 +5,7 @@
 本页统一导航插件仓库中的手册审计、开发里程碑、conformance、RFC 和实机验收记录。它不是
 当前型号支持状态或 capability 的事实源，也不表示记录中的能力已经发布。
 
-查询当前插件元数据和 capability 时，应使用[生成式插件目录](../reference/plugin-catalog.md)
+查询当前插件元数据和 capability 时，应使用 [生成式插件目录](../reference/plugin-catalog.md)
 以及对应包的 production descriptor。查询 WaveBench 公共合同和 CLI 行为时，应使用
 [WaveBench Core 文档](https://github.com/Scaxlibur/wavebench/tree/master/docs)。
 
@@ -52,6 +52,7 @@
 ### RTM2000
 
 - [手册功能覆盖矩阵](../../packages/wavebench-rohde-schwarz-rtm2000/doc/RTM2000_COVERAGE_MATRIX.md)
+- [功能覆盖开发路线](../../packages/wavebench-rohde-schwarz-rtm2000/doc/RTM2000_COVERAGE_MILESTONES.md)
 - [0.1.0–0.15.0 开发与验收存档](../../packages/wavebench-rohde-schwarz-rtm2000/doc/archive/RTM2000_README_0.15.md)
 
 ## SHENGPU
@@ -77,5 +78,6 @@
 ### SDS800X HD
 
 - [编程手册功能覆盖矩阵](../../packages/wavebench-siglent-sds800x-hd/doc/SDS800X_HD_COVERAGE_MATRIX.md)
+- [功能覆盖开发路线](../../packages/wavebench-siglent-sds800x-hd/doc/SDS800X_HD_COVERAGE_MILESTONES.md)
 - [实机验收记录](../../packages/wavebench-siglent-sds800x-hd/doc/SDS800X_HD_HARDWARE_ACCEPTANCE.md)
 - [Scope R1.3 conformance 证据](../../packages/wavebench-siglent-sds800x-hd/doc/SDS800X_HD_R13_CONFORMANCE.md)

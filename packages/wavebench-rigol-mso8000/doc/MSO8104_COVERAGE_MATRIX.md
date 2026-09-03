@@ -3,7 +3,7 @@
 [English](MSO8104_COVERAGE_MATRIX_EN.md)
 
 本页将 MSO8000 编程手册的功能域映射到外置 `wavebench-rigol-mso8000` 插件当前公开的
-WaveBench capability。当前包版本、依赖和入口点以[包元数据](../pyproject.toml)为准，型号、
+WaveBench capability。当前包版本、依赖和入口点以 [包元数据](../pyproject.toml)为准，型号、
 capability、binary profile 和请求限制以
 [production descriptor](../src/wavebench_rigol_mso8000/descriptor.py) 为准，精确 SCPI、解析与
 恢复行为以 [driver](../src/wavebench_rigol_mso8000/driver.py) 为准。

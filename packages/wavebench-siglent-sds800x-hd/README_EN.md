@@ -16,8 +16,9 @@ models remain bounded by the evidence pages.
 
 The implementation covers strict identity checks, analog-channel coupling, `DMAX` waveform reads and
 single acquisitions, read-only measurement statistics, PNG screenshots, and standalone acquisition
-run-state/control. The production descriptor and [coverage matrix](doc/SDS800X_HD_COVERAGE_MATRIX_EN.md)
-are authoritative for exact capabilities, protocol behavior, model limits, and unsupported areas.
+run-state/control. The production descriptor is authoritative for exact capabilities, profiles, and
+model scope. The [coverage matrix](doc/SDS800X_HD_COVERAGE_MATRIX_EN.md) explains protocol behavior
+and unsupported areas.
 
 The family has fixed `1 MΩ` analog inputs and no internal `50 Ω` termination. CN11G documents no
 error-queue command, so the plugin does not declare `scope.errors`. Waveform use must disable the

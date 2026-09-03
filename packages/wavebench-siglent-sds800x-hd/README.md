@@ -14,8 +14,8 @@
 ## 当前边界
 
 当前实现覆盖严格身份检查、模拟通道 coupling、`DMAX` 波形读取与单次采集、只读测量统计、
-PNG 截图，以及独立采集运行状态与控制。精确 capability、协议行为、型号限制和未支持项以
-production descriptor 及[功能覆盖矩阵](doc/SDS800X_HD_COVERAGE_MATRIX.md)为准。
+PNG 截图，以及独立采集运行状态与控制。精确 capability、profile 和型号范围以 production
+descriptor 为准；[功能覆盖矩阵](doc/SDS800X_HD_COVERAGE_MATRIX.md)说明协议行为和未支持项。
 
 该系列模拟输入固定为 `1 MΩ`，没有内部 `50 Ω` 端接。CN11G 没有记录错误队列命令，因此
 插件不声明 `scope.errors`。使用波形读取时必须显式关闭 WaveBench 错误队列检查：
@@ -42,6 +42,6 @@ transport。默认测试使用 FakeTransport。真实设备地址、序列号、
 
 ## 开发与许可证
 
-本地手册、实机验收和 Scope R1.3 conformance 入口见[插件文档](doc/README.md)。日常源码开发
+本地手册、实机验收和 Scope R1.3 conformance 入口见 [插件文档](doc/README.md)。日常源码开发
 使用仓库级 [editable 开发环境](../../doc/DEVELOPMENT.md)。项目原创代码和文档采用
 [MIT License](LICENSE)；厂商资料不属于公开 distribution。

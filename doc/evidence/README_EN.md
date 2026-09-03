@@ -53,6 +53,7 @@ and the package's production descriptor. For WaveBench public contracts and CLI 
 ### RTM2000
 
 - [Manual feature-coverage matrix](../../packages/wavebench-rohde-schwarz-rtm2000/doc/RTM2000_COVERAGE_MATRIX_EN.md)
+- [Feature-coverage development roadmap](../../packages/wavebench-rohde-schwarz-rtm2000/doc/RTM2000_COVERAGE_MILESTONES_EN.md)
 - [0.1.0–0.15.0 development and acceptance archive](../../packages/wavebench-rohde-schwarz-rtm2000/doc/archive/RTM2000_README_0.15_EN.md)
 
 ## SHENGPU
@@ -78,5 +79,6 @@ and the package's production descriptor. For WaveBench public contracts and CLI 
 ### SDS800X HD
 
 - [Programming-guide coverage matrix](../../packages/wavebench-siglent-sds800x-hd/doc/SDS800X_HD_COVERAGE_MATRIX_EN.md)
+- [Feature-coverage development roadmap](../../packages/wavebench-siglent-sds800x-hd/doc/SDS800X_HD_COVERAGE_MILESTONES_EN.md)
 - [Hardware acceptance](../../packages/wavebench-siglent-sds800x-hd/doc/SDS800X_HD_HARDWARE_ACCEPTANCE_EN.md)
 - [Scope R1.3 conformance evidence](../../packages/wavebench-siglent-sds800x-hd/doc/SDS800X_HD_R13_CONFORMANCE.md) (Chinese only)

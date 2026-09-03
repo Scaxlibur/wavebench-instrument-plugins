@@ -45,5 +45,5 @@ trigger 不会盲目重试；Core 缺少必要安全接口时保持 capability �
 
 ## 开发与许可证
 
-里程碑、RFC、实机证据和历史状态见[插件文档](doc/README.md)。日常源码开发使用仓库级
+里程碑、RFC、实机证据和历史状态见 [插件文档](doc/README.md)。日常源码开发使用仓库级
 [editable 开发环境](../../doc/DEVELOPMENT.md)。本插件采用 [MIT License](LICENSE)。

@@ -7,8 +7,13 @@
 
 ## 当前 Reference
 
-- [编程手册功能覆盖矩阵](SDS800X_HD_COVERAGE_MATRIX.md)
+- [当前功能覆盖与行为边界](SDS800X_HD_COVERAGE_MATRIX.md)
 - [仓库级插件目录](../../../doc/reference/plugin-catalog.md)
+
+## 开发
+
+- [功能覆盖开发路线](SDS800X_HD_COVERAGE_MILESTONES.md)
+- [仓库开发环境](../../../doc/DEVELOPMENT.md)
 
 ## 验收与 conformance
 
@@ -18,9 +23,8 @@
 
 验收和 conformance 页面保存特定设备、版本与时间点的证据，不独立提升当前 capability。
 
-## 厂商资料与开发
+## 厂商资料
 
 - [本地 CN11G 编程手册存放规则](vendor-local/README.md)
 - [SIGLENT SDS800X HD 产品资料](https://www.siglent.com/int/products-overview/sds800x-hd/)
-- [仓库开发环境](../../../doc/DEVELOPMENT.md)
 - [返回插件入口](../README.md)

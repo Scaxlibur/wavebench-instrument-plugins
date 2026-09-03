@@ -1,120 +1,78 @@
-# RTM2000 manual feature coverage matrix
+# RTM2000 Manual Feature-Coverage Matrix
 
 [中文](RTM2000_COVERAGE_MATRIX.md)
 
-## Purpose and counting method
+This page maps RTM2000 programming-manual domains to the WaveBench capabilities currently exposed
+by the external `wavebench-rohde-schwarz-rtm2000` plugin. The [package metadata](../pyproject.toml)
+is authoritative for version, dependencies, and entry point; the
+[production descriptor](../src/wavebench_rohde_schwarz_rtm2000/descriptor.py) for models, backends,
+configuration fields, and capabilities; [profiles](../src/wavebench_rohde_schwarz_rtm2000/profiles.py)
+for request boundaries; and the [driver](../src/wavebench_rohde_schwarz_rtm2000/driver.py) for exact
+SCPI and runtime behavior.
 
-This matrix compares the locally stored RTM2000 programming-manual command index with the WaveBench external RTM2000 plugin, the bundled fallback, and recorded RTM2032 hardware acceptance. It separates manual claims, implemented product behavior, and hardware evidence; a command listed for the RTM2000 family is not assumed to be installed or supported on the current RTM2032.
+The [feature-coverage development roadmap](RTM2000_COVERAGE_MILESTONES_EN.md) records future order
+and exit gates. The [development and acceptance archive](archive/RTM2000_README_0.15_EN.md) retains
+hardware and negative evidence for particular versions, devices, and dates. Those records support
+traceability and do not independently add a current capability.
 
-The selected manual transcription has 1,490 lines containing 1,434 command-index entries and 1,417 exact unique command templates: 608 query-marked forms and 809 non-query forms. Further case-insensitive, whitespace-normalized parsing yields 1,416 templates (607 query-marked and 809 non-query); the final difference is one repeated/layout variant. These figures still include parameterized templates and a small number of OCR defects. They describe command-surface scale and are not a feature-completion denominator.
+## Scope
 
-The external plugin currently declares twenty-six WaveBench capabilities: five read-only Scope V2 capabilities added in 0.13.0, controlled channel display added in 0.14.0, and a multi-channel joint view added in 0.15.0. It is an analog-waveform acquisition MVP with representative hardware acceptance, narrow read-only status and analysis surfaces, controlled view configuration, and one controlled average-acquisition transaction, not a general RTM2000 remote-control layer.
+The local RTM2000 programming-manual index spans multiple models, firmware revisions, and options
+and contains a small number of duplicates and OCR defects. This matrix reports the current public
+surface by functional domain rather than treating command counts as completion. A manual command,
+driver method, or one successful hardware run cannot replace a production-descriptor declaration.
 
-Coverage labels:
+`rohde-schwarz.rtm2032` is the external plugin's canonical driver ID. The short `rtm2032` alias
+belongs to the Core fallback. The external plugin provides bounded waveform acquisition, query-only
+state/analysis, and controlled view configuration; it is not a general RTM2000 remote-control layer.
 
-- **Hardware accepted**: implemented and offline-tested with controlled RTM2032 evidence.
-- **Implemented**: code and offline tests exist, without a separate hardware conclusion for that detail.
-- **Partial**: only a narrow subset of the manual family is covered.
-- **Not covered**: no corresponding external-plugin, bundled-fallback, or generic ScopeService API.
-- **Acceptance-tool only**: reserved for experiment restoration/acceptance rather than production driver use.
-- **Option/model gated**: identity and installed options must be checked before exposure.
+## Functional coverage
 
-## Feature matrix
+| Domain | Manual surface | Current public capability | Current boundary |
+|---|---|---|---|
+| Identity, errors, health | IEEE 488.2, `SYSTem:ERRor:*`, status conditions | `scope.idn`, `scope.errors`, `scope.snapshot`, `scope.snapshot_v2` | Snapshot V2 guarantees only identity fields in its profile. EVENT and error-queue reads are consuming and are not implicit health reads. |
+| Autoscale | `AUToscale` | `scope.autoscale` | Explicit action that mutates vertical, timebase, and trigger state; capture never invokes it implicitly. |
+| Acquisition state | mode, average, sample/record rate, segmented, available/count | `scope.acquisition_status` | Reads existing state. Option-dependent fields are gated, and undefined completion is not inferred from counts or OPC. |
+| Average acquisition | average count, single count, channel arithmetic, `SINGle` | `scope.capture_average` | Caller confirms stopped acquisition. The transaction changes only bounded fields and restores them; unknown outcome latches the write path. |
+| Analog input | coupling, termination, range, scale, offset, position, bandwidth, probe | `scope.channel_coupling`, `scope.channel_input_state_v2`, `scope.snapshot` | V2 maps coupling/termination and may leave numeric impedance unavailable. Core enforces the high-impedance policy. |
+| Channel display | channel state | `scope.channel_display_configure_v2` | Profile permits CH1/CH2 only. Core owns baseline, readback, restoration, and verification; the plugin performs the controlled display write. |
+| Multi-channel focus | time range, channel display, V/div | `scope.focus_configure_v2` | Accepts CH1/CH2 and timebase/vertical requests within the profile. It does not configure position, offset, coupling, termination, or bandwidth. |
+| Analog waveform | REAL/LSBF, header, data, `DEF/MAX/DMAX` | `scope.fetch_waveform`, `scope.capture_waveform`, `scope.capture_waveforms` | Reads channels sequentially after one acquisition and adds no cross-channel hardware-synchronization guarantee. Long records use a separate timeout. |
+| Waveform metadata | X/Y scaling, point count, quantization, values per sample | `scope.snapshot` | Header field four is values per sample interval, not a segment ID. |
+| Timebase and history | range, position, zoom, history timestamp | `scope.snapshot`, `scope.history_timestamps`, `scope.focus_configure_v2` | History is K15-gated. Frame numbers do not substitute for timestamps, and timeout is not blindly retried or cleared. Zoom is not public. |
+| Trigger | edge and other trigger families | `scope.snapshot` reads current basic edge state; capture reuses existing settings | The production descriptor declares no generic trigger-configuration capability. Driver-specific methods are not current WaveBench capabilities. |
+| Measurement statistics | slot, source, actual, aggregates, buffer | `scope.measurement_statistics`, `scope.measurement_statistics_v2` | Reads caller-confirmed preconfigured slots. V2 permits slots 1–4 and no buffer; it never configures or resets slots. |
+| Cursor | X/Y, delta, ratio, tracking | `scope.cursor_readout` | Reads caller-confirmed preconfigured cursor state; no production setup or positioning API. |
+| Math and FFT | expression, metadata, FFT state/RBW | `scope.math_metadata`, `scope.fft_status`, `scope.fft_status_v2` | V2 returns only profile fields. It does not configure expressions or treat host DSP as instrument FFT capability. |
+| Reference curve | source, state, scale, data, save/load | `scope.reference_metadata` | Reads an existing reference only; it does not update/save/load or fetch the payload. |
+| Digital/MSO | D0-D15 state, threshold, deskew, data | `scope.digital_status`, `scope.digital_status_v2`, `scope.digital_waveform` | Checks B1 first. Waveform reads require a stopped record and compatible existing format and do not configure threshold, display, or transfer format. |
+| Spectrum/spectrogram | spectrum data, axis, RBW, marker, history | Not public | Option-dependent analysis application requiring an independent model. |
+| Search, mask, protocol decode/trigger | results, navigation, actions, bus configuration | Not public | Depend on options, input models, restoration, and result contracts; raw SCPI does not bypass them. |
+| DVM and counter | source, type, result, state | Not public | No declared typed capability or option boundary exists. |
+| Display and screenshot | display state, hardcopy | `scope.screenshot`, `scope.channel_display_configure_v2`, `scope.focus_configure_v2` | Screenshot returns PNG. Grid, palette, persistence, XY, virtual-screen, and printer setup are not public. |
+| Instrument filesystem/export | `MMEMory`, instrument-side export | Not public | Host-side WaveBench artifacts are not instrument filesystem support. Paths and persistent writes are denied by default. |
+| Setup save/restore | `SYSTem:SET`, state store/load | Not public | Setup blobs belong to acceptance restoration tooling, not the production configuration API. |
+| Power analysis | quality, harmonics, ripple, switching, SOA, and related domains | Not public | Independent application area requiring probes, deskew, options, and result models. |
+| Calibration, reset, global setup | calibration, `*RST`, preset, clock, language, network | Not public | Global/persistent mutation belongs only in separately authorized maintenance workflows. |
 
-| Feature domain | Manual surface | Current coverage | Hardware state | Main gap | Recommendation |
-|---|---|---|---|---|---|
-| Identity, synchronization, basic errors | IEEE 488.2 common commands and `SYSTem:ERRor:*` | `*IDN?`, `*OPT?`, non-consuming health snapshot, five-field identity `scope.snapshot_v2`, `*CLS`, `*OPC?` wait, explicit error queue | **Hardware accepted**: CH1/CH2 Snapshot V2 read-only acceptance passed | No self-test or complete event-register API | Identity/options/health P1 complete; keep EVENT reads explicit |
-| Acquisition control | 16 templates for modes, averaging, sample/record rates, interpolation, segmented acquisition, and availability | Read-only available/count/sample-rate plus average/segmented status, `SINGle` acquisition, explicit `AUToscale`, and controlled `scope.capture_average` | **Read-only status hardware accepted; average transaction implemented, pending independent hardware acceptance** | No run/stop, segmented acquisition, write-rate, or interpolation API | Keep explicit stopped confirmation, readback restoration, and latching for average; **P2** segmented plans |
-| Analog channel setup | About 48 templates for state, coupling, range, scale, offset, position, bandwidth, polarity, skew, label, overload, and thresholds | Typed read-only RTM2032 CH1/CH2 state and `scope.channel_input_state_v2`; V2 maps only coupling/termination and marks numeric impedance unavailable; `scope.channel_display_configure_v2` provides a single-channel display transaction, while `scope.focus_configure_v2` adds multi-target display, per-channel V/div, a complete joint baseline, and failure restoration | **Hardware accepted**: CH1/CH2 V2 input state, the CH2 `ON→OFF→ON` display transaction, and representative CH1-hide plus CH2 0.2→0.4 V/div focus/restoration acceptance passed | No threshold readback; focus does not configure position, offset, coupling, termination, or bandwidth; profile boundary values were not exercised point by point | View configuration P1 complete; retain impedance and restoration guards for other writes |
-| Analog waveform transfer | `CHANnel<m>:DATA*`, envelope data, independent X/Y metadata | REAL/LSBF, header + data, `DEF/MAX/DMAX`, sequential channel reads after one acquisition, and typed X/Y scaling, point-count, quantization, and values-per-sample snapshots | **Hardware accepted** | No envelope, history/segment selection, or streaming-block API; no added cross-channel hardware-synchronization guarantee | Metadata complete; **P2** segmented/history/envelope |
-| Timebase, zoom, timestamp | 12 timebase templates plus zoom and timestamp navigation | Typed read-only acquisition time/divisions/position/range/reference/scale/roll; `scope.focus_configure_v2` can set time range while protecting time position in the baseline; K15-gated strict history timestamp-table API | **Basic timebase and representative focus hardware acceptance passed; history timestamp query blocked by instrument timeout** | No zoom; profile timebase boundaries were not exercised point by point; no successful timestamp-table hardware evidence | Keep the plugin-side timebase guard and strict K15 gate; do not retry or clear errors implicitly |
-| Trigger system | About 159 templates for A/B, edge, width, runt, rise time, pattern, TV, holdoff, external, protocol, and trigger out | Typed read-only basic edge-trigger snapshot for CH1/CH2; vendor-specific controlled RTM2032 CH2 `EDGE/AUTO/POS/DC/level` setter; single capture reuses front-panel state | **Read-only and CH2 write/restore hardware accepted** | Setter accepts only healthy, high-impedance, non-overloaded CH2 and an in-range level; no automatic restoration journal, other trigger types, B trigger, or output | P1 complete; keep restoration responsibility explicit and design a separate transaction model before broader writes |
-| Automatic measurements/statistics | 20 templates for slots, source/main, actual, peaks, mean, standard deviation, and waveform count | `scope.measurement_statistics` and `scope.measurement_statistics_v2`; V2 reads only caller-confirmed preconfigured slots 1-4, supports no buffer, and requires complete finite aggregates | **Existing configured-slot path hardware accepted; V2 adapter offline verified** for CH2 frequency actual/average/min/max/stddev/count; unconfigured-slot timeout remains a negative boundary | Stopped-acquisition buffer read is not hardware accepted and is outside the V2 profile | Keep caller confirmation mandatory; require stopped confirmation for buffer reads; never configure/reset slots or consume the error queue in this API |
-| Cursors | About 27 templates for X/Y, delta, ratio, tracking, and results | `scope.cursor_readout` for explicitly preconfigured cursor state | **Vertical delta hardware accepted**; other cursor functions remain offline-tested | No production cursor setup or position writes | Readout is complete for the narrow capability; keep placement as a separate controlled action |
-| Math and FFT | About 51 templates for expression, math/envelope data, window, span, and RBW | `scope.math_metadata`, guarded `scope.fft_status`, `scope.fft_status_v2` limited to average complete/RBW/sample rate, and `scope.reference_metadata` for existing state | **Existing math metadata and FFT status hardware accepted; V2 adapter offline verified**; reference metadata blocked because the instrument had no valid stored reference | No payload read, production expression setup, or reference update/save/load | Keep stateful configuration separate, preserve reference storage, and keep host DSP distinct |
-| Spectrum/spectrogram | 107 templates for spectrum waveforms, frequency axis, RBW, markers, history, and spectrogram | Not covered | None | Complete spectrum-analysis application absent | **P3, option gated** with a separate capability |
-| Search | About 119 templates for edge/width/runt/pattern, result lists, and protocol search | Not covered | None | No search plan, results, or navigation | **P3**, after history/trigger/protocol models mature |
-| Mask test | About 36 templates for mask data, counts, actions, save/load | Not covered | None | No mask lifecycle, violation model, or action safety policy | **P3**; separate read-only results from destructive actions |
-| Digital/MSO channels | About 33 templates for digital data, thresholds, technology, deskew, and history | B1-gated `scope.digital_status` and `scope.digital_status_v2`; V2 marks threshold scope and timing calibration unavailable; `scope.digital_waveform` reads each Dn under the existing ASCII format (manual `ASC,0`, RTM2032 readback `CSV,0`) and host-packs uint16 | **Scalar status hardware accepted**: existing D0-D15 and CLI acceptance remains valid, and D0 V2 read-only acceptance passed; digital waveform passed FakeTransport, while hardware read-only preflight passed B1/format gating but stopped before `DATA?` because D0 was hidden and reported zero points | Digital waveform payload hardware acceptance is pending; no configuration writes, history, or bus decode; no electrical-input acceptance | Run zero-write payload/axis-consistency acceptance against a stable stopped record; treat electrical acceptance separately |
-| Serial/parallel bus decoding | About 249 templates for I²C, SPI/SSPI, UART, CAN, LIN, I²S, ARINC, MIL-STD, parallel buses, and frame results | Not covered | None | No bus setup, frame list, field parser, or history model | **P3, split by option**; do not fold into the basic scope capability |
-| Protocol trigger/search | Large protocol subsets under trigger and search | Not covered | None | Depends on bus sources, thresholds, protocol format, and options | **P3**, after read-only bus decode |
-| DVM and frequency counter | Six DVM and three counter templates | Not covered | None | No source/type/result/status API | **P2, option gated**, suitable for small read-only capabilities |
-| Probe metadata/setup | About 18 templates for identity, attenuation, bandwidth, impedance, offset, and mode | Read-only RTM2032 CH1/CH2 attenuation, bandwidth, capacitance, impedance, name, and type | **Hardware accepted** | No probe ID fields, DC offset, mode, or safety-limit integration | Basic P1 complete; add identity/safety integration later and defer writes |
-| Reference curves | About 19 templates for source/save/load/state, scaling, and data | Read-only `scope.reference_metadata` for an existing stored reference | **Implemented; hardware blocked by empty reference storage** (`DATA:HEADer?` reported zero points and later metadata queries timed out) | No safe test fixture without overwriting internal reference storage; no data payload or state management | Wait for a user-created reference; do not call `UPDATE`, save, or load merely to manufacture acceptance evidence |
-| Display and screenshot | 24 display plus eight hardcopy templates | CH1/CH2 `scope.channel_display_configure_v2`; `scope.focus_configure_v2` can select multiple target channels and hide other analog channels; PNG, color scheme, menu inclusion | **Hardware accepted**: single-channel display and focus target/restored states passed fresh readback, followed by a new read-only session that confirmed the complete baseline | No grid, palette, persistence, XY, virtual-screen, page, or printer setup | Channel display, joint view, and screenshot satisfy the MVP; others **P3** |
-| Instrument filesystem/export | 16 `MMEMory` templates plus waveform, measurement, search, and power export | Not covered; WaveBench saves host-side artifacts only | None | No instrument filesystem or report export | **Out of default scope**; require a path sandbox and separate permission |
-| Setup snapshot/restoration | `SYSTem:SET`, `MMEMory:STORE/LOAD:STATE` | Not exposed by production driver; setup blob used by acceptance tooling | **Acceptance path passed** | SocketIO setup writes were once partial; reliable restoration uses controlled VXI-11 chunks | Keep **acceptance-tool only** |
-| Status registers/health | Operation/questionable/status-byte, overload, mask, limit status | Non-consuming health snapshot plus channel-overload readback | **Hardware accepted** | No mask/limit aggregation or event-register API | Basic P1 complete; keep EVENT reads explicit and consuming |
-| Power analysis | About 358 templates for quality, harmonics, ripple, switching, SOA, efficiency, inrush, and modulation | Not covered | None | Separate application domain with probes, deskew, reports, and many result types | **P3, option gated, separate capability/package** |
-| Calibration, reset, system settings | Calibration, `*RST`, preset, clock, language, beeper, education mode | Not covered | None | Global mutation and manual-recovery risk | **Denied by default** or explicit acceptance-tool authorization only |
+## Protocol and safety boundaries
 
-## Directly covered SCPI surface
+- The driver uses supported abbreviated SCPI. The table indexes manual domains; the
+  [driver](../src/wavebench_rohde_schwarz_rtm2000/driver.py) is the complete source for actual
+  commands, avoiding a second manually maintained allowlist here.
+- `DEF`, `MAX`, and `DMAX` are passed through to the device. Long waveform reads use the descriptor
+  option's separate timeout, and failed reads are not replayed automatically.
+- Capture reads coupling first. Core rejects potentially 50-ohm `AC`/`DC` by default; continuation
+  requires explicit opt-in, while `ACL`/`DCL` are high-impedance paths.
+- Channel-display and focus channels, numeric ranges, step budgets, and restoration order are defined
+  by [profiles](../src/wavebench_rohde_schwarz_rtm2000/profiles.py).
+- Host-side CSV/NPY/PNG artifacts, DSP analysis, and acceptance setup restoration are not RTM2000
+  SCPI capabilities.
 
-The external driver mainly uses the following equivalent command families:
+## Related sources
 
-```text
-*IDN?  *CLS  *OPC?
-SYSTem:ERRor[:NEXT]?
-AUToscale  SINGle
-TIMebase:RANGe[?]  TIMebase:POSition[?]
-CHANnel<n>:STATE[?]  CHANnel<n>:COUPling?
-CHANnel<n>:RANGe?  CHANnel<n>:SCALe[?]
-CHANnel<n>:POSition[?]  CHANnel<n>:OFFSet[?]
-FORMat[:DATA]  FORMat:BORder
-CHANnel:DATA:POINTs
-CHANnel<n>:DATA:HEADer?  CHANnel<n>:DATA?
-HCOPy:LANGuage  HCOPy:COLor:SCHeme  HCOPy:MENU  HCOPy:DATA?
-```
-
-The implementation uses supported short forms. This list normalizes them to manual-style long forms for auditing and is not a raw communication log.
-
-## WaveBench core coverage outside instrument SCPI
-
-- Reads coupling before capture and rejects potentially 50 Ω `AC` / `DC` by default; continuation requires explicit opt-in. `ACL` / `DCL` are accepted as high-impedance paths.
-- Atomically records capture artifacts as CSV, NPY, metadata, screenshots, and sanitized command logs; failure metadata and already-produced evidence are retained.
-- Uses capability checks, a restricted external-plugin override slot, and uninstall fallback so plugin installation cannot falsely advertise unimplemented features.
-- Keeps `AUToscale` explicit rather than silently changing front-panel state during capture.
-
-These improve experiment safety and traceability but do not count as RTM2000 manual-command coverage.
-
-## Recommended roadmap
-
-### P1: turn the capture MVP into a diagnosable basic scope driver
-
-1. Read-only `identity/options/health` snapshot covering `*OPT?`, acquisition, and non-consuming status conditions. **Complete.**
-2. Typed RTM2032 CH1/CH2 analog-channel, timebase, and probe state. **Basic fields complete and hardware accepted.**
-3. Basic edge trigger: the strict read-only snapshot and minimal controlled CH2 source/type/mode/slope/coupling/level loop are complete. It does not call find-level implicitly, and the production setter does not pretend to own a persistent restoration journal.
-4. Read-only automatic measurement results/statistics, clearly distinguished from host-side DSP. **Caller-confirmed configured-slot statistics are hardware accepted; stopped-acquisition buffer read remains pending.**
-5. Waveform scaling and shape metadata. **Complete and hardware accepted.** `DATA:HEADER?` field four is values per sample interval, not a segment ID; segment/history identity requires a separate history/timestamp path.
-
-### P2: analysis and specialized acquisition
-
-- average/segmented acquisition and history/timestamps; **the controlled average transaction is implemented but awaits independent hardware acceptance; segmented acquisition remains deferred; the K15 timestamp-table query timed out and remains blocked**;
-- math/FFT/reference waveforms; **math metadata and FFT status are hardware accepted; reference metadata awaits a valid pre-existing reference**;
-- cursor, DVM, and counter results; **vertical cursor readout is hardware accepted; DVM/counter remain uncovered**;
-- read-only probe identity and attenuation/impedance safety integration.
-
-### P3: option-specific applications
-
-- spectrum/spectrogram;
-- digital/MSO and bus decode;
-- protocol trigger/search;
-- mask testing;
-- power analysis.
-
-These domains must not be bypassed through a generic raw-SCPI entry point. They need capability contracts, option detection, restoration policy, and explicit permissions.
-
-## Boundaries that are not defects
-
-- The index spans multiple RTM2000 models, firmware revisions, and options. Missing option commands are not automatically basic-driver defects.
-- WaveBench host-side CSV/NPY/PNG artifacts do not constitute instrument-side `MMEMory`/`EXPort` support.
-- Host DSP may compute FFT/THD but does not constitute instrument `CALCulate:MATH:FFT`, `SPECtrum`, or `POWer` result support.
-- Setup-blob restoration is an acceptance safety mechanism and should not become a production configuration API merely because the manual lists `SYSTem:SET`.
-- Sequential channel reads after one acquisition do not add or prove a cross-channel hardware-synchronization guarantee.
-
-## Evidence boundary
-
-- Manual side: a locally stored RTM2000 programming-manual command index used only for internal auditing and excluded from distributions.
-- Implementation side: current external `driver.py`/`descriptor.py`, the WaveBench bundled fallback, and ScopeService.
-- Hardware side: RTM2032 is the representative RTM2000-series baseline for `DEF/MAX/DMAX`, dual-channel single acquisition, autoscale, coupling, the CH2 display transaction, multi-target focus timebase/Vdiv/hide-other behavior with complete restoration, screenshot, repeat capture, configured-slot measurement statistics, math/FFT metadata, vertical cursor readout, and B1-gated D0-D15 digital scalar-status queries. The latest session also records negative evidence for history timestamps and empty reference storage. Representative acceptance does not require per-model repetition and does not mean every profile boundary value was exercised point by point.
-- Hardware labels require an explicit controlled probe and state-restoration check; code presence alone is never promoted to hardware acceptance.
+- [Production descriptor](../src/wavebench_rohde_schwarz_rtm2000/descriptor.py)
+- [Descriptor profiles](../src/wavebench_rohde_schwarz_rtm2000/profiles.py)
+- [Driver implementation](../src/wavebench_rohde_schwarz_rtm2000/driver.py)
+- [Feature-coverage development roadmap](RTM2000_COVERAGE_MILESTONES_EN.md)
+- [0.1.0–0.15.0 development and acceptance archive](archive/RTM2000_README_0.15_EN.md)

@@ -8,8 +8,13 @@ current version, compatibility range, models, and capabilities.
 
 ## Current lookup
 
-- [RTM2000 manual feature-coverage matrix](RTM2000_COVERAGE_MATRIX_EN.md): compares manual domains, current implementation, and evidence boundaries.
+- [RTM2000 current coverage and behavior boundaries](RTM2000_COVERAGE_MATRIX_EN.md)
 - [Repository plugin catalog](../../../doc/reference/plugin-catalog-en.md): generated from package metadata and the production descriptor.
+
+## Development
+
+- [RTM2000 feature-coverage development roadmap](RTM2000_COVERAGE_MILESTONES_EN.md)
+- [Repository development environment](../../../doc/DEVELOPMENT_EN.md)
 
 ## Historical and acceptance evidence
 
@@ -19,8 +24,7 @@ current version, compatibility range, models, and capabilities.
 Historical records preserve conclusions for particular versions, devices, and points in time. They
 do not independently promote current capabilities.
 
-## Vendor material and development
+## Vendor material
 
 - [Local programming-manual storage rules](vendor-local/README.md)
-- [Repository development environment](../../../doc/DEVELOPMENT_EN.md)
 - [Return to the plugin landing page](../README_EN.md)
