@@ -12,6 +12,7 @@ This repository maintains independently installable WaveBench instrument plugins
 - [Develop a WaveBench plugin](https://github.com/Scaxlibur/wavebench/blob/master/docs/development/plugin-development.md)
 - [Configure this repository's editable development environment](DEVELOPMENT_EN.md)
 - [Read plugin-side interface proposals and historical records](rfcs/README.md)
+- [Browse acceptance and historical evidence across plugins](evidence/README_EN.md)
 
 ## Repository responsibility
 

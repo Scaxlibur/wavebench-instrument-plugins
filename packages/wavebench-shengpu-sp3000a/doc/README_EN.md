@@ -3,13 +3,23 @@
 [中文](README.md)
 
 This directory contains project-authored, publishable development documentation for the SP3000A plugin.
+The production descriptor remains authoritative for current capabilities; audits, plans, and acceptance
+records do not independently promote public capabilities.
+
+## Current Reference
+
+- [Command certification matrix](COMMAND_CERTIFICATION_MATRIX_EN.md): command-level implementation and evidence status.
+
+## Audits and plans
 
 - [Remote protocol and capability audit](PROTOCOL_AUDIT_EN.md)
-- [远控协议与能力审计](PROTOCOL_AUDIT.md)
-- [RS-232 read-only protocol acceptance](RS232_READONLY_ACCEPTANCE_EN.md)
-- [RS-232 只读协议验收](RS232_READONLY_ACCEPTANCE.md)
+- [Command certification plan](COMMAND_CERTIFICATION_PLAN_EN.md)
 
-Development material prioritizes:
+## Historical acceptance evidence
+
+- [RS-232 read-only protocol acceptance](RS232_READONLY_ACCEPTANCE_EN.md)
+
+Development material is organized around:
 
 1. model, firmware, interface, and impedance capability matrices;
 2. communication parameters for LAN, USB Device, RS-232, and optional GPIB;

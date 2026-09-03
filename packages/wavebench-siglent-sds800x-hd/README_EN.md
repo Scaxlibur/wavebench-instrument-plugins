@@ -79,7 +79,7 @@ The local `CN11G` guide and its converted content remain under:
 doc/vendor-local/
 ```
 
-Converter limits split the current copy across three directories. The manual support table lists `1.1.3.1` as the minimum SDS800X HD firmware. The official entry is [SDS800X HD Series Programming Guide](https://www.siglent.com/na/sds800x-hd-series-programming-guide/); project-authored conclusions are in the [coverage matrix](doc/SDS800X_HD_COVERAGE_MATRIX_EN.md) and [hardware acceptance record](doc/SDS800X_HD_HARDWARE_ACCEPTANCE_EN.md).
+Converter limits split the current copy across three directories. The manual support table lists `1.1.3.1` as the minimum SDS800X HD firmware. The official entry is [SDS800X HD Series Programming Guide](https://www.siglent.com/na/sds800x-hd-series-programming-guide/); project-authored conclusions are in the [coverage matrix](doc/SDS800X_HD_COVERAGE_MATRIX_EN.md), [hardware acceptance record](doc/SDS800X_HD_HARDWARE_ACCEPTANCE_EN.md), and [Scope R1.3 conformance evidence](doc/SDS800X_HD_R13_CONFORMANCE.md) (Chinese only).
 
 The repository-level `.gitignore` excludes every file under `doc/vendor-local/` except its explanatory README, and the sdist build excludes the whole directory. Vendor PDFs therefore do not enter Git pushes or public distributions. Project-authored protocol summaries, capability matrices, and acceptance records belong elsewhere under `doc/`.
 

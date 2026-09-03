@@ -8,6 +8,9 @@
 
 [生成式插件目录](../doc/reference/plugin-catalog.md)列出所有 distribution、driver ID、登记型号、WaveBench 兼容范围和 production descriptor 已声明的 capability。该页面由包内元数据生成，不在本页重复维护状态表。
 
+[插件验收与历史证据](../doc/evidence/README.md)统一导航各包的手册审计、里程碑、RFC、conformance
+和实机验收记录，但不替代当前插件目录或 production descriptor。
+
 进入具体包的 README，可以继续查看：
 
 - 适用型号与连接方式；

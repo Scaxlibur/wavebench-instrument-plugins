@@ -8,6 +8,10 @@
 
 The generated [plugin catalog](../doc/reference/plugin-catalog-en.md) lists every distribution, driver ID, registered model, WaveBench compatibility range, and capability declared by the production descriptor. It is generated from package metadata, so this page does not maintain a second status table.
 
+The [plugin acceptance and historical evidence index](../doc/evidence/README_EN.md) provides one route into
+manual audits, milestones, RFCs, conformance records, and hardware acceptance evidence without replacing
+the current catalog or production descriptors.
+
 Each package README provides the next level of detail:
 
 - applicable models and connection routes;

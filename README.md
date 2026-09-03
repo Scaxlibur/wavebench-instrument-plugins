@@ -12,6 +12,7 @@
 - [开发 WaveBench 插件](https://github.com/Scaxlibur/wavebench/blob/master/docs/development/plugin-development.md)
 - [配置本仓库的 editable 开发环境](doc/DEVELOPMENT.md)
 - [查阅插件侧接口提案与历史记录](doc/rfcs/README.md)
+- [查阅跨插件验收与历史证据](doc/evidence/README.md)
 
 ## 仓库职责
 

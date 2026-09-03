@@ -79,7 +79,7 @@ points = "dmax"
 doc/vendor-local/
 ```
 
-当前转换因工具限制拆为三个目录。手册支持表将 SDS800X HD 的最低固件列为 `1.1.3.1`。官方入口为 [SDS800X HD Series Programming Guide](https://www.siglent.com/na/sds800x-hd-series-programming-guide/)，项目原创结论见[功能覆盖矩阵](doc/SDS800X_HD_COVERAGE_MATRIX.md)和[实机验收记录](doc/SDS800X_HD_HARDWARE_ACCEPTANCE.md)。
+当前转换因工具限制拆为三个目录。手册支持表将 SDS800X HD 的最低固件列为 `1.1.3.1`。官方入口为 [SDS800X HD Series Programming Guide](https://www.siglent.com/na/sds800x-hd-series-programming-guide/)，项目原创结论见[功能覆盖矩阵](doc/SDS800X_HD_COVERAGE_MATRIX.md)、[实机验收记录](doc/SDS800X_HD_HARDWARE_ACCEPTANCE.md)和 [Scope R1.3 conformance 证据](doc/SDS800X_HD_R13_CONFORMANCE.md)。
 
 `doc/vendor-local/` 中除说明文件外的内容由仓库级 `.gitignore` 排除，整个目录也被 sdist 构建规则排除。厂商 PDF 不会随 Git push 或公开 distribution 发布；项目原创的协议摘要、能力矩阵和验收记录应另写入 `doc/`。
 
