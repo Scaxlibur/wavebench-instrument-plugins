@@ -46,7 +46,7 @@ WaveBench 主包长期预装 RTM2000、DS1000Z、DG4000、DP800 和 DM3000 五�
 - [`wavebench-rigol-dg4000`](packages/wavebench-rigol-dg4000/README.md)：双通道 RIGOL DG4202 / DG4000 系列，canonical ID `rigol.dg4202`。
 - [`wavebench-rigol-dm3000`](packages/wavebench-rigol-dm3000/README.md)：LAN-only RIGOL DM3000 / DM3058 数字万用表，canonical ID `rigol.dm3000`；短 alias 保留内建双 backend fallback。
 - [`wavebench-rigol-dp800`](packages/wavebench-rigol-dp800/README.md)：RIGOL DP800 / DP832 / DP832A 可编程直流电源，canonical ID `rigol.dp800`；短 alias 保留内建 fallback。
-- [`wavebench-rohde-schwarz-rtm2000`](packages/wavebench-rohde-schwarz-rtm2000/README.md)：R&S RTM2000 / RTM2032 示波器，canonical ID `rohde-schwarz.rtm2032`；双通道 `DEF` / `MAX` / `DMAX`、autoscale、截图与恢复实机验收已完成。
+- [`wavebench-rohde-schwarz-rtm2000`](packages/wavebench-rohde-schwarz-rtm2000/README.md)：R&S RTM2000 / RTM2032 示波器，canonical ID `rohde-schwarz.rtm2032`；双通道 `DEF` / `MAX` / `DMAX`、autoscale、截图、通道显示与多通道联合视图已完成代表性实机验收。
 - [`wavebench-shengpu-sp3000a`](packages/wavebench-shengpu-sp3000a/README.md)：Shengpu SP30120 扫频仪驱动，canonical ID `shengpu.sp30120`；descriptor 只声明身份能力，另有五项经认证、类型化、RF-OFF 的厂商专用控制，曲线及通用配置仍关闭。
 - [`wavebench-siglent-sdg2000x`](packages/wavebench-siglent-sdg2000x/README.md)：SIGLENT SDG2042X／SDG2082X／SDG2122X 函数／任意波形发生器，canonical ID `siglent.sdg2000x`；保留 V1 基础能力，并在精确 SDG2122X 型号／固件范围内声明 Source V2 snapshot、Basic、Output 与 Harmonic Disable。
 - [`wavebench-siglent-sds3000`](packages/wavebench-siglent-sds3000/README.md)：早期 SIGLENT SDS3000 示波器驱动，canonical ID `siglent.sds3000`；严格支持 SDS3054 固件 `8.4.1`，已采用 WaveBench `0.8.24` transport/session P0。

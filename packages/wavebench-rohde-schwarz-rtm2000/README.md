@@ -8,12 +8,12 @@
 
 - distribution：`wavebench-rohde-schwarz-rtm2000`
 - canonical driver ID：`rohde-schwarz.rtm2032`
-- 开发基线：WaveBench `0.8.25`
-- WaveBench：`>=0.8.25,<0.9`
+- 开发基线：WaveBench `0.8.26`
+- WaveBench：`>=0.8.26,<0.9`
 - Python：`>=3.11`
 - 默认 transport backend：核心提供的 `rsinstrument-socket`
 
-本插件的 0.14.0 开发线对齐 WaveBench `v0.8.25`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
+本插件的 0.15.0 开发线对齐 WaveBench `v0.8.26`，不维护旧核心兼容矩阵，也不自动声明兼容未来 `0.9`。安装后，显式 canonical ID
 `rohde-schwarz.rtm2032` 选择外置实现；短 alias `rtm2032` 始终选择内建 fallback。卸载
 插件后，canonical ID 也回退内建实现。
 
@@ -32,6 +32,7 @@
 - Scope V2 只读接口：通道输入状态、B1 门控的数字状态、严格的 identity 五字段 snapshot、
   仅支持 1–4 号槽且不含 buffer 的测量统计，以及已配置 FFT 的三字段状态；
 - RTM2032 CH1/CH2 的 `scope.channel_display_configure_v2`：Core 负责 typed baseline、写后回读、失败恢复和独立恢复验证，插件只执行单通道 `STATE?` 与 `STATE ON/OFF`；
+- RTM2000 系列 CH1/CH2 的 `scope.focus_configure_v2`：RTM 插件 profile 声明通道、时基和 V/div 请求 guard，Core 负责完整联合 baseline、写后回读、失败恢复和恢复验证；
 - RTM2032 CH2 edge trigger 的厂商专用最小受控配置闭环；
 - 当前波形读取与单次 acquisition；
 - 一次 acquisition 后按通道读取多路波形；
@@ -159,7 +160,7 @@ metadata、FFT status 与 vertical cursor delta readout 已完成受控验收并
 一次 `SINGle`，确认 `ACQuire:AVERage:COMPlete?` 后读取当前波形。它不写 `FORMat`、byte order、
 point mode、时基、垂直档位、触发或 K15 history 状态。无论采集或波形读取成功与否，都会恢复并
 回读三项配置；恢复失败或结果不一致会锁存该实例的 average 写路径，后续调用零 I/O 拒绝。该实现
-目前有离线事务测试，尚无独立实机验收结论。任一配置写（包括第一条）超时都会按“结果未知”
+目前有离线事务测试，尚无独立实机验收结论。任一配置写（包括第一条）超时都会按「结果未知」
 处理：即使随后的恢复回读一致，也会永久锁存当前驱动实例，避免继续依赖一次无法证明结果的写事务。
 
 0.11.0 新增 `scope.digital_status` 只读状态面。每次调用先用 `*OPT?` 精确确认 B1，再读取
@@ -197,6 +198,17 @@ restore write 与一次独立 verify query。插件不自行重试、不扩大�
 高阻且无过载的前提下，将 CH2 从 `ON` 切到 `OFF` 并独立读回，再通过 Core 从 `OFF` 恢复到
 `ON`。恢复事务只有一次已完成文本写入，write outcome unknown 与 binary write 均为 0，session
 保持 healthy；最终零写完整 snapshot 确认 CH1/CH2 均回到 `ON`、`DCL`、无过载。
+
+0.15.0 新增 `scope.focus_configure_v2`。RTM 插件 profile 将模拟通道限定为 CH1/CH2，并为时基、
+逐通道 V/div 与 I/O 步数提供插件侧 guard；Core 一次读取完整 time range/position 和两路 display、
+range、V/div、position、offset，成功后保留目标联合视图，任一失败则按 timebase、channel vertical、
+channel display 的固定顺序恢复并重新查询。RTM2032 固件 `06.010` 的代表性验收在 DG4202 双输出
+关闭、两路 `DCL` 高阻且无过载时，将 5 ms 改为 10 ms、CH2 从 0.2 V/div 改为 0.4 V/div，
+并隐藏 CH1；目标状态与恢复状态均通过 fresh readback。随后恢复到 5 ms、两路 0.2 V/div 且均
+开启，6 次文本写入全部完成，结果不明写入和二进制写入均为 0；全新只读 session 再次确认完整
+基线，DG4202 两路仍为 OFF。该设备是 RTM2000 系列的代表性实机基线，不要求逐型号重复验收；
+profile 上下限是插件请求 guard，不表示全部边界值均已逐点上机。部分写入故障与恢复失败使用离线
+受控故障注入验证，未在真实仪器上制造通信故障。
 
 ## 开发验证
 
