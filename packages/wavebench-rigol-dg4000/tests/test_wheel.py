@@ -96,7 +96,7 @@ def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) ->
     package = inspect_plugin_wheel(wheel)
 
     assert package.source_conformance_wheel_sha256 == (
-        "sha256:5eb021402156069ff367b4e1f8ea34dae963fcd9844bb1fa1ba6120ce872fe10"
+        "sha256:982f708c99dfdeed968bd8bcb0135b1fe2b70ae8a8e5fc97995c33f93be50d2c"
     )
     assert {
         (item.manifest_id, item.claimed_level.value, item.channels)

@@ -35,7 +35,7 @@ and the package's production descriptor. For WaveBench public contracts and CLI 
 
 ### DS1000Z
 
-- [Package entry and embedded regression history](../../packages/wavebench-rigol-ds1000z/README_EN.md)
+- [Controlled hardware acceptance](../../packages/wavebench-rigol-ds1000z/doc/DS1000Z_HARDWARE_ACCEPTANCE_EN.md)
 
 ### DSG830
 
@@ -53,6 +53,7 @@ and the package's production descriptor. For WaveBench public contracts and CLI 
 ### RTM2000
 
 - [Manual feature-coverage matrix](../../packages/wavebench-rohde-schwarz-rtm2000/doc/RTM2000_COVERAGE_MATRIX_EN.md)
+- [0.1.0–0.15.0 development and acceptance archive](../../packages/wavebench-rohde-schwarz-rtm2000/doc/archive/RTM2000_README_0.15_EN.md)
 
 ## SHENGPU
 

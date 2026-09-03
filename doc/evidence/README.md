@@ -34,7 +34,7 @@
 
 ### DS1000Z
 
-- [包入口与历史回归记录](../../packages/wavebench-rigol-ds1000z/README.md)
+- [受控实机验收记录](../../packages/wavebench-rigol-ds1000z/doc/DS1000Z_HARDWARE_ACCEPTANCE.md)
 
 ### DSG830
 
@@ -52,6 +52,7 @@
 ### RTM2000
 
 - [手册功能覆盖矩阵](../../packages/wavebench-rohde-schwarz-rtm2000/doc/RTM2000_COVERAGE_MATRIX.md)
+- [0.1.0–0.15.0 开发与验收存档](../../packages/wavebench-rohde-schwarz-rtm2000/doc/archive/RTM2000_README_0.15.md)
 
 ## SHENGPU
 
