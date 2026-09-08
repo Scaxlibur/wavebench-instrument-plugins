@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
 from math import isfinite
 import time
 
-from wavebench.errors import DataError, OperationTimeout
+from wavebench.errors import DataError, OperationTimeout, SessionHealthError, StateDriftError, TransportIOError
 from wavebench.instruments import (
     ScopeAcquisitionCompletion,
     ScopeAcquisitionControlBaseline,
@@ -680,6 +680,8 @@ class SDS800XHDScope:
         for command in commands:
             try:
                 self.transport.write(command)
+            except (TransportIOError, SessionHealthError):
+                raise
             except Exception as exc:
                 failures.append((command, exc))
         if failures:
@@ -693,6 +695,15 @@ class SDS800XHDScope:
                     f"{command!r}: {error}"
                 )
             raise first_error
+        actual = self._read_waveform_transfer_state()
+        if actual != state:
+            expected_values, actual_values = asdict(state), asdict(actual)
+            raise StateDriftError(
+                "SDS800X HD waveform transfer restore readback mismatch",
+                expected=expected_values, actual=actual_values,
+                diff={key: {"expected": value, "actual": actual_values[key]}
+                      for key, value in expected_values.items() if actual_values[key] != value},
+            )
 
     def _read_waveform_chunks(self, *, points: int, max_points: int) -> bytes:
         chunks: list[bytes] = []
@@ -876,15 +887,20 @@ class SDS800XHDScope:
             primary_error = exc
             raise
         finally:
-            try:
-                self._restore_waveform_transfer_state(state)
-            except Exception as restore_error:
-                if primary_error is None:
+            if not isinstance(primary_error, (TransportIOError, SessionHealthError)):
+                try:
+                    self._restore_waveform_transfer_state(state)
+                except (TransportIOError, SessionHealthError) as restore_error:
+                    if primary_error is not None:
+                        restore_error.add_note(f"Primary waveform error: {primary_error}")
                     raise
-                primary_error.add_note(
-                    "SDS800X HD waveform transfer state restoration also failed: "
-                    f"{restore_error}"
-                )
+                except Exception as restore_error:
+                    if primary_error is None:
+                        raise
+                    primary_error.add_note(
+                        "SDS800X HD waveform transfer state restoration also failed: "
+                        f"{restore_error}"
+                    )
 
     def capture_waveform(
         self,

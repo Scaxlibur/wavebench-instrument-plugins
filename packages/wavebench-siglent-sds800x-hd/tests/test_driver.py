@@ -68,7 +68,7 @@ def test_descriptor_is_executable_metadata_without_import_io() -> None:
     )
     assert item.scope_coupling_policy == "fixed-high-impedance"
     assert item.distribution == "wavebench-siglent-sds800x-hd"
-    assert item.version == "0.6.0"
+    assert item.version == "0.6.1"
     assert item.wavebench_min_version == "0.8.23"
     assert item.scope_extensions is not None
     assert item.scope_extensions.screenshot_profile is SDS800X_HD_SCREENSHOT_PROFILE

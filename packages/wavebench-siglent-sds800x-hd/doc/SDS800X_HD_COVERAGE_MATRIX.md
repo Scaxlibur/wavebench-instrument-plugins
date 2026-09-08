@@ -123,3 +123,9 @@ x[i] = horizontal_delay - timebase * 10 / 2 + i * sample_interval
 - [功能覆盖开发路线](SDS800X_HD_COVERAGE_MILESTONES.md)
 - [实机验收记录](SDS800X_HD_HARDWARE_ACCEPTANCE.md)
 - [Scope R1.3 conformance](SDS800X_HD_R13_CONFORMANCE.md)
+
+## 波形传输恢复验证
+
+legacy `fetch_waveform` 写回原传输设置后，重新读取 source／start／interval／points／width／byte order 六项并与快照比较。写入被设备忽略、回读无效或不一致时操作失败；不会只凭命令返回就认定恢复成功。结构化传输或会话失败后停止后续恢复 I/O，普通主操作与恢复失败信息均保留。
+
+本次新增验证仅做离线测试和制品检查，不扩展型号／固件实机范围，也不承诺自动恢复 capture 修改的时基、垂直档位或通道显示。测试专用 R1.3 fixture 与此生产路径保持各自的证据边界。

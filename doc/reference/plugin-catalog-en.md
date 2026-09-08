@@ -26,8 +26,8 @@ Regenerate it with `python scripts/generate_plugin_catalog.py`; verify drift wit
 | [`wavebench-rohde-schwarz-rtm2000`](../../packages/wavebench-rohde-schwarz-rtm2000/README_EN.md) | `0.15.0` | `rohde-schwarz.rtm2032` | scope | RTM2032, RTM2000 | `>=3.11` | `wavebench>=0.8.26,<0.9` |
 | [`wavebench-shengpu-sp3000a`](../../packages/wavebench-shengpu-sp3000a/README_EN.md) | `0.2.0` | `shengpu.sp30120` | sweep_analyzer | SP30120 | `>=3.11` | `wavebench>=0.8,<0.9` |
 | [`wavebench-siglent-sdg2000x`](../../packages/wavebench-siglent-sdg2000x/README_EN.md) | `0.8.2` | `siglent.sdg2000x` | source | SDG2042X, SDG2082X, SDG2122X | `>=3.11` | `wavebench>=0.8.24,<0.9` |
-| [`wavebench-siglent-sds3000`](../../packages/wavebench-siglent-sds3000/README_EN.md) | `0.1.0` | `siglent.sds3000` | scope | SDS3054 | `>=3.11` | `wavebench>=0.8.24,<0.9` |
-| [`wavebench-siglent-sds800x-hd`](../../packages/wavebench-siglent-sds800x-hd/README_EN.md) | `0.6.0` | `siglent.sds800x-hd` | scope | SDS802X HD, SDS804X HD, SDS812X HD, SDS814X HD, SDS822X HD, SDS824X HD | `>=3.11` | `wavebench>=0.8.23,<0.9` |
+| [`wavebench-siglent-sds3000`](../../packages/wavebench-siglent-sds3000/README_EN.md) | `0.1.1` | `siglent.sds3000` | scope | SDS3054 | `>=3.11` | `wavebench>=0.8.24,<0.9` |
+| [`wavebench-siglent-sds800x-hd`](../../packages/wavebench-siglent-sds800x-hd/README_EN.md) | `0.6.1` | `siglent.sds800x-hd` | scope | SDS802X HD, SDS804X HD, SDS812X HD, SDS814X HD, SDS822X HD, SDS824X HD | `>=3.11` | `wavebench>=0.8.23,<0.9` |
 
 ## Declared capabilities
 

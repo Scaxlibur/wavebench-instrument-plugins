@@ -416,6 +416,7 @@ def test_fetch_waveform_uses_existing_capability_and_restores_transfer_state() -
         "WFSU?",
         "C1:WF? DESC",
         "C1:WF? DAT1",
+        "WFSU?", "CORD?", "CFMT?", "CHDR?",
     ]
     assert transport.writes == [
         "CHDR OFF",
@@ -519,7 +520,7 @@ def _capture_transport(
     }
     return FakeTransport(
         responses=responses,
-        response_sequences={"TRMD?": ["TRMD AUTO", f"TRMD {final_trigger_mode}"]},
+        response_sequences={"TRMD?": ["TRMD AUTO", f"TRMD {final_trigger_mode}", "TRMD AUTO"]},
         binary_responses={
             "C1:WF? DESC": _word_descriptor(),
             "C1:WF? DAT1": struct.pack("<4h", -2, 0, 2, 4),
@@ -647,3 +648,75 @@ def test_capture_rejects_invalid_requests_before_io(
 
     assert transport.queries == []
     assert transport.writes == []
+
+
+def _track_setting_writes(transport, *, ignored):
+    original = transport.write
+    def write(command):
+        original(command)
+        if command != ignored and " " in command:
+            name, value = command.split(" ", 1)
+            transport.responses[name + "?"] = value
+    transport.write = write
+
+
+@pytest.mark.parametrize("ignored", ["CHDR SHORT", "CFMT DEF9,BYTE,BIN", "CORD HI", "WFSU SP,4,NP,10,FP,2,SN,0"])
+def test_transfer_restore_detects_silently_ignored_write(ignored):
+    transport = _waveform_transport()
+    _track_setting_writes(transport, ignored=ignored)
+    with pytest.raises(StateDriftError) as caught:
+        SDS3000Scope(transport).fetch_waveform(1, check_errors=False)
+    name = ignored.split(" ", 1)[0]
+    assert caught.value.actual[name] != caught.value.expected[name]
+    assert caught.value.diff[name]["actual"] == caught.value.actual[name]
+
+
+@pytest.mark.parametrize("ignored", ["TDIV 2 MS", "C1:VDIV 200 MV", "C1:TRA OFF", "TRMD AUTO"])
+def test_capture_restore_detects_silently_ignored_write(ignored):
+    transport = _capture_transport(trace_states={1: "OFF"})
+    # The first two trigger reads model baseline and completed acquisition.
+    transport.response_sequences["TRMD?"] = ["AUTO", "STOP"]
+    original_query = transport.query
+    def query(command, *, replay):
+        if command in transport.response_sequences and not transport.response_sequences[command]:
+            del transport.response_sequences[command]
+        return original_query(command, replay=replay)
+    transport.query = query
+    transport.responses["TRMD?"] = "STOP"
+    _track_setting_writes(transport, ignored=ignored)
+    with pytest.raises(StateDriftError) as caught:
+        SDS3000Scope(transport).capture_waveform(1, check_errors=False, time_range_s=.01, vertical_scale_v_per_div=.5)
+    assert ignored.split(" ", 1)[0] in caught.value.diff
+
+
+@pytest.mark.parametrize("name,expected,response", [
+    ("TDIV", "2 MS", "TIME_DIV 0.002 S"),
+    ("C1:VDIV", "200 MV", "C1:VOLT_DIV 0.2 V"),
+])
+def test_restore_compares_quantities_after_unit_conversion(name, expected, response):
+    scope = SDS3000Scope(FakeTransport(responses={name + "?": response}))
+    scope._verify_restored_setting(name, expected)
+
+
+def test_restore_readback_failure_retains_primary_waveform_error():
+    primary = TimeoutError("primary waveform failure")
+    transport = _waveform_transport(data_response=primary)
+    transport.response_sequences["CHDR?"] = ["SHORT", "OFF"]
+    with pytest.raises(StateDriftError) as caught:
+        SDS3000Scope(transport).fetch_waveform(1, check_errors=False)
+    assert caught.value.__cause__ is primary
+
+
+def test_restore_verification_query_failure_stops_following_io():
+    failure = _transport_failure(operation="query", synchronization=Synchronization.LOST)
+    transport = _waveform_transport()
+    original = transport.query
+    def query(command, *, replay):
+        if command == "WFSU?" and transport.writes:
+            raise failure
+        return original(command, replay=replay)
+    transport.query = query
+    with pytest.raises(TransportIOError) as caught:
+        SDS3000Scope(transport).fetch_waveform(1, check_errors=False)
+    assert caught.value is failure
+    assert transport.writes[-1] == "WFSU SP,4,NP,10,FP,2,SN,0"
