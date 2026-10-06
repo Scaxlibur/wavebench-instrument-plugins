@@ -129,3 +129,7 @@ This list indexes protocol domains from the current driver. The complete source 
 - [Feature-coverage development roadmap](SDS800X_HD_COVERAGE_MILESTONES_EN.md)
 - [Hardware acceptance record](SDS800X_HD_HARDWARE_ACCEPTANCE_EN.md)
 - [Scope R1.3 conformance](SDS800X_HD_R13_CONFORMANCE.md) (Chinese)
+
+## Waveform transfer restoration verification
+
+After restoring the legacy `fetch_waveform` transfer settings, the driver freshly reads source, start, interval, points, width and byte order and compares them with the baseline. Ignored writes, malformed readback and mismatches fail the operation. Structured transport/session failures stop subsequent restoration I/O; ordinary primary and restoration errors are both retained. This change is tested offline and does not extend hardware acceptance or promise restoration of capture timebase, vertical scale or channel display. The R1.3 test fixture remains separate from this production path.

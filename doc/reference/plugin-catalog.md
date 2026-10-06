@@ -25,8 +25,8 @@
 | [`wavebench-rohde-schwarz-rtm2000`](../../packages/wavebench-rohde-schwarz-rtm2000/README.md) | `0.15.0` | `rohde-schwarz.rtm2032` | 示波器 | RTM2032, RTM2000 | `>=3.11` | `wavebench>=0.8.26,<0.9` |
 | [`wavebench-shengpu-sp3000a`](../../packages/wavebench-shengpu-sp3000a/README.md) | `0.2.0` | `shengpu.sp30120` | 扫频仪 | SP30120 | `>=3.11` | `wavebench>=0.8,<0.9` |
 | [`wavebench-siglent-sdg2000x`](../../packages/wavebench-siglent-sdg2000x/README.md) | `0.8.2` | `siglent.sdg2000x` | 信号源 | SDG2042X, SDG2082X, SDG2122X | `>=3.11` | `wavebench>=0.8.24,<0.9` |
-| [`wavebench-siglent-sds3000`](../../packages/wavebench-siglent-sds3000/README.md) | `0.1.0` | `siglent.sds3000` | 示波器 | SDS3054 | `>=3.11` | `wavebench>=0.8.24,<0.9` |
-| [`wavebench-siglent-sds800x-hd`](../../packages/wavebench-siglent-sds800x-hd/README.md) | `0.6.0` | `siglent.sds800x-hd` | 示波器 | SDS802X HD, SDS804X HD, SDS812X HD, SDS814X HD, SDS822X HD, SDS824X HD | `>=3.11` | `wavebench>=0.8.23,<0.9` |
+| [`wavebench-siglent-sds3000`](../../packages/wavebench-siglent-sds3000/README.md) | `0.1.1` | `siglent.sds3000` | 示波器 | SDS3054 | `>=3.11` | `wavebench>=0.8.24,<0.9` |
+| [`wavebench-siglent-sds800x-hd`](../../packages/wavebench-siglent-sds800x-hd/README.md) | `0.6.1` | `siglent.sds800x-hd` | 示波器 | SDS802X HD, SDS804X HD, SDS812X HD, SDS814X HD, SDS822X HD, SDS824X HD | `>=3.11` | `wavebench>=0.8.23,<0.9` |
 
 ## 已声明 capability
 

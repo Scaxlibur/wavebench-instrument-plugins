@@ -53,3 +53,7 @@ Disposition meanings:
 This matrix answers whether each current WaveBench interface can be represented. [`COMMAND_COVERAGE_EN.md`](COMMAND_COVERAGE_EN.md) and the machine catalog answer how every explicit manual entity is disposed. Their denominators differ: 26 capabilities here and 578 explicit manual entities in the command catalog.
 
 One hundred percent coverage therefore does not mean executing every instruction on hardware. Reset, calibration, filesystem, network, hardcopy, option activation, shutdown, and arbitrary-script paths remain quarantined. Missing options, model exclusions, unverified firmware behavior, and core-model gaps remain auditable coverage outcomes.
+
+## Restoration readback
+
+Restored CHDR/CFMT/CORD/WFSU settings and capture TRMD/TDIV/VDIV/TRA settings are independently queried after each write. Enumerations are normalized; timebase and vertical scales are compared in base units with `rtol=1e-9, atol=0`. A mismatch, malformed response or restore write failure fails the operation and identifies the affected field. Structured transport/session failures stop further restoration I/O. A primary operation failure is retained as the cause when restoration also fails. This change has offline fault coverage, including silently ignored writes; no new hardware acceptance was performed.

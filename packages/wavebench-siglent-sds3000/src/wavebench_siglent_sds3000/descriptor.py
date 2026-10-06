@@ -42,7 +42,7 @@ def descriptor() -> InstrumentDescriptor:
         wavebench_min_version="0.8.24",
         wavebench_max_version="0.9.0",
         distribution="wavebench-siglent-sds3000",
-        version="0.1.0",
+        version="0.1.1",
         source="entry_point:siglent.sds3000",
         scope_coupling_policy="switchable-termination",
         config_fields=("connection.resource", "scope.driver", "waveform.*"),

@@ -378,6 +378,7 @@ def test_fetch_waveform_reads_stopped_record_in_chunks_and_restores_state() -> N
         ("write", ":WAVeform:START 4"),
         ("binary", ":WAVeform:DATA?"),
         *(("write", command) for command in _RESTORE_WRITES),
+        *(("query", command) for command in _ORIGINAL_TRANSFER_STATE),
     ]
 
 
@@ -640,3 +641,52 @@ def test_fetch_waveform_restore_failure_does_not_hide_primary_failure() -> None:
 
     assert any("restoration also failed" in note for note in caught.value.__notes__)
     assert transport.writes[-1] == ":WAVeform:START 5"
+
+
+@pytest.mark.parametrize("ignored", _RESTORE_WRITES[2:])
+def test_restore_detects_silently_ignored_transfer_write(ignored):
+    from wavebench.errors import StateDriftError
+    transport = FakeTransport()
+    original = transport.write
+    def write(command):
+        original(command)
+        if command != ignored:
+            name, value = command.split(" ", 1)
+            transport.responses[name + "?"] = value
+    transport.write = write
+    with pytest.raises(StateDriftError) as caught:
+        SDS800XHDScope(transport).fetch_waveform(2, check_errors=False)
+    assert caught.value.diff
+    assert transport.writes[-len(_RESTORE_WRITES):] == _RESTORE_WRITES
+
+
+def test_readback_error_does_not_hide_primary_error():
+    primary = TimeoutError("primary binary failure")
+    transport = FakeTransport(chunks=[primary])
+    original = transport.query
+    def query(command):
+        if transport.writes and transport.writes[-1] == _RESTORE_WRITES[-1]:
+            raise DataError("unreadable restored state")
+        return original(command)
+    transport.query = query
+    with pytest.raises(TimeoutError) as caught:
+        SDS800XHDScope(transport).fetch_waveform(2, check_errors=False)
+    assert caught.value is primary
+    assert any("unreadable restored state" in note for note in caught.value.__notes__)
+
+
+@pytest.mark.parametrize("during_restore", [False, True])
+def test_structured_session_failure_stops_all_following_restore_io(during_restore):
+    from wavebench.errors import SessionHealthError
+    failure = SessionHealthError("session poisoned", health="poisoned", io_kind="write" if during_restore else "query", epoch_id="test")
+    transport = FakeTransport(
+        chunks=None if during_restore else [failure],
+        write_failures={_RESTORE_WRITES[2]: failure} if during_restore else None,
+    )
+    with pytest.raises(SessionHealthError) as caught:
+        SDS800XHDScope(transport).fetch_waveform(2, check_errors=False)
+    assert caught.value is failure
+    if during_restore:
+        assert transport.operations[-1] == ("write", _RESTORE_WRITES[2])
+    else:
+        assert transport.operations[-1] == ("binary", ":WAVeform:DATA?")

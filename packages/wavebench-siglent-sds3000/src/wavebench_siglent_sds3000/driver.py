@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from math import isfinite
+from math import isclose, isfinite
 import re
 from threading import RLock
 from typing import TYPE_CHECKING, Callable, Iterator
@@ -342,6 +342,35 @@ class SDS3000Scope:
             ),
         )
 
+    def _verify_restored_setting(self, name: str, expected: str) -> None:
+        response = self.transport.query(f"{name}?", replay=ReplayPolicy.NO_REPLAY)
+        parsers = {"CHDR": self._parse_header_state, "CFMT": self._parse_format_state,
+                   "CORD": self._parse_order_state, "WFSU": self._parse_setup_state,
+                   "TRMD": self._parse_trigger_mode}
+        if name in parsers:
+            actual = parsers[name](response)
+            matches = actual == expected
+        elif name.endswith(":TRA"):
+            actual = self._parse_trace_state(response, channel=int(name[1:name.index(":")]))
+            matches = actual == expected
+        else:
+            time_axis = name == "TDIV"
+            units = frozenset({"", "S", "MS", "US", "NS", "KS"} if time_axis else {"", "V", "MV", "UV", "NV", "KV"})
+            header = "TIME_DIV" if time_axis else name.replace(":VDIV", ":VOLT_DIV")
+            actual = self._parse_positive_quantity(response, headers=(name, header), units=units, name=name)
+            def quantity(value: str) -> float:
+                match = _QUANTITY_RE.fullmatch(value)
+                assert match is not None
+                unit = match.group("unit")
+                scale = {"M": 1e-3, "U": 1e-6, "N": 1e-9, "K": 1e3}.get(unit[:1], 1.)
+                return float(match.group("number")) * scale
+            matches = isclose(quantity(actual), quantity(expected), rel_tol=1e-9, abs_tol=0.)
+        if not matches:
+            raise StateDriftError(
+                f"SDS3000 restore readback mismatch: {name}", expected={name: expected},
+                actual={name: actual}, diff={name: {"expected": expected, "actual": actual}},
+            )
+
     @contextmanager
     def _temporary_waveform_transfer_state(
         self,
@@ -371,6 +400,7 @@ class SDS3000Scope:
                 for command, previous in reversed(restore):
                     try:
                         self.transport.write(f"{command} {previous}")
+                        self._verify_restored_setting(command, previous)
                     except _STRUCTURED_IO_ERRORS:
                         raise
                     except Exception as exc:  # pragma: no branch - all failures are retained
@@ -378,16 +408,16 @@ class SDS3000Scope:
                 if failures:
                     expected = {command: previous for command, previous, _ in failures}
                     diff = {
-                        command: {"expected": previous, "actual": "unknown"}
-                        for command, previous, _ in failures
+                        command: {"expected": previous, "actual": getattr(exc, "actual", {}).get(command, "unknown")}
+                        for command, previous, exc in failures
                     }
                     names = ", ".join(command for command, _, _ in failures)
                     raise StateDriftError(
                         f"failed to restore SDS3000 waveform transfer state: {names}",
                         expected=expected,
-                        actual={command: "unknown" for command in expected},
+                        actual={name: getattr(exc, "actual", {}).get(name, "unknown") for name, _, exc in failures},
                         diff=diff,
-                    ) from failures[0][2]
+                    ) from (operation_failure or failures[0][2])
 
     @staticmethod
     def _validate_waveform_points(points: str) -> str:
@@ -555,6 +585,7 @@ class SDS3000Scope:
                 for name, command, expected in reversed(restore):
                     try:
                         self.transport.write(command)
+                        self._verify_restored_setting(name, expected)
                     except _STRUCTURED_IO_ERRORS:
                         raise
                     except Exception as exc:  # pragma: no branch - all failures are retained
@@ -562,16 +593,16 @@ class SDS3000Scope:
                 if failures:
                     expected = {name: value for name, value, _ in failures}
                     diff = {
-                        name: {"expected": value, "actual": "unknown"}
-                        for name, value, _ in failures
+                        name: {"expected": value, "actual": getattr(exc, "actual", {}).get(name, "unknown")}
+                        for name, value, exc in failures
                     }
                     names = ", ".join(name for name, _, _ in failures)
                     raise StateDriftError(
                         f"failed to restore SDS3000 capture state: {names}",
                         expected=expected,
-                        actual={name: "unknown" for name in expected},
+                        actual={name: getattr(exc, "actual", {}).get(name, "unknown") for name, _, exc in failures},
                         diff=diff,
-                    ) from failures[0][2]
+                    ) from (operation_failure or failures[0][2])
 
     def _acquire_once(self) -> None:
         budget_ms = max(min(self.io_timeout_ms, self.opc_timeout_ms), 1_000)
