@@ -4,6 +4,7 @@ import importlib.util
 import os
 from pathlib import Path
 import sys
+import tomllib
 
 import pytest
 
@@ -56,7 +57,9 @@ def test_expected_state_tracks_core_and_plugin_metadata():
     assert state["schema_version"] == 1
     assert state["build_requirements"] == ["hatchling>=1.25"]
     assert state["wavebench"]["distribution"] == "wavebench"
-    assert state["wavebench"]["version"] == "0.8.26"
+    assert state["wavebench"]["version"] == tomllib.loads(
+        (WAVEBENCH_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["version"]
     assert len(state["wavebench"]["pyproject_sha256"]) == 64
     assert len(state["plugins"]) == 11
     assert all(len(plugin["pyproject_sha256"]) == 64 for plugin in state["plugins"])
@@ -64,9 +67,9 @@ def test_expected_state_tracks_core_and_plugin_metadata():
 
 def test_sync_command_uses_standard_editable_installs():
     state = DEV_ENV.build_expected_state(ROOT, WAVEBENCH_ROOT)
-    command = DEV_ENV.build_sync_command(Path("/tmp/dev/bin/python"), state)
+    command = DEV_ENV.build_sync_command("uv", Path("/tmp/dev/bin/python"), state)
 
-    assert command[:4] == ["/tmp/dev/bin/python", "-m", "pip", "install"]
+    assert command[:5] == ["uv", "pip", "install", "--python", "/tmp/dev/bin/python"]
     assert "hatchling>=1.25" in command
     editable_targets = [
         command[index + 1] for index, item in enumerate(command) if item == "--editable"
@@ -89,13 +92,25 @@ def test_sync_command_uses_standard_editable_installs():
     assert "--no-index" not in command
 
 
-def test_rejects_managed_plugin_state(tmp_path):
+@pytest.mark.parametrize("state_name", DEV_ENV.MANAGED_STATE_NAMES)
+def test_rejects_managed_plugin_state(tmp_path, state_name):
     state_root = tmp_path / ".wavebench"
     state_root.mkdir()
-    (state_root / "plugin-installs-v1.json").write_text("{}\n", encoding="utf-8")
+    (state_root / state_name).write_text("{}\n", encoding="utf-8")
 
     with pytest.raises(DEV_ENV.DevEnvironmentError, match="受管插件账本"):
         DEV_ENV._assert_not_managed_environment(tmp_path)
+
+
+def test_missing_uv_does_not_create_environment(tmp_path, monkeypatch):
+    target = tmp_path / "new environment"
+    args = DEV_ENV.build_parser().parse_args(["--venv", str(target), "sync"])
+    monkeypatch.setattr(DEV_ENV.shutil, "which", lambda _name: None)
+
+    with pytest.raises(DEV_ENV.DevEnvironmentError, match="uv is required"):
+        DEV_ENV.sync_environment(args)
+
+    assert not target.exists()
 
 
 def test_identifies_only_plugins_removed_from_recorded_state():
