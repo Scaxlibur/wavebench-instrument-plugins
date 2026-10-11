@@ -156,13 +156,15 @@ def test_sdist_excludes_vendor_manuals_and_contains_public_docs(tmp_path: Path) 
 
 
 def _run(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    completed = subprocess.run(
         command,
         cwd=cwd,
         text=True,
         capture_output=True,
-        check=True,
+        check=False,
     )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    return completed
 
 
 def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
@@ -264,7 +266,7 @@ assert alias.origin == "builtin"
 """
     _run([str(python), "-I", "-c", discovery_script], cwd=tmp_path)
     _run(
-        [str(python), "-I", "-m", "wavebench", "plugin", "doctor", "--load"],
+        [str(python), "-I", "-X", "utf8", "-m", "wavebench", "plugin", "doctor", "--load"],
         cwd=tmp_path,
     )
     assert lifecycle.remove("rigol.dg4202-v2").status == "removed"
