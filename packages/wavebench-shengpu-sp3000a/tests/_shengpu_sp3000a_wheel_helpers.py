@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sysconfig
@@ -19,10 +20,17 @@ def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
         name = source.name
         if (
             name.startswith("wavebench")
+            or name == "pip"
             or name.endswith((".dist-info", ".egg-info", ".pth", ".egg"))
         ):
             continue
-        os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+        try:
+            os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+        except OSError:
+            if source.is_dir():
+                shutil.copytree(source, bridge / name)
+            else:
+                shutil.copy2(source, bridge / name)
     Path(purelib, "wavebench-test-runtime.pth").write_text(
         str(Path(wavebench.__file__).resolve().parents[1]) + "\n" + str(bridge) + "\n",
         encoding="utf-8",

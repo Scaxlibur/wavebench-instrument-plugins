@@ -35,8 +35,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install "pytest>=8"
-      - run: python scripts/generate_plugin_catalog.py --check
+      - uses: astral-sh/setup-uv@v9
+        with:
+          version: "0.12.15"
+      - run: uv venv
+      - run: uv pip install --python .venv "pytest>=8"
+      - run: uv run --no-project --python .venv python scripts/generate_plugin_catalog.py --check
       # Errors fail the pilot gate; known migration warnings remain visible.
-      - run: python scripts/audit_docs.py
-      - run: python -m pytest -q tests/test_docs_audit.py tests/test_plugin_catalog.py
+      - run: uv run --no-project --python .venv python scripts/audit_docs.py
+      - run: uv run --no-project --python .venv python -m pytest -q tests/test_docs_audit.py tests/test_plugin_catalog.py

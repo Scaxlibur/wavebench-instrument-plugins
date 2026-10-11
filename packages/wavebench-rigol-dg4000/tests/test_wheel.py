@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 import sysconfig
 import tarfile
 from zipfile import ZipFile
@@ -28,15 +29,17 @@ def test_wheel_contains_license_and_expected_entry_points(tmp_path: Path) -> Non
     wheelhouse.mkdir()
     _run(
         [
+            shutil.which("uv"),
+            "--no-config",
+            "--offline",
+            "--no-python-downloads",
+            "build",
+            "--wheel",
+            "--python",
             sys.executable,
-            "-m",
-            "pip",
-            "wheel",
             "--no-build-isolation",
-            "--no-deps",
             "--no-index",
-            "--disable-pip-version-check",
-            "--wheel-dir",
+            "--out-dir",
             str(wheelhouse),
             str(PACKAGE_ROOT),
         ],
@@ -77,15 +80,17 @@ def test_wheel_contains_verified_source_conformance_manifests(tmp_path: Path) ->
     wheelhouse.mkdir()
     _run(
         [
+            shutil.which("uv"),
+            "--no-config",
+            "--offline",
+            "--no-python-downloads",
+            "build",
+            "--wheel",
+            "--python",
             sys.executable,
-            "-m",
-            "pip",
-            "wheel",
             "--no-build-isolation",
-            "--no-deps",
             "--no-index",
-            "--disable-pip-version-check",
-            "--wheel-dir",
+            "--out-dir",
             str(wheelhouse),
             str(PACKAGE_ROOT),
         ],
@@ -170,7 +175,13 @@ def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
             or name.endswith((".dist-info", ".egg-info", ".pth", ".egg"))
         ):
             continue
-        os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+        try:
+            os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+        except OSError:
+            if source.is_dir():
+                shutil.copytree(source, bridge / name)
+            else:
+                shutil.copy2(source, bridge / name)
     Path(purelib, "wavebench-test-runtime.pth").write_text(
         str(Path(wavebench.__file__).resolve().parents[1]) + "\n" + str(bridge) + "\n",
         encoding="utf-8",
@@ -182,15 +193,17 @@ def test_wheel_install_migration_doctor_routing_and_uninstall_fallback(tmp_path:
     wheelhouse.mkdir()
     _run(
         [
+            shutil.which("uv"),
+            "--no-config",
+            "--offline",
+            "--no-python-downloads",
+            "build",
+            "--wheel",
+            "--python",
             sys.executable,
-            "-m",
-            "pip",
-            "wheel",
             "--no-build-isolation",
-            "--no-deps",
             "--no-index",
-            "--disable-pip-version-check",
-            "--wheel-dir",
+            "--out-dir",
             str(wheelhouse),
             str(PACKAGE_ROOT),
         ],
@@ -201,7 +214,7 @@ def test_wheel_install_migration_doctor_routing_and_uninstall_fallback(tmp_path:
     )
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
-    python = venv_dir / "bin" / "python"
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     purelib = _run(
         [str(python), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
         cwd=tmp_path,

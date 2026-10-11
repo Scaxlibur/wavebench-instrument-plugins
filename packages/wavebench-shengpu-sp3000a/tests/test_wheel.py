@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import shutil
 import tarfile
 
 from _shengpu_sp3000a_wheel_helpers import _run, _write_isolated_runtime_bridge
@@ -35,15 +36,17 @@ def test_wheel_install_discovery_and_uninstall_without_instrument_io(tmp_path: P
     wheelhouse.mkdir()
     _run(
         [
+            shutil.which("uv"),
+            "--no-config",
+            "--offline",
+            "--no-python-downloads",
+            "build",
+            "--wheel",
+            "--python",
             sys.executable,
-            "-m",
-            "pip",
-            "wheel",
             "--no-build-isolation",
-            "--no-deps",
             "--no-index",
-            "--disable-pip-version-check",
-            "--wheel-dir",
+            "--out-dir",
             str(wheelhouse),
             str(PACKAGE_ROOT),
         ],
@@ -52,7 +55,7 @@ def test_wheel_install_discovery_and_uninstall_without_instrument_io(tmp_path: P
     plugin_wheel = next(wheelhouse.glob("wavebench_shengpu_sp3000a-0.2.0-*.whl"))
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
-    python = venv_dir / "bin" / "python"
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     purelib = _run(
         [str(python), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
         cwd=tmp_path,
