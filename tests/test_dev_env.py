@@ -65,16 +65,17 @@ def test_expected_state_tracks_core_and_plugin_metadata():
     assert all(len(plugin["pyproject_sha256"]) == 64 for plugin in state["plugins"])
 
 
-def test_sync_command_uses_standard_editable_installs():
+def test_sync_command_uses_standard_editable_installs(tmp_path):
     state = DEV_ENV.build_expected_state(ROOT, WAVEBENCH_ROOT)
-    command = DEV_ENV.build_sync_command("uv", Path("/tmp/dev/bin/python"), state)
+    python = tmp_path / "python"
+    command = DEV_ENV.build_sync_command("uv", python, state)
 
-    assert command[:5] == ["uv", "pip", "install", "--python", "/tmp/dev/bin/python"]
+    assert command[:5] == ["uv", "pip", "install", "--python", str(python)]
     assert "hatchling>=1.25" in command
     editable_targets = [
         command[index + 1] for index, item in enumerate(command) if item == "--editable"
     ]
-    assert editable_targets[0].endswith("/wavebench[dev]")
+    assert editable_targets[0] == f"{WAVEBENCH_ROOT}[dev]"
     assert editable_targets[1:] == [
         f"{ROOT / 'packages/wavebench-rigol-dg4000'}[dev]",
         f"{ROOT / 'packages/wavebench-rigol-dm3000'}[dev]",
