@@ -4,6 +4,7 @@ from importlib.metadata import PathDistribution
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 import tarfile
 from zipfile import ZipFile
 
@@ -16,15 +17,17 @@ def test_wheel_contains_license_and_single_entry_point(tmp_path: Path) -> None:
     wheelhouse.mkdir()
     subprocess.run(
         [
+            shutil.which("uv"),
+            "--no-config",
+            "--offline",
+            "--no-python-downloads",
+            "build",
+            "--wheel",
+            "--python",
             sys.executable,
-            "-m",
-            "pip",
-            "wheel",
             "--no-build-isolation",
-            "--no-deps",
             "--no-index",
-            "--disable-pip-version-check",
-            "--wheel-dir",
+            "--out-dir",
             str(wheelhouse),
             str(PACKAGE_ROOT),
         ],

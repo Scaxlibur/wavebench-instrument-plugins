@@ -147,19 +147,17 @@ def build_expected_state(
     }
 
 
-def build_sync_command(venv_python: Path, state: dict[str, object]) -> list[str]:
+def build_sync_command(uv: str, venv_python: Path, state: dict[str, object]) -> list[str]:
     core = state["wavebench"]
     assert isinstance(core, dict)
     plugins = state["plugins"]
     assert isinstance(plugins, list)
     command = [
-        str(venv_python),
-        "-m",
+        uv,
         "pip",
         "install",
-        "--disable-pip-version-check",
-        "--upgrade-strategy",
-        "only-if-needed",
+        "--python",
+        str(venv_python),
     ]
     requirements = state["build_requirements"]
     assert isinstance(requirements, list)
@@ -228,7 +226,8 @@ import re
 from importlib import metadata
 from pathlib import Path
 from packaging.requirements import Requirement
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from wavebench.instruments.registry import build_instrument_registry
 
@@ -262,7 +261,9 @@ for project in projects:
     parsed = urlparse(direct_url.get("url", ""))
     if parsed.scheme != "file":
         raise RuntimeError(f"{project['distribution']} has a non-file editable source")
-    installed_path = Path(unquote(parsed.path)).resolve()
+    installed_path = Path(url2pathname(
+        f"//{parsed.netloc}{parsed.path}" if parsed.netloc else parsed.path
+    )).resolve()
     expected_path = Path(project["path"]).resolve()
     if installed_path != expected_path:
         raise RuntimeError(
@@ -334,9 +335,12 @@ def sync_environment(args: argparse.Namespace) -> None:
     wavebench_root = args.wavebench_root.resolve()
     venv = args.venv.resolve()
     expected = build_expected_state(repository_root, wavebench_root)
+    uv = shutil.which("uv")
+    if uv is None:
+        raise DevEnvironmentError("uv is required on PATH / PATH 中未找到 uv")
     created = False
     if not venv.exists():
-        subprocess.run([str(args.python), "-m", "venv", str(venv)], check=True)
+        subprocess.run([uv, "venv", "--python", str(args.python), str(venv)], check=True)
         created = True
     elif not (venv / MARKER_FILE).is_file() and not args.adopt_existing:
         raise DevEnvironmentError(
@@ -349,8 +353,8 @@ def sync_environment(args: argparse.Namespace) -> None:
         if not venv_python.is_file():
             raise DevEnvironmentError(f"virtualenv Python not found / 未找到虚拟环境 Python: {venv}")
         print(
-            "Syncing editable WaveBench and plugin packages; pip may access configured indexes.\n"
-            "正在同步 editable 核心与插件；pip 可能访问已配置的软件源。"
+            "Syncing editable WaveBench and plugin packages; uv may access configured indexes.\n"
+            "正在同步 editable 核心与插件；uv 可能访问已配置的软件源。"
         )
         recorded = None
         if (venv / STATE_FILE).is_file():
@@ -358,10 +362,10 @@ def sync_environment(args: argparse.Namespace) -> None:
         removed = removed_plugin_distributions(recorded, expected)
         if removed:
             subprocess.run(
-                [str(venv_python), "-m", "pip", "uninstall", "--yes", *removed],
+                [uv, "pip", "uninstall", "--python", str(venv_python), *removed],
                 check=True,
             )
-        subprocess.run(build_sync_command(venv_python, expected), check=True)
+        subprocess.run(build_sync_command(uv, venv_python, expected), check=True)
         probe = _probe_environment(venv_python, expected)
         (venv / MARKER_FILE).write_text("wavebench-plugin-dev-env-v1\n", encoding="utf-8")
         _write_json_atomic(venv / STATE_FILE, expected)

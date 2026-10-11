@@ -57,7 +57,7 @@
 根据变更逐级运行，前一级失败时先停止并处理根因：
 
 ```bash
-python3 scripts/dev_env.py check
+python scripts/dev_env.py check
 .venv/bin/python -m pytest -q packages/<package>/tests/<focused-test>.py
 .venv/bin/python -m pytest -q packages/<package>/tests
 .venv/bin/python -m ruff check <changed-paths>

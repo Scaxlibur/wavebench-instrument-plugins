@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 import sysconfig
 import tarfile
 from zipfile import ZipFile
@@ -35,7 +36,13 @@ def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
             (".dist-info", ".egg-info", ".pth", ".egg")
         ):
             continue
-        os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+        try:
+            os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+        except OSError:
+            if source.is_dir():
+                shutil.copytree(source, bridge / name)
+            else:
+                shutil.copy2(source, bridge / name)
     Path(purelib, "wavebench-test-runtime.pth").write_text(
         str(Path(wavebench.__file__).resolve().parents[1]) + "\n" + str(bridge) + "\n",
         encoding="utf-8",
@@ -46,15 +53,17 @@ def _build_wheel(destination: Path) -> Path:
     destination.mkdir()
     _run(
         [
+            shutil.which("uv"),
+            "--no-config",
+            "--offline",
+            "--no-python-downloads",
+            "build",
+            "--wheel",
+            "--python",
             sys.executable,
-            "-m",
-            "pip",
-            "wheel",
             "--no-build-isolation",
-            "--no-deps",
             "--no-index",
-            "--disable-pip-version-check",
-            "--wheel-dir",
+            "--out-dir",
             str(destination),
             str(PACKAGE_ROOT),
         ],
@@ -142,7 +151,7 @@ def test_install_discovery_reinstall_and_uninstall_without_io(tmp_path: Path) ->
     wheel = _build_wheel(tmp_path / "wheelhouse")
     venv_dir = tmp_path / "venv"
     _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
-    python = venv_dir / "bin" / "python"
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     purelib = _run(
         [str(python), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
         cwd=tmp_path,

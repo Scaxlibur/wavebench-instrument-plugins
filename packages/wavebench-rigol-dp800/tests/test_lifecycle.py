@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 import sysconfig
 
 import wavebench
@@ -24,10 +25,17 @@ def _write_isolated_runtime_bridge(*, purelib: Path, workspace: Path) -> None:
         name = source.name
         if (
             name.startswith("wavebench")
+            or name == "pip"
             or name.endswith((".dist-info", ".egg-info", ".pth", ".egg"))
         ):
             continue
-        os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+        try:
+            os.symlink(source, bridge / name, target_is_directory=source.is_dir())
+        except OSError:
+            if source.is_dir():
+                shutil.copytree(source, bridge / name)
+            else:
+                shutil.copy2(source, bridge / name)
     Path(purelib, "wavebench-test-runtime.pth").write_text(
         str(Path(wavebench.__file__).resolve().parents[1]) + "\n" + str(bridge) + "\n",
         encoding="utf-8",
@@ -39,15 +47,17 @@ def test_managed_install_routes_canonical_and_remove_restores_builtin(tmp_path: 
     wheelhouse.mkdir()
     _run(
         [
+            shutil.which("uv"),
+            "--no-config",
+            "--offline",
+            "--no-python-downloads",
+            "build",
+            "--wheel",
+            "--python",
             sys.executable,
-            "-m",
-            "pip",
-            "wheel",
             "--no-build-isolation",
-            "--no-deps",
             "--no-index",
-            "--disable-pip-version-check",
-            "--wheel-dir",
+            "--out-dir",
             str(wheelhouse),
             str(PACKAGE_ROOT),
         ],
@@ -55,14 +65,19 @@ def test_managed_install_routes_canonical_and_remove_restores_builtin(tmp_path: 
     )
     wheel = next(wheelhouse.glob("wavebench_rigol_dp800-0.3.0-*.whl"))
     venv_dir = tmp_path / "venv"
-    _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
-    python = venv_dir / "bin" / "python"
+    _run([sys.executable, "-m", "venv", "--without-pip", str(venv_dir)], cwd=tmp_path)
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     purelib = _run(
         [str(python), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
         cwd=tmp_path,
     ).stdout.strip()
     _write_isolated_runtime_bridge(purelib=Path(purelib), workspace=tmp_path)
 
+    _run(
+        [str(python), "-I", "-c",
+         "import importlib.util; assert importlib.util.find_spec('pip') is None"],
+        cwd=tmp_path,
+    )
     lifecycle = PluginLifecycle(python_executable=python)
     result = lifecycle.install(wheel)
     installed = lifecycle.info("rigol.dp800")

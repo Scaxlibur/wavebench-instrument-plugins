@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+import shutil
 
 from _rigol_dm3000_wheel_helpers import _run, _write_isolated_runtime_bridge
 from wavebench.plugins.lifecycle import PluginLifecycle
@@ -14,15 +15,17 @@ def test_managed_install_routes_canonical_and_remove_restores_builtin(tmp_path: 
     wheelhouse.mkdir()
     _run(
         [
+            shutil.which("uv"),
+            "--no-config",
+            "--offline",
+            "--no-python-downloads",
+            "build",
+            "--wheel",
+            "--python",
             sys.executable,
-            "-m",
-            "pip",
-            "wheel",
             "--no-build-isolation",
-            "--no-deps",
             "--no-index",
-            "--disable-pip-version-check",
-            "--wheel-dir",
+            "--out-dir",
             str(wheelhouse),
             str(PACKAGE_ROOT),
         ],
@@ -30,14 +33,19 @@ def test_managed_install_routes_canonical_and_remove_restores_builtin(tmp_path: 
     )
     wheel = next(wheelhouse.glob("wavebench_rigol_dm3000-0.5.0-*.whl"))
     venv_dir = tmp_path / "venv"
-    _run([sys.executable, "-m", "venv", str(venv_dir)], cwd=tmp_path)
-    python = venv_dir / "bin" / "python"
+    _run([sys.executable, "-m", "venv", "--without-pip", str(venv_dir)], cwd=tmp_path)
+    python = venv_dir / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     purelib = _run(
         [str(python), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
         cwd=tmp_path,
     ).stdout.strip()
     _write_isolated_runtime_bridge(purelib=Path(purelib), workspace=tmp_path)
 
+    _run(
+        [str(python), "-I", "-c",
+         "import importlib.util; assert importlib.util.find_spec('pip') is None"],
+        cwd=tmp_path,
+    )
     lifecycle = PluginLifecycle(python_executable=python)
     result = lifecycle.install(wheel)
     installed = lifecycle.info("rigol.dm3000")

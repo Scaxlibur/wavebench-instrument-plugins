@@ -6,27 +6,31 @@
 
 ## 首次同步
 
+需要 Python 3.11+ 和 PATH 中可用的 [uv](https://docs.astral.sh/uv/getting-started/installation/)。
+
+下文的 `python` 指 Python 3.11+，Bash 与 PowerShell 使用相同命令；若系统仅提供 `python3`，替换该命令名即可。uv 不读取 `pip.conf` 或 `PIP_INDEX_URL`；使用镜像或私有软件源时，先配置 [uv 软件源](https://docs.astral.sh/uv/concepts/indexes/)。
+
 默认目录布局为相邻的 `wavebench/` 和 `wavebench-instrument-plugins/`：
 
 ```bash
 cd wavebench-instrument-plugins
-python3 scripts/dev_env.py sync
+python scripts/dev_env.py sync
 ```
 
-脚本会创建仓库内被忽略的 `.venv/`，汇总并安装各项目声明的 build-system 依赖，安装 `wavebench[dev]` 和所有正式插件的 editable metadata，并通过真实 `wavebench.instruments` entry point 与 registry 解析验证环境。`sync` 会调用 pip，首次运行可能访问配置的软件源并安装依赖；它不是离线发布门禁。
+脚本会创建仓库内被忽略的 `.venv/`，汇总并安装各项目声明的 build-system 依赖，以 editable 方式安装 Core 和所有正式插件及各自的 `[dev]` extras，并通过真实 `wavebench.instruments` entry point 与 registry 解析验证环境。`sync` 使用 `uv venv` 和 `uv pip install`，首次运行可能访问配置的软件源并安装依赖；它不是离线发布门禁。
 
 若核心仓库不在默认相邻位置，应显式指定：
 
 ```bash
-python3 scripts/dev_env.py --wavebench-root <wavebench-source> sync
+python scripts/dev_env.py --wavebench-root <wavebench-source> sync
 ```
 
 ## 日常开发
 
 ```bash
-.venv/bin/python -m pytest
-.venv/bin/python -m ruff check .
-python3 scripts/dev_env.py check
+uv run --no-project --python .venv python -m pytest
+uv run --no-project --python .venv python -m ruff check .
+python scripts/dev_env.py check
 ```
 
 源码修改不需要重新运行 `sync`。只有下列内容变化时才需再次同步：
@@ -38,8 +42,25 @@ python3 scripts/dev_env.py check
 
 `check` 不安装软件、不访问仪器，也不联网；它会比较已记录的项目元数据，确认核心和插件仍为 editable 安装，要求仪器 entry point 集合与当前正式插件集合精确一致，并通过 WaveBench registry 解析每个 canonical driver ID。再次运行 `sync` 时，脚本会依据这个专用环境自己的旧状态记录卸载已经从仓库移除的正式插件。只有文档、没有 `pyproject.toml` 的孵化目录会被明确跳过。
 
+根目录不维护独立的 uv project 或 lock；脚本按 Core 与各插件的声明解析 editable 开发依赖，
+不等同于 Core 的锁定 CI 环境。不要在此环境执行 Core 的 `uv sync`，否则可能移除插件。
+脚本仅卸载自身旧状态中已从仓库移除的插件，并保留对受管账本的拒绝检查。
+
+已有的标记开发环境可继续同步；未标记环境须审阅后显式传入 `sync --adopt-existing`。接管不会清理任意旧包；需要干净环境时，通过 `--venv <新目录>` 创建独立环境，不覆盖原环境。
+
 ## 与正式验收的边界
 
 editable 环境仅用于开发反馈，不代表可发布验收。提交或发布前仍需使用 WaveBench 的 `plugin package check`、真实 wheel、一次性虚拟环境和受管 install/remove 生命周期门禁。不要在同一虚拟环境中混用 editable 安装与 WaveBench 受管插件账本；脚本检测到账本或未完成事务时会拒绝操作。
 
+uv 插件管理后端要求包含该变更的 Core `Dev`，操作与运行环境边界见 [Core 插件管理说明](https://github.com/Scaxlibur/wavebench/blob/Dev/docs/how-to/manage-plugins.md)。
+
+`.gitattributes` 将文本文件的检出换行固定为 LF，保证 Windows 与 Linux 构建的源码和许可证字节一致。wheel 证据摘要绑定这些字节，构建前不应另外转换换行。
+
 插件 descriptor 导入仍不得打开 transport。默认测试不得扫描端口、连接仪器或发送 SCPI；实机测试必须另行获得明确授权并使用脱敏配置。
+
+## 跨仓 CI
+
+`Plugin lifecycle` workflow 在 Linux／Windows 和 Python 3.11／3.12 上检查开发环境与
+四类插件的无 pip 生命周期。默认使用相邻 Core 的 `Dev` 分支，该分支须已包含 uv 安装后端；
+迁移阶段可通过手动运行的 `core_ref` 输入指定 Core 分支或提交。先合入 Core 后端，再启用插件仓的对应变更。
+wheel 安装兼容测试继续使用 pip；构建步骤使用 uv，并保留既有 wheel 内容和证据摘要检查。
