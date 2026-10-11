@@ -16,7 +16,7 @@ python3 scripts/dev_env.py check
 python3 scripts/dev_env.py sync
 ```
 
-`sync` 会创建或修改 `.venv`，以 editable 方式安装相邻 Core 与所有正式包，且 pip 可能访问已配置的软件源。运行前必须说明这些影响。已有但未标记的环境只能在审阅后显式接管；不要绕过脚本对 WaveBench 受管插件账本或未完成事务的拒绝。
+`sync` 会创建或修改 `.venv`，以 editable 方式安装相邻 Core 与所有正式包，通过 PATH 中的 uv 创建环境并安装，可能访问已配置的软件源。运行前必须说明这些影响。已有但未标记的环境只能在审阅后显式接管；不要绕过脚本对 WaveBench 受管插件账本或未完成事务的拒绝。
 
 开发环境只提供快速反馈，不是发行验收环境，也不能与受管 install/remove 流程混用。
 
