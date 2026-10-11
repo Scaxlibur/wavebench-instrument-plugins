@@ -54,6 +54,8 @@ editable 环境仅用于开发反馈，不代表可发布验收。提交或发�
 
 uv 插件管理后端要求包含该变更的 Core `Dev`，操作与运行环境边界见 [Core 插件管理说明](https://github.com/Scaxlibur/wavebench/blob/Dev/docs/how-to/manage-plugins.md)。
 
+`.gitattributes` 将文本文件的检出换行固定为 LF，保证 Windows 与 Linux 构建的源码和许可证字节一致。wheel 证据摘要绑定这些字节，构建前不应另外转换换行。
+
 插件 descriptor 导入仍不得打开 transport。默认测试不得扫描端口、连接仪器或发送 SCPI；实机测试必须另行获得明确授权并使用脱敏配置。
 
 ## 跨仓 CI

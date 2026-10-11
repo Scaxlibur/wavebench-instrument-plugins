@@ -52,6 +52,8 @@ The editable environment is a development feedback loop, not release acceptance.
 
 The uv plugin backend requires Core `Dev` containing that change; see the [Core plugin management guide](https://github.com/Scaxlibur/wavebench/blob/Dev/docs/how-to/manage-plugins.md) for runtime setup and operation boundaries.
 
+`.gitattributes` fixes text checkout line endings to LF so Windows and Linux builds preserve identical source and license bytes. Wheel evidence digests bind those bytes; do not convert line endings separately before building.
+
 Importing a plugin descriptor must still perform no transport I/O. Default tests must not scan ports, connect to instruments, or send SCPI. Hardware tests require separate explicit authorization and sanitized configuration.
 
 ## Cross-repository CI
