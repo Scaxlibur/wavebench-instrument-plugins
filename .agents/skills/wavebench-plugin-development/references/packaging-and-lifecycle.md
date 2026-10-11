@@ -7,13 +7,13 @@
 先检查现有标准环境：
 
 ```bash
-python3 scripts/dev_env.py check
+python scripts/dev_env.py check
 ```
 
 `check` 验证 Core 与所有正式插件的 metadata 快照、editable 安装和 entry point，不访问软件源，也不连接仪器。失败信息如果说明包集合或 metadata 漂移，再考虑：
 
 ```bash
-python3 scripts/dev_env.py sync
+python scripts/dev_env.py sync
 ```
 
 `sync` 会创建或修改 `.venv`，以 editable 方式安装相邻 Core 与所有正式包，通过 PATH 中的 uv 创建环境并安装，可能访问已配置的软件源。运行前必须说明这些影响。已有但未标记的环境只能在审阅后显式接管；不要绕过脚本对 WaveBench 受管插件账本或未完成事务的拒绝。

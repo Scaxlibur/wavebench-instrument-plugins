@@ -8,19 +8,21 @@ This repository uses one long-lived, dedicated development virtual environment. 
 
 Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/) on PATH are required.
 
+Here, `python` means Python 3.11+; the commands work in Bash and PowerShell. Use `python3` instead if that is the only command available on the system. uv does not read `pip.conf` or `PIP_INDEX_URL`; configure [uv indexes](https://docs.astral.sh/uv/concepts/indexes/) first when a mirror or private index is required.
+
 The default layout expects sibling `wavebench/` and `wavebench-instrument-plugins/` directories:
 
 ```bash
 cd wavebench-instrument-plugins
-python3 scripts/dev_env.py sync
+python scripts/dev_env.py sync
 ```
 
-The script creates the ignored repository-local `.venv/`, collects and installs each project's declared build-system requirements, installs `wavebench[dev]` and every maintained plugin as editable distributions, then verifies their real `wavebench.instruments` entry points and registry resolution. `sync` uses `uv venv` and `uv pip install` and may access configured package indexes to install dependencies on its first run; it is not an offline release gate.
+The script creates the ignored repository-local `.venv/`, collects and installs each project's declared build-system requirements, installs Core and every maintained plugin as editable distributions with their respective `[dev]` extras, then verifies their real `wavebench.instruments` entry points and registry resolution. `sync` uses `uv venv` and `uv pip install` and may access configured package indexes to install dependencies on its first run; it is not an offline release gate.
 
 Specify a non-sibling core checkout explicitly:
 
 ```bash
-python3 scripts/dev_env.py --wavebench-root <wavebench-source> sync
+python scripts/dev_env.py --wavebench-root <wavebench-source> sync
 ```
 
 ## Daily development
@@ -28,7 +30,7 @@ python3 scripts/dev_env.py --wavebench-root <wavebench-source> sync
 ```bash
 uv run --no-project --python .venv python -m pytest
 uv run --no-project --python .venv python -m ruff check .
-python3 scripts/dev_env.py check
+python scripts/dev_env.py check
 ```
 
 Source edits do not require another `sync`. Synchronize again only when:
@@ -42,9 +44,13 @@ Source edits do not require another `sync`. Synchronize again only when:
 
 The repository root is not a uv project and has no separate lockfile. The script resolves the declared Core and plugin requirements for editable development; this is not the Core locked CI environment. Do not run Core `uv sync` against this environment: it may remove plugins. The script only removes plugins listed in its previous state that no longer exist in the repository, and still rejects managed runtime ledgers.
 
+An existing marked development environment can be synchronized again. An unmarked environment requires review and explicit `sync --adopt-existing`. Adoption does not remove arbitrary old packages. Use `--venv <new-directory>` for a clean, separate environment without replacing the original.
+
 ## Boundary with release acceptance
 
 The editable environment is a development feedback loop, not release acceptance. Before committing or publishing a plugin, continue to use WaveBench `plugin package check`, a real wheel, a disposable virtual environment, and the managed install/remove lifecycle gate. Do not mix editable installs and the WaveBench managed-plugin ledger in one environment; the script refuses to operate when it detects a ledger or unfinished transaction.
+
+The uv plugin backend requires Core `Dev` containing that change; see the [Core plugin management guide](https://github.com/Scaxlibur/wavebench/blob/Dev/docs/how-to/manage-plugins.md) for runtime setup and operation boundaries.
 
 Importing a plugin descriptor must still perform no transport I/O. Default tests must not scan ports, connect to instruments, or send SCPI. Hardware tests require separate explicit authorization and sanitized configuration.
 

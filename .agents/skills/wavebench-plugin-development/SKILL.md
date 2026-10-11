@@ -26,6 +26,8 @@ metadata:
 
 本流程面向 Codex 或兼容 Agent Skills 的宿主，仓库要求 Python 3.11+。验证使用已同步的 WaveBench 开发环境；实时仪器工作还需要明确授权、已确认接线和 Core 安全流程。
 
+命令中的 `python` 指 Python 3.11+；仅提供 `python3` 的系统可替换命令名。虚拟环境示例使用 POSIX 的 `.venv/bin/python`，原生 Windows 替换为 `.venv\Scripts\python.exe`。
+
 ## Invocation boundary
 
 仅在插件仓的生产交付物是主要任务时使用本 Skill，例如修改 `packages/wavebench-*` 下的 driver、descriptor、parser、profile、测试或打包配置，或者修改仓库级开发、目录生成、conformance 与实机证据工具。
@@ -92,7 +94,7 @@ metadata:
 按改动风险逐层增加验证，不把全仓测试当作每次修改的起点：
 
 ```bash
-python3 scripts/dev_env.py check
+python scripts/dev_env.py check
 .venv/bin/python -m pytest -q packages/<package>/tests/<focused-test>.py
 .venv/bin/python -m ruff check <changed-paths>
 python scripts/generate_plugin_catalog.py --check
